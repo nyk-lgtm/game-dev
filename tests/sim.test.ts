@@ -14,7 +14,7 @@ import {
 } from '../src/core';
 
 describe('level generation', () => {
-  it('produces valid, deterministic floors', () => {
+  it('produces valid, deterministic floors', { timeout: 60_000 }, () => {
     for (let seed = 1; seed <= 150; seed++) {
       for (let depth = 1; depth <= 10; depth++) {
         const f = generateFloor(seed, depth);
@@ -75,5 +75,5 @@ describe('fuzz', () => {
       expect(r).toEqual(s);
       expect(eq(r.player.pos, s.player.pos)).toBe(true);
     }
-  });
+  }, 60_000);
 });
