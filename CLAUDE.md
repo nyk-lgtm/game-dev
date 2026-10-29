@@ -12,3 +12,5 @@
   `Pixel 7` device profile. `window.__game` exposes the controller for scripts.
 - Bug reports from the owner look like `TELEGRAPH build=… seed=… a=…`; reproduce
   with `replay(seed, a)` from src/core or `?seed=…&a=…` in the browser.
+- The live site (https://nyk-lgtm.github.io/game-dev/) deploys only from `main`;
+  other branches just build and test in CI.
