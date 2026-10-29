@@ -78,6 +78,7 @@ function playerMove(s: GameState, to: Hex, events: GameEvent[]): void {
 function enemyPhase(s: GameState, events: GameEvent[]): void {
   // 1. Readied shots fire, in id order, at whatever stands in the line now.
   for (const e of s.enemies) {
+    if (s.player.hp <= 0) return;
     if (e.hp > 0 && e.aim !== null) fireShot(s, e, events);
   }
   // 2. Every enemy acts, in id order.

@@ -333,9 +333,10 @@ function drawUnit(ctx: CanvasRenderingContext2D, L: Layout, u: VisUnit, time: nu
     ctx.restore();
     if (u.reload > 0 && u.aim === null) {
       ctx.fillStyle = C.muted;
-      ctx.font = `700 ${Math.round(S * 0.3)}px system-ui, sans-serif`;
+      ctx.font = `800 ${Math.round(S * 0.5)}px system-ui, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillText('…', 0, -S * 0.62);
+      ctx.textBaseline = 'middle';
+      ctx.fillText('…', 0, -S * 0.7);
     }
   }
 

@@ -17,6 +17,8 @@ import {
   previewAction,
   toPixel,
   PLAYER_ID,
+  replay,
+  threats,
 } from '../src/core';
 import { addEnemy, blankState } from './helpers';
 
@@ -105,7 +107,7 @@ describe('archer', () => {
     // Range 5 from (3,0) reaches (3,5); we're at (3,6), out of range.
     expect(s2.player.hp).toBe(3);
     expect(s2.enemies[0].aim).toBeNull();
-    expect(s2.enemies[0].reload).toBe(0);
+    expect(s2.enemies[0].reload).toBe(1); // fired, so it skips aiming next turn
   });
 
   it('arrow hits the player standing in the line', () => {
@@ -172,5 +174,34 @@ describe('turn rules', () => {
     const { state } = applyAction(s, move(add(P, DIRS[1])));
     expect(state.status).toBe('dead');
     expect(isLegal(state, { type: 'wait' })).toBe(false);
+  });
+});
+
+describe('review fixes', () => {
+  it('preview reports the heal when the move clears the floor and descends', () => {
+    // Last enemy sits next to both the player and the stairs; stepping onto the stairs stabs it.
+    const s = blankState(hex(0, 1), { hp: 2 });
+    addEnemy(s, 'archer', hex(1, 0));
+    expect(previewAction(s, move(hex(0, 0)))).toMatchObject({ descends: true, healed: true });
+  });
+
+  it('archer cannot aim on the turn right after firing', () => {
+    const s = blankState(hex(3, 3));
+    addEnemy(s, 'archer', hex(3, 0), { aim: 2 });
+    const s1 = applyAction(s, move(hex(3, 4))).state; // shot fires, hits us
+    expect(s1.enemies[0].aim).toBeNull();
+    const s2 = applyAction(s1, move(hex(3, 5))).state; // still in line, but reloading
+    expect(s2.enemies[0].aim).toBeNull();
+  });
+
+  it('shot danger zone stops at the first enemy in the line', () => {
+    const s = blankState(hex(5, 3));
+    addEnemy(s, 'archer', hex(3, 0), { aim: 2 });
+    addEnemy(s, 'brute', hex(3, 2));
+    expect(threats(s).shots[0].path).toEqual([hex(3, 1), hex(3, 2)]);
+  });
+
+  it('rejects malformed action codes', () => {
+    expect(() => replay(1, '5 5')).toThrow();
   });
 });

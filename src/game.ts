@@ -64,6 +64,7 @@ export class Game {
       actions = '';
       s = newRun(seed);
     }
+    this.animator.cancel();
     this.run = { seed, actions };
     this.state = s;
     this.scene = { current: sceneFromState(s) };
@@ -143,7 +144,8 @@ export class Game {
     renderPanel('', null);
     this.animator.play(this.scene, events, state, () => {
       this.refreshUi();
-      if (state.status === 'dead') setTimeout(() => this.showGameOver(), 250);
+      if (state.status === 'dead')
+        setTimeout(() => this.state === state && this.showGameOver(), 250);
     });
   }
 
@@ -165,8 +167,7 @@ export class Game {
       if (o.dies) parts.push('<span class="bad">You will die</span>');
       else if (o.damageTaken) parts.push(`<span class="bad">You take ${o.damageTaken} damage</span>`);
       else if (!o.descends) parts.push('Safe');
-      const cleared = o.descends && s.enemies.length === 0 && s.player.hp < s.player.maxHp;
-      if (cleared) parts.push('<span class="good">+1 ♥</span>');
+      if (o.healed) parts.push('<span class="good">+1 ♥</span>');
       renderPanel(`<div class="title">${parts.join(' · ')}</div>Tap again or press Move.`, {
         label: 'Move',
         danger: o.damageTaken > 0,
@@ -248,34 +249,48 @@ export class Game {
   }
 
   private frame(t: number): void {
+    // Schedule first so one bad frame can never stop the loop.
+    requestAnimationFrame((tt) => this.frame(tt));
     const dt = Math.min(50, t - (this.last || t));
     this.last = t;
-    if (this.scene) {
-      this.animator.update(dt);
-      const sc = this.scene.current;
-      sc.shake *= Math.pow(0.001, dt / 1000);
-      sc.hurt = Math.max(0, sc.hurt - dt / 500);
-      for (const u of sc.units.values()) u.flash = Math.max(0, u.flash - dt / 180);
-      for (const f of sc.floaters) f.age += dt;
-      sc.floaters = sc.floaters.filter((f) => f.age < f.life);
-      const idle = !this.animator.busy && this.state.status === 'playing';
-      draw(
-        this.ctx,
-        this.w,
-        this.h,
-        this.layout,
-        sc,
-        {
-          legal: idle ? legalMoves(this.state) : [],
-          selected: idle ? this.selected : null,
-          outcome: idle ? this.outcome : null,
-          threats: idle ? threats(this.state) : null,
-          inspect: idle ? this.inspect : null,
-        },
-        t,
-      );
+    if (!this.scene || this.w < 1 || this.h < 1) return;
+    try {
+      this.renderFrame(t, dt);
+    } catch (err) {
+      // Surface the error on screen and unstick the turn rather than freezing.
+      this.animator.cancel();
+      this.scene = { current: sceneFromState(this.state) };
+      this.refreshUi();
+      setTimeout(() => {
+        throw err;
+      });
     }
-    requestAnimationFrame((tt) => this.frame(tt));
+  }
+
+  private renderFrame(t: number, dt: number): void {
+    this.animator.update(dt);
+    const sc = this.scene.current;
+    sc.shake *= Math.pow(0.001, dt / 1000);
+    sc.hurt = Math.max(0, sc.hurt - dt / 500);
+    for (const u of sc.units.values()) u.flash = Math.max(0, u.flash - dt / 180);
+    for (const f of sc.floaters) f.age += dt;
+    sc.floaters = sc.floaters.filter((f) => f.age < f.life);
+    const idle = !this.animator.busy && this.state.status === 'playing';
+    draw(
+      this.ctx,
+      this.w,
+      this.h,
+      this.layout,
+      sc,
+      {
+        legal: idle ? legalMoves(this.state) : [],
+        selected: idle ? this.selected : null,
+        outcome: idle ? this.outcome : null,
+        threats: idle ? threats(this.state) : null,
+        inspect: idle ? this.inspect : null,
+      },
+      t,
+    );
   }
 }
 

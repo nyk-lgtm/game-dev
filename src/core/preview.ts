@@ -3,7 +3,7 @@
 
 import { neighbors, key, type Hex } from './hex';
 import { tileAt } from './board';
-import { shotPath } from './enemies';
+import { shotDanger } from './enemies';
 import { applyAction } from './resolve';
 import { PLAYER_ID, type Action, type GameState } from './types';
 
@@ -22,7 +22,7 @@ export function threats(s: GameState): Threats {
     if (e.kind === 'brute') {
       for (const n of neighbors(e.pos)) if (tileAt(s, n) !== undefined) melee.add(key(n));
     }
-    if (e.aim !== null) shots.push({ by: e.id, path: shotPath(s, e) });
+    if (e.aim !== null) shots.push({ by: e.id, path: shotDanger(s, e) });
   }
   return { melee, shots };
 }
@@ -32,18 +32,23 @@ export interface Outcome {
   kills: number[];
   wounded: number[];
   descends: boolean;
+  /** Descending with the floor cleared restores 1 HP. */
+  healed: boolean;
   dies: boolean;
 }
 
 export function previewAction(s: GameState, a: Action): Outcome {
   const { events } = applyAction(s, a);
-  const out: Outcome = { damageTaken: 0, kills: [], wounded: [], descends: false, dies: false };
+  const out: Outcome = { damageTaken: 0, kills: [], wounded: [], descends: false, healed: false, dies: false };
   for (const ev of events) {
     if (ev.type === 'damage') {
       if (ev.target === PLAYER_ID) out.damageTaken += ev.amount;
-      else if (ev.hp > 0) out.wounded.push(ev.target);
+      else if (ev.hp > 0 && !out.wounded.includes(ev.target)) out.wounded.push(ev.target);
     } else if (ev.type === 'death') out.kills.push(ev.target);
-    else if (ev.type === 'descend') out.descends = true;
+    else if (ev.type === 'descend') {
+      out.descends = true;
+      out.healed = ev.healed;
+    }
     else if (ev.type === 'playerDeath') out.dies = true;
   }
   return out;

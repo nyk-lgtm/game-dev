@@ -53,6 +53,17 @@ export function shotPath(s: GameState, e: Enemy): Hex[] {
   return e.aim === null ? [] : ray(s, e.pos, e.aim, ARCHER_RANGE);
 }
 
+/**
+ * The danger zone of a readied shot: its path, cut after the first enemy
+ * standing in it (that enemy will take the arrow). The player is not a
+ * blocker here, since the player moves before the shot resolves.
+ */
+export function shotDanger(s: GameState, e: Enemy): Hex[] {
+  const path = shotPath(s, e);
+  const i = path.findIndex((h) => enemyAt(s, h) !== undefined);
+  return i < 0 ? path : path.slice(0, i + 1);
+}
+
 export const ENEMIES: Record<EnemyKind, EnemyDef> = {
   brute: {
     kind: 'brute',
@@ -124,7 +135,8 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
 export function fireShot(s: GameState, e: Enemy, events: GameEvent[]): void {
   const full = shotPath(s, e);
   e.aim = null;
-  e.reload = 1;
+  // Skips aiming this phase and the next one.
+  e.reload = 2;
   let hitIdx = -1;
   for (let i = 0; i < full.length; i++) {
     if (occupied(s, full[i])) {

@@ -13,9 +13,8 @@ export function encodeAction(s: GameState, a: Action): string {
 
 export function decodeAction(s: GameState, c: string): Action {
   if (c === 'w') return { type: 'wait' };
-  const d = Number(c);
-  if (!(d >= 0 && d < 6)) throw new Error(`bad action code "${c}"`);
-  return { type: 'move', to: add(s.player.pos, DIRS[d]) };
+  if (!/^[0-5]$/.test(c)) throw new Error(`bad action code "${c}"`);
+  return { type: 'move', to: add(s.player.pos, DIRS[Number(c)]) };
 }
 
 export function replay(seed: number, actions: string): GameState {

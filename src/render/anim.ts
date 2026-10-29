@@ -193,6 +193,13 @@ export class Animator {
     };
   }
 
+  /** Drop all pending steps without running their callbacks. */
+  cancel(): void {
+    this.steps = [];
+    this.cur = null;
+    this.onDone = null;
+  }
+
   update(dt: number): void {
     // Run as many steps as fit in this frame (zero-length steps resolve instantly).
     let budget = dt;
