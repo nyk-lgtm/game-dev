@@ -133,15 +133,22 @@ export function shotPath(s: GameState, e: Enemy): Hex[] {
   return e.aim === null ? [] : ray(s, e.pos, e.aim, ARCHER_RANGE);
 }
 
-/** Where a readied charge goes: until a unit (included), lava (included) or an obstacle. */
-export function chargePath(s: GameState, e: Enemy): Hex[] {
+/**
+ * Where a readied charge goes: until a blocking unit (included), lava
+ * (included) or an obstacle. `blocks` decides which hexes hold a blocker.
+ */
+export function chargePath(
+  s: GameState,
+  e: Enemy,
+  blocks: (h: Hex) => boolean = (h) => unitAt(s, h) !== null,
+): Hex[] {
   if (e.aim === null) return [];
   const out: Hex[] = [];
   let cur = e.pos;
   for (;;) {
     cur = add(cur, DIRS[e.aim]);
     const t = tileAt(s, cur);
-    if (unitAt(s, cur) !== null) {
+    if (blocks(cur)) {
       out.push(cur);
       break;
     }
@@ -177,7 +184,7 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     cost: 3,
     minDepth: 2,
     blurb:
-      'Its shield blocks stabs, lunges and arrows from the 3 hexes it faces, and it only smashes those 3 hexes. Turns slowly — get behind it.',
+      'Shield blocks stabs, lunges and arrows from the 3 hexes it faces; it only smashes those 3. Turns slowly — get behind it.',
     act(s, e, events) {
       const p = s.player.pos;
       if (frontArc(e).some((h) => eq(h, p))) {
@@ -203,7 +210,7 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     cost: 3,
     minDepth: 2,
     blurb:
-      'Aims down a straight line, then fires next turn. The arrow hits the first thing in the line — including other enemies. Rests a turn after firing.',
+      'Aims down a line, then fires next turn, hitting the first thing in it — enemies too. Rests a turn after firing.',
     act(s, e, events) {
       const p = s.player.pos;
       if (ready(e) && !isAdjacent(e.pos, p)) {
@@ -247,7 +254,7 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     cost: 3,
     minDepth: 3,
     blurb:
-      'Lobs a bomb at your hex from 2–4 away. Two turns later it explodes, hitting that hex and all 6 around it — enemies too.',
+      'Lobs a bomb at your hex from 2–4 away. Two turns later it blasts that hex and the 6 around it — enemies too.',
     act(s, e, events) {
       const p = s.player.pos;
       const d = distance(e.pos, p);
@@ -268,7 +275,7 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     cost: 4,
     minDepth: 4,
     blurb:
-      'Lines up on you, then next turn charges in a straight line until it hits something: 1 damage to whatever it rams. Runs straight into lava. Rests after charging. Harmless up close.',
+      'Lines up on you, then next turn charges until it rams something (1 damage). Dies in lava. Rests after. Never aims from next to you.',
     act(s, e, events) {
       const p = s.player.pos;
       if (ready(e)) {

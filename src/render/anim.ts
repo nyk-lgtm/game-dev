@@ -241,11 +241,19 @@ export class Animator {
           });
           break;
         }
+        case 'fuseTick': {
+          steps.push({
+            dur: 0,
+            start: () => scene.current.bombs.forEach((b) => (b.fuse = Math.max(0, b.fuse - 1))),
+          });
+          break;
+        }
         case 'explode': {
           steps.push({
             dur: 260,
             start: () => {
-              scene.current.bombs = scene.current.bombs.filter((b) => b.q !== ev.at.q || b.r !== ev.at.r);
+              const i = scene.current.bombs.findIndex((b) => b.q === ev.at.q && b.r === ev.at.r);
+              if (i >= 0) scene.current.bombs.splice(i, 1);
               scene.current.shake = Math.max(scene.current.shake, 9);
               navigator.vibrate?.(30);
             },

@@ -1,3 +1,5 @@
+import { RULES_VERSION } from '../core';
+
 // On-device debugging: errors are shown on screen (no devtools on a phone),
 // and a run can be exported as a short text code and replayed exactly.
 
@@ -19,7 +21,7 @@ export function installErrorOverlay(): void {
 
 export function bugReport(seed: number, actions: string, depth: number): string {
   const ua = navigator.userAgent.replace(/\s+/g, ' ');
-  return `TELEGRAPH build=${__BUILD_ID__} seed=${seed} depth=${depth} a=${actions || '-'} screen=${innerWidth}x${innerHeight}@${devicePixelRatio} ua="${ua}"`;
+  return `TELEGRAPH build=${__BUILD_ID__} rules=${RULES_VERSION} seed=${seed} depth=${depth} a=${actions || '-'} screen=${innerWidth}x${innerHeight}@${devicePixelRatio} ua="${ua}"`;
 }
 
 /** Reads ?seed=123&a=0152w from the URL (for reproducing bug reports). */

@@ -107,6 +107,7 @@ function playerBash(s: GameState, target: Hex, events: GameEvent[]): void {
 function enemyPhase(s: GameState, events: GameEvent[]): void {
   // 1. Telegraphs resolve: fuses tick and bombs explode, then readied shots
   //    and charges fire in id order.
+  if (s.bombs.length) events.push({ type: 'fuseTick' });
   const lit = s.bombs.map((b) => ({ ...b, fuse: b.fuse - 1 }));
   s.bombs = lit.filter((b) => b.fuse > 0);
   for (const b of lit) {

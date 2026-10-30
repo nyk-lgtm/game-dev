@@ -91,7 +91,7 @@ export const HELP_HTML = `
 <ul>
   <li><b>Tap a hex</b> to preview. <b>Tap it again</b> (or press the button) to do it. The preview is exact: ✕ marks who dies, and it shows damage you will take.</li>
   <li><b>Moving is attacking.</b> <b>Stab</b>: step from one hex next to an enemy to another hex next to it (1 damage). <b>Lunge</b>: step straight toward an enemy 2 hexes away (2 damage).</li>
-  <li><b>Bash</b>: tap an adjacent enemy to shove it 1 hex. It is <b>dazed</b> (skips its next action, loses its aim). Into lava it dies; into a wall or another enemy, both take 1 damage. Recharges in 3 turns.</li>
+  <li><b>Bash</b>: tap an adjacent enemy, then press <b>Bash</b> to shove it 1 hex. It is <b>dazed</b> (skips its next action, loses its aim). Into lava it dies; into a wall or another enemy, both take 1 damage. Recharges in 3 turns.</li>
   <li><span class="c-threat">Red</span> = danger for the coming enemy turn. Walls block arrows; lava blocks walking, not arrows.</li>
   <li>Kill every enemy before taking the stairs to <span class="c-heal">heal 1 ♥</span>.</li>
 </ul>

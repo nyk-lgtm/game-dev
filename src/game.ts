@@ -2,6 +2,7 @@
 
 import {
   ENEMIES,
+  RULES_VERSION,
   applyAction,
   bashTargets,
   encodeAction,
@@ -31,6 +32,7 @@ import { HELP_HTML, closeOverlay, enemyIntroHtml, renderHud, renderPanel, showCa
 interface SavedRun {
   seed: number;
   actions: string;
+  v?: number;
 }
 
 export class Game {
@@ -68,7 +70,7 @@ export class Game {
       s = newRun(seed);
     }
     this.animator.cancel();
-    this.run = { seed, actions };
+    this.run = { seed, actions, v: RULES_VERSION };
     this.state = s;
     this.scene = { current: sceneFromState(s) };
     this.clearSelection();
@@ -125,10 +127,8 @@ export class Game {
       this.outcome = previewAction(this.state, { type: 'move', to: h });
       navigator.vibrate?.(8);
     } else if (bashTargets(this.state).some((m) => eq(m, h))) {
-      if (this.bashSel && eq(this.bashSel, h)) {
-        this.commit({ type: 'bash', target: h });
-        return;
-      }
+      // Bash commits only from the panel button, so tapping an enemy to read
+      // about it can never shove it by accident.
       this.clearSelection();
       this.bashSel = h;
       this.inspect = enemyAt(this.state, h)?.id ?? null;
@@ -178,10 +178,8 @@ export class Game {
       const o = this.outcome;
       const parts: string[] = [];
       const bashing = this.bashSel !== null;
-      if (bashing) {
-        const e = s.enemies.find((x) => x.id === this.inspect);
-        parts.push(`Bash ${e ? ENEMIES[e.kind].name : ''}`);
-      }
+      const target = bashing ? s.enemies.find((x) => x.id === this.inspect) : undefined;
+      if (target) parts.push(`Bash ${ENEMIES[target.kind].name}`);
       if (o.descends) parts.push('<span class="good">Take the stairs</span>');
       if (o.kills.length) parts.push(`<span class="good">Kills ${o.kills.length}</span>`);
       if (o.wounded.length) parts.push(`Wounds ${o.wounded.length}`);
@@ -194,8 +192,11 @@ export class Game {
         : this.bashSel
           ? { type: 'bash', target: this.bashSel }
           : null;
+      const body = target
+        ? `${ENEMIES[target.kind].name} ${target.hp}/${target.maxHp} HP: ${ENEMIES[target.kind].blurb}`
+        : 'Tap again or press Move.';
       renderPanel(
-        `<div class="title">${parts.join(' · ')}</div>Tap again or press ${bashing ? 'Bash' : 'Move'}.`,
+        `<div class="title">${parts.join(' · ')}</div>${body}`,
         {
           label: bashing ? 'Bash' : 'Move',
           danger: o.damageTaken > 0,

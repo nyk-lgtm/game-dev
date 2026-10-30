@@ -1,6 +1,6 @@
 import { installErrorOverlay, replayFromUrl } from './debug/debug';
 import { Game } from './game';
-import { randomSeed } from './core';
+import { RULES_VERSION, randomSeed } from './core';
 import { load } from './storage';
 
 installErrorOverlay();
@@ -9,7 +9,9 @@ const game = new Game(document.getElementById('board') as HTMLCanvasElement);
 document.getElementById('menuBtn')!.onclick = () => game.showMenu();
 
 const fromUrl = replayFromUrl();
-const saved = load<{ seed: number; actions: string } | null>('run', null);
+const stored = load<{ seed: number; actions: string; v?: number } | null>('run', null);
+// Runs saved under older rules would replay differently: start fresh instead.
+const saved = stored?.v === RULES_VERSION ? stored : null;
 if (fromUrl) {
   game.start(fromUrl.seed, fromUrl.actions);
   // Drop the params so a reload resumes the saved run instead of replaying again.

@@ -77,6 +77,7 @@ export type GameEvent =
   | { type: 'slam'; id: number; into: number | null; at: Hex }
   | { type: 'fall'; id: number }
   | { type: 'throw'; by: number; at: Hex }
+  | { type: 'fuseTick' }
   | { type: 'explode'; at: Hex }
   | { type: 'charge'; id: number; from: Hex; to: Hex }
   | { type: 'descend'; depth: number; healed: boolean }

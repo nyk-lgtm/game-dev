@@ -4,7 +4,7 @@
 import { enemyAt, tileAt } from './board';
 import { frontArc } from './combat';
 import { chargePath, shotPath } from './enemies';
-import { key, neighbors, type Hex } from './hex';
+import { eq, key, neighbors, type Hex } from './hex';
 import { applyAction } from './resolve';
 import { PLAYER_ID, type Action, type GameState } from './types';
 
@@ -21,6 +21,16 @@ export function threats(s: GameState): Threats {
   const melee = new Set<string>();
   const lines: Threats['lines'] = [];
   const onBoard = (h: Hex) => tileAt(s, h) !== undefined;
+  // Lines resolve after the player moves and after bombs go off, and aimed
+  // chargers leave their hex before later shots fly. So only enemies that will
+  // still be standing there block a line; the player never does.
+  const boom = new Set(s.bombs.filter((b) => b.fuse <= 1).flatMap((b) => [b.pos, ...neighbors(b.pos)]).map(key));
+  const staysPut = (h: Hex) => {
+    const e = enemyAt(s, h);
+    if (!e) return false;
+    if (e.kind === 'charger' && e.aim !== null) return false;
+    return !(e.hp <= 1 && boom.has(key(h)));
+  };
   for (const e of s.enemies) {
     if (e.hp <= 0) continue;
     if (e.kind === 'brute') for (const n of neighbors(e.pos)) if (onBoard(n)) melee.add(key(n));
@@ -29,10 +39,10 @@ export function threats(s: GameState): Threats {
     if (e.kind === 'archer') {
       // The arrow stops at the first enemy in the line (it takes the hit).
       const path = shotPath(s, e);
-      const i = path.findIndex((h) => enemyAt(s, h) !== undefined);
+      const i = path.findIndex(staysPut);
       lines.push({ by: e.id, kind: 'shot', path: i < 0 ? path : path.slice(0, i + 1) });
     } else if (e.kind === 'charger') {
-      lines.push({ by: e.id, kind: 'charge', path: chargePath(s, e) });
+      lines.push({ by: e.id, kind: 'charge', path: chargePath(s, e, (h) => !eq(h, e.pos) && staysPut(h)) });
     }
   }
   const blasts = s.bombs.map((b) => ({ fuse: b.fuse, hexes: [b.pos, ...neighbors(b.pos)].filter(onBoard) }));

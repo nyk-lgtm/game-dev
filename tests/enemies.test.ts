@@ -517,11 +517,19 @@ describe('charger', () => {
     expect(enemy(applyAction(u.s, move(hex(3, 4))).state, u.c.id)!.aim).toBeNull();
   });
 
-  it('threats() shows the readied charge line', () => {
+  it('threats() shows the readied charge line, running past the player (who moves first)', () => {
     const { s } = lineState(hex(3, 3), { aim: 2 });
     const line = threats(s).lines.find((l) => l.kind === 'charge')!;
     expect(line.path[0]).toEqual(hex(3, 1));
-    expect(line.path.at(-1)).toEqual(hex(3, 3)); // includes the unit it will ram
+    expect(line.path).toContainEqual(hex(3, 4)); // stepping back along the line is not safe
+    expect(line.path.at(-1)).toEqual(hex(3, 7)); // board edge
+  });
+
+  it('threats() charge line stops at an enemy that will still be standing there', () => {
+    const { s } = lineState(hex(5, 3), { aim: 2 });
+    addEnemy(s, 'brute', hex(3, 3));
+    const line = threats(s).lines.find((l) => l.kind === 'charge')!;
+    expect(line.path.at(-1)).toEqual(hex(3, 3));
   });
 
   it('charges until it hits a unit: that unit takes 1 damage and the charger stops adjacent', () => {
