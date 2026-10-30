@@ -1,7 +1,7 @@
 // Procedural floor generation. Deterministic per (run seed, depth).
 
 import { distanceField, playerWalkable } from './board';
-import { ENEMIES } from './enemies';
+import { ENEMIES, faceToward } from './enemies';
 import { distance, key, neighbors, offsetToAxial, type Hex } from './hex';
 import { Rng, mixSeed } from './rng';
 import type { Enemy, EnemyKind, GameState, Player, Tile } from './types';
@@ -92,7 +92,16 @@ function tryFloor(rng: Rng, depth: number): Floor | null {
     const pos = idx >= 0 ? spots.splice(idx, 1)[0] : spots.shift();
     if (!pos) break;
     const def = ENEMIES[kind];
-    enemies.push({ kind, pos, hp: def.maxHp, maxHp: def.maxHp, staggered: false, aim: null, reload: 0 });
+    enemies.push({
+      kind,
+      pos,
+      hp: def.maxHp,
+      maxHp: def.maxHp,
+      staggered: false,
+      aim: null,
+      reload: 0,
+      facing: faceToward(pos, START),
+    });
     budget -= def.cost;
   }
   if (enemies.length === 0) return null;
@@ -109,10 +118,11 @@ export function enterFloor(s: GameState, depth: number): void {
   s.player.pos = f.start;
   s.player.facing = 5;
   s.enemies = f.enemies.map((e) => ({ ...e, id: s.nextId++ }));
+  s.bombs = [];
 }
 
 export function newRun(seed: number): GameState {
-  const player: Player = { pos: START, hp: 3, maxHp: 3, facing: 5 };
+  const player: Player = { pos: START, hp: 3, maxHp: 3, facing: 5, bashCd: 0 };
   const s: GameState = {
     seed,
     depth: 0,
@@ -123,6 +133,7 @@ export function newRun(seed: number): GameState {
     stairs: START,
     player,
     enemies: [],
+    bombs: [],
     nextId: 1,
     kills: 0,
     status: 'playing',

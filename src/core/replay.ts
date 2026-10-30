@@ -1,4 +1,5 @@
-// Compact run encoding: each move is the direction digit 0-5, a wait is "w".
+// Compact run encoding: a move is the direction digit 0-5, a bash is the
+// direction letter a-f, a wait is "w".
 // A whole run is (seed, action string), which is enough to rebuild the exact
 // state because the rules are deterministic.
 
@@ -7,12 +8,18 @@ import { newRun } from './levelgen';
 import { applyAction } from './resolve';
 import type { Action, GameState } from './types';
 
+const BASH_CODES = 'abcdef';
+
 export function encodeAction(s: GameState, a: Action): string {
-  return a.type === 'wait' ? 'w' : String(dirIndex(s.player.pos, a.to));
+  if (a.type === 'wait') return 'w';
+  if (a.type === 'bash') return BASH_CODES[dirIndex(s.player.pos, a.target)];
+  return String(dirIndex(s.player.pos, a.to));
 }
 
 export function decodeAction(s: GameState, c: string): Action {
   if (c === 'w') return { type: 'wait' };
+  const b = BASH_CODES.indexOf(c);
+  if (b >= 0) return { type: 'bash', target: add(s.player.pos, DIRS[b]) };
   if (!/^[0-5]$/.test(c)) throw new Error(`bad action code "${c}"`);
   return { type: 'move', to: add(s.player.pos, DIRS[Number(c)]) };
 }

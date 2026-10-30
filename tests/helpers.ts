@@ -16,8 +16,9 @@ export function blankState(player: Hex, opts: { tiles?: [Hex, Tile][]; hp?: numb
     rows: ROWS,
     tiles,
     stairs,
-    player: { pos: player, hp: opts.hp ?? 3, maxHp: 3, facing: 5 },
+    player: { pos: player, hp: opts.hp ?? 3, maxHp: 3, facing: 5, bashCd: 0 },
     enemies: [],
+    bombs: [],
     nextId: 1,
     kills: 0,
     status: 'playing',
@@ -35,6 +36,7 @@ export function addEnemy(s: GameState, kind: EnemyKind, pos: Hex, extra: Partial
     staggered: false,
     aim: null,
     reload: 0,
+    facing: 2,
     ...extra,
   };
   s.enemies.push(e);

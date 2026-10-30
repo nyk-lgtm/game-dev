@@ -1,30 +1,42 @@
 // Read-only helpers the UI uses to explain the board: threat overlays and
 // exact outcome previews (by simulating the real rules).
 
-import { neighbors, key, type Hex } from './hex';
-import { tileAt } from './board';
-import { shotDanger } from './enemies';
+import { enemyAt, tileAt } from './board';
+import { frontArc } from './combat';
+import { chargePath, shotPath } from './enemies';
+import { key, neighbors, type Hex } from './hex';
 import { applyAction } from './resolve';
 import { PLAYER_ID, type Action, type GameState } from './types';
 
 export interface Threats {
-  /** Hexes next to a brute: ending your turn here gets you smashed. */
+  /** Hexes where ending your turn gets you smashed. */
   melee: Set<string>;
-  /** Readied shot lines, per shooter. */
-  shots: { by: number; path: Hex[] }[];
+  /** Readied shot and charge lines, per enemy. */
+  lines: { by: number; kind: 'shot' | 'charge'; path: Hex[] }[];
+  /** Bomb blast areas (center first); `fuse` 1 means it explodes this coming enemy turn. */
+  blasts: { fuse: number; hexes: Hex[] }[];
 }
 
 export function threats(s: GameState): Threats {
   const melee = new Set<string>();
-  const shots: Threats['shots'] = [];
+  const lines: Threats['lines'] = [];
+  const onBoard = (h: Hex) => tileAt(s, h) !== undefined;
   for (const e of s.enemies) {
     if (e.hp <= 0) continue;
-    if (e.kind === 'brute') {
-      for (const n of neighbors(e.pos)) if (tileAt(s, n) !== undefined) melee.add(key(n));
+    if (e.kind === 'brute') for (const n of neighbors(e.pos)) if (onBoard(n)) melee.add(key(n));
+    if (e.kind === 'guard') for (const n of frontArc(e)) if (onBoard(n)) melee.add(key(n));
+    if (e.aim === null) continue;
+    if (e.kind === 'archer') {
+      // The arrow stops at the first enemy in the line (it takes the hit).
+      const path = shotPath(s, e);
+      const i = path.findIndex((h) => enemyAt(s, h) !== undefined);
+      lines.push({ by: e.id, kind: 'shot', path: i < 0 ? path : path.slice(0, i + 1) });
+    } else if (e.kind === 'charger') {
+      lines.push({ by: e.id, kind: 'charge', path: chargePath(s, e) });
     }
-    if (e.aim !== null) shots.push({ by: e.id, path: shotDanger(s, e) });
   }
-  return { melee, shots };
+  const blasts = s.bombs.map((b) => ({ fuse: b.fuse, hexes: [b.pos, ...neighbors(b.pos)].filter(onBoard) }));
+  return { melee, lines, blasts };
 }
 
 export interface Outcome {
@@ -48,8 +60,8 @@ export function previewAction(s: GameState, a: Action): Outcome {
     else if (ev.type === 'descend') {
       out.descends = true;
       out.healed = ev.healed;
-    }
-    else if (ev.type === 'playerDeath') out.dies = true;
+    } else if (ev.type === 'playerDeath') out.dies = true;
   }
+  out.wounded = out.wounded.filter((id) => !out.kills.includes(id));
   return out;
 }

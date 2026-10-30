@@ -6,7 +6,7 @@ import {
   eq,
   generateFloor,
   key,
-  legalMoves,
+  legalActions,
   newRun,
   playerWalkable,
   type Action,
@@ -56,15 +56,15 @@ describe('fuzz', () => {
       let s = newRun(run + 1);
       const actions: Action[] = [];
       for (let i = 0; i < 300 && s.status === 'playing'; i++) {
-        const moves = legalMoves(s);
+        const acts = legalActions(s);
         // Bias toward the stairs so runs reach deeper floors.
-        let a: Action;
-        if (moves.length === 0) a = { type: 'wait' };
-        else if (rng.next() < 0.5) {
+        let a: Action = rng.pick(acts);
+        if (acts[0].type !== 'wait' && rng.next() < 0.5) {
           const field = distanceField(s, s.stairs, playerWalkable);
-          moves.sort((x, y) => (field.get(key(x)) ?? 99) - (field.get(key(y)) ?? 99));
-          a = { type: 'move', to: moves[0] };
-        } else a = { type: 'move', to: rng.pick(moves) };
+          const moves = acts.filter((x): x is Extract<Action, { type: 'move' }> => x.type === 'move');
+          moves.sort((x, y) => (field.get(key(x.to)) ?? 99) - (field.get(key(y.to)) ?? 99));
+          if (moves.length) a = moves[0];
+        }
         actions.push(a);
         s = applyAction(s, a).state;
         checkInvariants(s);

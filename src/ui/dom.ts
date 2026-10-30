@@ -1,6 +1,6 @@
 // DOM UI: HUD, bottom info panel, and modal cards.
 
-import { ENEMIES, type GameState } from '../core';
+import { ENEMIES, type EnemyKind, type GameState } from '../core';
 import { BUILD } from '../debug/debug';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -8,6 +8,9 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 export function renderHud(s: GameState): void {
   $('depth').textContent = String(s.depth);
   $('kills').textContent = String(s.kills);
+  const bash = $('bash');
+  bash.textContent = s.player.bashCd === 0 ? '✓' : String(s.player.bashCd);
+  bash.className = s.player.bashCd === 0 ? 'value ready' : 'value cooling';
   const hearts = $('hearts');
   hearts.innerHTML = '';
   for (let i = 0; i < s.player.maxHp; i++) {
@@ -72,20 +75,26 @@ export function showCard(html: string, buttons: CardButton[], dismissable = true
   o.onclick = dismissable ? (e) => e.target === o && closeOverlay() : null;
 }
 
+function enemyLine(k: EnemyKind): string {
+  const d = ENEMIES[k];
+  const from = d.minDepth > 1 ? ` <i>(floor ${d.minDepth}+)</i>` : '';
+  return `<li><span class="c-${k}">${d.name}</span> (${d.maxHp} HP)${from}: ${d.blurb}</li>`;
+}
+
+export function enemyIntroHtml(kinds: EnemyKind[]): string {
+  return `<h2>New enem${kinds.length > 1 ? 'ies' : 'y'}</h2><ul>${kinds.map(enemyLine).join('')}</ul>`;
+}
+
 export const HELP_HTML = `
 <h2>How to play</h2>
 <p>You are the <span class="c-player">spear</span>. Reach the stairs at the top of each floor. Go as deep as you can.</p>
 <ul>
-  <li><b>Tap a hex</b> to preview the move. <b>Tap it again</b> (or press <b>Move</b>) to do it.</li>
-  <li><b>Moving is attacking.</b> You never attack by standing still.</li>
-  <li><b>Stab</b>: step from one hex next to an enemy to another hex next to it. 1 damage.</li>
-  <li><b>Lunge</b>: step straight toward an enemy 2 hexes away. 2 damage.</li>
-  <li>Wounded enemies are <b>dazed</b> and skip their next action.</li>
-  <li><span class="c-threat">Red hexes</span> are danger zones for the enemy turn.</li>
-  <li><span class="c-brute">Brute</span> (2 HP): ${ENEMIES.brute.blurb}</li>
-  <li><span class="c-archer">Archer</span> (1 HP): ${ENEMIES.archer.blurb}</li>
-  <li>Walls block arrows. Lava blocks walking, not arrows.</li>
+  <li><b>Tap a hex</b> to preview. <b>Tap it again</b> (or press the button) to do it. The preview is exact: ✕ marks who dies, and it shows damage you will take.</li>
+  <li><b>Moving is attacking.</b> <b>Stab</b>: step from one hex next to an enemy to another hex next to it (1 damage). <b>Lunge</b>: step straight toward an enemy 2 hexes away (2 damage).</li>
+  <li><b>Bash</b>: tap an adjacent enemy to shove it 1 hex. It is <b>dazed</b> (skips its next action, loses its aim). Into lava it dies; into a wall or another enemy, both take 1 damage. Recharges in 3 turns.</li>
+  <li><span class="c-threat">Red</span> = danger for the coming enemy turn. Walls block arrows; lava blocks walking, not arrows.</li>
   <li>Kill every enemy before taking the stairs to <span class="c-heal">heal 1 ♥</span>.</li>
-  <li>The preview is exact: it shows who dies (✕) and damage you will take.</li>
 </ul>
+<h2>Enemies</h2>
+<ul>${(Object.keys(ENEMIES) as EnemyKind[]).map(enemyLine).join('')}</ul>
 `;

@@ -5,7 +5,7 @@ import {
   distanceField,
   encodeAction,
   key,
-  legalMoves,
+  legalActions,
   newRun,
   playerWalkable,
   previewAction,
@@ -14,17 +14,18 @@ import {
 } from '../src/core';
 
 export function greedyAction(s: GameState): Action {
-  const moves = legalMoves(s);
-  if (moves.length === 0) return { type: 'wait' };
+  const acts = legalActions(s);
+  if (acts[0].type === 'wait') return acts[0];
   const field = distanceField(s, s.stairs, playerWalkable);
-  let best: Action = { type: 'move', to: moves[0] };
+  let best: Action = acts[0];
   let bestScore = -Infinity;
-  for (const to of moves) {
-    const a: Action = { type: 'move', to };
+  for (const a of acts) {
     const o = previewAction(s, a);
+    const at = a.type === 'move' ? a.to : s.player.pos;
     const score =
       -o.damageTaken * 100 + (o.dies ? -1000 : 0) + o.kills.length * 8 + o.wounded.length * 3 -
-      (field.get(key(to)) ?? 50) * 2 + (o.descends ? (s.enemies.length > 0 ? 5 : 40) : 0);
+      (field.get(key(at)) ?? 50) * 2 + (o.descends ? (s.enemies.length > 0 ? 5 : 40) : 0) -
+      (a.type === 'bash' ? 4 : 0);
     if (score > bestScore) {
       bestScore = score;
       best = a;

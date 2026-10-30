@@ -36,7 +36,10 @@ export interface Floater {
 export interface Scene {
   state: GameState;
   units: Map<number, VisUnit>;
-  projectile: { q: number; r: number; dir: number } | null;
+  projectile: { q: number; r: number; dir: number; kind: 'arrow' | 'bomb'; lift: number } | null;
+  bombs: { q: number; r: number; fuse: number }[];
+  /** Explosion flash: center and progress 0..1. */
+  blast: { q: number; r: number; t: number } | null;
   floaters: Floater[];
   /** Screen shake strength in px, decays over time. */
   shake: number;
@@ -75,13 +78,15 @@ export function sceneFromState(s: GameState, prev?: Scene): Scene {
       staggered: e.staggered,
       aim: e.aim,
       reload: e.reload,
-      facing: e.aim ?? 2,
+      facing: e.facing,
     });
   }
   return {
     state: s,
     units,
     projectile: null,
+    bombs: s.bombs.map((b) => ({ q: b.pos.q, r: b.pos.r, fuse: b.fuse })),
+    blast: null,
     floaters: prev?.floaters ?? [],
     shake: prev?.shake ?? 0,
     hurt: prev?.hurt ?? 0,

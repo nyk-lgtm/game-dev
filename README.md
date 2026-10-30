@@ -17,7 +17,8 @@ telegraphs its threat; moving is attacking. Reach the stairs, go deeper.
 src/core/     pure, deterministic rules (no DOM) — state in, state + events out
   hex.ts        axial hex math (flat-top), odd-q offset board
   board.ts      tile/occupancy queries, distance fields, rays
-  enemies.ts    enemy definitions (data + behavior)
+  enemies.ts    enemy definitions (data + behavior): brute, guard, archer, bomber, charger
+  combat.ts     damage, daze, shields, shoves (Bash)
   levelgen.ts   seeded floor generation
   resolve.ts    applyAction(): player move, stab/lunge, enemy phase
   preview.ts    threat overlay + exact outcome preview
@@ -26,7 +27,7 @@ src/render/   canvas drawing, scene model, event -> animation timeline
 src/ui/       DOM HUD, info panel, modal cards
 src/debug/    on-screen error overlay, bug-report export, URL replay
 src/game.ts   controller: input -> rules -> animation -> UI
-scripts/      greedy bot + balance probe (npx vite-node scripts/balance.ts)
+scripts/      greedy bot, balance probe, damage-source report
 tests/        rules, levelgen and fuzz tests
 ```
 

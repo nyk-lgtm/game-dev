@@ -1,5 +1,5 @@
 import { DIRS, add, eq, key, neighbors, type Hex } from './hex';
-import type { Enemy, GameState, Tile } from './types';
+import { PLAYER_ID, type Enemy, type GameState, type Tile } from './types';
 
 export function tileAt(s: GameState, h: Hex): Tile | undefined {
   return s.tiles[key(h)];
@@ -24,6 +24,12 @@ export function shotPasses(t: Tile | undefined): boolean {
 
 export function enemyAt(s: GameState, h: Hex): Enemy | undefined {
   return s.enemies.find((e) => e.hp > 0 && eq(e.pos, h));
+}
+
+/** Id of the unit on a hex (PLAYER_ID for the player), or null. */
+export function unitAt(s: GameState, h: Hex): number | null {
+  if (eq(s.player.pos, h)) return PLAYER_ID;
+  return enemyAt(s, h)?.id ?? null;
 }
 
 export function occupied(s: GameState, h: Hex): boolean {

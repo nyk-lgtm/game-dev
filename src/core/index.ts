@@ -7,3 +7,4 @@ export * from './resolve';
 export * from './preview';
 export * from './rng';
 export * from './replay';
+export * from './combat';

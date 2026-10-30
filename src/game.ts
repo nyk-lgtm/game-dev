@@ -3,9 +3,11 @@
 import {
   ENEMIES,
   applyAction,
+  bashTargets,
   encodeAction,
   enemyAt,
   eq,
+  isAdjacent,
   inBounds,
   legalMoves,
   newRun,
@@ -24,7 +26,7 @@ import { draw } from './render/draw';
 import { fitBoard, pxToHex, type Layout } from './render/layout';
 import { sceneFromState, type Scene } from './render/scene';
 import { load, save } from './storage';
-import { HELP_HTML, closeOverlay, renderHud, renderPanel, showCard } from './ui/dom';
+import { HELP_HTML, closeOverlay, enemyIntroHtml, renderHud, renderPanel, showCard } from './ui/dom';
 
 interface SavedRun {
   seed: number;
@@ -41,6 +43,7 @@ export class Game {
   private w = 0;
   private h = 0;
   private selected: Hex | null = null;
+  private bashSel: Hex | null = null;
   private outcome: Outcome | null = null;
   private inspect: number | null = null;
   private last = 0;
@@ -72,6 +75,7 @@ export class Game {
     this.persist();
     this.refreshUi();
     if (s.status === 'dead') this.showGameOver();
+    else this.introduceEnemies();
   }
 
   newRun(): void {
@@ -116,9 +120,19 @@ export class Game {
         this.commit({ type: 'move', to: h });
         return;
       }
+      this.clearSelection();
       this.selected = h;
-      this.inspect = null;
       this.outcome = previewAction(this.state, { type: 'move', to: h });
+      navigator.vibrate?.(8);
+    } else if (bashTargets(this.state).some((m) => eq(m, h))) {
+      if (this.bashSel && eq(this.bashSel, h)) {
+        this.commit({ type: 'bash', target: h });
+        return;
+      }
+      this.clearSelection();
+      this.bashSel = h;
+      this.inspect = enemyAt(this.state, h)?.id ?? null;
+      this.outcome = previewAction(this.state, { type: 'bash', target: h });
       navigator.vibrate?.(8);
     } else {
       this.clearSelection();
@@ -130,6 +144,7 @@ export class Game {
 
   private clearSelection(): void {
     this.selected = null;
+    this.bashSel = null;
     this.outcome = null;
     this.inspect = null;
   }
@@ -144,6 +159,7 @@ export class Game {
     renderPanel('', null);
     this.animator.play(this.scene, events, state, () => {
       this.refreshUi();
+      if (events.some((e) => e.type === 'descend')) this.introduceEnemies();
       if (state.status === 'dead')
         setTimeout(() => this.state === state && this.showGameOver(), 250);
     });
@@ -158,9 +174,14 @@ export class Game {
       renderPanel('<span class="title">You fell.</span>', { label: 'New run', onClick: () => this.newRun() });
       return;
     }
-    if (this.selected && this.outcome) {
+    if ((this.selected || this.bashSel) && this.outcome) {
       const o = this.outcome;
       const parts: string[] = [];
+      const bashing = this.bashSel !== null;
+      if (bashing) {
+        const e = s.enemies.find((x) => x.id === this.inspect);
+        parts.push(`Bash ${e ? ENEMIES[e.kind].name : ''}`);
+      }
       if (o.descends) parts.push('<span class="good">Take the stairs</span>');
       if (o.kills.length) parts.push(`<span class="good">Kills ${o.kills.length}</span>`);
       if (o.wounded.length) parts.push(`Wounds ${o.wounded.length}`);
@@ -168,22 +189,33 @@ export class Game {
       else if (o.damageTaken) parts.push(`<span class="bad">You take ${o.damageTaken} damage</span>`);
       else if (!o.descends) parts.push('Safe');
       if (o.healed) parts.push('<span class="good">+1 ♥</span>');
-      renderPanel(`<div class="title">${parts.join(' · ')}</div>Tap again or press Move.`, {
-        label: 'Move',
-        danger: o.damageTaken > 0,
-        onClick: () => this.selected && this.commit({ type: 'move', to: this.selected }),
-      });
+      const act: Action | null = this.selected
+        ? { type: 'move', to: this.selected }
+        : this.bashSel
+          ? { type: 'bash', target: this.bashSel }
+          : null;
+      renderPanel(
+        `<div class="title">${parts.join(' · ')}</div>Tap again or press ${bashing ? 'Bash' : 'Move'}.`,
+        {
+          label: bashing ? 'Bash' : 'Move',
+          danger: o.damageTaken > 0,
+          onClick: () => act && this.commit(act),
+        },
+      );
       return;
     }
     if (this.inspect !== null) {
       const e = s.enemies.find((x) => x.id === this.inspect);
       if (e) {
         const def = ENEMIES[e.kind];
-        renderPanel(`<div class="title">${def.name} · ${e.hp}/${e.maxHp} HP</div>${def.blurb}`, null);
+        const adjacent = isAdjacent(e.pos, s.player.pos);
+        const bashNote =
+          adjacent && s.player.bashCd > 0 ? `<br><b>Bash ready in ${s.player.bashCd}.</b>` : '';
+        renderPanel(`<div class="title">${def.name} · ${e.hp}/${e.maxHp} HP</div>${def.blurb}${bashNote}`, null);
         return;
       }
     }
-    if (legalMoves(s).length === 0) {
+    if (legalMoves(s).length === 0 && bashTargets(s).length === 0) {
       renderPanel('<div class="title">Boxed in.</div>No moves available.', {
         label: 'Wait',
         onClick: () => this.commit({ type: 'wait' }),
@@ -192,9 +224,19 @@ export class Game {
     }
     const hint =
       s.depth === 1 && s.turn < 3
-        ? 'Tap a hex next to you to preview a move. Tap an enemy to learn what it does.'
+        ? 'Tap a hex next to you to preview a move. Tap an enemy to learn what it does. Tap an adjacent enemy to Bash it.'
         : 'Reach the stairs. Red = danger.';
     renderPanel(`<div class="title">Depth ${s.depth}</div>${hint}`, null);
+  }
+
+  /** First time an enemy kind shows up, explain it. */
+  private introduceEnemies(): void {
+    const seen = new Set(load<string[]>('seenKinds', ['brute']));
+    const fresh = [...new Set(this.state.enemies.map((e) => e.kind))].filter((k) => !seen.has(k));
+    if (fresh.length === 0) return;
+    fresh.forEach((k) => seen.add(k));
+    save('seenKinds', [...seen]);
+    showCard(enemyIntroHtml(fresh), [{ label: 'Got it', primary: true, onClick: closeOverlay }]);
   }
 
   showHelp(): void {
@@ -288,6 +330,8 @@ export class Game {
         outcome: idle ? this.outcome : null,
         threats: idle ? threats(this.state) : null,
         inspect: idle ? this.inspect : null,
+        bashTargets: idle ? bashTargets(this.state) : [],
+        bashSelected: idle ? this.bashSel : null,
       },
       t,
     );

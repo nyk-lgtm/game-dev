@@ -54,26 +54,12 @@ describe('player attacks', () => {
     expect(state.kills).toBe(1);
   });
 
-  it('stab wounds and staggers, so the brute does not smash', () => {
+  it('stab wounds but does not daze: the brute smashes back', () => {
     const s = blankState(P);
     const b = addEnemy(s, 'brute', add(P, DIRS[0]));
     const { state } = applyAction(s, move(add(P, DIRS[5])));
-    const after = state.enemies.find((e) => e.id === b.id)!;
-    expect(after.hp).toBe(1);
-    expect(after.staggered).toBe(false); // consumed during the enemy phase
-    expect(state.player.hp).toBe(3);
-  });
-
-  it('second stab finishes a wounded brute', () => {
-    const s = blankState(P);
-    addEnemy(s, 'brute', add(P, DIRS[0]));
-    const s1 = applyAction(s, move(add(P, DIRS[5]))).state;
-    // From P+DIRS[5], hexes adjacent to both it and the brute: P (back) and one other.
-    const brute = s1.enemies[0].pos;
-    const next = legalMoves(s1).find((h) => distance(h, brute) === 1)!;
-    const s2 = applyAction(s1, move(next)).state;
-    expect(s2.enemies).toHaveLength(0);
-    expect(s2.player.hp).toBe(3);
+    expect(state.enemies.find((e) => e.id === b.id)!.hp).toBe(1);
+    expect(state.player.hp).toBe(2);
   });
 });
 
@@ -198,7 +184,7 @@ describe('review fixes', () => {
     const s = blankState(hex(5, 3));
     addEnemy(s, 'archer', hex(3, 0), { aim: 2 });
     addEnemy(s, 'brute', hex(3, 2));
-    expect(threats(s).shots[0].path).toEqual([hex(3, 1), hex(3, 2)]);
+    expect(threats(s).lines[0].path).toEqual([hex(3, 1), hex(3, 2)]);
   });
 
   it('rejects malformed action codes', () => {

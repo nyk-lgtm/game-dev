@@ -36,10 +36,12 @@ html, body {
   border-bottom: 1px solid var(--line);
   min-height: 52px;
 }
-.stat { display: flex; flex-direction: column; line-height: 1.1; min-width: 44px; }
+.stat { display: flex; flex-direction: column; line-height: 1.1; min-width: 40px; }
 .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
 .value { font-size: 20px; font-weight: 700; }
-#hearts { flex: 1; display: flex; justify-content: center; gap: 6px; font-size: 24px; }
+#hearts { flex: 1; display: flex; justify-content: center; gap: 4px; font-size: 22px; }
+#bash.ready { color: var(--accent); }
+#bash.cooling { color: var(--muted); }
 #hearts .h { color: var(--danger); transition: transform 0.2s; }
 #hearts .h.empty { color: #3a3f52; }
 .icon-btn {
@@ -98,6 +100,9 @@ button:active { transform: scale(0.97); }
 .c-player { color: var(--accent); font-weight: 700; }
 .c-brute { color: var(--danger); font-weight: 700; }
 .c-archer { color: var(--gold); font-weight: 700; }
+.c-guard { color: #7aa2ff; font-weight: 700; }
+.c-bomber { color: #c084fc; font-weight: 700; }
+.c-charger { color: #a3e635; font-weight: 700; }
 .c-heal { color: var(--heal); font-weight: 700; }
 .c-threat { color: #ff3355; font-weight: 700; }
 #errors {

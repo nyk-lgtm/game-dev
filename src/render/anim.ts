@@ -59,15 +59,16 @@ export class Animator {
           break;
         }
         case 'attack': {
-          if (ev.kind === 'arrow') break;
-          const dur = ev.by === PLAYER_ID ? 90 : 140;
+          if (ev.kind === 'charge') break;
+          const dur = ev.kind === 'bash' ? 130 : ev.by === PLAYER_ID ? 90 : 140;
+          const reach = ev.kind === 'bash' ? 0.4 : ev.by === PLAYER_ID ? 0.25 : 0.35;
           steps.push({
             dur,
             update: (t) => {
               const a = unit(ev.by);
               const b = unit(ev.target);
               if (!a || !b) return;
-              const k = Math.sin(t * Math.PI) * (ev.by === PLAYER_ID ? 0.25 : 0.35);
+              const k = Math.sin(t * Math.PI) * reach;
               a.bq = (b.q - a.q) * k;
               a.br = (b.r - a.r) * k;
             },
@@ -152,9 +153,104 @@ export class Animator {
                 q: lerp(from.q, end.q, t),
                 r: lerp(from.r, end.r, t),
                 dir,
+                kind: 'arrow',
+                lift: 0,
               };
             },
             end: () => (scene.current.projectile = null),
+          });
+          break;
+        }
+        case 'blocked': {
+          steps.push({
+            dur: 140,
+            start: () => {
+              const u = unit(ev.target);
+              if (u) floater('blocked', C.guard, u);
+            },
+          });
+          break;
+        }
+        case 'face': {
+          steps.push({
+            dur: 90,
+            start: () => {
+              const u = unit(ev.id);
+              if (u) u.facing = ev.dir;
+            },
+          });
+          break;
+        }
+        case 'push': {
+          steps.push(moveStep(() => unit(ev.id), ev.from, ev.to, 120));
+          break;
+        }
+        case 'charge': {
+          const len = Math.max(Math.abs(ev.to.q - ev.from.q), Math.abs(ev.to.r - ev.from.r), 1);
+          steps.push(moveStep(() => unit(ev.id), ev.from, ev.to, 50 * len + 60, 'linear'));
+          break;
+        }
+        case 'slam': {
+          steps.push({
+            dur: 120,
+            start: () => {
+              scene.current.shake = Math.max(scene.current.shake, 5);
+              floater('slam!', C.text, ev.at);
+            },
+            update: (t) => {
+              const u = unit(ev.id);
+              if (!u) return;
+              const k = Math.sin(t * Math.PI) * 0.3;
+              u.bq = (ev.at.q - u.q) * k;
+              u.br = (ev.at.r - u.r) * k;
+            },
+          });
+          break;
+        }
+        case 'fall': {
+          steps.push({
+            dur: 260,
+            update: (t) => {
+              const u = unit(ev.id);
+              if (!u) return;
+              u.scale = 1 - 0.7 * t;
+              u.alpha = 1 - t;
+            },
+            end: () => scene.current.units.delete(ev.id),
+          });
+          break;
+        }
+        case 'throw': {
+          const thrower = unit(ev.by);
+          const from = thrower ? { q: thrower.q, r: thrower.r } : ev.at;
+          steps.push({
+            dur: 260,
+            update: (t) => {
+              scene.current.projectile = {
+                q: lerp(from.q, ev.at.q, t),
+                r: lerp(from.r, ev.at.r, t),
+                dir: 0,
+                kind: 'bomb',
+                lift: Math.sin(t * Math.PI),
+              };
+            },
+            end: () => {
+              scene.current.projectile = null;
+              scene.current.bombs.push({ q: ev.at.q, r: ev.at.r, fuse: 2 });
+            },
+          });
+          break;
+        }
+        case 'explode': {
+          steps.push({
+            dur: 260,
+            start: () => {
+              scene.current.bombs = scene.current.bombs.filter((b) => b.q !== ev.at.q || b.r !== ev.at.r);
+              scene.current.shake = Math.max(scene.current.shake, 9);
+              navigator.vibrate?.(30);
+            },
+            update: (t) => (scene.current.blast = { q: ev.at.q, r: ev.at.r, t }),
+            end: () => (scene.current.blast = null),
           });
           break;
         }
@@ -229,7 +325,13 @@ export class Animator {
   }
 }
 
-function moveStep(get: () => VisUnit | undefined, from: Hex, to: Hex, dur: number): Step {
+function moveStep(
+  get: () => VisUnit | undefined,
+  from: Hex,
+  to: Hex,
+  dur: number,
+  curve: 'ease' | 'linear' = 'ease',
+): Step {
   return {
     dur,
     start: () => {
@@ -242,7 +344,7 @@ function moveStep(get: () => VisUnit | undefined, from: Hex, to: Hex, dur: numbe
     update: (t) => {
       const u = get();
       if (!u) return;
-      const k = ease(t);
+      const k = curve === 'ease' ? ease(t) : t;
       u.q = lerp(from.q, to.q, k);
       u.r = lerp(from.r, to.r, k);
     },
