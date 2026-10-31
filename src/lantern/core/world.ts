@@ -95,14 +95,34 @@ export function markerPos(m: LoadedMap, char: string): Pos {
   throw new Error(`no marker ${char} in ${m.id}`);
 }
 
-/** Where you arrive when entering map `m` through the exit marked `char`. */
-export function arrivalPos(m: LoadedMap, char: string): Pos {
+/** Straight neighbors first (S, N, E, W), then diagonals. */
+const ARRIVAL_ORDER = [4, 0, 2, 6, 3, 5, 1, 7];
+
+/**
+ * Where you arrive when entering map `m` through the exit marked `char`:
+ * the first free ground next to it that you could step to from the exit.
+ */
+export function arrivalPos(m: LoadedMap, char: string, free: (p: Pos) => boolean = () => true): Pos {
   const at = markerPos(m, char);
-  for (const d of DIRS8) {
-    const n = addPos(at, d);
-    if (passable(m, n) && markerAt(m, n)?.kind !== 'exit') return n;
+  for (const d of ARRIVAL_ORDER) {
+    const n = addPos(at, DIRS8[d]);
+    if (passable(m, n) && markerAt(m, n)?.kind !== 'exit' && canStep(m, at, d) && free(n)) return n;
   }
   return at;
+}
+
+/**
+ * A diagonal step can't squeeze between two blocked cells (wall corners,
+ * trees, water). Straight steps are always fine here.
+ */
+export function canStep(m: LoadedMap, from: Pos, dir: number): boolean {
+  if (dir % 2 === 0) return true;
+  const d = DIRS8[dir];
+  const open = (p: Pos) => {
+    const t = terrainAt(m, p);
+    return t !== undefined && OPEN.has(t);
+  };
+  return open({ x: from.x + d.x, y: from.y }) || open({ x: from.x, y: from.y + d.y });
 }
 
 /** Bresenham line of sight between two cells (endpoints excluded from blocking). */
@@ -163,6 +183,10 @@ export function pathTo(s: GameState, to: Pos): number[] | null {
   const seen = s.seen[m.id];
   const known = (p: Pos) => !MAPS[m.id].dark || (seen !== undefined && seen[p.y * m.w + p.x] === '1');
   const goalOpen = passable(m, to) && !monsterAt(s, m.id, to);
+  // Only creatures and things (NPCs, chests, signs, the lantern) can be bumped.
+  const goalMarker = markerAt(m, to);
+  const bumpable = !!monsterAt(s, m.id, to) || (!!goalMarker && goalMarker.kind !== 'exit' && goalMarker.kind !== 'spawn');
+  if (!goalOpen && !bumpable) return null;
   const prev = new Map<string, { p: Pos; d: number }>();
   const q: Pos[] = [from];
   prev.set(posKey(from), { p: from, d: -1 });
@@ -171,7 +195,7 @@ export function pathTo(s: GameState, to: Pos): number[] | null {
     for (let d = 0; d < 8; d++) {
       const n = addPos(cur, DIRS8[d]);
       const k = posKey(n);
-      if (prev.has(k)) continue;
+      if (prev.has(k) || !canStep(m, cur, d)) continue;
       const isGoal = samePos(n, to);
       if (isGoal && !goalOpen) {
         // Bump into the goal from here.

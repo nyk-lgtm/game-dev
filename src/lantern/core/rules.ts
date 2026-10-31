@@ -10,6 +10,7 @@ import {
   WORLD,
   addPos,
   arrivalPos,
+  canStep,
   chebyshev,
   fov,
   inMap,
@@ -58,7 +59,7 @@ export function isLegal(s: GameState, a: Action): boolean {
       if (!(a.dir >= 0 && a.dir < 8)) return false;
       const m = WORLD[p.map];
       const to = addPos(p.pos, DIRS8[a.dir]);
-      if (!inMap(m, to)) return false;
+      if (!inMap(m, to) || !canStep(m, p.pos, a.dir)) return false;
       return passable(m, to) || !!monsterAt(s, p.map, to) || !!markerAt(m, to);
     }
     case 'wait':
@@ -164,7 +165,7 @@ function step(s: GameState, dir: number, events: GameEvent[]): boolean {
   p.pos = to;
   if (mk?.kind === 'exit') {
     p.map = mk.to;
-    p.pos = arrivalPos(WORLD[mk.to], mk.entry);
+    p.pos = arrivalPos(WORLD[mk.to], mk.entry, (q) => !monsterAt(s, mk.to, q));
     say(s, `You enter ${MAPS[mk.to].name}.`);
     events.push({ type: 'enterMap', map: mk.to });
   }
@@ -293,17 +294,18 @@ function monsterPhase(s: GameState, events: GameEvent[]): void {
     if (chasing && !(def.erratic > 0 && roll(s) < def.erratic)) {
       // Step to the free neighbor closest to the player.
       let best = d;
-      for (const dir of DIRS8) {
-        const n = addPos(mo.pos, dir);
+      for (let k = 0; k < 8; k++) {
+        const n = addPos(mo.pos, DIRS8[k]);
         const nd = chebyshev(n, p.pos);
-        if (nd < best && free(n)) {
+        if (nd < best && free(n) && canStep(m, mo.pos, k)) {
           best = nd;
           target = n;
         }
       }
     } else if (chasing || roll(s) < 0.25) {
-      const n = addPos(mo.pos, DIRS8[rollInt(s, 0, 7)]);
-      if (free(n)) target = n;
+      const k = rollInt(s, 0, 7);
+      const n = addPos(mo.pos, DIRS8[k]);
+      if (free(n) && canStep(m, mo.pos, k)) target = n;
     }
     if (target) mo.pos = target;
   }
@@ -362,8 +364,8 @@ export function newGame(seed: number): GameState {
       xp: 0,
       baseAtk: 3,
       baseDef: 0,
-      gold: 5,
-      potions: 1,
+      gold: 8,
+      potions: 2,
       weapon: 'dagger',
       armor: 'cloth',
     },

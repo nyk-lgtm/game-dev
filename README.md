@@ -8,6 +8,7 @@ Small, deep games for one thumb, built for phones (portrait, touch).
 |---|---|
 | [Telegraph](https://nyk-lgtm.github.io/game-dev/telegraph/) | Hex tactics roguelike. Every enemy telegraphs its next attack; moving is attacking. |
 | [Grove](https://nyk-lgtm.github.io/game-dev/grove/) | Hex merge puzzle. Three alike merge into the next tier; trap the wandering wisps. |
+| [Lantern](https://nyk-lgtm.github.io/game-dev/lantern/) | Tiny ASCII RPG. Tap to walk, bump to fight; relight the village Lantern. |
 
 ## Stack
 
@@ -37,6 +38,7 @@ npm test           # all rules tests
 npm run build      # typecheck + production build into dist/
 npx vite-node scripts/telegraph/balance.ts 150
 npx vite-node scripts/grove/balance.ts 60
+npx vite-node scripts/lantern/balance.ts 50
 ```
 
 ## Debugging from a phone

@@ -58,9 +58,9 @@ const hash = (x: number, y: number) => ((x * 73856093) ^ (y * 19349663)) >>> 0;
 function terrainGlyph(t: string, x: number, y: number, outdoors: boolean, time: number): [string, string] {
   switch (t) {
     case '#':
-      return ['#', outdoors ? '#a2835f' : '#646a7d'];
+      return ['#', outdoors ? '#a2835f' : '#9298ad'];
     case '.':
-      return ['·', outdoors ? '#6b5640' : '#3d4150'];
+      return ['·', outdoors ? '#6b5640' : '#6a6f82'];
     case ',': {
       const g = [',', '\'', '"', '`', ','][hash(x, y) % 5];
       return [g, ['#3f6b33', '#4a7a3a', '#365c2c'][hash(y, x) % 3]];
@@ -156,10 +156,10 @@ export function draw(
       else if (mk?.kind === 'chest') [glyph, color] = s.done.includes(mk.id) ? ['_', '#6b5a3a'] : ['≡', '#e7b84a'];
       else if (mk?.kind === 'sign') [glyph, color] = ['?', '#d6b47a'];
       else if (mk?.kind === 'lantern') [glyph, color] = s.quest === 'won' ? ['☼', '#ffd166'] : ['¥', '#7d7a73'];
-      if (remembered) color = '#2b2d36';
+      if (remembered) color = '#262832';
       else if (lit) {
         const d = Math.hypot(x - P.x, y - P.y);
-        ctx.globalAlpha = Math.max(0.35, 1 - d / 8);
+        ctx.globalAlpha = Math.max(0.5, 1 - d / 10);
       }
       ctx.fillStyle = color;
       ctx.fillText(glyph, cx, cy);

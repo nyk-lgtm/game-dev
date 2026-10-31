@@ -20,7 +20,7 @@ export interface MonsterDef {
 export const MONSTERS: Record<MonsterKind, MonsterDef> = {
   rat: { name: 'rat', glyph: 'r', hp: 4, atk: 2, def: 0, xp: 2, gold: [0, 1], sight: 5, erratic: 0, blurb: 'A fat rat. Mostly teeth.' },
   wolf: { name: 'wolf', glyph: 'w', hp: 9, atk: 4, def: 0, xp: 5, gold: [0, 0], sight: 7, erratic: 0, blurb: 'Grey wolf. It has your scent.' },
-  goblin: { name: 'goblin', glyph: 'g', hp: 10, atk: 4, def: 1, xp: 6, gold: [2, 5], sight: 6, erratic: 0, blurb: 'A goblin with a rusty knife and a full purse.' },
+  goblin: { name: 'goblin', glyph: 'g', hp: 10, atk: 3, def: 1, xp: 6, gold: [2, 5], sight: 6, erratic: 0, blurb: 'A goblin with a rusty knife and a full purse.' },
   bat: { name: 'bat', glyph: 'b', hp: 5, atk: 3, def: 0, xp: 3, gold: [0, 1], sight: 6, erratic: 0.5, blurb: 'Flits about wildly. Hard to pin down.' },
   spider: { name: 'spider', glyph: 's', hp: 12, atk: 5, def: 1, xp: 8, gold: [0, 2], sight: 5, erratic: 0, blurb: 'A cave spider the size of a dog.' },
   skeleton: { name: 'skeleton', glyph: 'k', hp: 16, atk: 6, def: 2, xp: 12, gold: [3, 6], sight: 6, erratic: 0, blurb: 'Old bones that remember how to fight.' },
@@ -29,7 +29,7 @@ export const MONSTERS: Record<MonsterKind, MonsterDef> = {
 
 export const WEAPONS = { dagger: { name: 'Dagger', atk: 0 }, sword: { name: 'Sword', atk: 3 }, axe: { name: 'Iron Axe', atk: 5 } };
 export const ARMORS = { cloth: { name: 'Cloth', def: 0 }, leather: { name: 'Leather', def: 1 }, chain: { name: 'Chain Mail', def: 3 } };
-export const PRICES = { sword: 20, leather: 12, chain: 35, potion: 6, rest: 2 };
+export const PRICES = { sword: 20, leather: 12, chain: 25, potion: 6, rest: 2 };
 export const POTION_HEAL = 12;
 /** Total XP needed to reach level i + 1 (index 0 = level 1). */
 export const XP_TABLE = [0, 10, 25, 45, 70, 100, 135, 175, 220, 270];

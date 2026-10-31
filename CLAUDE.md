@@ -1,7 +1,7 @@
 # Game Lab — notes for Claude
 
 A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
-(`index.html` + `src/hub/`), one folder per game: `telegraph/`, `grove/`.
+(`index.html` + `src/hub/`), one folder per game: `telegraph/`, `grove/`, `lantern/`.
 
 - The owner plays and tests only on an Android phone (Chrome, portrait). Every UI
   change must work by touch at ~390 CSS px wide; tap targets ≥ 44px.
@@ -21,13 +21,17 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     depth ≈ 7; it can't plan bash/lunge combos). `scripts/telegraph/damage.ts`
     shows what hurts the player.
   - Grove: `npx vite-node scripts/grove/balance.ts 60` (score, game length, best tier).
+  - Lantern: `npx vite-node scripts/lantern/balance.ts 50` (completion bot: ~98% finish,
+    level 7 at the king). Maps are hand-drawn strings in src/lantern/core/maps.ts;
+    diagonal steps can't squeeze between two blocked cells, so never connect areas
+    only diagonally.
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)
   plus a shape in render/draw.ts and a color in palette.ts; tests in
   tests/telegraph/enemies.test.ts. Telegraphed attacks set `aim` and resolve via
   `release` at the start of the next enemy phase; a releasing enemy skips `act`.
 - Visual check: build, `npx vite preview`, screenshot with Playwright using the
   `Pixel 7` device profile. `window.__game` exposes each game's controller.
-- Bug reports from the owner look like `TELEGRAPH …`/`GROVE … seed=… a=…`;
+- Bug reports from the owner look like `TELEGRAPH …`/`GROVE …`/`LANTERN … seed=… a=…`;
   reproduce with that game's `replay(seed, a)` or `<game>/?seed=…&a=…`.
 - The live site deploys only from `main` (CI pushes `dist/` to `gh-pages`);
   other branches just build and test.
