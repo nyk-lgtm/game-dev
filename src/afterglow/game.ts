@@ -121,6 +121,7 @@ export class Game {
     showPause(this.world, {
       resume: () => this.resume(),
       quit: () => this.end(),
+      report: () => this.copyReport(),
       muted: this.sfx.muted,
       toggleMute: () => {
         this.sfx.setMuted(!this.sfx.muted);

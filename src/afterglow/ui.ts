@@ -158,7 +158,7 @@ export function buildList(w: World): HTMLElement {
   return box;
 }
 
-export function showPause(w: World, h: { resume(): void; quit(): void; muted: boolean; toggleMute(): void }): void {
+export function showPause(w: World, h: { resume(): void; quit(): void; muted: boolean; toggleMute(): void; report(): void }): void {
   const p = screen();
   p.append(el('h2', '', 'Paused'));
   p.append(button('Resume', 'big', h.resume));
@@ -168,7 +168,7 @@ export function showPause(w: World, h: { resume(): void; quit(): void; muted: bo
     button(h.muted ? 'Sound: off' : 'Sound: on', 'alt', h.toggleMute),
     button('Give up', 'alt', h.quit),
   );
-  p.append(row);
+  p.append(row, button('Copy bug report', 'alt', h.report));
 }
 
 export interface RunSummary {

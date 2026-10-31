@@ -268,6 +268,31 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, fx: Fx, cam: 
   }
   ctx.globalCompositeOperation = 'source-over';
 
+  // Arrows at the screen edge pointing to off-screen bosses and elites.
+  for (const e of w.enemies) {
+    if (!e.elite && e.kind !== 'prism' && e.kind !== 'eclipse') continue;
+    const X = sx(e.x);
+    const Y = sy(e.y);
+    if (X > 0 && X < cam.w && Y > 60 && Y < cam.h) continue;
+    const cx = cam.w / 2;
+    const cy = cam.h / 2;
+    const a = Math.atan2(Y - cy, X - cx);
+    const t = Math.min((cam.w / 2 - 22) / Math.abs(Math.cos(a) || 1e-6), (cam.h / 2 - 70) / Math.abs(Math.sin(a) || 1e-6));
+    const ax = cx + Math.cos(a) * t;
+    const ay = cy + Math.sin(a) * t;
+    ctx.save();
+    ctx.translate(ax, ay);
+    ctx.rotate(a);
+    ctx.beginPath();
+    ctx.moveTo(12, 0);
+    ctx.lineTo(-6, -8);
+    ctx.lineTo(-6, 8);
+    ctx.closePath();
+    ctx.fillStyle = e.elite ? 'rgba(255,209,102,0.9)' : 'rgba(255,61,139,0.95)';
+    ctx.fill();
+    ctx.restore();
+  }
+
   // Joystick.
   if (joy) {
     ctx.beginPath();

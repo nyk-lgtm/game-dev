@@ -40,6 +40,7 @@ html, body {
   text-shadow: 0 0 12px #ff3d8b; opacity: 0; transition: opacity 0.3s;
 }
 #banner.show { opacity: 1; }
+#ui:not(:empty) ~ #hud #banner, body:has(#ui:not(:empty)) #banner { opacity: 0; }
 
 /* ---------- screens ---------- */
 #ui:empty { display: none; }
