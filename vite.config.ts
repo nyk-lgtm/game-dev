@@ -30,6 +30,7 @@ export default defineConfig({
         telegraph: resolve(__dirname, 'telegraph/index.html'),
         grove: resolve(__dirname, 'grove/index.html'),
         lantern: resolve(__dirname, 'lantern/index.html'),
+        afterglow: resolve(__dirname, 'afterglow/index.html'),
       },
     },
   },
