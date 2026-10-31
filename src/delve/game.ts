@@ -78,6 +78,11 @@ export class Game {
   private bolt: { t: number; color: string } | null = null;
   private bump = 0;
   private last = 0;
+  /** Viewing a ?seed=&a= replay link: never touches the saved run or records. */
+  private replaying = false;
+  /** Something changed that the idle (torch-rate) redraw wouldn't pick up soon enough. */
+  private dirty = true;
+  private lastTick = -1;
 
   constructor() {
     this.view = $<HTMLCanvasElement>('view');
@@ -90,24 +95,31 @@ export class Game {
 
   // ---------- lifecycle ----------
 
-  start(seed: number, actions = ''): void {
+  /** Start (or restore) a run. With `replayLink`, the run is a bug-report replay and is never saved. */
+  start(seed: number, actions = '', replayLink = false): void {
     let s: GameState;
+    let note = replayLink ? 'Replay: progress here is not saved' : '';
     try {
       s = replay(seed, actions);
-    } catch {
+    } catch (err) {
+      note = `${replayLink ? 'Replay' : 'Saved run'} failed (${err instanceof Error ? err.message : String(err)}); seed ${seed} from the start`;
       actions = '';
       s = newGame(seed);
     }
+    if (note) toast(note);
+    this.replaying = replayLink;
     this.run = { seed, actions, v: RULES_VERSION };
     this.state = s;
     this.snapPose();
     this.resize();
+    this.dirty = true;
     this.persist();
     this.refresh();
     if (s.status !== 'playing') this.showEnd();
   }
 
   private persist(): void {
+    if (this.replaying) return;
     store.save('run', this.state.status === 'playing' ? this.run : null);
     const best = store.load<number>('best', 0);
     if (this.state.depth > best) store.save('best', this.state.depth);
@@ -172,6 +184,7 @@ export class Game {
     this.react(events);
     this.persist();
     this.refresh();
+    this.dirty = true;
   }
 
   private react(events: GameEvent[]): void {
@@ -280,7 +293,7 @@ export class Game {
         { label: 'Resume', primary: true, onClick: closeOverlay },
         { label: 'How to play', onClick: () => this.showHelp() },
         { label: 'Copy bug report', onClick: () => this.copyReport() },
-        { label: 'Abandon descent', onClick: () => (store.save('run', null), this.showTitle()) },
+        { label: 'Abandon descent', onClick: () => (this.replaying || store.save('run', null), this.showTitle()) },
         { label: 'All games', onClick: () => (location.href = '../') },
       ],
     );
@@ -348,6 +361,7 @@ export class Game {
     mc.width = Math.round(150 * dpr);
     mc.height = Math.round(150 * dpr);
     this.mapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.dirty = true;
   }
 
   private frame(t: number): void {
@@ -355,6 +369,13 @@ export class Game {
     const dt = Math.min(0.1, (t - (this.last || t)) / 1000);
     this.last = t;
     if (!this.state) return;
+    // Redraw every frame only while something moves; otherwise at the torch's
+    // flicker rate (10 Hz), which is all an idle view changes by.
+    const busy = !!this.anim || this.flash.size > 0 || this.hurtFlash > 0 || this.swing > 0 || this.bump > 0 || !!this.bolt;
+    const tick = Math.floor(t / 100);
+    if (!busy && !this.dirty && tick === this.lastTick) return;
+    this.lastTick = tick;
+    this.dirty = false;
     if (this.anim) {
       const a = this.anim;
       a.t += dt / a.dur;

@@ -19,7 +19,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 #flash.show { opacity: 1; }
 #pauseBtn { pointer-events: auto; position: absolute; top: calc(env(safe-area-inset-top) + 70px); right: 10px; width: 44px; height: 44px; background: rgba(10, 4, 24, 0.6); color: var(--text); border: 1px solid #4a2a7a; font: 800 14px var(--mono); }
 #controls { position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 14px); display: flex; align-items: flex-end; justify-content: space-between; padding: 0 12px; gap: 12px; }
-#controls button { pointer-events: auto; width: 96px; height: 64px; border: 2px solid; background: rgba(10, 4, 24, 0.55); font: 900 15px var(--mono); letter-spacing: 0.08em; }
+#controls button { pointer-events: auto; touch-action: none; width: 96px; height: 64px; border: 2px solid; background: rgba(10, 4, 24, 0.55); font: 900 15px var(--mono); letter-spacing: 0.08em; }
 #brakeBtn { color: #b9a6e8; border-color: #4a2a7a; }
 #boostBtn { color: #ffd166; border-color: #ff8a3d; box-shadow: 0 0 14px rgba(255, 138, 61, 0.4); }
 #controls button.down { background: rgba(255, 138, 61, 0.35); }

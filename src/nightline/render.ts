@@ -53,17 +53,48 @@ export interface SkyState {
   offset: number;
 }
 
+/** Scroll the skyline for one simulation step (call once per `step`, not per drawn frame). */
+export function advanceSky(sky: SkyState, r: Race): void {
+  const p = r.player;
+  sky.offset += segmentAt(r, p.z).curve * (p.speed / 8000) * 0.12;
+}
+
+/** Screen row the player's car stands on: above the on-screen BRAKE/BOOST buttons. */
+export function carBottomRow(v: View): number {
+  return v.rows - Math.ceil(96 / v.ch);
+}
+
+/**
+ * How far behind the car the camera sits so that flat road at the car's z
+ * projects exactly onto the car sprite's bottom row. The race core treats
+ * `player.z` as the car's position, so crashes line up with what's drawn.
+ */
+export function playerDepth(v: View): number {
+  const halfW = (v.cols * v.cw) / 2;
+  const below = Math.max(v.ch, (carBottomRow(v) - v.horizon) * v.ch);
+  return (CAM_DEPTH * CAM_HEIGHT * halfW) / below;
+}
+
+/** Ground height at world z (a segment's `y` is its far end). */
+function groundY(r: Race, z: number): number {
+  const seg = segmentAt(r, z);
+  const prevY = r.segments[seg.index - 1]?.y ?? seg.y;
+  const t = Math.max(0, Math.min(1, (z - seg.z) / SEG_LEN));
+  return prevY + (seg.y - prevY) * t;
+}
+
 export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number): { skyGradient: [string, string]; horizonRow: number } {
   clearGrid(g);
   const p = r.player;
-  const base = segmentAt(r, p.z);
-  const pal = PALETTES[base.biome];
+  // The camera trails the car; clamp at the start line (there's no road behind it).
+  const camZ = Math.max(0, p.z - playerDepth(v));
+  const base = segmentAt(r, camZ);
+  const pal = PALETTES[segmentAt(r, p.z).biome];
   const W = v.cols * v.cw;
   const halfW = W / 2;
-  const basePct = (p.z % SEG_LEN) / SEG_LEN;
-  const nextY = r.segments[base.index + 1]?.y ?? base.y;
-  const playerY = base.y + (nextY - base.y) * basePct;
-  const camY = playerY + CAM_HEIGHT;
+  const basePct = (camZ - base.z) / SEG_LEN;
+  // Camera height follows the ground under the car, so the car sits on the road over hills.
+  const camY = groundY(r, p.z) + CAM_HEIGHT;
   const camX = p.x * ROAD_W;
   const horizonPx = v.horizon * v.ch;
 
@@ -89,10 +120,10 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
       for (let c = cx - halfC; c <= cx + halfC; c++) put(g, row, c, '=', t > 0.6 ? pal.sun[1] : pal.sun[0]);
     }
   } else if (pal.stars) {
-    const mx = Math.round(v.cols * 0.75 - (sky.offset * 0.2) % v.cols);
+    const mx = Math.round(v.cols * 0.75 - (((sky.offset * 0.2) % v.cols) + v.cols) % v.cols);
     for (const [dr, s] of [[0, ' .--. '], [1, '(    )'], [2, " '--' "]] as [number, string][]) text(g, 4 + dr, mx, s, '#e8e0c0');
   }
-  const sk = SKYLINES[base.biome];
+  const sk = SKYLINES[segmentAt(r, p.z).biome];
   const off = Math.floor(sky.offset);
   for (let rr = 0; rr < sk.rows.length; rr++) {
     const row = v.horizon - sk.rows.length + rr;
@@ -105,13 +136,17 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
 
   // ---- road, near to far ----
   const proj: { x: number; y: number; w: number; scale: number }[] = [];
+  /** Per drawn segment: curve offset and its slope at the segment start, and the start height (for placing cars inside a segment). */
+  const segX: number[] = [];
+  const segDx: number[] = [];
+  const segY0: number[] = [];
   let x = 0;
   let dx = -(base.curve * basePct);
   let maxy = v.rows * v.ch;
   const clips: number[] = [];
   /** Project a road-center point; `curveX` is the accumulated curve offset (world units). */
   const project = (curveX: number, wy: number, wz: number) => {
-    const scale = CAM_DEPTH / Math.max(1, wz - p.z);
+    const scale = CAM_DEPTH / Math.max(1, wz - camZ);
     return {
       x: halfW + scale * (curveX - camX) * halfW,
       y: horizonPx - scale * (wy - camY) * halfW,
@@ -125,11 +160,14 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
     const prevY = r.segments[seg.index - 1]?.y ?? seg.y;
     const p1 = project(x, prevY, seg.z);
     const p2 = project(x + dx, seg.y, seg.z + SEG_LEN);
+    segX[n] = x;
+    segDx[n] = dx;
+    segY0[n] = prevY;
     x += dx;
     dx += seg.curve;
     proj[n] = p1;
     clips[n] = maxy;
-    if (seg.z + SEG_LEN - p.z <= CAM_DEPTH || p2.y >= p1.y || p2.y >= maxy) continue;
+    if (seg.z + SEG_LEN - camZ <= CAM_DEPTH || p2.y >= p1.y || p2.y >= maxy) continue;
     const band = Math.floor(seg.index / 3) % 2;
     const sp = PALETTES[seg.biome];
     const rTop = Math.max(0, Math.ceil(p2.y / v.ch));
@@ -185,11 +223,14 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
     }
     for (const car of r.cars) {
       const cn = Math.floor(car.z / SEG_LEN) - base.index;
-      if (cn !== n) continue;
-      const rowsH = (pr.w * 0.62) / v.ch;
+      if (cn !== n || car.z <= camZ) continue;
+      // Place the car at its exact z inside the segment so near traffic doesn't hop.
+      const t = (car.z - seg.z) / SEG_LEN;
+      const pc = project(segX[n] + segDx[n] * t, segY0[n] + (seg.y - segY0[n]) * t, car.z);
+      const rowsH = (pc.w * 0.62) / v.ch;
       if (rowsH < 1) continue;
-      const colX = (pr.x + pr.w * car.x) / v.cw;
-      blitArt(g, TRAFFIC[car.kind % TRAFFIC.length], rowsH, pr.y / v.ch, colX, ['#7fd1ff', '#ffd166', '#b8ff6b', '#ff9ef0'][car.kind % 4], { clipRow, solid: true, maxScale: 2 });
+      const colX = (pc.x + pc.w * car.x) / v.cw;
+      blitArt(g, TRAFFIC[car.kind % TRAFFIC.length], rowsH, pc.y / v.ch, colX, ['#7fd1ff', '#ffd166', '#b8ff6b', '#ff9ef0'][car.kind % 4], { clipRow, solid: true, maxScale: 2 });
     }
   }
 
@@ -198,8 +239,7 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
   const offroad = Math.abs(p.x) > 1 && p.speed > 50;
   const bounce = offroad ? Math.round(Math.sin(time * 40)) : 0;
   const carRows = Math.min(art.rows.length * 1.2, v.rows * 0.16);
-  // Sit above the on-screen BRAKE/BOOST buttons.
-  const carBottom = v.rows - Math.ceil(96 / v.ch);
+  const carBottom = carBottomRow(v);
   blitArt(g, art, carRows, carBottom + bounce, v.cols / 2, '#ff2a6d', { solid: true });
 
   // Boost streaks.
@@ -210,6 +250,5 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
       const c0 = left ? 0 : v.cols - 6;
       text(g, rr, c0, left ? '----  ' : '  ----', '#ffffff');
     }
-  sky.offset += base.curve * (p.speed / 8000) * 0.12;
   return { skyGradient: [pal.skyTop, pal.skyBot], horizonRow: v.horizon };
 }

@@ -81,26 +81,42 @@ export function blitArt(
   }
 }
 
-/** Paint the grid, batching horizontal runs of the same color into one fillText. */
+/**
+ * Paint the grid, batching each horizontal run of one color into one
+ * fillText. Spaces are blank in any color, so a run carries on through them
+ * (the font is monospace, so the characters still land on their cells).
+ */
 export function paintGrid(ctx: CanvasRenderingContext2D, g: Grid, x0: number, y0: number, cw: number, chh: number, font: string): void {
   ctx.font = font;
   ctx.textBaseline = 'top';
   ctx.textAlign = 'left';
+  const { ch, color, cols } = g;
   for (let r = 0; r < g.rows; r++) {
-    let c = 0;
-    const base = r * g.cols;
-    while (c < g.cols) {
-      if (g.ch[base + c] === ' ') {
-        c++;
+    const base = r * cols;
+    const end = base + cols;
+    let i = base;
+    while (i < end) {
+      if (ch[i] === ' ') {
+        i++;
         continue;
       }
-      const color = g.color[base + c];
-      let run = '';
-      let c2 = c;
-      while (c2 < g.cols && g.color[base + c2] === color && g.ch[base + c2] !== ' ') run += g.ch[base + c2++];
-      ctx.fillStyle = color;
-      ctx.fillText(run, x0 + c * cw, y0 + r * chh);
-      c = c2;
+      const col = color[i];
+      const start = i;
+      let run = ch[i++];
+      // `pending` counts spaces seen since the last character of this color.
+      let pending = 0;
+      while (i < end) {
+        const c = ch[i];
+        if (c === ' ') pending++;
+        else if (color[i] === col) {
+          if (pending) run += ' '.repeat(pending);
+          pending = 0;
+          run += c;
+        } else break;
+        i++;
+      }
+      ctx.fillStyle = col;
+      ctx.fillText(run, x0 + (start - base) * cw, y0 + r * chh);
     }
   }
 }

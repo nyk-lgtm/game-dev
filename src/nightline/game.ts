@@ -7,7 +7,7 @@ import { Sfx } from '../afterglow/audio';
 import { LOGO } from './art';
 import { BIOME_NAMES, DT, MAX_SPEED, NITRO_MAX, newRace, randomSeed, stageProgress, step, type Input, type Race } from './core';
 import { Engine } from './engine';
-import { drawRace, type SkyState, type View } from './render';
+import { advanceSky, drawRace, type SkyState, type View } from './render';
 
 const store = makeStore('nightline.');
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -31,6 +31,8 @@ export class Game {
   private sfx = new Sfx();
   private engine = new Engine();
   private flashTimer = 0;
+  /** Pending "next biome" banner after a checkpoint. */
+  private bannerTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d', { alpha: false })!;
@@ -108,6 +110,7 @@ export class Game {
 
   title(): void {
     this.running = false;
+    this.clearBanner();
     $('hud').hidden = true;
     this.sfx.stopMusic();
     const best = store.load<number>('best', 0);
@@ -125,6 +128,8 @@ export class Game {
 
   private toggleTilt(): void {
     this.tilt = !this.tilt;
+    // Don't keep steering with the last tilt reading.
+    this.steer = 0;
     store.save('tilt', this.tilt);
     // iOS-style permission prompt where required.
     const DOE = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> };
@@ -148,9 +153,11 @@ export class Game {
 
   start(): void {
     closeOverlay();
+    this.clearBanner();
     this.race = newRace(randomSeed());
     this.sky = { offset: 0 };
     this.acc = 0;
+    this.steer = 0;
     this.running = true;
     $('hud').hidden = false;
     this.sfx.startMusic();
@@ -201,6 +208,11 @@ export class Game {
     );
   }
 
+  private clearBanner(): void {
+    clearTimeout(this.bannerTimer);
+    this.bannerTimer = undefined;
+  }
+
   private say(text: string): void {
     const f = $('flash');
     f.textContent = text;
@@ -236,6 +248,7 @@ export class Game {
       let n = 0;
       while (this.acc >= DT && n < 5) {
         step(r, this.input());
+        advanceSky(this.sky, r);
         this.acc -= DT;
         n++;
         this.handleFx(r);
@@ -244,6 +257,8 @@ export class Game {
           break;
         }
       }
+      // Too far behind (slow device): drop the backlog instead of carrying it forever.
+      if (n >= 5) this.acc = Math.min(this.acc, DT);
     }
     this.engine.set(r ? r.player.speed / MAX_SPEED : 0, !!r && this.running, !!r?.player.boosting);
     if (this.flashTimer > 0) {
@@ -258,7 +273,12 @@ export class Game {
       if (e.type === 'checkpoint') {
         this.say(`EXTENDED +${e.bonus}s`);
         this.sfx.levelUp();
-        setTimeout(() => this.say(BIOME_NAMES[r.stages[e.stage].biome].toUpperCase()), 1200);
+        const biome = BIOME_NAMES[r.stages[e.stage].biome].toUpperCase();
+        this.clearBanner();
+        this.bannerTimer = setTimeout(() => {
+          this.bannerTimer = undefined;
+          if (this.race === r && r.status === 'racing') this.say(biome);
+        }, 1200);
       } else if (e.type === 'crash') {
         this.sfx.hurt();
         if (e.hard) {

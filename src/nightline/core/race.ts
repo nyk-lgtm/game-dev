@@ -16,9 +16,19 @@ export const OFFROAD_LIMIT = MAX_SPEED * 0.35;
 export const CENTRIFUGAL = 0.32;
 export const START_CLOCK = 65;
 export const NITRO_MAX = 4;
-export const CAR_COUNT = 14;
-/** Car half-width in road half-widths. */
-export const CAR_W = 0.22;
+export const CAR_COUNT = 16;
+/**
+ * Rear-end contact: lateral distance between car centers (in road
+ * half-widths) at which the player's sprite and a traffic sprite overlap on
+ * screen. Measured from the art on a Pixel 7: ~0.29-0.35 (hatchback..sports
+ * car) at zero gap, ~0.4 half a segment ahead (near traffic is size-capped).
+ */
+export const CAR_HIT_W = 0.35;
+/** Traffic appears at least this many segments ahead, beyond the renderer's draw distance (170), so cars never pop in. */
+export const SPAWN_MIN = 175;
+export const SPAWN_SPAN = 100;
+/** How far ahead of the car's rear (its z) a roadside prop counts as hit. */
+export const PROP_REACH = SEG_LEN * 0.5;
 
 export function segmentAt(r: Race, z: number): Segment {
   const i = Math.floor(z / SEG_LEN);
@@ -64,8 +74,10 @@ function spawnTraffic(r: Race): void {
   const g = rng(r, 5000 + r.nextCarId);
   const stage = r.stages[r.stage];
   const limit = (stage?.end ?? r.segments.length) * SEG_LEN;
+  // The opening grid may fill the visible road; later cars start out of sight.
+  const near = r.time === 0 ? 60 : SPAWN_MIN;
   while (r.cars.length < want) {
-    const z = p.z + SEG_LEN * (60 + g.next() * 260);
+    const z = p.z + SEG_LEN * (near + g.next() * (SPAWN_MIN + SPAWN_SPAN - near));
     if (z > limit) break;
     const lane = g.int(-1, 1) * 0.62;
     r.cars.push({ id: r.nextCarId++, x: lane, z, speed: MAX_SPEED * (0.28 + g.next() * 0.3), kind: g.int(0, 3) });
@@ -112,7 +124,7 @@ export function step(r: Race, input: Input): void {
 
   // Roadside props: hitting one stops you hard.
   if (Math.abs(p.x) > 1) {
-    const s2 = segmentAt(r, p.z);
+    const s2 = segmentAt(r, p.z + PROP_REACH);
     for (const pr of s2.props) {
       if (pr.kind === 'fork') continue;
       if (Math.abs(p.x - pr.offset) < 0.22) {
@@ -136,7 +148,7 @@ export function step(r: Race, input: Input): void {
     if (near > 0 && near < SEG_LEN * 20 && Math.abs(c.x - p.x) < 0.5) c.x += Math.sign(c.x - p.x || 1) * dt * 0.15;
     c.x = Math.max(-0.85, Math.min(0.85, c.x - cseg.curve * 0.0005));
     const gap = c.z - p.z;
-    if (gap > -SEG_LEN * 0.4 && gap < SEG_LEN * 0.6 && Math.abs(c.x - p.x) < CAR_W * 2 && p.speed > c.speed) {
+    if (gap > -SEG_LEN * 0.4 && gap < SEG_LEN * 0.6 && Math.abs(c.x - p.x) < CAR_HIT_W && p.speed > c.speed) {
       // Rear-end: you lose your speed and get nudged aside.
       p.speed = Math.max(c.speed * 0.85, p.speed * 0.5);
       p.x += p.x > c.x ? 0.18 : -0.18;

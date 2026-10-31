@@ -3,8 +3,11 @@
 // planks), shaded by distance under torchlight; floor and ceiling are cast
 // per cell; monsters and items are ASCII-art billboards with a depth buffer.
 
+import { makeGrid, paintGrid, type Grid } from '../shared/ascii';
 import { ITEM_ART, MONSTER_ART, STAIRS_ART, type Art } from './art';
 import { SIZE, idx, type GameState, type Tile } from './core';
+
+export { makeGrid, paintGrid, type Grid };
 
 export interface Pose {
   /** Position in cell units (cell centers are at +0.5). */
@@ -14,25 +17,37 @@ export interface Pose {
   a: number;
 }
 
-export interface Grid {
-  cols: number;
-  rows: number;
-  ch: string[];
-  color: string[];
-}
-
 export const FOV_PLANE = 0.66;
 const RAMP = '@#%*+=-:.';
 
-/** Quantized color cache: hue/sat fixed per material, lightness in steps. */
-const colorCache = new Map<string, string>();
-function shade(h: number, s: number, l: number): string {
-  const q = Math.max(0, Math.min(20, Math.round(l * 20)));
-  const k = `${h}|${s}|${q}`;
-  let c = colorCache.get(k);
-  if (!c) colorCache.set(k, (c = `hsl(${h}, ${s}%, ${Math.round((q / 20) * 78)}%)`));
-  return c;
+/** Lightness steps per material ramp. */
+const STEPS = 20;
+type Ramp = readonly string[];
+/** Quantized colors: hue/sat fixed per material, lightness in STEPS+1 steps. */
+const ramps = new Map<number, Ramp>();
+function ramp(h: number, s: number): Ramp {
+  const k = h * 1000 + s;
+  let r = ramps.get(k);
+  if (!r) {
+    r = Array.from({ length: STEPS + 1 }, (_, q) => `hsl(${h}, ${s}%, ${Math.round((q / STEPS) * 78)}%)`);
+    ramps.set(k, r);
+  }
+  return r;
 }
+function shadeOf(r: Ramp, l: number): string {
+  return r[Math.max(0, Math.min(STEPS, Math.round(l * STEPS)))];
+}
+function shade(h: number, s: number, l: number): string {
+  return shadeOf(ramp(h, s), l);
+}
+const DOOR = ramp(28, 55);
+const PILLAR = ramp(38, 18);
+const WALL_NEAR = ramp(30, 22);
+const WALL_FAR = ramp(220, 14);
+const STAIRS = ramp(42, 80);
+const FLOOR_EDGE = ramp(30, 12);
+const FLOOR = ramp(30, 10);
+const BEAM = ramp(220, 10);
 
 const hash = (x: number, y: number) => {
   let h = (x * 374761393 + y * 668265263) | 0;
@@ -60,10 +75,6 @@ export interface Sprite {
   lift?: number;
 }
 
-export function makeGrid(cols: number, rows: number): Grid {
-  return { cols, rows, ch: new Array(cols * rows).fill(' '), color: new Array(cols * rows).fill('#000') };
-}
-
 function wallChar(t: Tile, u: number, v: number, d: number, side: number): string {
   const ramp = RAMP[Math.min(RAMP.length - 1, Math.floor((d / 9) * RAMP.length))];
   if (t === 'door') {
@@ -87,6 +98,8 @@ function wallChar(t: Tile, u: number, v: number, d: number, side: number): strin
   return side ? ramp : RAMP[Math.min(RAMP.length - 1, Math.floor((d / 9) * RAMP.length) + 1)];
 }
 
+let zbuf = new Float32Array(0);
+
 /** Render the scene into `g`. */
 export function castView(g: Grid, s: GameState, pose: Pose, aspect: number, flicker: number, sprites: Sprite[]): void {
   const { cols, rows } = g;
@@ -99,7 +112,7 @@ export function castView(g: Grid, s: GameState, pose: Pose, aspect: number, flic
   // A wall at distance 1 spans this many rows (square walls given the cell aspect).
   const H = (cols * aspect) / (2 * FOV_PLANE);
   const horizon = rows / 2;
-  const zbuf = new Float32Array(cols);
+  if (zbuf.length !== cols) zbuf = new Float32Array(cols);
   const tiles = s.level.tiles;
 
   for (let c = 0; c < cols; c++) {
@@ -139,7 +152,7 @@ export function castView(g: Grid, s: GameState, pose: Pose, aspect: number, flic
     const top = horizon - h / 2;
     const bot = horizon + h / 2;
     const L = light(dist, flicker) * (side ? 0.82 : 1);
-    const [hue, sat] = t === 'door' ? [28, 55] : t === 'pillar' ? [38, 18] : [dist < 3 ? 30 : 220, dist < 3 ? 22 : 14];
+    const wallColor = shadeOf(t === 'door' ? DOOR : t === 'pillar' ? PILLAR : dist < 3 ? WALL_NEAR : WALL_FAR, L);
 
     for (let r = 0; r < rows; r++) {
       const i = r * cols + c;
@@ -147,7 +160,7 @@ export function castView(g: Grid, s: GameState, pose: Pose, aspect: number, flic
       if (y >= top && y <= bot) {
         const v = (y - top) / h;
         g.ch[i] = wallChar(t, u, v, dist, side);
-        g.color[i] = shade(hue, sat, L);
+        g.color[i] = wallColor;
       } else if (y > bot) {
         // Floor: find where this row hits the ground along this ray.
         const d = H / (2 * (y - horizon));
@@ -161,14 +174,17 @@ export function castView(g: Grid, s: GameState, pose: Pose, aspect: number, flic
         const fl = light(d, flicker) * 0.85;
         if (ft === 'stairs') {
           g.ch[i] = (Math.floor(uy * 4) + Math.floor(ux * 4)) % 2 ? '=' : '>';
-          g.color[i] = shade(42, 80, Math.max(fl, 0.25));
+          g.color[i] = shadeOf(STAIRS, Math.max(fl, 0.25));
         } else if (ux < 0.05 || uy < 0.05) {
           g.ch[i] = d < 3 ? '+' : '.';
-          g.color[i] = shade(30, 12, fl * 0.7);
+          g.color[i] = shadeOf(FLOOR_EDGE, fl * 0.7);
         } else {
           const n = hash(Math.floor(fx * 6), Math.floor(fy * 6)) % 9;
-          g.ch[i] = n === 0 ? ',' : n === 1 ? '.' : n === 2 && d < 2.5 ? '`' : ' ';
-          g.color[i] = shade(30, 10, fl * 0.6);
+          const chx = n === 0 ? ',' : n === 1 ? '.' : n === 2 && d < 2.5 ? '`' : ' ';
+          if (chx !== ' ') {
+            g.ch[i] = chx;
+            g.color[i] = shadeOf(FLOOR, fl * 0.6);
+          }
         }
       } else {
         // Ceiling: faint beams over cell edges.
@@ -179,7 +195,7 @@ export function castView(g: Grid, s: GameState, pose: Pose, aspect: number, flic
         const uy = fy - Math.floor(fy);
         if (d < 5 && (ux < 0.05 || uy < 0.05)) {
           g.ch[i] = '-';
-          g.color[i] = shade(220, 10, light(d, flicker) * 0.35);
+          g.color[i] = shadeOf(BEAM, light(d, flicker) * 0.35);
         }
       }
     }
@@ -219,7 +235,8 @@ export function castView(g: Grid, s: GameState, pose: Pose, aspect: number, flic
       // cleanly against busy wall textures.
       const first = srcRow.search(/\S/);
       if (first >= 0) {
-        const lastSrc = srcRow.length - 1 - [...srcRow].reverse().join('').search(/\S/);
+        let lastSrc = srcRow.length - 1;
+        while (lastSrc > first && srcRow[lastSrc] === ' ') lastSrc--;
         for (let cc = Math.floor(first * k); cc <= Math.ceil(lastSrc * k); cc++) {
           const c = c0 + cc;
           if (c < 0 || c >= cols || zbuf[c] < ty) continue;
@@ -235,33 +252,6 @@ export function castView(g: Grid, s: GameState, pose: Pose, aspect: number, flic
         g.ch[i] = ch;
         g.color[i] = !sp.flash && art.accents?.[ch] ? art.accents[ch] : base;
       }
-    }
-  }
-}
-
-/** Blit the grid to a canvas, batching runs of the same color. */
-export function paintGrid(ctx: CanvasRenderingContext2D, g: Grid, x0: number, y0: number, cw: number, chh: number, font: string): void {
-  ctx.font = font;
-  ctx.textBaseline = 'top';
-  ctx.textAlign = 'left';
-  for (let r = 0; r < g.rows; r++) {
-    let c = 0;
-    while (c < g.cols) {
-      const i = r * g.cols + c;
-      if (g.ch[i] === ' ') {
-        c++;
-        continue;
-      }
-      const color = g.color[i];
-      let run = '';
-      let c2 = c;
-      while (c2 < g.cols && g.color[r * g.cols + c2] === color && g.ch[r * g.cols + c2] !== ' ') {
-        run += g.ch[r * g.cols + c2];
-        c2++;
-      }
-      ctx.fillStyle = color;
-      ctx.fillText(run, x0 + c * cw, y0 + r * chh);
-      c = c2;
     }
   }
 }
