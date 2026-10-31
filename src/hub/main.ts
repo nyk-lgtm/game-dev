@@ -19,6 +19,7 @@ const grove = makeStore('grove.');
 const lantern = makeStore('lantern.');
 const afterglow = makeStore('afterglow.');
 const delve = makeStore('delve.');
+const nightline = makeStore('nightline.');
 
 const GAMES: GameCard[] = [
   {
@@ -39,6 +40,22 @@ const GAMES: GameCard[] = [
       <g filter="url(#ag)" opacity="0.9"><circle cx="38" cy="40" r="7" fill="#5ee7ff"/><path d="M16 18l7 3-6 5zM60 20l-3 7-5-6zM58 60l-7-1 4-6zM14 56l5-6 3 7z" fill="#ff3d8b"/><rect x="50" y="34" width="9" height="9" fill="#ff9a3d"/></g>
       <circle cx="38" cy="40" r="6" fill="#bff6ff"/><circle cx="38" cy="40" r="20" fill="none" stroke="#b88cff" stroke-width="2" opacity="0.7"/>
       <path d="M16 18l7 3-6 5zM60 20l-3 7-5-6zM58 60l-7-1 4-6zM14 56l5-6 3 7z" fill="#ff3d8b"/></svg>`,
+  },
+  {
+    path: './nightline/',
+    title: 'Nightline',
+    tag: 'ASCII racer',
+    pitch: 'An OutRun-style night drive drawn in text. Beat the clock, pick your road at every fork.',
+    accent: '#ff2a6d',
+    best: () => {
+      const b = nightline.load<number>('best', 0);
+      return b ? `Best score: ${b.toLocaleString()}` : null;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#05010f"/><rect width="76" height="34" fill="#1a0533"/>
+      <g font-family="monospace" font-weight="700" font-size="8"><text x="4" y="30" fill="#7a3cff">|#|_|##|_|#|</text>
+      <text x="22" y="44" fill="#ff2a6d">#</text><text x="50" y="44" fill="#e8e8ff">#</text><text x="16" y="56" fill="#e8e8ff">##</text><text x="52" y="56" fill="#ff2a6d">##</text>
+      <text x="35" y="50" fill="#05d9e8">|</text><text x="35" y="62" fill="#05d9e8">|</text><text x="20" y="72" fill="#ff2a6d">[=NL84=]</text></g>
+      <circle cx="60" cy="14" r="6" fill="none" stroke="#e8e0c0" stroke-dasharray="2 2"/></svg>`,
   },
   {
     path: './delve/',
