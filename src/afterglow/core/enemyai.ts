@@ -10,12 +10,18 @@ import type { Enemy, World } from './types';
 export const DART_AIM = 0.7;
 export const SPIT_AIM = 0.45;
 export const BLOAT_SWELL = 0.9;
-export const SLAM_AIM = 1.1;
+export const SLAM_AIM = 1.6;
+/** The Eclipse enrages below this HP fraction (faster cycle). */
+export const ECLIPSE_ENRAGE = 0.35;
+export const SLAM_RADIUS = 150;
+export const eclipseCycle = (hp: number, maxHp: number) => (hp < maxHp * ECLIPSE_ENRAGE ? 9 : 12);
 export const PRISM_AIM = 0.8;
+/** A bloater's blast hits for this multiple of its contact damage. */
+export const BLOAT_BLAST = 1.5;
 
 function fire(w: World, x: number, y: number, dx: number, dy: number, speed: number, dmg: number, r = 6): void {
   if (w.bullets.length >= MAX_BULLETS) return;
-  w.bullets.push({ x, y, vx: dx * speed, vy: dy * speed, r, dmg, life: 6, alive: true });
+  w.bullets.push({ x, y, vx: dx * speed, vy: dy * speed, r, dmg, life: 4, alive: true });
 }
 
 /** Returns the enemy's intended velocity for this step. */
@@ -58,10 +64,11 @@ export function think(w: World, e: Enemy, dt: number): { vx: number; vy: number 
     case 'spitter': {
       let vx = 0;
       let vy = 0;
-      if (d > 240) [vx, vy] = [ux * sp, uy * sp];
-      else if (d < 170) [vx, vy] = [-ux * sp, -uy * sp];
+      // Hold a band close enough to stay on a portrait screen (~200 units to the side).
+      if (d > 195) [vx, vy] = [ux * sp, uy * sp];
+      else if (d < 140) [vx, vy] = [-ux * sp, -uy * sp];
       else [vx, vy] = [-uy * sp * 0.6, ux * sp * 0.6];
-      if (e.phase === 0 && e.t > 2.6 && d < 380) {
+      if (e.phase === 0 && e.t > 3.0 && d < 320) {
         e.phase = 1;
         e.t = 0;
       } else if (e.phase === 1) {
@@ -112,7 +119,7 @@ export function think(w: World, e: Enemy, dt: number): { vx: number; vy: number 
 function explode(w: World, e: Enemy): void {
   const r = 78;
   const p = w.player;
-  if ((p.x - e.x) ** 2 + (p.y - e.y) ** 2 < (r + 12) ** 2) hurtPlayer(w, e.dmg);
+  if ((p.x - e.x) ** 2 + (p.y - e.y) ** 2 < (r + 12) ** 2) hurtPlayer(w, e.dmg * BLOAT_BLAST);
   e.alive = false;
   w.fx.push({ type: 'boom', x: e.x, y: e.y, r, color: 0 });
   enemiesWithin(w, e.x, e.y, r, (o, dd) => {
@@ -156,27 +163,37 @@ function prism(w: World, e: Enemy, ux: number, uy: number, d: number, chase: { v
 
 function eclipse(w: World, e: Enemy, chase: { vx: number; vy: number }) {
   // A 12-second cycle: spiral, summon, slam, then chase. Faster when hurt.
-  const enraged = e.hp < e.maxHp * 0.35;
-  const cycle = enraged ? 9 : 12;
+  // (The renderer mirrors this threshold and cycle for the slam telegraph.)
+  const enraged = e.hp < e.maxHp * ECLIPSE_ENRAGE;
+  // A long fight wears you down: after 75s every attack gets denser.
+  const fury = e.t > 75 ? 2 : 0;
+  const cycle = eclipseCycle(e.hp, e.maxHp);
   const t = e.t % cycle;
-  const step = Math.floor(e.t * 10);
+  const step = Math.floor(e.t * 8);
   if (t < 3) {
     if (step !== e.phase) {
       e.phase = step;
-      const arms = enraged ? 5 : 3;
+      const arms = (enraged ? 7 : 5) + fury;
       for (let i = 0; i < arms; i++) {
         const a = e.t * 1.7 + (i / arms) * TAU;
-        fire(w, e.x, e.y, Math.cos(a), Math.sin(a), 130, 14, 7);
+        fire(w, e.x, e.y, Math.cos(a), Math.sin(a), 150, 28, 7);
       }
     }
     return { vx: chase.vx * 0.3, vy: chase.vy * 0.3 };
   }
   if (t < 3.2 && e.ax !== Math.floor(e.t / cycle) + 1) {
     e.ax = Math.floor(e.t / cycle) + 1;
-    for (let i = 0; i < 10; i++) {
-      const a = (i / 10) * TAU;
+    // Moths circle in; every other call, bloaters too.
+    const moths = 12 + fury * 3;
+    for (let i = 0; i < moths; i++) {
+      const a = (i / moths) * TAU;
       spawnEnemy(w, 'orbiter', w.player.x + Math.cos(a) * 330, w.player.y + Math.sin(a) * 330);
     }
+    if (e.ax % 2 === 0)
+      for (let i = 0; i < 6; i++) {
+        const a = ((i + 0.5) / 6) * TAU;
+        spawnEnemy(w, 'bloater', w.player.x + Math.cos(a) * 300, w.player.y + Math.sin(a) * 300);
+      }
     w.fx.push({ type: 'warn', text: 'The Eclipse calls its moths' });
   }
   if (t >= 4 && t < 4 + SLAM_AIM) {
@@ -190,10 +207,16 @@ function eclipse(w: World, e: Enemy, chase: { vx: number; vy: number }) {
   }
   if (t >= 4 + SLAM_AIM && e.ay === 1) {
     e.ay = 0;
-    const r = 150;
+    const r = SLAM_RADIUS;
     const p = w.player;
-    if ((p.x - e.sx) ** 2 + (p.y - e.sy) ** 2 < r * r) hurtPlayer(w, 30);
+    if ((p.x - e.sx) ** 2 + (p.y - e.sy) ** 2 < r * r) hurtPlayer(w, 65);
     w.fx.push({ type: 'boom', x: e.sx, y: e.sy, r, color: 15 });
+    // The impact throws a ring of embers outward from the edge of the blast.
+    const n = (enraged ? 24 : 18) + fury * 3;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU + e.t;
+      fire(w, e.sx + Math.cos(a) * r * 0.5, e.sy + Math.sin(a) * r * 0.5, Math.cos(a), Math.sin(a), 120, 30, 7);
+    }
   }
   return chase;
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BLOAT_BLAST,
   BLOAT_SWELL,
   DART_AIM,
   DT,
@@ -119,7 +120,7 @@ describe('bloater', () => {
 
     for (let i = 0; i < 20 && b.alive; i++) step(w, 0, 0);
     expect(b.alive).toBe(false);
-    expect(w.player.hp).toBeCloseTo(hp0 - Math.max(1, b.dmg - w.stats.armor), 6);
+    expect(w.player.hp).toBeCloseTo(hp0 - Math.max(1, b.dmg * BLOAT_BLAST - w.stats.armor), 6);
     expect(friend.hp).toBeLessThan(1e9);
     expect(w.fx.some((f) => f.type === 'boom')).toBe(true);
     step(w, 0, 0);

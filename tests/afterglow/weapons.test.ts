@@ -72,7 +72,7 @@ describe('weapons', () => {
     expect(detonated).toBe(true);
   });
 
-  it('lance only hits along the facing direction', () => {
+  it('lance only hits along the facing axis (ahead and behind) at level 1', () => {
     const run = (fx: number, fy: number) => {
       const w = calmWorld(3);
       makeImmortal(w);
@@ -85,7 +85,8 @@ describe('weapons', () => {
       return w.dealt.lance ?? 0;
     };
     expect(run(0, -1)).toBeGreaterThan(0);
-    expect(run(0, 1)).toBe(0);
+    expect(run(0, 1)).toBeGreaterThan(0);
+    expect(run(1, 0)).toBe(0);
   });
 
   it('weapon kills of weak enemies produce gems and count kills', () => {

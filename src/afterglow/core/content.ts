@@ -20,17 +20,17 @@ export interface EnemyDef {
 }
 
 export const ENEMIES: Record<EnemyKind, EnemyDef> = {
-  drone: { name: 'Drone', r: 9, hp: 8, speed: 52, dmg: 6, xp: 1, heavy: 0, hue: 330, blurb: 'Swarms. Lots of them.' },
-  mite: { name: 'Mite', r: 6, hp: 4, speed: 74, dmg: 4, xp: 1, heavy: 0, hue: 300, blurb: 'Fast splinters.' },
-  brute: { name: 'Brute', r: 18, hp: 60, speed: 34, dmg: 14, xp: 5, heavy: 0.8, hue: 25, blurb: 'Slow, heavy, hard to push.' },
-  dart: { name: 'Dart', r: 9, hp: 14, speed: 44, dmg: 10, xp: 2, heavy: 0.2, hue: 50, blurb: 'Aims, then dashes. Watch the line.' },
-  spitter: { name: 'Spitter', r: 11, hp: 16, speed: 48, dmg: 8, xp: 2, heavy: 0.1, hue: 140, blurb: 'Keeps its distance and spits.' },
-  splitter: { name: 'Splitter', r: 14, hp: 26, speed: 44, dmg: 8, xp: 3, heavy: 0.2, hue: 280, blurb: 'Bursts into mites.' },
-  bloater: { name: 'Bloater', r: 15, hp: 30, speed: 46, dmg: 22, xp: 3, heavy: 0.3, hue: 0, blurb: 'Swells and explodes. Hurts its friends too.' },
-  orbiter: { name: 'Orbiter', r: 10, hp: 18, speed: 64, dmg: 8, xp: 2, heavy: 0.1, hue: 95, blurb: 'Circles you, closing in.' },
-  warden: { name: 'Warden', r: 15, hp: 70, speed: 38, dmg: 10, xp: 6, heavy: 0.6, hue: 245, blurb: 'Shields everything near it. Kill it first.' },
-  prism: { name: 'Prism', r: 34, hp: 2400, speed: 42, dmg: 20, xp: 120, heavy: 1, hue: 170, blurb: 'Fires bursts of shards and lunges.' },
-  eclipse: { name: 'Eclipse', r: 46, hp: 11000, speed: 34, dmg: 26, xp: 0, heavy: 1, hue: 15, blurb: 'The end of the night.' },
+  drone: { name: 'Drone', r: 9, hp: 9, speed: 52, dmg: 6, xp: 1, heavy: 0, hue: 330, blurb: 'Swarms. Lots of them.' },
+  mite: { name: 'Mite', r: 6, hp: 5, speed: 74, dmg: 4, xp: 1, heavy: 0, hue: 300, blurb: 'Fast splinters.' },
+  brute: { name: 'Brute', r: 18, hp: 78, speed: 34, dmg: 14, xp: 5, heavy: 0.8, hue: 25, blurb: 'Slow, heavy, hard to push.' },
+  dart: { name: 'Dart', r: 9, hp: 18, speed: 44, dmg: 10, xp: 2, heavy: 0.2, hue: 50, blurb: 'Aims, then dashes. Watch the line.' },
+  spitter: { name: 'Spitter', r: 11, hp: 20, speed: 48, dmg: 8, xp: 2, heavy: 0.1, hue: 140, blurb: 'Keeps its distance and spits.' },
+  splitter: { name: 'Splitter', r: 14, hp: 34, speed: 44, dmg: 8, xp: 3, heavy: 0.2, hue: 280, blurb: 'Bursts into mites.' },
+  bloater: { name: 'Bloater', r: 15, hp: 40, speed: 46, dmg: 12, xp: 3, heavy: 0.3, hue: 0, blurb: 'Swells and explodes. Hurts its friends too.' },
+  orbiter: { name: 'Orbiter', r: 10, hp: 24, speed: 64, dmg: 8, xp: 2, heavy: 0.1, hue: 95, blurb: 'Circles you, closing in.' },
+  warden: { name: 'Warden', r: 15, hp: 90, speed: 38, dmg: 10, xp: 6, heavy: 0.6, hue: 245, blurb: 'Shields everything near it. Kill it first.' },
+  prism: { name: 'Prism', r: 34, hp: 3000, speed: 42, dmg: 20, xp: 120, heavy: 1, hue: 170, blurb: 'Fires bursts of shards and lunges.' },
+  eclipse: { name: 'Eclipse', r: 46, hp: 32000, speed: 48, dmg: 40, xp: 0, heavy: 1, hue: 15, blurb: 'The end of the night.' },
 };
 
 // ---------- passives ----------
@@ -172,9 +172,11 @@ export function emptyProfile(): Profile {
 
 /** XP needed to go from `level` to `level + 1`. */
 export function xpToNext(level: number): number {
+  // The first level comes after three drones, so it lands within ~8s.
+  if (level === 1) return 3;
   if (level < 20) return 5 + (level - 1) * 10;
-  if (level < 40) return 195 + (level - 20) * 13;
-  return 455 + (level - 40) * 16;
+  if (level < 40) return 195 + (level - 20) * 45;
+  return 1095 + (level - 40) * 50;
 }
 
 /** Run length before the final boss arrives. */

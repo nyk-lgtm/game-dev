@@ -134,7 +134,7 @@ const orbit: WeaponDef = {
     const l = ws.level;
     const n = at([2, 2, 3, 3, 4, 4, 4, 5], l) + w.stats.amount;
     const radius = at([62, 62, 62, 76, 76, 76, 76, 84], l) * w.stats.area;
-    const dmg = at([8, 10, 10, 10, 10, 13, 13, 16], l);
+    const dmg = at([10, 12, 12, 12, 12, 15, 15, 18], l);
     const spin = at([3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 4.0, 4.0], l) * (0.8 + 0.2 * w.stats.velocity);
     ws.t += dt * spin;
     orbitBlades(w, ws.t, 'orbit', n, radius, dmg, 9 * w.stats.area);
@@ -162,14 +162,14 @@ const nova: WeaponDef = {
   hue: 270,
   maxLevel: 8,
   desc: 'A ring of force bursts out around you.',
-  levels: ['Bursts around you, knocking enemies back', '+4 damage', 'Bigger', 'Faster', '+6 damage', 'Bigger', 'Faster', '+8 damage, bigger'],
+  levels: ['Bursts around you, knocking enemies back', '+4 damage', 'Bigger', 'Faster', '+7 damage', 'Bigger', 'Faster', '+9 damage, bigger'],
   evolvesWith: 'haste',
   evolvesInto: 'supernova',
   tick(w, ws, dt) {
     const l = ws.level;
     if (!ready(w, ws, dt, at([2.6, 2.6, 2.6, 2.2, 2.2, 2.2, 1.9, 1.9], l))) return;
     const r = at([105, 105, 120, 120, 120, 135, 135, 150], l) * w.stats.area;
-    const dmg = at([14, 18, 18, 18, 24, 24, 24, 32], l);
+    const dmg = at([16, 20, 20, 20, 27, 27, 27, 36], l);
     burst(w, 'nova', w.player.x, w.player.y, r, dmg, 170);
     w.fx.push({ type: 'ring', x: w.player.x, y: w.player.y, r, color: 270 });
   },
@@ -202,8 +202,8 @@ const lance: WeaponDef = {
   name: 'Lance',
   hue: 50,
   maxLevel: 8,
-  desc: 'A piercing beam in the direction you move.',
-  levels: ['Piercing beam where you face', '+6 damage', 'Longer', '+1 beam behind', '+8 damage', 'Wider', 'Faster', '+10 damage, longer'],
+  desc: 'Piercing beams along the direction you move.',
+  levels: ['Piercing beams ahead of and behind you', '+6 damage', 'Longer', '+2 beams to the sides', '+8 damage', 'Wider', 'Faster', '+10 damage, longer'],
   evolvesWith: 'velocity',
   evolvesInto: 'railgun',
   tick(w, ws, dt) {
@@ -213,8 +213,8 @@ const lance: WeaponDef = {
     const length = at([230, 230, 290, 290, 290, 290, 290, 350], l) * w.stats.area * Math.sqrt(w.stats.velocity);
     const width = at([16, 16, 16, 16, 16, 24, 24, 24], l) * w.stats.area;
     const p = w.player;
-    const dirs = [0];
-    if (l >= 4) dirs.push(Math.PI);
+    const dirs = [0, Math.PI];
+    if (l >= 4) dirs.push(Math.PI / 2, -Math.PI / 2);
     for (let i = 0; i < w.stats.amount; i++) dirs.push((i % 2 ? -1 : 1) * (0.35 + 0.2 * Math.floor(i / 2)));
     for (const a of dirs) {
       const d = rotate(p.fx, p.fy, a);
@@ -229,15 +229,15 @@ const mines: WeaponDef = {
   hue: 20,
   maxLevel: 8,
   desc: 'Drops mines that blow up when enemies step on them.',
-  levels: ['Drops a mine behind you', '+6 damage', 'Bigger blasts', '+1 mine per drop', '+8 damage', 'Faster', 'Bigger blasts', '+1 mine, +10 damage'],
+  levels: ['Drops a mine behind you', '+6 damage', 'Bigger blasts', '+1 mine per drop', '+6 damage', 'Faster', 'Bigger blasts', '+1 mine, +8 damage'],
   evolvesWith: 'duration',
   evolvesInto: 'minefield',
   tick(w, ws, dt) {
     const l = ws.level;
-    if (!ready(w, ws, dt, at([1.4, 1.4, 1.4, 1.4, 1.4, 1.1, 1.1, 1.1], l))) return;
+    if (!ready(w, ws, dt, at([1.6, 1.6, 1.6, 1.6, 1.6, 1.25, 1.25, 1.25], l))) return;
     const n = at([1, 1, 1, 2, 2, 2, 2, 3], l) + w.stats.amount;
-    const dmg = at([30, 36, 36, 36, 44, 44, 44, 54], l);
-    const blast = at([55, 55, 66, 66, 66, 66, 78, 78], l) * w.stats.area;
+    const dmg = at([24, 30, 30, 30, 36, 36, 36, 44], l);
+    const blast = at([50, 50, 60, 60, 60, 60, 72, 72], l) * w.stats.area;
     dropMines(w, 'mines', n, 18, dmg, blast, 8);
   },
 };
@@ -282,13 +282,13 @@ const halo: WeaponDef = {
   hue: 45,
   maxLevel: 8,
   desc: 'A searing aura that hurts and slows nearby enemies.',
-  levels: ['Aura hurts and slows enemies near you', '+1 damage', 'Bigger', '+2 damage', 'Bigger', 'Stronger slow', '+2 damage', 'Bigger, +3 damage'],
+  levels: ['Aura hurts and slows enemies near you', '+1 damage', 'Bigger', '+2 damage', 'Bigger', 'Stronger slow', '+3 damage', 'Bigger, +4 damage'],
   evolvesWith: 'vitality',
   evolvesInto: 'sanctum',
   tick(w, ws, dt) {
     const l = ws.level;
-    const r = at([52, 52, 62, 62, 72, 72, 72, 86], l) * w.stats.area;
-    const dmg = at([4, 5, 5, 7, 7, 7, 9, 12], l);
+    const r = at([56, 56, 66, 66, 76, 76, 76, 90], l) * w.stats.area;
+    const dmg = at([6, 7, 7, 9, 9, 9, 12, 16], l);
     const slow = at([0.75, 0.75, 0.75, 0.75, 0.75, 0.6, 0.6, 0.6], l);
     aura(w, ws, dt, 'halo', r, dmg, slow, 0);
   },
@@ -327,7 +327,7 @@ const storm: WeaponDef = {
       const dir = aimAt(w, t);
       const v = rotate(dir.x, dir.y, (w.rng.next() - 0.5) * 0.5);
       const sp = 480 * w.stats.velocity;
-      spawnShot(w, { weapon: 'storm', x: w.player.x, y: w.player.y, vx: v.x * sp, vy: v.y * sp, dmg: 16, pierce: 2, homing: 7, r: 6 * w.stats.area, life: 1.4 * w.stats.duration });
+      spawnShot(w, { weapon: 'storm', x: w.player.x, y: w.player.y, vx: v.x * sp, vy: v.y * sp, dmg: 18, pierce: 2, homing: 7, r: 6 * w.stats.area, life: 1.4 * w.stats.duration });
     }
   },
 };
@@ -343,9 +343,9 @@ const corona: WeaponDef = {
   tick(w, ws, dt) {
     const a = w.stats.area;
     ws.t += dt * 3.6;
-    orbitBlades(w, ws.t, 'corona', 6 + w.stats.amount, 70 * a, 22, 12 * a);
+    orbitBlades(w, ws.t, 'corona', 6 + w.stats.amount, 70 * a, 34, 12 * a);
     // The outer ring spins the other way, a little slower.
-    orbitBlades(w, -ws.t * 0.7, 'corona', 8 + w.stats.amount, 120 * a, 22, 12 * a);
+    orbitBlades(w, -ws.t * 0.7, 'corona', 8 + w.stats.amount, 120 * a, 34, 12 * a);
   },
 };
 
@@ -363,13 +363,13 @@ const supernova: WeaponDef = {
       ws.t -= dt;
       if (ws.t <= 0) {
         const r = 210 * w.stats.area;
-        burst(w, 'supernova', p.x, p.y, r, 34, 220);
+        burst(w, 'supernova', p.x, p.y, r, 30, 220);
         w.fx.push({ type: 'ring', x: p.x, y: p.y, r, color: 290 });
       }
     }
     if (!ready(w, ws, dt, 1.3)) return;
     const r = 170 * w.stats.area;
-    burst(w, 'supernova', p.x, p.y, r, 46, 220);
+    burst(w, 'supernova', p.x, p.y, r, 40, 220);
     w.fx.push({ type: 'ring', x: p.x, y: p.y, r, color: 270 });
     ws.t = 0.3;
   },
@@ -384,10 +384,10 @@ const tempest: WeaponDef = {
   desc: 'Constant lightning that leaps across the swarm.',
   levels: ['Evolved Arc: constant storms of chain lightning'],
   tick(w, ws, dt) {
-    if (!ready(w, ws, dt, 0.55)) return;
-    for (let i = 0; i < 3 + w.stats.amount; i++) {
+    if (!ready(w, ws, dt, 0.7)) return;
+    for (let i = 0; i < 2 + w.stats.amount; i++) {
       const t = randomEnemyNear(w, 380);
-      if (t) chain(w, 'tempest', t, 7, 130 * w.stats.area, 30, 210);
+      if (t) chain(w, 'tempest', t, 5, 130 * w.stats.area, 24, 210);
     }
   },
 };
@@ -420,7 +420,7 @@ const minefield: WeaponDef = {
   levels: ['Evolved Mines: clusters of chain-detonating mines'],
   tick(w, ws, dt) {
     if (!ready(w, ws, dt, 0.9)) return;
-    dropMines(w, 'minefield', 3 + w.stats.amount, 45, 80, 95 * w.stats.area, 10);
+    dropMines(w, 'minefield', 3 + w.stats.amount, 45, 70, 95 * w.stats.area, 10);
   },
 };
 
@@ -438,7 +438,7 @@ const pinball: WeaponDef = {
       const t = randomEnemyNear(w, 420);
       const dir = aimAt(w, t);
       const sp = 420 * w.stats.velocity;
-      spawnShot(w, { weapon: 'pinball', x: w.player.x, y: w.player.y, vx: dir.x * sp, vy: dir.y * sp, dmg: 28, pierce: 99, bounces: 6, split: true, r: 9 * w.stats.area, life: 2.4 * w.stats.duration, knock: 70 });
+      spawnShot(w, { weapon: 'pinball', x: w.player.x, y: w.player.y, vx: dir.x * sp, vy: dir.y * sp, dmg: 15, pierce: 99, bounces: 4, split: true, r: 9 * w.stats.area, life: 2.4 * w.stats.duration, knock: 70 });
     }
   },
 };
@@ -452,7 +452,7 @@ const sanctum: WeaponDef = {
   desc: 'A vast holy aura. Kills inside it heal you.',
   levels: ['Evolved Halo: vast aura, kills inside heal you'],
   tick(w, ws, dt) {
-    aura(w, ws, dt, 'sanctum', 125 * w.stats.area, 16, 0.5, 0.4);
+    aura(w, ws, dt, 'sanctum', 135 * w.stats.area, 26, 0.5, 0.5);
   },
 };
 

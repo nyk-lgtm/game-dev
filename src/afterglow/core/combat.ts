@@ -44,8 +44,10 @@ export function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number, elit
   const d = ENEMIES[kind];
   const minutes = w.time / 60;
   const boss = kind === 'prism' || kind === 'eclipse';
-  const hpMul = boss ? 1 : 1 + minutes * 0.3;
-  const dmgMul = boss ? 1 : 1 + minutes * 0.07;
+  const hpMul = boss ? 1 : 1 + minutes * 0.27 + minutes * minutes * 0.04;
+  const dmgMul = boss ? 1 : 1 + minutes * 0.06;
+  // Later swarms are a little quicker, so outrunning them gets harder.
+  const speedMul = boss ? 1 : 1 + minutes * 0.015;
   const e: Enemy = {
     id: w.nextId++,
     kind,
@@ -56,10 +58,10 @@ export function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number, elit
     hp: d.hp * hpMul * (elite ? 7 : 1),
     maxHp: d.hp * hpMul * (elite ? 7 : 1),
     r: d.r * (elite ? 1.4 : 1),
-    speed: d.speed * (elite ? 0.9 : 1),
+    speed: d.speed * speedMul * (elite ? 0.9 : 1),
     dmg: d.dmg * dmgMul * (elite ? 1.4 : 1),
     // Later enemies are worth more, so leveling keeps pace with the swarm.
-    xp: d.xp * (elite ? 10 : 1) * (boss ? 1 : 1 + minutes * 0.35),
+    xp: d.xp * (elite ? 10 : 1) * (boss ? 1 : 1 + minutes * 0.1),
     elite,
     flash: 0,
     t: w.rng.next() * 2,

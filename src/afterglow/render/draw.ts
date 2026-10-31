@@ -1,7 +1,7 @@
 // Draws one frame of the world: background grid, pickups, telegraphs,
 // enemies, weapons, the player, bullets and effects.
 
-import { BLOAT_SWELL, DART_AIM, PRISM_AIM, SLAM_AIM, SPIT_AIM, ENEMIES, RUN_SECONDS, type Enemy, type EnemyKind, type World } from '../core';
+import { BLOAT_SWELL, DART_AIM, PRISM_AIM, SLAM_AIM, SLAM_RADIUS, SPIT_AIM, eclipseCycle, ENEMIES, RUN_SECONDS, type Enemy, type EnemyKind, type World } from '../core';
 import type { Fx } from './fx';
 import { glowSprite, sprite, type Shape, type Sprite } from './sprites';
 
@@ -365,19 +365,19 @@ function drawTelegraph(ctx: CanvasRenderingContext2D, e: Enemy, sx: (x: number) 
     ctx.lineWidth = e.r * 2 * k * 0.6;
     ctx.stroke();
   } else if (e.kind === 'eclipse' && e.ay === 1) {
-    const cycle = e.hp < e.maxHp * 0.35 ? 9 : 12;
-    const t = Math.min(1, ((e.t % cycle) - 4) / SLAM_AIM);
+    const cycle = eclipseCycle(e.hp, e.maxHp);
+    const t = Math.max(0, Math.min(1, ((e.t % cycle) - 4) / SLAM_AIM));
     const SX = sx(e.sx);
     const SY = sy(e.sy);
     ctx.beginPath();
-    ctx.arc(SX, SY, 150 * k, 0, Math.PI * 2);
+    ctx.arc(SX, SY, SLAM_RADIUS * k, 0, Math.PI * 2);
     ctx.fillStyle = warn(0.06);
     ctx.fill();
     ctx.strokeStyle = warn(0.7);
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(SX, SY, 150 * k * t, 0, Math.PI * 2);
+    ctx.arc(SX, SY, SLAM_RADIUS * k * t, 0, Math.PI * 2);
     ctx.fillStyle = warn(0.18);
     ctx.fill();
   }

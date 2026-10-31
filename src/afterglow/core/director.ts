@@ -16,20 +16,23 @@ interface Wave {
 
 /** One entry per minute. Ramps for three minutes, then alternates spikes and breathers. */
 export const WAVES: Wave[] = [
-  { rate: 1.5, max: 30, mix: { drone: 1 } },
-  { rate: 2.3, max: 55, mix: { drone: 0.8, dart: 0.2 } },
-  { rate: 2.9, max: 80, mix: { drone: 0.55, dart: 0.2, spitter: 0.25 } },
-  { rate: 3.7, max: 115, mix: { drone: 0.45, dart: 0.15, spitter: 0.15, brute: 0.1, splitter: 0.15 } },
-  { rate: 3.2, max: 105, mix: { drone: 0.35, brute: 0.2, bloater: 0.15, splitter: 0.15, spitter: 0.15 } },
-  { rate: 2.6, max: 95, mix: { drone: 0.6, dart: 0.2, spitter: 0.2 } },
-  { rate: 4.6, max: 175, mix: { drone: 0.35, splitter: 0.15, bloater: 0.1, brute: 0.1, spitter: 0.1, dart: 0.1, warden: 0.05, orbiter: 0.05 } },
-  { rate: 5.6, max: 215, mix: { drone: 0.3, splitter: 0.15, bloater: 0.12, brute: 0.12, spitter: 0.1, dart: 0.1, warden: 0.06, orbiter: 0.05 } },
-  { rate: 4.2, max: 170, mix: { brute: 0.3, warden: 0.12, spitter: 0.2, bloater: 0.18, dart: 0.2 } },
-  { rate: 7.2, max: 290, mix: { drone: 0.3, splitter: 0.15, bloater: 0.12, brute: 0.12, spitter: 0.1, dart: 0.1, warden: 0.06, orbiter: 0.05 } },
+  { rate: 2.1, max: 45, mix: { drone: 1 } },
+  { rate: 3.2, max: 75, mix: { drone: 0.8, dart: 0.2 } },
+  { rate: 4.1, max: 110, mix: { drone: 0.55, dart: 0.2, spitter: 0.25 } },
+  { rate: 5.3, max: 155, mix: { drone: 0.45, dart: 0.15, spitter: 0.15, brute: 0.1, splitter: 0.15 } },
+  { rate: 5.1, max: 155, mix: { drone: 0.35, brute: 0.2, bloater: 0.15, splitter: 0.15, spitter: 0.15 } },
+  { rate: 4.1, max: 130, mix: { drone: 0.6, dart: 0.2, spitter: 0.2 } },
+  { rate: 7.8, max: 230, mix: { drone: 0.35, splitter: 0.15, bloater: 0.1, brute: 0.1, spitter: 0.1, dart: 0.1, warden: 0.05, orbiter: 0.05 } },
+  { rate: 8.5, max: 250, mix: { drone: 0.3, splitter: 0.15, bloater: 0.12, brute: 0.12, spitter: 0.1, dart: 0.1, warden: 0.06, orbiter: 0.05 } },
+  { rate: 7.4, max: 240, mix: { brute: 0.3, warden: 0.12, spitter: 0.2, bloater: 0.14, dart: 0.24 } },
+  { rate: 11.0, max: 290, mix: { drone: 0.3, splitter: 0.15, bloater: 0.12, brute: 0.12, spitter: 0.1, dart: 0.1, warden: 0.06, orbiter: 0.05 } },
 ];
-const FINALE: Wave = { rate: 1.2, max: 60, mix: { drone: 0.7, orbiter: 0.3 } };
+const FINALE: Wave = { rate: 7, max: 220, mix: { drone: 0.4, orbiter: 0.25, spitter: 0.15, dart: 0.1, bloater: 0.1 } };
 
 export const HARD_CAP = 350;
+const PRISM_AT = 300;
+/** Seconds after the Prism arrives that regular spawns stay halved. */
+const PRISM_LULL = 45;
 export const SPAWN_DIST = 480;
 
 interface ScriptedEvent {
@@ -57,15 +60,15 @@ export const EVENTS: ScriptedEvent[] = [
       // A column of brutes charging in from one side.
       const a = w.rng.next() * TAU;
       const p = w.player;
-      for (let i = 0; i < 12; i++) {
-        const off = (i - 5.5) * 30;
+      for (let i = 0; i < 16; i++) {
+        const off = (i - 7.5) * 30;
         spawnEnemy(w, 'brute', p.x + Math.cos(a) * 470 - Math.sin(a) * off, p.y + Math.sin(a) * 470 + Math.cos(a) * off);
       }
     },
   },
   {
     id: 'prism',
-    at: 300,
+    at: PRISM_AT,
     warn: 'The Prism approaches',
     run: (w) => {
       const a = w.rng.next() * TAU;
@@ -73,8 +76,8 @@ export const EVENTS: ScriptedEvent[] = [
       w.boss = e.id;
     },
   },
-  { id: 'ring2', at: 390, warn: 'Orbiters close in', run: (w) => ring(w, 'orbiter', 26, 300) },
-  { id: 'split', at: 465, warn: 'A splitter swarm', run: (w) => ring(w, 'splitter', 18, 360) },
+  { id: 'ring2', at: 390, warn: 'Orbiters close in', run: (w) => ring(w, 'orbiter', 34, 300) },
+  { id: 'split', at: 465, warn: 'A splitter swarm', run: (w) => ring(w, 'splitter', 24, 360) },
   { id: 'bloat', at: 520, warn: 'Bloaters drift in', run: (w) => ring(w, 'bloater', 14, 280) },
   {
     id: 'eclipse',
@@ -130,8 +133,10 @@ export function direct(w: World, dt: number): void {
 
   const wave = currentWave(w);
   const alive = w.enemies.length;
-  const bossUp = w.boss !== null;
-  const rate = wave.rate * (bossUp && w.time < RUN_SECONDS ? 0.5 : 1);
+  // The swarm thins while the Prism is fresh, but only for a while: a Prism
+  // left alive shouldn't halve the waves for the rest of the run.
+  const lull = w.boss !== null && w.time < RUN_SECONDS && w.time < PRISM_AT + PRISM_LULL;
+  const rate = wave.rate * (lull ? 0.5 : 1);
   w.spawnAcc += rate * dt;
   while (w.spawnAcc >= 1) {
     w.spawnAcc -= 1;
