@@ -1,0 +1,34 @@
+/* Grove-only styles; the shell lives in src/shared/shell.css. */
+:root {
+  --bg: #10140f;
+  --panel: #171d15;
+  --line: #273024;
+  --text: #eef2e6;
+  --muted: #93a08a;
+  --accent: #9bd66a;
+}
+#hud .spacer { flex: 1; }
+#tray {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+#info { flex: none; min-height: 38px; max-height: 56px; }
+#slots { display: flex; align-items: flex-end; gap: 10px; }
+.slot {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: transparent; border: 1px solid var(--line); border-radius: 12px;
+  padding: 4px 6px; color: var(--text);
+}
+.slot canvas { width: 52px; height: 52px; }
+.slot.current { border-color: var(--accent); }
+.slot.current canvas { width: 64px; height: 64px; }
+.slot.next { opacity: 0.75; }
+#stashBtn { min-width: 64px; }
+#actBtn { margin-left: auto; align-self: center; }
+.c-plant { color: #7fcf5a; font-weight: 700; }
+.c-stone { color: #c8cee0; font-weight: 700; }
+.c-wisp { color: #c9b8ff; font-weight: 700; }
+.c-crystal { color: #7ee8f5; font-weight: 700; }
+.c-bolt { color: #ffd23f; font-weight: 700; }

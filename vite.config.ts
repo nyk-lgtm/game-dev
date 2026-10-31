@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import { execSync } from 'node:child_process';
+import { resolve } from 'node:path';
 
 function buildId(): string {
   const sha = process.env.GITHUB_SHA ?? (() => {
@@ -22,6 +23,14 @@ export default defineConfig({
   build: {
     target: 'es2020',
     assetsInlineLimit: 0,
+    // One page per game plus the hub. Add new games here.
+    rollupOptions: {
+      input: {
+        hub: resolve(__dirname, 'index.html'),
+        telegraph: resolve(__dirname, 'telegraph/index.html'),
+        grove: resolve(__dirname, 'grove/index.html'),
+      },
+    },
   },
   test: {
     include: ['tests/**/*.test.ts'],

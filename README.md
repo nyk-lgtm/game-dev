@@ -1,48 +1,46 @@
-# Telegraph
+# Game Lab
 
-A turn-based hex tactics roguelike for phones (portrait, one thumb). Every enemy
-telegraphs its threat; moving is attacking. Reach the stairs, go deeper.
+Small, deep games for one thumb, built for phones (portrait, touch).
 
 **Play:** https://nyk-lgtm.github.io/game-dev/
 
+| Game | What it is |
+|---|---|
+| [Telegraph](https://nyk-lgtm.github.io/game-dev/telegraph/) | Hex tactics roguelike. Every enemy telegraphs its next attack; moving is attacking. |
+| [Grove](https://nyk-lgtm.github.io/game-dev/grove/) | Hex merge puzzle. Three alike merge into the next tier; trap the wandering wisps. |
+
 ## Stack
 
-- TypeScript + Vite, no game engine. Canvas 2D for the board, HTML/CSS for UI.
+- TypeScript + Vite (multi-page), no game engine. Canvas 2D boards, HTML/CSS UI.
 - All art is procedural vector shapes; no image assets.
 - Vitest for the rules; GitHub Actions builds, tests and deploys to GitHub Pages.
 
 ## Layout
 
 ```
-src/core/     pure, deterministic rules (no DOM) — state in, state + events out
-  hex.ts        axial hex math (flat-top), odd-q offset board
-  board.ts      tile/occupancy queries, distance fields, rays
-  enemies.ts    enemy definitions (data + behavior): brute, guard, archer, bomber, charger
-  combat.ts     damage, daze, shields, shoves (Bash)
-  levelgen.ts   seeded floor generation
-  resolve.ts    applyAction(): player move, stab/lunge, enemy phase
-  preview.ts    threat overlay + exact outcome preview
-  replay.ts     compact action encoding, replay from (seed, actions)
-src/render/   canvas drawing, scene model, event -> animation timeline
-src/ui/       DOM HUD, info panel, modal cards
-src/debug/    on-screen error overlay, bug-report export, URL replay
-src/game.ts   controller: input -> rules -> animation -> UI
-scripts/      greedy bot, balance probe, damage-source report
-tests/        rules, levelgen and fuzz tests
+index.html, src/hub/        the game-select hub
+<game>/index.html           one page per game (telegraph/, grove/)
+src/<game>/core/            pure, deterministic rules: state + action -> state + events
+src/<game>/render/          canvas drawing and event-driven animation
+src/<game>/game.ts          controller: input -> rules -> animation -> UI
+src/shared/                 hex math, seeded rng, storage, debug overlay, cards, timeline
+tests/<game>/               rules, generation and fuzz tests
+scripts/<game>/             greedy bots and balance probes
 ```
 
 ## Commands
 
 ```
 npm install
-npm run dev        # local dev server (--host, so a phone on the LAN can open it)
-npm test           # rules tests
+npm run dev        # dev server (--host, so a phone on the LAN can open it)
+npm test           # all rules tests
 npm run build      # typecheck + production build into dist/
-npx vite-node scripts/balance.ts 200   # how deep does the greedy bot get?
+npx vite-node scripts/telegraph/balance.ts 150
+npx vite-node scripts/grove/balance.ts 60
 ```
 
 ## Debugging from a phone
 
 - Errors show as red banners at the bottom of the screen.
-- Menu → **Copy bug report** copies the build, seed and full move list.
-  Any run can be replayed exactly at `?seed=<seed>&a=<moves>`.
+- Each game's menu has **Copy bug report** (build, seed, full move list).
+  Any game replays exactly at `<game>/?seed=<seed>&a=<moves>`.
