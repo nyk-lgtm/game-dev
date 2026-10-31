@@ -18,6 +18,8 @@ export interface Spell {
   dmg: number;
   count: number;
   pierce: number;
+  /** Armor ignored by each hit. */
+  shred: number;
   chain: number;
   /** Fraction of speed removed for 2s. */
   slow: number;

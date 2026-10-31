@@ -2,7 +2,7 @@
 // toward the tower; each loom row casts whenever its cooldown is ready.
 
 import { Rng, mixSeed } from '../../shared/rng';
-import { compileRow } from './runes';
+import { MOD, compileRow } from './runes';
 import type { Battle, Element, Enemy, EnemyKind, GameState, Spell } from './types';
 
 export const DT = 1 / 60;
@@ -10,6 +10,8 @@ export const DT = 1 / 60;
 export const ASPECT = 1.6;
 export const TOWER = { x: 0.5, y: 1 };
 export const WAVES = 15;
+/** Seconds a frost hit keeps its slow. */
+export const SLOW_TIME = 1.5;
 
 export interface EnemyDef {
   name: string;
@@ -30,16 +32,16 @@ export interface EnemyDef {
 }
 
 export const ENEMIES: Record<EnemyKind, EnemyDef> = {
-  imp: { name: 'Imp', hp: 20, speed: 0.085, armor: 0, shield: 0, leak: 1, gold: 1, resist: {}, flying: false, steady: false, r: 0.028, hue: 0, blurb: 'Weak, quick, many.' },
-  knight: { name: 'Knight', hp: 55, speed: 0.06, armor: 3, shield: 0, leak: 2, gold: 2, resist: {}, flying: false, steady: false, r: 0.036, hue: 30, blurb: 'Armor shrugs off small hits: use big ones.' },
-  wisp: { name: 'Wisp', hp: 28, speed: 0.12, armor: 0, shield: 0, leak: 1, gold: 1, resist: { frost: 0.25, arcane: 0.7 }, flying: true, steady: false, r: 0.026, hue: 190, blurb: 'Flies over novas. Frost barely touches it.' },
-  golem: { name: 'Golem', hp: 150, speed: 0.04, armor: 6, shield: 0, leak: 3, gold: 3, resist: { storm: 0.5 }, flying: false, steady: true, r: 0.05, hue: 35, blurb: 'Huge armor, unstoppable. Storm is weak against it.' },
-  splitter: { name: 'Splitter', hp: 45, speed: 0.065, armor: 0, shield: 0, leak: 2, gold: 2, resist: {}, flying: false, steady: false, r: 0.036, hue: 300, blurb: 'Bursts into two imps.' },
-  mender: { name: 'Mender', hp: 40, speed: 0.06, armor: 1, shield: 0, leak: 1, gold: 2, resist: { arcane: 0.6 }, flying: false, steady: false, r: 0.032, hue: 130, blurb: 'Heals everything near it. Kill it first.' },
-  drake: { name: 'Drake', hp: 85, speed: 0.075, armor: 2, shield: 0, leak: 3, gold: 3, resist: { fire: 0 }, flying: true, steady: false, r: 0.042, hue: 15, blurb: 'Flies, and fire cannot hurt it.' },
-  warden: { name: 'Warden', hp: 900, speed: 0.03, armor: 4, shield: 250, leak: 10, gold: 15, resist: {}, flying: false, steady: true, r: 0.075, hue: 220, blurb: 'A shielded boss. Break the shield, then the rest.' },
-  colossus: { name: 'Colossus', hp: 1900, speed: 0.022, armor: 9, shield: 0, leak: 15, gold: 25, resist: { frost: 0.5 }, flying: false, steady: true, r: 0.09, hue: 40, blurb: 'Massive armor. Only heavy hits get through.' },
-  lich: { name: 'Lich', hp: 3400, speed: 0.025, armor: 4, shield: 300, leak: 20, gold: 0, resist: { arcane: 0.5 }, flying: false, steady: true, r: 0.085, hue: 280, blurb: 'Summons imps as it comes. The final foe.' },
+  imp: { name: 'Imp', hp: 20, speed: 0.085, armor: 0, shield: 0, leak: 1, gold: 0, resist: {}, flying: false, steady: false, r: 0.028, hue: 0, blurb: 'Weak, quick, many.' },
+  knight: { name: 'Knight', hp: 55, speed: 0.06, armor: 3, shield: 0, leak: 2, gold: 1, resist: {}, flying: false, steady: false, r: 0.036, hue: 30, blurb: 'Armor shrugs off small hits: use big ones.' },
+  wisp: { name: 'Wisp', hp: 28, speed: 0.12, armor: 0, shield: 0, leak: 1, gold: 0, resist: { frost: 0.25, arcane: 0.7 }, flying: true, steady: false, r: 0.026, hue: 190, blurb: 'Flies over novas. Frost barely touches it.' },
+  golem: { name: 'Golem', hp: 150, speed: 0.04, armor: 6, shield: 0, leak: 3, gold: 1, resist: { storm: 0.5 }, flying: false, steady: true, r: 0.05, hue: 35, blurb: 'Huge armor, unstoppable. Storm is weak against it.' },
+  splitter: { name: 'Splitter', hp: 45, speed: 0.065, armor: 0, shield: 0, leak: 2, gold: 0, resist: {}, flying: false, steady: false, r: 0.036, hue: 300, blurb: 'Bursts into two imps.' },
+  mender: { name: 'Mender', hp: 40, speed: 0.06, armor: 1, shield: 0, leak: 1, gold: 1, resist: { arcane: 0.6 }, flying: false, steady: false, r: 0.032, hue: 130, blurb: 'Heals everything near it. Kill it first.' },
+  drake: { name: 'Drake', hp: 85, speed: 0.075, armor: 2, shield: 0, leak: 3, gold: 1, resist: { fire: 0 }, flying: true, steady: false, r: 0.042, hue: 15, blurb: 'Flies, and fire cannot hurt it.' },
+  warden: { name: 'Warden', hp: 1000, speed: 0.03, armor: 4, shield: 250, leak: 10, gold: 6, resist: {}, flying: false, steady: true, r: 0.075, hue: 220, blurb: 'A shielded boss. Break the shield, then the rest.' },
+  colossus: { name: 'Colossus', hp: 2300, speed: 0.022, armor: 9, shield: 0, leak: 15, gold: 8, resist: { frost: 0.5 }, flying: false, steady: true, r: 0.09, hue: 40, blurb: 'Massive armor. Only heavy hits get through.' },
+  lich: { name: 'Lich', hp: 4000, speed: 0.025, armor: 4, shield: 300, leak: 20, gold: 0, resist: { arcane: 0.5 }, flying: false, steady: true, r: 0.085, hue: 280, blurb: 'Summons imps as it comes. The final foe.' },
 };
 
 const UNLOCK: [EnemyKind, number, number][] = [
@@ -55,28 +57,43 @@ const UNLOCK: [EnemyKind, number, number][] = [
 
 const BOSSES: Record<number, EnemyKind> = { 5: 'warden', 10: 'colossus', 15: 'lich' };
 
+/** Seconds over which a wave's foes arrive (battles run a little longer). */
+export function waveWindow(wave: number): number {
+  return WAVE_TIME.base + WAVE_TIME.perWave * wave;
+}
+
+export const WAVE_TIME = { base: 28, perWave: 1.9 };
+/** Wave budget: what the foes of a wave "cost" in total (see UNLOCK). */
+export function waveBudget(wave: number): number {
+  return Math.round(BUDGET.base + BUDGET.perWave * wave + BUDGET.square * wave * wave);
+}
+export const BUDGET = { base: 8, perWave: 6, square: 0.4 };
+
 /** The wave's spawn list: [time, kind, x]. Deterministic per seed and wave. */
 export function waveQueue(seed: number, wave: number): [number, EnemyKind, number][] {
   const rng = new Rng(mixSeed(seed, 900 + wave));
-  const q: [number, EnemyKind, number][] = [];
-  let budget = 8 + wave * 6 + Math.floor(wave * wave * 0.25);
+  let budget = waveBudget(wave);
   const kinds = UNLOCK.filter(([, w]) => w <= wave);
-  let t = 0.5;
+  // Pick the groups first, then spread them over the wave's window, a little
+  // denser toward the end.
+  const groups: [EnemyKind, number][] = [];
   while (budget > 0) {
     const options = kinds.filter(([, , c]) => c <= budget);
     if (!options.length) break;
     const [kind, , cost] = options[rng.int(0, options.length - 1)];
     // Imps come in little packs.
-    const n = kind === 'imp' ? rng.int(2, 4) : 1;
-    for (let i = 0; i < n && budget > 0; i++) {
-      q.push([t, kind, 0.12 + rng.next() * 0.76]);
-      t += kind === 'imp' ? 0.35 : 0.9;
-      budget -= cost;
-    }
-    t += 0.4 + rng.next() * 0.8;
+    const n = kind === 'imp' ? Math.min(rng.int(2, 4), budget) : 1;
+    groups.push([kind, n]);
+    budget -= cost * n;
   }
+  const W = waveWindow(wave);
+  const q: [number, EnemyKind, number][] = [];
+  groups.forEach(([kind, n], i) => {
+    const t = 0.5 + W * Math.pow((i + 0.3 * rng.next()) / groups.length, 0.85);
+    for (let j = 0; j < n; j++) q.push([t + j * (kind === 'imp' ? 0.35 : 0.8), kind, 0.12 + rng.next() * 0.76]);
+  });
   const boss = BOSSES[wave];
-  if (boss) q.push([t + 1.5, boss, 0.5]);
+  if (boss) q.push([W * 0.3, boss, 0.5]);
   return q.sort((a, b) => a[0] - b[0]);
 }
 
@@ -97,20 +114,33 @@ export function newBattle(s: GameState): Battle {
   };
 }
 
+export const isBoss = (kind: EnemyKind) => kind === 'warden' || kind === 'colossus' || kind === 'lich';
+
+/** Regular foes gain this fraction of their base HP every wave. */
+export const HP_GROWTH = 0.22;
+
+/** Max HP of a foe on a given wave: regular foes toughen every wave, bosses don't. */
+export function enemyHp(kind: EnemyKind, wave: number): number {
+  return ENEMIES[kind].hp * (isBoss(kind) ? 1 : 1 + HP_GROWTH * (wave - 1));
+}
+
 function spawn(s: GameState, b: Battle, kind: EnemyKind, x: number, y = 0): Enemy {
   const d = ENEMIES[kind];
-  const boss = kind === 'warden' || kind === 'colossus' || kind === 'lich';
-  const scale = boss ? 1 : 1 + 0.13 * (s.wave - 1);
-  const e: Enemy = { id: b.nextId++, kind, x, y, hp: d.hp * scale, maxHp: d.hp * scale, shield: d.shield, speed: d.speed, slow: 0, slowT: 0, burn: 0, burnT: 0, alive: true, flash: 0 };
+  const hp = enemyHp(kind, s.wave);
+  const e: Enemy = { id: b.nextId++, kind, x, y, hp, maxHp: hp, shield: d.shield, speed: d.speed, slow: 0, slowT: 0, burn: 0, burnT: 0, alive: true, flash: 0 };
   b.enemies.push(e);
   return e;
 }
 
-const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, (ay - by) * ASPECT);
+function dist(ax: number, ay: number, bx: number, by: number): number {
+  const dx = ax - bx;
+  const dy = (ay - by) * ASPECT;
+  return Math.sqrt(dx * dx + dy * dy);
+}
 
-function battleRng(s: GameState, b: Battle): number {
-  // Deterministic per wave and tick.
-  return new Rng(mixSeed(s.seed, s.wave * 100000 + Math.round(b.t * 60) * 7 + b.kills)).next();
+function battleRng(s: GameState, b: Battle, salt: number): number {
+  // Deterministic per wave, tick and kill.
+  return new Rng(mixSeed(mixSeed(s.seed, salt), s.wave * 100000 + Math.round(b.t * 60) * 7 + b.kills)).next();
 }
 
 /** Apply a hit. Returns damage dealt. */
@@ -118,7 +148,7 @@ function hit(s: GameState, b: Battle, e: Enemy, sp: Spell, dmg: number, chainLef
   if (!e.alive) return 0;
   const d = ENEMIES[e.kind];
   let amount = dmg * (d.resist[sp.element] ?? 1);
-  amount = Math.max(amount > 0 ? 1 : 0, amount - d.armor);
+  amount = Math.max(amount > 0 ? 1 : 0, amount - Math.max(0, d.armor - sp.shred));
   if (e.shield > 0) {
     const absorbed = Math.min(e.shield, amount);
     e.shield -= absorbed;
@@ -128,7 +158,7 @@ function hit(s: GameState, b: Battle, e: Enemy, sp: Spell, dmg: number, chainLef
   e.flash = 0.1;
   if (sp.slow > 0 && !d.steady && !(d.flying && sp.element === 'frost' && (d.resist.frost ?? 1) < 0.5)) {
     e.slow = Math.max(e.slow, sp.slow);
-    e.slowT = 2;
+    e.slowT = SLOW_TIME;
   }
   if (sp.burn > 0 && (d.resist.fire ?? 1) > 0) {
     e.burn = Math.max(e.burn, sp.burn);
@@ -143,7 +173,7 @@ function hit(s: GameState, b: Battle, e: Enemy, sp: Spell, dmg: number, chainLef
     const done = new Set([e.id]);
     for (let i = 0; i < chainLeft; i++) {
       let best: Enemy | null = null;
-      let bd = 0.22;
+      let bd = 0.3;
       for (const o of b.enemies) {
         if (!o.alive || done.has(o.id)) continue;
         const dd = dist(o.x, o.y, from.x, from.y);
@@ -155,7 +185,7 @@ function hit(s: GameState, b: Battle, e: Enemy, sp: Spell, dmg: number, chainLef
       if (!best) break;
       done.add(best.id);
       pts.push(best.x, best.y);
-      hit(s, b, best, sp, dmg * 0.7, 0);
+      hit(s, b, best, sp, dmg * MOD.stormDmg, 0);
       from = best;
     }
     if (pts.length > 2) b.fx.push({ type: 'chain', pts, element: sp.element });
@@ -169,8 +199,8 @@ function die(s: GameState, b: Battle, e: Enemy, sp: Spell | null): void {
   b.kills++;
   const d = ENEMIES[e.kind];
   let gold = d.gold;
-  if (sp && sp.gild > 0 && battleRng(s, b) < sp.gild) gold++;
-  if (sp && sp.leech > 0 && battleRng(s, b) < sp.leech) s.hp = Math.min(s.maxHp, s.hp + 1);
+  if (sp && sp.gild > 0 && battleRng(s, b, 1) < sp.gild) gold++;
+  if (sp && sp.leech > 0 && battleRng(s, b, 2) < sp.leech) s.hp = Math.min(s.maxHp, s.hp + 1);
   b.goldEarned += gold;
   b.fx.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, gold });
   if (e.kind === 'splitter') for (const dx of [-0.04, 0.04]) spawn(s, b, 'imp', Math.min(0.95, Math.max(0.05, e.x + dx)), e.y);
@@ -183,6 +213,16 @@ function front(b: Battle): Enemy | null {
   return best;
 }
 
+const novaRadius = (sp: Spell) => sp.area * (1 + (sp.count - 1) * 0.35);
+const inNova = (e: Enemy, r: number) => e.alive && !ENEMIES[e.kind].flying && dist(e.x, e.y, TOWER.x, TOWER.y) < r + ENEMIES[e.kind].r;
+
+/** Is there something for this spell to hit? Novas wait for foes in reach. */
+function hasTarget(b: Battle, sp: Spell): boolean {
+  if (sp.caster !== 'nova') return !!front(b);
+  const r = novaRadius(sp);
+  return b.enemies.some((e) => inNova(e, r));
+}
+
 function cast(s: GameState, b: Battle, row: number, sp: Spell): void {
   const target = front(b);
   if (!target) return;
@@ -191,7 +231,7 @@ function cast(s: GameState, b: Battle, row: number, sp: Spell): void {
     case 'bolt':
     case 'orb': {
       const homing = sp.caster === 'orb';
-      const speed = homing ? 0.45 : 1.25;
+      const speed = homing ? 0.55 : 1.25;
       for (let i = 0; i < sp.count; i++) {
         const spread = (i - (sp.count - 1) / 2) * 0.12;
         let dx = target.x - TOWER.x;
@@ -214,27 +254,54 @@ function cast(s: GameState, b: Battle, row: number, sp: Spell): void {
       for (let i = 1; i < sp.count && others[i - 1]; i++) cols.push(others[i - 1].x);
       for (const x of cols) {
         b.fx.push({ type: 'beam', x, element: sp.element });
-        for (const e of b.enemies) if (e.alive && Math.abs(e.x - x) < sp.area + ENEMIES[e.kind].r) hit(s, b, e, sp, sp.dmg);
+        let chain = sp.chain;
+        for (const e of b.enemies)
+          if (e.alive && Math.abs(e.x - x) < sp.area + ENEMIES[e.kind].r) {
+            hit(s, b, e, sp, sp.dmg, chain);
+            chain = 0;
+          }
       }
       break;
     }
     case 'nova': {
-      const r = sp.area * (1 + (sp.count - 1) * 0.35);
+      const r = novaRadius(sp);
       b.fx.push({ type: 'nova', r, element: sp.element });
+      let chain = sp.chain;
       for (const e of b.enemies)
-        if (e.alive && !ENEMIES[e.kind].flying && dist(e.x, e.y, TOWER.x, TOWER.y) < r + ENEMIES[e.kind].r) hit(s, b, e, sp, sp.dmg);
+        if (inNova(e, r)) {
+          hit(s, b, e, sp, sp.dmg, chain);
+          chain = 0;
+        }
       break;
     }
     case 'rain': {
       const alive = b.enemies.filter((e) => e.alive && e.y > 0.02);
       for (let i = 0; i < sp.count && alive.length; i++) {
-        const pick = alive[Math.floor(new Rng(mixSeed(s.seed, b.t * 1000 + i * 31 + row)).next() * alive.length)];
+        const pick = alive[Math.floor(new Rng(mixSeed(s.seed, Math.round(b.t * 60) * 1000 + i * 31 + row)).next() * alive.length)];
         b.fx.push({ type: 'strike', x: pick.x, y: pick.y, element: sp.element });
-        for (const e of b.enemies) if (e.alive && dist(e.x, e.y, pick.x, pick.y) < sp.area + ENEMIES[e.kind].r) hit(s, b, e, sp, sp.dmg);
+        let chain = sp.chain;
+        for (const e of b.enemies)
+          if (e.alive && dist(e.x, e.y, pick.x, pick.y) < sp.area + ENEMIES[e.kind].r) {
+            hit(s, b, e, sp, sp.dmg, chain);
+            chain = 0;
+          }
       }
       break;
     }
   }
+}
+
+// The loom can't change mid-battle (moves are build-phase only), so each
+// battle compiles its rows once. A cache on the side, not state: it is rebuilt
+// identically after a reload.
+const compiled = new WeakMap<Battle, (Spell | null)[]>();
+function rowSpells(s: GameState, b: Battle): (Spell | null)[] {
+  let c = compiled.get(b);
+  if (!c) {
+    c = s.loom.map((r) => compileRow(r));
+    compiled.set(b, c);
+  }
+  return c;
 }
 
 export function stepBattle(s: GameState, b: Battle): void {
@@ -274,11 +341,12 @@ export function stepBattle(s: GameState, b: Battle): void {
     }
   }
   // Spells.
+  const spells = rowSpells(s, b);
   for (let row = 0; row < 3; row++) {
-    const sp = compileRow(s.loom[row]);
+    const sp = spells[row];
     if (!sp) continue;
     b.cooldowns[row] -= dt;
-    if (b.cooldowns[row] > 0 || !front(b)) continue;
+    if (b.cooldowns[row] > 0 || !hasTarget(b, sp)) continue;
     b.cooldowns[row] = sp.cooldown;
     cast(s, b, row, sp);
     sp.echoes.forEach((echo, i) => b.echoQueue.push([b.t + 0.22 * (i + 1), row, echo]));
@@ -322,8 +390,9 @@ export function stepBattle(s: GameState, b: Battle): void {
     for (const e of b.enemies) {
       if (!e.alive || p.hit.includes(e.id)) continue;
       if (dist(e.x, e.y, p.x, p.y) > ENEMIES[e.kind].r + p.spell.area) continue;
+      // Storm arcs from a projectile's first hit only.
+      hit(s, b, e, p.spell, p.spell.dmg, p.hit.length ? 0 : p.spell.chain);
       p.hit.push(e.id);
-      hit(s, b, e, p.spell, p.spell.dmg);
       p.pierce--;
       if (p.pierce <= 0) {
         p.alive = false;
@@ -331,7 +400,7 @@ export function stepBattle(s: GameState, b: Battle): void {
       }
     }
   }
-  b.enemies = b.enemies.filter((e) => e.alive);
-  b.projectiles = b.projectiles.filter((p) => p.alive);
+  if (b.enemies.some((e) => !e.alive)) b.enemies = b.enemies.filter((e) => e.alive);
+  if (b.projectiles.some((p) => !p.alive)) b.projectiles = b.projectiles.filter((p) => p.alive);
   if (s.hp <= 0 || (b.queue.length === 0 && b.enemies.length === 0)) b.over = true;
 }

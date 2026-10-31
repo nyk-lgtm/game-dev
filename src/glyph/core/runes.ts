@@ -15,37 +15,71 @@ export interface RuneDef {
 
 export const TIER_MULT = [0, 1, 1.8, 3.2];
 
-const caster = (id: CasterId, name: string, hue: number, text: (t: number) => string): RuneDef => ({ id, name, kind: 'caster', cost: 3, hue, text });
+/** Modifier numbers by tier t (1..3); compileRow and the rules text share them. */
+export const MOD = {
+  fireDmg: 1.1,
+  /** Burn per second as a fraction of the hit (as built so far), for 3s. */
+  fireBurn: (t: number) => 0.1 + 0.1 * t,
+  frostSlow: (t: number) => 0.1 + 0.1 * t,
+  stormArcs: (t: number) => 1 + t,
+  /** Arc damage as a fraction of the hit. */
+  stormDmg: 0.8,
+  /** Split's total damage gain, shared among the old and new projectiles. */
+  splitGain: (t: number) => 1.15 + 0.2 * t,
+  heavyDmg: (t: number) => 1.5 + 0.3 * (t - 1),
+  heavyCd: 1.3,
+  pierceThrough: (t: number) => 1 + t,
+  pierceShred: (t: number) => 5 * t,
+  pierceDmg: 1.15,
+  hasteCd: (t: number) => 0.75 - 0.07 * (t - 1),
+  leech: (t: number) => 0.15 * t,
+  gild: (t: number) => 0.1 * t,
+  echoCd: (t: number) => 1.35 - 0.1 * (t - 1),
+};
+
+const pct = (x: number) => Math.round(x * 100);
+
+const BASE: Record<CasterId, Omit<Spell, 'caster' | 'echoes'>> = {
+  bolt: { element: 'arcane', dmg: 15, count: 1, pierce: 1, shred: 0, chain: 0, slow: 0, burn: 0, area: 0.04, cooldown: 1.0, leech: 0, gild: 0 },
+  beam: { element: 'arcane', dmg: 11, count: 1, pierce: 99, shred: 0, chain: 0, slow: 0, burn: 0, area: 0.045, cooldown: 2.3, leech: 0, gild: 0 },
+  nova: { element: 'arcane', dmg: 27, count: 1, pierce: 99, shred: 0, chain: 0, slow: 0, burn: 0, area: 0.34, cooldown: 1.8, leech: 0, gild: 0 },
+  rain: { element: 'arcane', dmg: 9, count: 3, pierce: 1, shred: 0, chain: 0, slow: 0, burn: 0, area: 0.07, cooldown: 2.4, leech: 0, gild: 0 },
+  orb: { element: 'arcane', dmg: 12, count: 1, pierce: 5, shred: 0, chain: 0, slow: 0, burn: 0, area: 0.05, cooldown: 2.2, leech: 0, gild: 0 },
+};
+
+/** Base stats of a caster rune (tier 1). */
+export const casterBase = (id: CasterId): Readonly<Omit<Spell, 'caster' | 'echoes'>> => BASE[id];
+
+const caster = (id: CasterId, name: string, hue: number, text: (dmg: number, cd: number) => string): RuneDef => ({
+  id,
+  name,
+  kind: 'caster',
+  cost: 3,
+  hue,
+  text: (t) => text(Math.round(BASE[id].dmg * TIER_MULT[t]), BASE[id].cooldown),
+});
 const mod = (id: ModId, name: string, hue: number, text: (t: number) => string): RuneDef => ({ id, name, kind: 'mod', cost: 2, hue, text });
 
 export const RUNES: Record<RuneId, RuneDef> = {
-  bolt: caster('bolt', 'Bolt', 200, (t) => `Fires a bolt at the nearest foe (${Math.round(10 * TIER_MULT[t])} dmg).`),
-  beam: caster('beam', 'Beam', 50, (t) => `A beam pierces a whole column (${Math.round(14 * TIER_MULT[t])} dmg).`),
-  nova: caster('nova', 'Nova', 280, (t) => `Blasts everything near the tower (${Math.round(10 * TIER_MULT[t])} dmg).`),
-  rain: caster('rain', 'Rain', 160, (t) => `3 strikes on random foes (${Math.round(11 * TIER_MULT[t])} dmg, small splash).`),
-  orb: caster('orb', 'Orb', 320, (t) => `A slow homing orb passing through 5 foes (${Math.round(8 * TIER_MULT[t])} dmg).`),
-  fire: mod('fire', 'Fire', 15, (t) => `Burns for ${4 * t}/s over 3s. Element: fire.`),
-  frost: mod('frost', 'Frost', 195, (t) => `Slows by ${Math.round((0.25 + 0.1 * t) * 100)}% for 2s. Element: frost.`),
-  storm: mod('storm', 'Storm', 55, (t) => `Arcs to ${1 + t} more foes at 70%. Element: storm.`),
-  split: mod('split', 'Split', 300, (t) => `+${t} projectile/strike, each 75% damage.`),
-  heavy: mod('heavy', 'Heavy', 30, (t) => `+${50 + 30 * (t - 1)}% damage, bigger, but slower.`),
-  pierce: mod('pierce', 'Pierce', 90, (t) => `Bolts and orbs pass through ${1 + t} more foes.`),
-  haste: mod('haste', 'Haste', 110, (t) => `Casts ${Math.round((1 / (0.75 - 0.07 * (t - 1)) - 1) * 100)}% faster.`),
-  leech: mod('leech', 'Leech', 340, (t) => `${10 * t}% chance a kill heals the tower 1.`),
-  gild: mod('gild', 'Gild', 45, (t) => `${25 * t}% chance a kill drops +1 gold.`),
-  echo: mod('echo', 'Echo', 260, () => 'Repeats the spell as built so far (runes to its left). Slower.'),
+  bolt: caster('bolt', 'Bolt', 200, (d, cd) => `Fires a bolt at the nearest foe (${d} dmg, every ${cd}s).`),
+  beam: caster('beam', 'Beam', 50, (d, cd) => `A beam pierces a whole column (${d} dmg, every ${cd}s).`),
+  nova: caster('nova', 'Nova', 280, (d, cd) => `Blasts every walker near the tower (${d} dmg, every ${cd}s); waits for foes in reach.`),
+  rain: caster('rain', 'Rain', 160, (d, cd) => `${BASE.rain.count} strikes on random foes (${d} dmg, small splash, every ${cd}s).`),
+  orb: caster('orb', 'Orb', 320, (d, cd) => `A slow homing orb passing through ${BASE.orb.pierce} foes (${d} dmg, every ${cd}s).`),
+  fire: mod('fire', 'Fire', 15, (t) => `+${pct(MOD.fireDmg - 1)}% damage, then burns for ${pct(MOD.fireBurn(t))}% of the hit per second for 3s. Element: fire.`),
+  frost: mod('frost', 'Frost', 195, (t) => `Slows by ${pct(MOD.frostSlow(t))}% for 1.5s. Element: frost.`),
+  storm: mod('storm', 'Storm', 55, (t) => `Each cast arcs to ${MOD.stormArcs(t)} more foes at ${pct(MOD.stormDmg)}%. Element: storm.`),
+  split: mod('split', 'Split', 300, (t) => `+${t} projectile/strike/beam; +${pct(MOD.splitGain(t) - 1)}% total damage, shared out.`),
+  heavy: mod('heavy', 'Heavy', 30, (t) => `+${pct(MOD.heavyDmg(t) - 1)}% damage, bigger, but ${pct(MOD.heavyCd - 1)}% slower.`),
+  pierce: mod('pierce', 'Pierce', 90, (t) => `+${pct(MOD.pierceDmg - 1)}% damage, hits ignore ${MOD.pierceShred(t)} armor; bolts and orbs pass through ${MOD.pierceThrough(t)} more foes.`),
+  haste: mod('haste', 'Haste', 110, (t) => `Casts ${pct(1 / MOD.hasteCd(t) - 1)}% faster.`),
+  leech: mod('leech', 'Leech', 340, (t) => `${pct(MOD.leech(t))}% chance a kill heals the tower 1.`),
+  gild: mod('gild', 'Gild', 45, (t) => `${pct(MOD.gild(t))}% chance a kill drops +1 gold.`),
+  echo: mod('echo', 'Echo', 260, (t) => `Repeats the spell as built so far (runes to its left), but casts ${pct(MOD.echoCd(t) - 1)}% slower.`),
 };
 
 export const CASTERS: CasterId[] = ['bolt', 'beam', 'nova', 'rain', 'orb'];
 export const MODS: ModId[] = ['fire', 'frost', 'storm', 'split', 'heavy', 'pierce', 'haste', 'leech', 'gild', 'echo'];
-
-const BASE: Record<CasterId, Omit<Spell, 'caster' | 'echoes'>> = {
-  bolt: { element: 'arcane', dmg: 10, count: 1, pierce: 1, chain: 0, slow: 0, burn: 0, area: 0.04, cooldown: 1.0, leech: 0, gild: 0 },
-  beam: { element: 'arcane', dmg: 14, count: 1, pierce: 99, chain: 0, slow: 0, burn: 0, area: 0.07, cooldown: 1.8, leech: 0, gild: 0 },
-  nova: { element: 'arcane', dmg: 10, count: 1, pierce: 99, chain: 0, slow: 0, burn: 0, area: 0.24, cooldown: 2.0, leech: 0, gild: 0 },
-  rain: { element: 'arcane', dmg: 11, count: 3, pierce: 1, chain: 0, slow: 0, burn: 0, area: 0.07, cooldown: 2.2, leech: 0, gild: 0 },
-  orb: { element: 'arcane', dmg: 8, count: 1, pierce: 5, chain: 0, slow: 0, burn: 0, area: 0.05, cooldown: 2.6, leech: 0, gild: 0 },
-};
 
 const clone = (s: Spell): Spell => ({ ...s, echoes: [] });
 
@@ -61,44 +95,47 @@ export function compileRow(row: (Rune | null)[]): Spell | null {
     const t = r.tier;
     switch (r.id as ModId) {
       case 'fire':
+        // Burn scales with the hit as built so far: fire after heavy burns hotter.
+        // Burns don't stack: a second fire only keeps the hotter one.
         s.element = 'fire';
-        s.burn += 4 * t;
-        s.dmg *= 1.1;
+        s.dmg *= MOD.fireDmg;
+        s.burn = Math.max(s.burn, s.dmg * MOD.fireBurn(t));
         break;
       case 'frost':
         s.element = 'frost';
-        s.slow = Math.max(s.slow, 0.25 + 0.1 * t);
+        s.slow = Math.max(s.slow, MOD.frostSlow(t));
         break;
       case 'storm':
         s.element = 'storm';
-        s.chain += 1 + t;
+        s.chain += MOD.stormArcs(t);
         break;
       case 'split':
+        s.dmg *= (MOD.splitGain(t) * s.count) / (s.count + t);
         s.count += t;
-        s.dmg *= 0.75;
-        s.cooldown *= 1.1;
         break;
       case 'heavy':
-        s.dmg *= 1.5 + 0.3 * (t - 1);
+        s.dmg *= MOD.heavyDmg(t);
         s.area *= 1.25;
-        s.cooldown *= 1.35;
+        s.cooldown *= MOD.heavyCd;
         break;
       case 'pierce':
-        s.pierce += 1 + t;
+        s.pierce += MOD.pierceThrough(t);
+        s.shred += MOD.pierceShred(t);
+        s.dmg *= MOD.pierceDmg;
         break;
       case 'haste':
-        s.cooldown *= 0.75 - 0.07 * (t - 1);
+        s.cooldown *= MOD.hasteCd(t);
         break;
       case 'leech':
-        s.leech += 0.1 * t;
+        s.leech += MOD.leech(t);
         break;
       case 'gild':
-        s.gild += 0.25 * t;
+        s.gild += MOD.gild(t);
         break;
       case 'echo':
         // A copy of everything built so far fires again shortly after.
         s.echoes.push(clone(s));
-        s.cooldown *= 1.25;
+        s.cooldown *= MOD.echoCd(t);
         break;
     }
   }
@@ -108,7 +145,7 @@ export function compileRow(row: (Rune | null)[]): Spell | null {
 /** Rough damage per second for the row preview. */
 export function spellDps(s: Spell): number {
   const hits = s.caster === 'rain' ? s.count : s.caster === 'bolt' || s.caster === 'orb' ? s.count * Math.min(s.pierce, 3) : 3;
-  const per = s.dmg * hits * (1 + s.chain * 0.7) + s.burn * 3;
+  const per = s.dmg * hits + s.dmg * s.count * s.chain * MOD.stormDmg + s.burn * 3 * hits;
   return (per * (1 + s.echoes.length * 0.8)) / s.cooldown;
 }
 

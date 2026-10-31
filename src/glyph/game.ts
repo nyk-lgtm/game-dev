@@ -9,6 +9,7 @@ import {
   BENCH_SIZE,
   CASTERS,
   ENEMIES,
+  HP_GROWTH,
   MODS,
   REROLL_COST,
   RULES_VERSION,
@@ -649,7 +650,7 @@ export class Game {
         return `<div><i style="background:hsl(${d.hue},85%,55%)"></i><b>${d.name}</b> · ${Math.round(d.hp)} hp${d.armor ? ` · armor ${d.armor}` : ''}${d.shield ? ` · shield ${d.shield}` : ''}${d.flying ? ' · flies' : ''}${res ? ` · ${res}` : ''}<br>${d.blurb}</div>`;
       })
       .join('');
-    showCard(`<h2>Foes</h2><div class="scroll foes">${html}</div><p>Normal foes gain 13% HP each wave.</p>`, [
+    showCard(`<h2>Foes</h2><div class="scroll foes">${html}</div><p>Normal foes gain ${Math.round(HP_GROWTH * 100)}% HP each wave.</p>`, [
       { label: 'Close', primary: true, onClick: closeOverlay },
     ]);
   }
