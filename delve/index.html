@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Delve</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23000'/%3E%3Ctext x='16' y='23' font-family='monospace' font-weight='bold' font-size='20' text-anchor='middle' fill='%23ffb347'%3E%3E%3C/text%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="../src/delve/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header id="hud">
+        <div class="bars">
+          <div class="bar hp"><i id="hpFill"></i><span id="hpText">HP 30/30</span></div>
+          <div class="bar mp"><i id="mpFill"></i><span id="mpText">MP 6/6</span></div>
+        </div>
+        <div id="depth">D1</div>
+        <button id="menuBtn" aria-label="Menu">=</button>
+      </header>
+      <canvas id="view"></canvas>
+      <section id="deck">
+        <canvas id="map"></canvas>
+        <div id="side">
+          <div id="stats"></div>
+          <div id="log"></div>
+        </div>
+      </section>
+      <section id="pad">
+        <button data-a="left">TURN&lt;</button>
+        <button data-a="forward" class="main">FWD</button>
+        <button data-a="right">&gt;TURN</button>
+        <button data-a="use" class="act">HIT</button>
+        <button data-a="strafeL">&lt;STEP</button>
+        <button data-a="back">BACK</button>
+        <button data-a="strafeR">STEP&gt;</button>
+        <button data-a="magic" class="act">CAST</button>
+        <button data-a="potion" class="wide">POTION <span id="potCount">2</span></button>
+        <button data-a="wait">WAIT</button>
+        <button data-a="ether" class="wide">ETHER <span id="ethCount">1</span></button>
+      </section>
+    </div>
+    <div id="overlay" hidden></div>
+    <div id="errors"></div>
+    <script type="module" src="../src/delve/main.ts"></script>
+  </body>
+</html>

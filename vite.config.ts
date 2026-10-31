@@ -31,6 +31,7 @@ export default defineConfig({
         grove: resolve(__dirname, 'grove/index.html'),
         lantern: resolve(__dirname, 'lantern/index.html'),
         afterglow: resolve(__dirname, 'afterglow/index.html'),
+        delve: resolve(__dirname, 'delve/index.html'),
       },
     },
   },

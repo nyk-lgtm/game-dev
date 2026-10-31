@@ -1,0 +1,51 @@
+:root {
+  --mono: ui-monospace, 'Cascadia Mono', 'Roboto Mono', 'Droid Sans Mono', 'DejaVu Sans Mono', Menlo, monospace;
+  --amber: #ffb347;
+  --dim: #6f6a60;
+  --text: #e9e2d0;
+  --line: #2a2620;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #000; color: var(--text); font: 14px/1.35 var(--mono); user-select: none; -webkit-user-select: none; }
+#app { height: 100dvh; display: flex; flex-direction: column; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+#hud { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.bars { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.bar { position: relative; height: 16px; background: #1a1612; border: 1px solid var(--line); }
+.bar i { position: absolute; inset: 0; width: 100%; }
+.bar.hp i { background: #7a1f1f; }
+.bar.mp i { background: #1f3d7a; }
+.bar span { position: relative; padding-left: 6px; font-size: 11px; font-weight: 700; }
+#depth { font-size: 20px; font-weight: 800; color: var(--amber); min-width: 40px; text-align: center; }
+#menuBtn { width: 44px; height: 44px; background: #0d0b09; color: var(--amber); border: 1px solid var(--line); font: 800 20px var(--mono); }
+#view { display: block; width: 100%; touch-action: none; background: #000; }
+#deck { display: flex; gap: 8px; padding: 6px 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); min-height: 0; flex: 1; }
+#map { flex: none; width: 150px; height: 150px; align-self: center; }
+#side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
+#stats { font-size: 11px; color: var(--dim); }
+#stats b { color: var(--text); }
+#log { flex: 1; overflow: hidden; font-size: 12px; color: var(--dim); display: flex; flex-direction: column; justify-content: flex-end; }
+#log div:last-child { color: var(--text); }
+#pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 8px; }
+#pad button { min-height: 50px; background: #0d0b09; color: var(--text); border: 1px solid #3a342a; font: 800 14px var(--mono); letter-spacing: 0.04em; }
+#pad button.main { color: var(--amber); border-color: #6b4a1f; }
+#pad button.act { color: #ffd9a0; background: #1c130a; border-color: #6b4a1f; }
+#pad button:active { background: #2a1d0e; }
+#pad button:disabled { opacity: 0.35; }
+#pad button.wide { grid-column: span 1; }
+#overlay { position: fixed; inset: 0; z-index: 10; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; padding: 16px; }
+#overlay[hidden] { display: none; }
+.card { width: 100%; max-width: 420px; max-height: 100%; overflow-y: auto; border: 1px solid #3a342a; background: #070604; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.card h2 { margin: 0; color: var(--amber); font-size: 20px; }
+.card p { margin: 0; color: var(--dim); }
+.card pre { margin: 0 auto; color: var(--amber); font: 700 12px/1.1 var(--mono); text-shadow: 0 0 8px rgba(255,179,71,0.5); }
+.card button { min-height: 48px; background: #0d0b09; color: var(--text); border: 1px solid #3a342a; font: 800 15px var(--mono); }
+.card button.primary { color: #1b1206; background: var(--amber); border-color: var(--amber); }
+.card button:disabled { opacity: 0.35; }
+.card ul { margin: 0; padding-left: 18px; color: var(--dim); }
+.card li { margin-bottom: 4px; }
+.card b { color: var(--text); }
+.meta { font-size: 11px; color: var(--dim); text-align: center; }
+#errors { position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 20; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+#errors .err { pointer-events: auto; background: #3a0d18; border: 1px solid #ff4d6d; color: #ffd6de; padding: 8px 10px; font: 12px/1.3 var(--mono); }
+.toast { position: fixed; left: 50%; top: 64px; transform: translateX(-50%); background: #0d0b09; border: 1px solid #3a342a; padding: 8px 16px; z-index: 30; }

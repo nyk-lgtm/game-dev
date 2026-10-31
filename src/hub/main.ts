@@ -17,8 +17,46 @@ interface GameCard {
 const telegraph = makeStore('telegraph.');
 const grove = makeStore('grove.');
 const lantern = makeStore('lantern.');
+const afterglow = makeStore('afterglow.');
+const delve = makeStore('delve.');
 
 const GAMES: GameCard[] = [
+  {
+    path: './afterglow/',
+    title: 'Afterglow',
+    tag: 'Survivor-like',
+    pitch: 'Ten minutes of neon swarms. Build a weapon combo, evolve it, outlast the Eclipse.',
+    accent: '#ff3d8b',
+    best: () => {
+      const p = afterglow.load<{ bestTime?: number; wins?: number } | null>('profile', null);
+      if (!p?.bestTime) return null;
+      const m = Math.floor(p.bestTime / 60);
+      const s = String(Math.floor(p.bestTime % 60)).padStart(2, '0');
+      return `Best: ${m}:${s}${p.wins ? ` · ${p.wins} win${p.wins > 1 ? 's' : ''}` : ''}`;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><defs><filter id="ag" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2"/></filter></defs>
+      <rect width="76" height="76" fill="#05060d"/>
+      <g filter="url(#ag)" opacity="0.9"><circle cx="38" cy="40" r="7" fill="#5ee7ff"/><path d="M16 18l7 3-6 5zM60 20l-3 7-5-6zM58 60l-7-1 4-6zM14 56l5-6 3 7z" fill="#ff3d8b"/><rect x="50" y="34" width="9" height="9" fill="#ff9a3d"/></g>
+      <circle cx="38" cy="40" r="6" fill="#bff6ff"/><circle cx="38" cy="40" r="20" fill="none" stroke="#b88cff" stroke-width="2" opacity="0.7"/>
+      <path d="M16 18l7 3-6 5zM60 20l-3 7-5-6zM58 60l-7-1 4-6zM14 56l5-6 3 7z" fill="#ff3d8b"/></svg>`,
+  },
+  {
+    path: './delve/',
+    title: 'Delve',
+    tag: 'First-person ASCII crawler',
+    pitch: 'Ten floors of dark corridors, drawn entirely in text. Find the stairs, face the Warden.',
+    accent: '#ffb347',
+    best: () => {
+      const d = delve.load<number>('best', 0);
+      const wins = delve.load<number>('wins', 0);
+      return d ? `Deepest: ${d}${wins ? ` · ${wins} win${wins > 1 ? 's' : ''}` : ''}` : null;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#000"/>
+      <g font-family="monospace" font-weight="700" font-size="9" fill="#8a7a5c">
+      <text x="2" y="12">##|___|##</text><text x="2" y="22" fill="#a08c66">#|_|_|_|#</text><text x="2" y="32" fill="#c0a87a">%|  /\  |</text>
+      <text x="2" y="42" fill="#c0a87a">%| (oo) |</text><text x="2" y="52" fill="#a08c66">#|  ||  |</text><text x="2" y="62" fill="#5c5446">. , . , .</text></g>
+      <text x="58" y="70" font-family="monospace" font-size="11" fill="#ffb347">)(</text></svg>`,
+  },
   {
     path: './telegraph/',
     title: 'Telegraph',
