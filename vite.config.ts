@@ -32,6 +32,7 @@ export default defineConfig({
         lantern: resolve(__dirname, 'lantern/index.html'),
         afterglow: resolve(__dirname, 'afterglow/index.html'),
         delve: resolve(__dirname, 'delve/index.html'),
+        nightline: resolve(__dirname, 'nightline/index.html'),
       },
     },
   },
