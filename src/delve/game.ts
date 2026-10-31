@@ -8,7 +8,6 @@ import { DEATH_ART, LOGO, MONSTER_ART, ITEM_ART, VICTORY_ART } from './art';
 import {
   ARMORS,
   MAX_DEPTH,
-  MONSTERS,
   RULES_VERSION,
   SIZE,
   SPELLS,
