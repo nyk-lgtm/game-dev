@@ -143,7 +143,7 @@ export function generateFloor(seed: number, depth: number): Floor {
     monsters.push({ ...mk('warden', c.x, c.y - 2) });
     for (const [dx, dy] of [[-4, 0], [4, 0], [-4, 3], [4, 3]]) monsters.push(mk('skeleton', c.x + dx, c.y + dy));
   } else {
-    const n = Math.min(spots.length, Math.round(4 + depth * 1.6));
+    const n = Math.min(spots.length, Math.round(2 + depth * 2.3));
     for (let i = 0; i < n; i++) {
       const total = kinds.reduce((s, k) => s + MONSTERS[k].weight, 0);
       let r = rng.next() * total;
@@ -161,22 +161,24 @@ export function generateFloor(seed: number, depth: number): Floor {
   }
   const items: Omit<Item, 'id'>[] = [];
   const nItems = boss ? 2 : rng.int(4, 7);
-  for (let i = 0; i < nItems && spots.length; i++) {
-    const s = spots.pop()!;
+  // Never under a monster (the boss floor's guard stands on fixed cells, not on popped spots).
+  const free = spots.filter((p) => !monsters.some((m) => m.x === p.x && m.y === p.y));
+  for (let i = 0; i < nItems && free.length; i++) {
+    const s = free.pop()!;
     const r = rng.next();
     let kind: ItemKind;
     let value = 0;
-    if (r < 0.32) kind = 'potion';
-    else if (r < 0.5) kind = 'ether';
-    else if (r < 0.75) {
+    if (r < 0.12) kind = 'potion';
+    else if (r < 0.24) kind = 'ether';
+    else if (r < 0.62) {
       kind = 'gold';
       value = rng.int(5, 12) * depth;
-    } else if (r < 0.88) {
+    } else if (r < 0.81) {
       kind = 'weapon';
-      value = Math.min(4, Math.floor(depth / 2.2) + rng.int(0, 1));
+      value = Math.min(4, Math.floor(depth / 2.5) + rng.int(0, 1));
     } else {
       kind = 'armor';
-      value = Math.min(4, Math.floor(depth / 2.2) + rng.int(0, 1));
+      value = Math.min(4, Math.floor(depth / 2.5) + rng.int(0, 1));
     }
     items.push({ kind, x: s.x, y: s.y, value });
   }

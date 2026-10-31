@@ -5,7 +5,7 @@
 import { Rng, mixSeed } from '../../shared/rng';
 import { ARMORS, ARMOR_DEF, ETHER_MP, MAX_DEPTH, MONSTERS, POTION_HEAL, SPELLS, WEAPONS, WEAPON_ATK, XP_TABLE, fireDamage } from './content';
 import { SIZE, distances, generateFloor } from './gen';
-import { DX, DY, type Action, type Dir, type GameEvent, type GameState, type Monster, type SpellId, type StepResult, type Tile } from './types';
+import { DX, DY, type Action, type Dir, type GameEvent, type GameState, type Monster, type MonsterKind, type SpellId, type StepResult, type Tile } from './types';
 
 const LOG_MAX = 30;
 export const SIGHT = 7;
@@ -25,6 +25,12 @@ function roll(s: GameState): number {
 }
 function rollInt(s: GameState, lo: number, hi: number): number {
   return lo + Math.floor(roll(s) * (hi - lo + 1));
+}
+/** "the giant rat", but "The Warden" (whose name already carries its article). */
+function the(kind: MonsterKind, start = false): string {
+  const name = MONSTERS[kind].name;
+  if (name.startsWith('The ')) return name;
+  return `${start ? 'The' : 'the'} ${name.toLowerCase()}`;
 }
 function say(s: GameState, text: string): void {
   s.log.push(text);
@@ -186,7 +192,7 @@ function attack(s: GameState, m: Monster, ev: GameEvent[]): void {
   const def = MONSTERS[m.kind];
   m.awake = true;
   if (roll(s) > 0.88) {
-    say(s, `You miss the ${def.name.toLowerCase()}.`);
+    say(s, `You miss ${the(m.kind)}.`);
     ev.push({ type: 'miss', target: m.id });
     return;
   }
@@ -202,11 +208,11 @@ function damage(s: GameState, m: Monster, dmg: number, ev: GameEvent[], prefix =
   m.hp -= dmg;
   m.awake = true;
   if (m.hp > 0) {
-    say(s, `${prefix ? prefix + ' ' : ''}You hit the ${def.name.toLowerCase()} for ${dmg}.`);
+    say(s, `${prefix ? prefix + ' ' : ''}You hit ${the(m.kind)} for ${dmg}.`);
     return;
   }
   s.kills++;
-  say(s, `${prefix ? prefix + ' ' : ''}The ${def.name.toLowerCase()} falls. +${def.xp} XP.`);
+  say(s, `${prefix ? prefix + ' ' : ''}${the(m.kind, true)} falls.${def.xp ? ` +${def.xp} XP.` : ''}`);
   ev.push({ type: 'kill', kind: m.kind });
   if (m.kind === 'warden') {
     s.status = 'won';
@@ -337,7 +343,8 @@ function cast(s: GameState, spell: SpellId, ev: GameEvent[]): void {
   }
   if (spell === 'fire') damage(s, m, fireDamage(p.level), ev, 'Fire engulfs it!');
   else {
-    m.stun = 3;
+    // The Warden shakes frost off after one turn (otherwise it could be frozen forever).
+    m.stun = m.kind === 'warden' ? 1 : 3;
     damage(s, m, 3 + p.level, ev, 'Frost locks it in place!');
   }
 }
@@ -367,7 +374,7 @@ function monsterTurn(s: GameState, ev: GameEvent[]): void {
     if (m.kind === 'warden' && s.turn % 7 === 0 && s.monsters.filter((o) => o.hp > 0).length < 8) {
       const spot = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([dx, dy]) => !solid(tileAt(s, m.x + dx, m.y + dy)) && !monsterAt(s, m.x + dx, m.y + dy) && (m.x + dx !== p.x || m.y + dy !== p.y));
       if (spot) {
-        s.monsters.push({ id: s.nextId++, kind: 'skeleton', x: m.x + spot[0], y: m.y + spot[1], hp: 16, maxHp: 16, wait: 1, awake: true, stun: 0 });
+        s.monsters.push({ id: s.nextId++, kind: 'skeleton', x: m.x + spot[0], y: m.y + spot[1], hp: MONSTERS.skeleton.hp, maxHp: MONSTERS.skeleton.hp, wait: 1, awake: true, stun: 0 });
         say(s, 'The Warden raises the dead!');
         continue;
       }
@@ -378,7 +385,7 @@ function monsterTurn(s: GameState, ev: GameEvent[]): void {
       continue;
     }
     // Ranged: shoot along a clear straight line.
-    if (def.range && (m.x === p.x || m.y === p.y) && d <= def.range && los(s, m.x, m.y, p.x, p.y) && roll(s) < 0.7) {
+    if (def.range && (m.x === p.x || m.y === p.y) && d <= def.range && los(s, m.x, m.y, p.x, p.y) && !monsterBetween(s, m) && roll(s) < 0.7) {
       ev.push({ type: 'shot', by: m.kind });
       hurt(s, m, def.atk, ev, m.kind === 'mage' ? 'A firebolt' : m.kind === 'warden' ? 'A wave of grave-cold' : 'An arrow');
       continue;
@@ -419,15 +426,23 @@ function monsterTurn(s: GameState, ev: GameEvent[]): void {
   }
 }
 
+/** Another monster standing on the straight line between m and the player (it would take the shot). */
+function monsterBetween(s: GameState, m: Monster): boolean {
+  const p = s.player;
+  const sx = Math.sign(p.x - m.x);
+  const sy = Math.sign(p.y - m.y);
+  for (let x = m.x + sx, y = m.y + sy; x !== p.x || y !== p.y; x += sx, y += sy) if (monsterAt(s, x, y)) return true;
+  return false;
+}
+
 function hurt(s: GameState, m: Monster, atk: number, ev: GameEvent[], what = ''): void {
-  const def = MONSTERS[m.kind];
   if (roll(s) > 0.8) {
-    say(s, `${what || `The ${def.name.toLowerCase()}`} misses you.`);
+    say(s, `${what || the(m.kind, true)} misses you.`);
     return;
   }
   const dmg = Math.max(1, atk - defenceOf(s) + rollInt(s, -1, 1));
   s.player.hp -= dmg;
-  say(s, `${what || `The ${def.name.toLowerCase()}`} hits you for ${dmg}.`);
+  say(s, `${what || the(m.kind, true)} hits you for ${dmg}.`);
   ev.push({ type: 'hurt', dmg, by: m.kind });
   if (s.player.hp <= 0) {
     s.player.hp = 0;
