@@ -16,6 +16,7 @@ interface GameCard {
 
 const telegraph = makeStore('telegraph.');
 const grove = makeStore('grove.');
+const lantern = makeStore('lantern.');
 
 const GAMES: GameCard[] = [
   {
@@ -51,6 +52,25 @@ const GAMES: GameCard[] = [
       <circle cx="29" cy="35" r="7" fill="#3fa860" stroke="#1d3a1a" stroke-width="2"/>
       <circle cx="47" cy="35" r="7" fill="#3fa860" stroke="#1d3a1a" stroke-width="2"/>
       <path d="M60 52 q4 -6 0 -12 q-4 6 0 12z" fill="#c9b8ff"/></svg>`,
+  },
+  {
+    path: './lantern/',
+    title: 'Lantern',
+    tag: 'ASCII RPG',
+    pitch: 'A tiny text-mode quest. Relight the village Lantern from the dark of the Hollow.',
+    accent: '#ffd166',
+    best: () => {
+      const t = lantern.load<number | null>('bestTurns', null);
+      if (t !== null) return `Finished in ${t} turns`;
+      return lantern.load('game', null) ? 'Quest in progress' : null;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#0b0b0e"/>
+      <g font-family="monospace" font-weight="700" font-size="13" text-anchor="middle">
+      <text x="14" y="20" fill="#646a7d">#</text><text x="28" y="20" fill="#646a7d">#</text><text x="42" y="20" fill="#646a7d">#</text><text x="56" y="20" fill="#646a7d">#</text><text x="66" y="20" fill="#646a7d">#</text>
+      <text x="14" y="38" fill="#3d4150">·</text><text x="28" y="38" fill="#ffffff">@</text><text x="42" y="38" fill="#3d4150">·</text><text x="56" y="38" fill="#ff6b6b">s</text>
+      <text x="14" y="56" fill="#3d4150">·</text><text x="28" y="56" fill="#3d4150">·</text><text x="42" y="56" fill="#e7b84a">≡</text><text x="56" y="56" fill="#ffd166">&gt;</text>
+      <text x="38" y="70" fill="#2f8a3e">♣ ♣ ♣</text></g>
+      <circle cx="28" cy="34" r="20" fill="rgba(255,190,90,0.12)"/></svg>`,
   },
 ];
 

@@ -29,6 +29,7 @@ export default defineConfig({
         hub: resolve(__dirname, 'index.html'),
         telegraph: resolve(__dirname, 'telegraph/index.html'),
         grove: resolve(__dirname, 'grove/index.html'),
+        lantern: resolve(__dirname, 'lantern/index.html'),
       },
     },
   },

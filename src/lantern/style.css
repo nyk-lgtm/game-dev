@@ -1,0 +1,34 @@
+/* Lantern-only styles; the shell lives in src/shared/shell.css. */
+:root {
+  --bg: #0b0b0e;
+  --panel: #131318;
+  --line: #24242c;
+  --text: #e8e6df;
+  --muted: #8b8a95;
+  --accent: #ffd166;
+  --danger: #ff5c5c;
+  --mono: ui-monospace, 'Cascadia Mono', 'Roboto Mono', 'Droid Sans Mono', 'DejaVu Sans Mono', Menlo, monospace;
+}
+body { font-family: var(--mono); }
+#hud { gap: 10px; }
+.stat.hp { flex: 1; gap: 4px; }
+.stat.hp b { color: var(--text); }
+.bar { height: 8px; border-radius: 4px; background: #2a1a1c; overflow: hidden; }
+#hpBar { height: 100%; width: 100%; background: var(--danger); transition: width 0.2s; }
+#hud .value { font-size: 17px; }
+#dock {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+#log { font: 13px/1.35 var(--mono); color: var(--muted); height: 54px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
+#log div:last-child { color: var(--text); }
+#buttons { display: flex; gap: 8px; }
+#buttons button { flex: 1; min-height: 48px; font-family: var(--mono); }
+#buttons button:disabled { opacity: 0.4; }
+.card { font-family: var(--mono); }
+.card .speaker { color: var(--accent); font-weight: 700; }
+.card table { width: 100%; border-collapse: collapse; color: var(--muted); }
+.card td { padding: 3px 0; }
+.card td:last-child { text-align: right; color: var(--text); }
