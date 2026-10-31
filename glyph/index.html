@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0716" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Glyphwright</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0716'/%3E%3Cpath d='M8 24L24 8M24 8h-6M24 8v6' stroke='%23b08cff' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="../src/shared/shell.css" />
+    <link rel="stylesheet" href="../src/glyph/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header id="hud">
+        <div class="stat"><span class="label">Wave</span><span id="wave" class="value">1</span></div>
+        <div class="stat"><span class="label">Tower</span><span id="hp" class="value">20</span></div>
+        <div class="stat"><span class="label">Gold</span><span id="gold" class="value gold">9</span></div>
+        <div class="spacer"></div>
+        <button id="speedBtn" class="icon-btn" aria-label="Speed" hidden>1×</button>
+        <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>
+      </header>
+      <main id="stage">
+        <canvas id="lane"></canvas>
+        <div id="laneInfo"></div>
+        <div id="banner"></div>
+      </main>
+      <section id="loom"></section>
+      <div id="tip"></div>
+      <section id="bench"></section>
+      <section id="shop">
+        <div id="offers"></div>
+        <div id="shopBtns">
+          <button id="rerollBtn" class="secondary">Reroll 1●</button>
+          <button id="freezeBtn" class="secondary">Freeze</button>
+          <button id="fightBtn" class="primary">Fight</button>
+        </div>
+      </section>
+    </div>
+    <div id="overlay" hidden></div>
+    <div id="errors"></div>
+    <script type="module" src="../src/glyph/main.ts"></script>
+  </body>
+</html>

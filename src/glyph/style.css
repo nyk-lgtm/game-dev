@@ -1,0 +1,115 @@
+:root {
+  --bg: #0b0716;
+  --panel: #140e24;
+  --line: #2a2045;
+  --accent: #b08cff;
+  --gold: #ffd166;
+  --slot: min(54px, calc((100vw - 52px) / 6.4));
+}
+#hud { min-height: 48px; padding: 4px 10px; gap: 14px; }
+#hud .value { font-size: 18px; }
+#hud .gold { color: var(--gold); }
+#hud .spacer { flex: 1; }
+#hud .hurt { color: var(--danger); }
+#speedBtn { font-size: 15px; font-weight: 800; width: 52px; }
+
+#stage { flex: 1; min-height: 120px; position: relative; overflow: hidden; }
+#lane { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#laneInfo {
+  position: absolute; left: 8px; right: 8px; top: 8px;
+  display: flex; flex-wrap: wrap; gap: 4px 6px; justify-content: center;
+  font-size: 12px; pointer-events: auto;
+}
+#laneInfo .chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: 999px;
+  background: rgba(20, 14, 36, 0.85); border: 1px solid var(--line);
+}
+#laneInfo .chip i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+#laneInfo .chip.boss { border-color: #ff5d7a; color: #ffb3c1; font-weight: 700; }
+#laneInfo .head { width: 100%; text-align: center; color: var(--muted); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+#banner {
+  position: absolute; left: 0; right: 0; top: 42%;
+  text-align: center; font-weight: 800; font-size: 22px;
+  text-shadow: 0 0 12px rgba(176, 140, 255, 0.9);
+  opacity: 0; transition: opacity 0.3s; pointer-events: none;
+}
+#banner.show { opacity: 1; }
+#banner small { display: block; font-size: 14px; font-weight: 600; color: var(--gold); }
+
+/* The loom: three spell rows. */
+#loom { padding: 6px 10px 2px; border-top: 1px solid var(--line); background: var(--panel); }
+.lrow { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; position: relative; }
+.lrow .slots { display: flex; gap: 4px; }
+.lrow .arrow { color: var(--line); font-size: 12px; margin: 0 -3px; align-self: center; }
+.lrow .sum { flex: 1; min-width: 0; font-size: 12px; line-height: 1.25; color: var(--muted); }
+.lrow .sum b { color: var(--text); font-size: 13px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lrow .sum .dps { color: var(--gold); font-weight: 700; }
+.lrow .cd { position: absolute; left: 0; bottom: -2px; height: 2px; background: var(--accent); border-radius: 2px; }
+.lrow.cast .slot.caster { box-shadow: 0 0 14px rgba(255, 220, 160, 0.9); }
+
+.slot {
+  width: var(--slot); height: var(--slot); flex: none;
+  border-radius: 10px; border: 1px solid var(--line);
+  background: #0e0a1b; position: relative;
+  touch-action: none;
+}
+.slot canvas { width: 100%; height: 100%; display: block; pointer-events: none; }
+.slot.caster { border-color: #3d2f66; background: #161030; }
+.slot.caster:empty::after, .slot.caster.empty::after {
+  content: 'cast'; position: absolute; inset: 0; display: grid; place-items: center;
+  font-size: 10px; color: #4a3d73; text-transform: uppercase; letter-spacing: 0.08em;
+}
+.slot.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.slot.ok { border-color: #2fd3a5; box-shadow: 0 0 0 2px rgba(47, 211, 165, 0.6); }
+.slot.hover { background: #1f3a33; }
+.slot.dragging { opacity: 0.3; }
+
+#tip {
+  min-height: 40px; padding: 4px 12px; display: flex; align-items: center; gap: 10px;
+  font-size: 12.5px; line-height: 1.3; color: var(--muted);
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+#tip .txt { flex: 1; min-width: 0; }
+#tip b { color: var(--text); }
+#tip .star { color: var(--gold); font-weight: 700; }
+#tip button { min-height: 40px; min-width: 76px; font-size: 14px; padding: 0 10px; }
+#tip.sellzone { background: #3a1420; color: #ffb3c1; justify-content: center; font-weight: 700; }
+#tip.sellzone.hover { background: #6a1f33; }
+
+#bench { display: flex; gap: 5px; justify-content: center; padding: 6px 10px; background: var(--panel); }
+
+#shop { padding: 6px 10px 10px; background: var(--panel); border-top: 1px solid var(--line); padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+#offers { display: flex; gap: 6px; justify-content: center; }
+.offer { display: flex; flex-direction: column; align-items: center; gap: 2px; width: calc(var(--slot) + 10px); }
+.offer .price { font-size: 12px; font-weight: 700; color: var(--gold); }
+.offer.poor .price { color: var(--danger); }
+.offer.poor .slot { opacity: 0.55; }
+.offer.sold .slot { opacity: 0.25; }
+.offer.sold .price { visibility: hidden; }
+.offer .slot.merge { border-color: var(--gold); box-shadow: 0 0 10px rgba(255, 209, 102, 0.55); }
+.offer .slot.merge::before {
+  content: '★'; position: absolute; right: 2px; top: 0; font-size: 11px; color: var(--gold); z-index: 1;
+}
+#shopBtns { display: flex; gap: 8px; margin-top: 8px; }
+#shopBtns button { flex: 1; min-height: 48px; }
+#shopBtns .primary { flex: 1.4; background: var(--accent); color: #1a0d33; }
+#freezeBtn.on { border-color: #5ee7ff; color: #5ee7ff; background: rgba(94, 231, 255, 0.1); }
+
+/* During battle the bench and shop give way to the lane. */
+body.battle #bench, body.battle #shop { display: none; }
+body.battle #tip { min-height: 44px; }
+
+#ghost {
+  position: fixed; width: 60px; height: 60px; pointer-events: none; z-index: 50;
+  transform: translate(-50%, -80%);
+  filter: drop-shadow(0 0 8px rgba(176, 140, 255, 0.8));
+}
+
+.card .runes { display: grid; grid-template-columns: 40px 1fr; gap: 6px 10px; align-items: center; text-align: left; font-size: 13px; margin: 8px 0; }
+.card .runes canvas { width: 40px; height: 40px; }
+.card .foes { text-align: left; font-size: 13px; margin: 8px 0; }
+.card .foes div { margin: 4px 0; }
+.card .foes i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 6px; }
+.card h2 { margin: 4px 0 8px; }
+.card .scroll { max-height: 55vh; overflow-y: auto; }

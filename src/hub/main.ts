@@ -20,6 +20,7 @@ const lantern = makeStore('lantern.');
 const afterglow = makeStore('afterglow.');
 const delve = makeStore('delve.');
 const nightline = makeStore('nightline.');
+const glyph = makeStore('glyph.');
 
 const GAMES: GameCard[] = [
   {
@@ -40,6 +41,24 @@ const GAMES: GameCard[] = [
       <g filter="url(#ag)" opacity="0.9"><circle cx="38" cy="40" r="7" fill="#5ee7ff"/><path d="M16 18l7 3-6 5zM60 20l-3 7-5-6zM58 60l-7-1 4-6zM14 56l5-6 3 7z" fill="#ff3d8b"/><rect x="50" y="34" width="9" height="9" fill="#ff9a3d"/></g>
       <circle cx="38" cy="40" r="6" fill="#bff6ff"/><circle cx="38" cy="40" r="20" fill="none" stroke="#b88cff" stroke-width="2" opacity="0.7"/>
       <path d="M16 18l7 3-6 5zM60 20l-3 7-5-6zM58 60l-7-1 4-6zM14 56l5-6 3 7z" fill="#ff3d8b"/></svg>`,
+  },
+  {
+    path: './glyph/',
+    title: 'Glyphwright',
+    tag: 'Spell-crafting autobattler',
+    pitch: 'Weave runes into spells, three rows on a loom. Order matters. Hold the tower for 15 waves.',
+    accent: '#b08cff',
+    best: () => {
+      const p = glyph.load<{ bestWave?: number; wins?: number } | null>('profile', null);
+      if (!p?.bestWave) return null;
+      return `Best: wave ${p.bestWave}${p.wins ? ` · ${p.wins} win${p.wins > 1 ? 's' : ''}` : ''}`;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><defs><filter id="gw" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2"/></filter></defs>
+      <rect width="76" height="76" fill="#0b0716"/>
+      <g fill="none" stroke-linecap="round" stroke-width="3"><g filter="url(#gw)"><path d="M14 30L30 14M30 14h-7M30 14v7" stroke="#5ec8ff"/><path d="M46 14v16M40 22h12" stroke="#ff7a3d"/><circle cx="60" cy="22" r="6" stroke="#c77dff"/></g>
+      <path d="M14 30L30 14M30 14h-7M30 14v7" stroke="#bfe9ff"/><path d="M46 14v16M40 22h12" stroke="#ffc7a8"/><circle cx="60" cy="22" r="6" stroke="#e7cfff"/></g>
+      <path d="M38 66l6-10-6-10-6 10z" fill="#c9b2ff"/><circle cx="24" cy="44" r="4" fill="#ff5d7a"/><path d="M52 40l4 7h-8z" fill="#ffb347"/>
+      <path d="M38 46L26 45" stroke="#5ec8ff" stroke-width="1.5"/></svg>`,
   },
   {
     path: './nightline/',

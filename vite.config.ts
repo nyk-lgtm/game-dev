@@ -33,6 +33,7 @@ export default defineConfig({
         afterglow: resolve(__dirname, 'afterglow/index.html'),
         delve: resolve(__dirname, 'delve/index.html'),
         nightline: resolve(__dirname, 'nightline/index.html'),
+        glyph: resolve(__dirname, 'glyph/index.html'),
       },
     },
   },
