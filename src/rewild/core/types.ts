@@ -34,10 +34,24 @@ export type Weather = 'fair' | 'drought' | 'fire' | 'storm' | 'harsh';
 export interface Goal {
   id: string;
   text: string;
-  /** Progress text, e.g. "4/10". */
   target: number;
+  /** Current progress (best so far for "at once" goals). */
+  progress: number;
   done: boolean;
   reward: number;
+}
+
+export interface Stats {
+  /** Rock or sand turned into soil. */
+  soilMade: number;
+  /** Ponds dammed by beavers. */
+  pondsMade: number;
+  /** Cells burnt by wildfire. */
+  burnt: number;
+  /** Seasons that ended with wolves and deer both alive. */
+  wolfDeer: number;
+  /** Most species alive at once. */
+  maxSpecies: number;
 }
 
 export interface SeasonLog {
@@ -63,12 +77,19 @@ export interface GameState {
   score: number;
   goals: Goal[];
   log: SeasonLog[];
+  /** Cards that can still be played this season. */
+  plays: number;
   /** Rerolls of the hand left. */
   rerolls: number;
+  /** Hands dealt so far (salts the deal so rerolls differ). */
+  deals: number;
+  /** Highest card tier unlocked (1..3). */
+  tier: number;
+  stats: Stats;
   over: boolean;
 }
 
-export type Action = { type: 'place'; card: number; cell: number } | { type: 'reroll' } | { type: 'pass' };
+export type Action = { type: 'place'; card: number; cell: number } | { type: 'reroll' } | { type: 'end' };
 
 /** What happened during a season, for animation and the report. */
 export type SimEvent =
@@ -81,4 +102,5 @@ export type SimEvent =
   | { type: 'terraform'; cell: number; from: Terrain; to: Terrain }
   | { type: 'enrich'; cell: number; fert: number }
   | { type: 'burn'; cell: number }
-  | { type: 'goal'; id: string };
+  | { type: 'goal'; id: string }
+  | { type: 'unlock'; tier: number };

@@ -10,6 +10,8 @@ export interface PlantDef {
   /** Terrains it can root in. */
   on: Terrain[];
   minFert: number;
+  /** Outcompeted on soil richer than this. */
+  maxFert: number;
   minWet: number;
   maxWet: number;
   /** Size when placed. */
@@ -41,6 +43,8 @@ export interface AnimalDef {
   start: number;
   /** Seasons in which it breeds. */
   breeds: number[];
+  /** How far it can move or send young (cells). */
+  range: 1 | 2;
   text: string;
 }
 
@@ -50,37 +54,37 @@ const LAND: Terrain[] = ['soil', 'sand', 'rock'];
 
 export const PLANTS: Record<PlantId, PlantDef> = {
   lichen: {
-    id: 'lichen', kind: 'plant', name: 'Lichen', tier: 1, on: ['rock', 'soil', 'sand'], minFert: 0, minWet: 0, maxWet: 3, start: 1,
+    id: 'lichen', kind: 'plant', name: 'Lichen', tier: 1, on: ['rock', 'soil', 'sand'], minFert: 0, maxFert: 0, minWet: 0, maxWet: 3, start: 2,
     grows: [0, 1, 2], spread: 'self',
-    text: 'Grows on bare rock. When full it crumbles the rock into soil and gives way. Spreads over rock and dust.',
+    text: 'Grows on bare rock and sand. When full it spreads to two cells, then crumbles its own cell into soil.',
   },
   grass: {
-    id: 'grass', kind: 'plant', name: 'Grass', tier: 1, on: ['soil'], minFert: 1, minWet: 0, maxWet: 3, start: 2,
+    id: 'grass', kind: 'plant', name: 'Grass', tier: 1, on: ['soil'], minFert: 1, maxFert: 3, minWet: 0, maxWet: 3, start: 2,
     grows: [0, 1, 2], spread: 'self',
     text: 'Needs soil. Grows fast and spreads on its own. Burns in dry summers.',
   },
   reeds: {
-    id: 'reeds', kind: 'plant', name: 'Reeds', tier: 1, on: ['shallows', 'marsh', 'pond'], minFert: 0, minWet: 0, maxWet: 3, start: 1,
+    id: 'reeds', kind: 'plant', name: 'Reeds', tier: 1, on: ['shallows', 'marsh', 'pond'], minFert: 0, maxFert: 3, minWet: 0, maxWet: 3, start: 1,
     grows: [0, 1, 2], spread: 'water',
     text: 'Grow in shallow water. When full, they silt the shallows up into rich marsh.',
   },
   flowers: {
-    id: 'flowers', kind: 'plant', name: 'Wildflowers', tier: 2, on: ['soil'], minFert: 1, minWet: 1, maxWet: 3, start: 2,
+    id: 'flowers', kind: 'plant', name: 'Wildflowers', tier: 2, on: ['soil'], minFert: 1, maxFert: 3, minWet: 1, maxWet: 3, start: 2,
     grows: [0, 1], spread: 'pollinated',
     text: 'Need soil and some moisture. Only spread where bees are nearby.',
   },
   shrub: {
-    id: 'shrub', kind: 'plant', name: 'Berry shrub', tier: 2, on: ['soil'], minFert: 2, minWet: 1, maxWet: 3, start: 1,
+    id: 'shrub', kind: 'plant', name: 'Berry shrub', tier: 2, on: ['soil'], minFert: 2, maxFert: 3, minWet: 1, maxWet: 3, start: 1,
     grows: [0, 1], spread: 'birds',
     text: 'Needs rich soil. Songbirds carry its seeds up to 2 cells away. Deer browse it.',
   },
   tree: {
-    id: 'tree', kind: 'plant', name: 'Oak', tier: 2, on: ['soil'], minFert: 2, minWet: 2, maxWet: 3, start: 1,
-    grows: [0], spread: 'birds',
-    text: 'Needs rich, moist soil and grows only in spring. A full oak keeps nearby soil moist. Songbirds spread acorns; deer eat saplings.',
+    id: 'tree', kind: 'plant', name: 'Oak', tier: 2, on: ['soil'], minFert: 2, maxFert: 3, minWet: 2, maxWet: 3, start: 1,
+    grows: [0, 1], spread: 'birds',
+    text: 'Needs rich, moist soil; grows in spring and summer. A full oak keeps nearby soil moist. Songbirds spread acorns; deer eat saplings.',
   },
   fungi: {
-    id: 'fungi', kind: 'plant', name: 'Fungi', tier: 2, on: ['soil'], minFert: 0, minWet: 1, maxWet: 3, start: 1,
+    id: 'fungi', kind: 'plant', name: 'Fungi', tier: 2, on: ['soil'], minFert: 0, maxFert: 3, minWet: 1, maxWet: 3, start: 1,
     grows: [1, 2], spread: 'self',
     text: 'Need moisture and a tree or shrub next to them. Each autumn they enrich the soil around them.',
   },
@@ -89,42 +93,42 @@ export const PLANTS: Record<PlantId, PlantDef> = {
 export const ANIMALS: Record<AnimalId, AnimalDef> = {
   bees: {
     id: 'bees', kind: 'animal', name: 'Bees', tier: 1, on: LAND, eats: ['flowers', 'shrub', 'tree'], consumes: false, value: 1, need: 1,
-    hibernates: true, start: 1, breeds: [0, 1],
+    hibernates: true, start: 1, breeds: [0, 1], range: 2,
     text: 'Feed on blossoms without using them up, and let wildflowers spread.',
   },
   rabbit: {
     id: 'rabbit', kind: 'animal', name: 'Rabbits', tier: 1, on: ['soil', 'sand'], eats: ['grass', 'flowers'], consumes: true, value: 1, need: 1,
-    hibernates: false, start: 2, breeds: [0, 1, 2],
+    hibernates: false, start: 2, breeds: [0, 1, 2], range: 1,
     text: 'Graze grass and flowers. Breed fast; can strip a meadow bare.',
   },
   songbird: {
     id: 'songbird', kind: 'animal', name: 'Songbirds', tier: 2, on: ['soil', 'sand', 'rock', 'marsh'], eats: ['shrub', 'tree', 'bees'], consumes: false, value: 1, need: 1,
-    hibernates: false, start: 1, breeds: [0, 1],
+    hibernates: false, start: 1, breeds: [0, 1], range: 2,
     text: 'Need shrubs or trees close by. Carry shrub and oak seeds up to 2 cells.',
   },
   frog: {
     id: 'frog', kind: 'animal', name: 'Frogs', tier: 2, on: ['marsh', 'pond'], eats: ['reeds', 'bees'], consumes: false, value: 1, need: 1,
-    hibernates: true, start: 1, breeds: [0, 1],
+    hibernates: true, start: 1, breeds: [0, 1], range: 1,
     text: 'Live in marsh and ponds among reeds.',
   },
   deer: {
     id: 'deer', kind: 'animal', name: 'Deer', tier: 2, on: ['soil', 'sand'], eats: ['grass', 'shrub', 'tree', 'flowers'], consumes: true, value: 1, need: 2,
-    hibernates: false, start: 2, breeds: [0, 1],
+    hibernates: false, start: 2, breeds: [0, 1], range: 2,
     text: 'Browse shrubs, saplings and grass. Too many deer and no forest can grow. They flee from wolves.',
   },
   fox: {
     id: 'fox', kind: 'animal', name: 'Foxes', tier: 3, on: ['soil', 'sand', 'rock'], eats: ['rabbit', 'frog'], consumes: true, value: 2, need: 1,
-    hibernates: false, start: 1, breeds: [0],
+    hibernates: false, start: 1, breeds: [0], range: 2,
     text: 'Hunt rabbits and frogs. Keep rabbits from stripping the meadows.',
   },
   wolf: {
     id: 'wolf', kind: 'animal', name: 'Wolves', tier: 3, on: ['soil', 'sand', 'rock'], eats: ['deer'], consumes: true, value: 3, need: 1,
-    hibernates: false, start: 1, breeds: [0],
+    hibernates: false, start: 1, breeds: [0], range: 2,
     text: 'Hunt deer, and deer keep away from them, so forests can grow back.',
   },
   beaver: {
     id: 'beaver', kind: 'animal', name: 'Beavers', tier: 3, on: ['soil', 'marsh', 'shallows', 'pond'], eats: ['tree', 'shrub', 'reeds'], consumes: true, value: 1, need: 1,
-    hibernates: false, start: 1, breeds: [0],
+    hibernates: false, start: 1, breeds: [0], range: 1,
     text: 'Live by water and gnaw trees. Each autumn a family dams a nearby cell into a new pond.',
   },
 };
@@ -139,7 +143,7 @@ export const isPlant = (id: SpeciesId): id is PlantId => id in PLANTS;
 /** Can this plant live here, given the cell's current moisture? */
 export function plantFits(id: PlantId, c: Cell, wet: number): boolean {
   const d = PLANTS[id];
-  return d.on.includes(c.t) && c.fert >= d.minFert && wet >= d.minWet && wet <= d.maxWet;
+  return d.on.includes(c.t) && c.fert >= d.minFert && c.fert <= d.maxFert && wet >= d.minWet && wet <= d.maxWet;
 }
 
 export function animalFits(id: AnimalId, c: Cell): boolean {
