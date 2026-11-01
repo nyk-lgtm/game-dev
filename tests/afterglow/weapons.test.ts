@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { WEAPONS, step, type WeaponId } from '../../src/afterglow/core';
+import { BASE_WEAPONS, PASSIVES, WEAPONS, step, type PassiveId, type WeaponId } from '../../src/afterglow/core';
 import { calmWorld, makeImmortal, put, secondsToSteps } from './helpers';
 
 const ALL = Object.keys(WEAPONS) as WeaponId[];
 
 describe('weapons', () => {
-  it('registers 16 weapons whose ids match their keys', () => {
-    expect(ALL).toHaveLength(16);
+  it('registers 20 weapons whose ids match their keys', () => {
+    expect(ALL).toHaveLength(20);
     for (const id of ALL) {
       expect(WEAPONS[id].id).toBe(id);
       expect(WEAPONS[id].maxLevel).toBeGreaterThanOrEqual(1);
@@ -99,5 +99,56 @@ describe('weapons', () => {
     // Nova fires on the first step (cd 0): both die.
     expect(w.kills).toBe(2);
     expect(w.pickups.filter((p) => p.kind === 'gem').length).toBeGreaterThan(0);
+  });
+
+  it('every passive is the catalyst for exactly one base weapon, and every base weapon evolves', () => {
+    const catalysts = BASE_WEAPONS.map((id) => WEAPONS[id].evolvesWith);
+    expect(new Set(catalysts).size).toBe(BASE_WEAPONS.length);
+    for (const id of Object.keys(PASSIVES) as PassiveId[]) expect(catalysts, id).toContain(id);
+    for (const id of BASE_WEAPONS) {
+      const into = WEAPONS[id].evolvesInto!;
+      expect(WEAPONS[into].from).toBe(id);
+    }
+  });
+
+  it('gravity wells drag enemies toward their center', () => {
+    const w = calmWorld(6);
+    makeImmortal(w);
+    w.weapons = [{ id: 'well', level: 1, cd: 0, t: 0, dealt: 0 }];
+    const e = put(w, 'brute', 0, -150, 1e9);
+    e.speed = 0;
+    step(w, 0, 0);
+    expect(w.wells.length).toBe(1);
+    const well = w.wells[0];
+    // Nudge the brute off-center inside the well and watch it get pulled in.
+    e.x = well.x + 50;
+    e.y = well.y;
+    for (let i = 0; i < 30; i++) step(w, 0, 0);
+    expect(Math.hypot(e.x - well.x, e.y - well.y)).toBeLessThan(50);
+    expect(w.dealt.well ?? 0).toBeGreaterThan(0);
+  });
+
+  it('wellspring heals the player while it drains', () => {
+    const w = calmWorld(7);
+    makeImmortal(w);
+    w.weapons = [{ id: 'wellspring', level: 1, cd: 0, t: 0, dealt: 0 }];
+    for (let i = 0; i < 3; i++) put(w, 'brute', 60 - i * 60, -80, 1e9).speed = 0;
+    w.player.hp = 10;
+    for (let i = 0; i < secondsToSteps(2); i++) step(w, 0, 0);
+    expect(w.player.hp).toBeGreaterThan(10);
+    expect(w.tethers.length).toBe(3);
+  });
+
+  it('event horizon sends loose gems to the player', () => {
+    const w = calmWorld(8);
+    makeImmortal(w);
+    w.weapons = [{ id: 'horizon', level: 1, cd: 0, t: 0, dealt: 0 }];
+    const e = put(w, 'brute', 0, -250, 1e9);
+    e.speed = 0;
+    step(w, 0, 0);
+    const well = w.wells[0];
+    w.pickups.push({ kind: 'gem', x: well.x + 30, y: well.y, value: 1, pulled: false, alive: true });
+    step(w, 0, 0);
+    expect(w.pickups.some((p) => p.kind === 'gem' && p.pulled)).toBe(true);
   });
 });

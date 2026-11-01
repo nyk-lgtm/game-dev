@@ -40,6 +40,7 @@ export function createWorld(seed: number, characterId = 'spark', profile?: Profi
     enemies: [],
     shots: [],
     mines: [],
+    wells: [],
     bullets: [],
     pickups: [],
     nextId: 1,
@@ -61,6 +62,7 @@ export function createWorld(seed: number, characterId = 'spark', profile?: Profi
     dealt: {},
     blades: [],
     auras: [],
+    tethers: [],
   };
   recomputeStats(w);
   w.player.hp = w.stats.maxHp;
@@ -110,6 +112,7 @@ export function step(w: World, ix: number, iy: number): void {
 
   w.blades.length = 0;
   w.auras.length = 0;
+  w.tethers.length = 0;
   for (const ws of w.weapons) WEAPONS[ws.id].tick(w, ws, dt);
 
   moveEnemies(w, dt);
@@ -123,6 +126,7 @@ export function step(w: World, ix: number, iy: number): void {
   w.enemies = w.enemies.filter((e) => e.alive);
   w.shots = w.shots.filter((s) => s.alive);
   w.mines = w.mines.filter((s) => s.alive);
+  w.wells = w.wells.filter((s) => s.alive);
   w.bullets = w.bullets.filter((s) => s.alive);
   w.pickups = w.pickups.filter((s) => s.alive);
   if (w.tick % 300 === 0) for (const [k, t] of w.hitCd) if (t < w.time) w.hitCd.delete(k);

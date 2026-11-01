@@ -2,6 +2,8 @@
 
 import {
   CHARACTERS,
+  MAX_PASSIVES,
+  MAX_WEAPONS,
   META,
   PASSIVES,
   WEAPONS,
@@ -32,6 +34,10 @@ export const WEAPON_ICON: Record<WeaponId, Shape> = {
   pinball: 'disc',
   halo: 'ring',
   sanctum: 'ring',
+  siphon: 'cross',
+  wellspring: 'cross',
+  well: 'hex',
+  horizon: 'hex',
 };
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', html = ''): HTMLElementTagNameMap[K] {
@@ -91,8 +97,8 @@ function choiceCard(w: World, c: Choice, onClick: () => void): HTMLButtonElement
     name = d.name;
     desc = d.desc;
     tag = c.level === 1 ? 'new' : `lv ${c.level}`;
-    const evo = Object.values(WEAPONS).find((x) => x.evolvesWith === c.id && w.weapons.some((ws) => ws.id === x.id));
-    if (evo) hint = `Evolves ${evo.name} → ${WEAPONS[evo.evolvesInto!].name}`;
+    const evo = Object.values(WEAPONS).find((x) => x.evolvesWith === c.id);
+    if (evo) hint = `Evolves ${evo.name} → ${WEAPONS[evo.evolvesInto!].name}${w.weapons.some((ws) => ws.id === evo.id) ? ' (you have it)' : ''}`;
     if (c.level === 1) card.classList.add('new');
   } else drawIcon(icon, 'diamond', 185, 52);
   const max = c.kind === 'weapon' ? WEAPONS[c.id as WeaponId].maxLevel : c.kind === 'passive' ? PASSIVES[c.id as PassiveId].maxLevel : 0;
@@ -118,6 +124,7 @@ export function showLevelUp(w: World, h: LevelUpHandlers): void {
   let banishing = false;
   p.append(el('h2', '', 'Level up!'));
   p.append(el('p', 'sub', `Level ${w.player.level - w.pendingLevels + 1}${w.pendingLevels > 1 ? ` · ${w.pendingLevels} to pick` : ''}`));
+  p.append(slotsLine(w));
   const cards = w.choices.map((c, i) =>
     choiceCard(w, c, () => {
       if (banishing) h.banish(i);
@@ -150,11 +157,43 @@ export function showChest(w: World, got: Choice[], done: () => void): void {
   p.append(button('Continue', 'big', done));
 }
 
+function slotsLine(w: World): HTMLElement {
+  return el('p', 'slots', `Weapons <b>${w.weapons.length}/${MAX_WEAPONS}</b> · Passives <b>${Object.keys(w.passives).length}/${MAX_PASSIVES}</b>`);
+}
+
+/** Compact build overview: every weapon and passive, with evolution recipes. */
 export function buildList(w: World): HTMLElement {
-  const box = el('div', 'panel');
-  for (const ws of w.weapons) box.append(choiceCard(w, { kind: 'weapon', id: ws.id, level: ws.level }, () => {}));
-  for (const [id, lvl] of Object.entries(w.passives) as [PassiveId, number][])
-    box.append(choiceCard(w, { kind: 'passive', id, level: lvl }, () => {}));
+  const box = el('div', 'build');
+  const item = (shape: Shape, hue: number, evolved: boolean, name: string, level: number, max: number, evo: string) => {
+    const row = el('div', 'item' + (evolved ? ' evolved' : ''));
+    const icon = el('canvas');
+    drawIcon(icon, shape, hue, 34, evolved);
+    row.append(icon, el('div', 'body', `<div class="name">${name}${pips(level, max)}</div>${evo ? `<div class="evo">${evo}</div>` : ''}`));
+    return row;
+  };
+  box.append(el('h3', '', `<span>Weapons</span><span>${w.weapons.length}/${MAX_WEAPONS}</span>`));
+  for (const ws of w.weapons) {
+    const d = WEAPONS[ws.id];
+    let evo = '';
+    if (d.from) evo = 'Evolved';
+    else if (d.evolvesWith) {
+      const lvOk = ws.level >= d.maxLevel;
+      const psOk = (w.passives[d.evolvesWith] ?? 0) > 0;
+      const mark = (ok: boolean, t: string) => `<span class="${ok ? 'ok' : 'no'}">${ok ? '✓' : '·'} ${t}</span>`;
+      evo = `→ ${WEAPONS[d.evolvesInto!].name}: ${mark(lvOk, `lv ${ws.level}/${d.maxLevel}`)} ${mark(psOk, PASSIVES[d.evolvesWith].name)}${lvOk && psOk ? ' · open a chest' : ''}`;
+    }
+    box.append(item(WEAPON_ICON[ws.id], d.hue, !!d.from, d.name, ws.level, d.maxLevel, evo));
+  }
+  if (w.weapons.length < MAX_WEAPONS) box.append(el('div', 'empty', `${MAX_WEAPONS - w.weapons.length} free slot${MAX_WEAPONS - w.weapons.length > 1 ? 's' : ''}`));
+  const passives = Object.entries(w.passives) as [PassiveId, number][];
+  box.append(el('h3', '', `<span>Passives</span><span>${passives.length}/${MAX_PASSIVES}</span>`));
+  for (const [id, lvl] of passives) {
+    const d = PASSIVES[id];
+    const evoW = Object.values(WEAPONS).find((x) => x.evolvesWith === id);
+    const evo = `${d.desc}${evoW ? ` · evolves ${evoW.name}` : ''}`;
+    box.append(item('hex', d.hue, false, d.name, lvl, d.maxLevel, evo));
+  }
+  if (passives.length < MAX_PASSIVES) box.append(el('div', 'empty', `${MAX_PASSIVES - passives.length} free slot${MAX_PASSIVES - passives.length > 1 ? 's' : ''}`));
   return box;
 }
 
@@ -168,7 +207,7 @@ export function showPause(w: World, h: { resume(): void; quit(): void; muted: bo
     button(h.muted ? 'Sound: off' : 'Sound: on', 'alt', h.toggleMute),
     button('Give up', 'alt', h.quit),
   );
-  p.append(row, button('Copy bug report', 'alt', h.report));
+  p.append(row, button('Copy bug report', 'alt', h.report), button('Resume', 'big', h.resume));
 }
 
 export interface RunSummary {

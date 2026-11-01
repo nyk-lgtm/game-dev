@@ -66,7 +66,11 @@ export type WeaponId =
   | 'railgun'
   | 'minefield'
   | 'pinball'
-  | 'sanctum';
+  | 'sanctum'
+  | 'siphon'
+  | 'wellspring'
+  | 'well'
+  | 'horizon';
 
 export type PassiveId =
   | 'might'
@@ -121,6 +125,21 @@ export interface Mine {
   r: number;
   blast: number;
   dmg: number;
+  alive: boolean;
+}
+
+/** A gravity well: pulls enemies in and grinds them down. */
+export interface Well {
+  weapon: WeaponId;
+  x: number;
+  y: number;
+  r: number;
+  /** Pull speed at the rim (px/s). */
+  pull: number;
+  dmg: number;
+  life: number;
+  /** Seconds until the next damage tick. */
+  t: number;
   alive: boolean;
 }
 
@@ -212,6 +231,7 @@ export interface World {
   enemies: Enemy[];
   shots: Shot[];
   mines: Mine[];
+  wells: Well[];
   bullets: Bullet[];
   pickups: Pickup[];
   nextId: number;
@@ -239,6 +259,8 @@ export interface World {
   /** Render-only: orbiting blade positions and auras from this step. */
   blades: { x: number; y: number; r: number; hue: number }[];
   auras: { r: number; hue: number }[];
+  /** Render-only: siphon tethers from the player to these points. */
+  tethers: { x: number; y: number; hue: number }[];
   /** Damage dealt per weapon (for the results screen). */
   dealt: Partial<Record<WeaponId, number>>;
 }

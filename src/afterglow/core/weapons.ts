@@ -294,6 +294,47 @@ const halo: WeaponDef = {
   },
 };
 
+const siphon: WeaponDef = {
+  id: 'siphon',
+  name: 'Siphon',
+  hue: 130,
+  maxLevel: 8,
+  desc: 'Tethers to the nearest enemies and drains them.',
+  levels: ['Drains the nearest enemy', '+1 tether', '+2 damage', 'Longer reach', '+1 tether', '+3 damage', 'Faster drain', '+1 tether, +3 damage'],
+  evolvesWith: 'regen',
+  evolvesInto: 'wellspring',
+  tick(w, ws, dt) {
+    const l = ws.level;
+    const n = at([1, 2, 2, 2, 3, 3, 3, 4], l) + Math.floor(w.stats.amount / 2);
+    const range = at([150, 150, 150, 185, 185, 185, 185, 200], l) * w.stats.area;
+    const dmg = at([8, 8, 10, 10, 10, 14, 14, 18], l);
+    const every = at([0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.3, 0.3], l);
+    drain(w, ws, dt, 'siphon', n, range, dmg, every, 0);
+  },
+};
+
+const well: WeaponDef = {
+  id: 'well',
+  name: 'Gravity Well',
+  hue: 250,
+  maxLevel: 8,
+  desc: 'Opens a well in the swarm that drags enemies in and grinds them.',
+  levels: ['A well pulls enemies in and hurts them', '+2 damage', 'Bigger', 'Lasts longer', '+1 well', 'Stronger pull', '+3 damage', 'Bigger, +1 well'],
+  evolvesWith: 'magnet',
+  evolvesInto: 'horizon',
+  tick(w, ws, dt) {
+    const l = ws.level;
+    tickWells(w, 'well', dt);
+    if (!ready(w, ws, dt, 4.2)) return;
+    const n = at([1, 1, 1, 1, 2, 2, 2, 3], l) + Math.floor(w.stats.amount / 2);
+    const r = at([70, 70, 85, 85, 85, 85, 85, 100], l) * w.stats.area;
+    const life = at([2.6, 2.6, 2.6, 3.4, 3.4, 3.4, 3.4, 3.4], l) * w.stats.duration;
+    const pull = at([90, 90, 90, 90, 90, 130, 130, 130], l);
+    const dmg = at([5, 7, 7, 7, 7, 7, 10, 10], l);
+    openWells(w, 'well', n, r, life, pull, dmg);
+  },
+};
+
 function aura(w: World, ws: WeaponState, dt: number, id: WeaponId, r: number, dmg: number, slow: number, healPerKill: number): void {
   w.auras.push({ r, hue: id === 'sanctum' ? 55 : 45 });
   ws.t -= dt;
@@ -307,6 +348,72 @@ function aura(w: World, ws: WeaponState, dt: number, id: WeaponId, r: number, dm
     damage(w, e, dmg, id, 0, 0, 0);
     if (was && !e.alive && healPerKill) p.hp = Math.min(w.stats.maxHp, p.hp + healPerKill);
   });
+}
+
+/** Lash the n nearest enemies within range; heal per tethered enemy each pulse. */
+function drain(w: World, ws: WeaponState, dt: number, id: WeaponId, n: number, range: number, dmg: number, every: number, heal: number): void {
+  const p = w.player;
+  const near: { e: Enemy; d: number }[] = [];
+  enemiesWithin(w, p.x, p.y, range, (e, d) => {
+    if (near.length < n) near.push({ e, d });
+    else {
+      let far = 0;
+      for (let i = 1; i < near.length; i++) if (near[i].d > near[far].d) far = i;
+      if (d < near[far].d) near[far] = { e, d };
+    }
+  });
+  const hue = WEAPONS[id].hue;
+  for (const t of near) w.tethers.push({ x: t.e.x, y: t.e.y, hue });
+  ws.t -= dt;
+  if (ws.t > 0) return;
+  ws.t += every * w.stats.haste;
+  if (ws.t < 0) ws.t = 0;
+  for (const t of near) damage(w, t.e, dmg, id, 0, 0, 0);
+  if (heal && near.length) p.hp = Math.min(w.stats.maxHp, p.hp + heal * near.length);
+}
+
+/** Open wells on the densest nearby enemies (falls back to ahead of you). */
+function openWells(w: World, id: WeaponId, n: number, r: number, life: number, pull: number, dmg: number): void {
+  const p = w.player;
+  for (let i = 0; i < n; i++) {
+    const t = i === 0 ? nearestEnemy(w, p.x, p.y, 300) : randomEnemyNear(w, 320);
+    const x = t ? t.x : p.x + p.fx * 120;
+    const y = t ? t.y : p.y + p.fy * 120;
+    w.wells.push({ weapon: id, x, y, r, pull, dmg, life, t: 0, alive: true });
+  }
+}
+
+function tickWells(w: World, id: WeaponId, dt: number): void {
+  for (const wl of w.wells) {
+    if (wl.weapon !== id || !wl.alive) continue;
+    wl.life -= dt;
+    if (wl.life <= 0) {
+      wl.alive = false;
+      if (id === 'horizon') {
+        burst(w, id, wl.x, wl.y, wl.r * 1.2, wl.dmg * 4, 260);
+        w.fx.push({ type: 'ring', x: wl.x, y: wl.y, r: wl.r * 1.2, color: 250 });
+      }
+      continue;
+    }
+    wl.t -= dt;
+    const hit = wl.t <= 0;
+    if (hit) wl.t += 0.3;
+    enemiesWithin(w, wl.x, wl.y, wl.r, (e, d) => {
+      const def = e.kind === 'prism' || e.kind === 'eclipse' ? 1 : 0;
+      if (!def && d > 4) {
+        const k = (wl.pull * dt) / d;
+        e.x -= (e.x - wl.x) * Math.min(1, k);
+        e.y -= (e.y - wl.y) * Math.min(1, k);
+      }
+      if (hit) damage(w, e, wl.dmg, id, 0, 0, 0);
+    });
+    if (id === 'horizon') {
+      // The horizon swallows loose gems and sends them to you.
+      for (const g of w.pickups) {
+        if (g.kind === 'gem' && !g.pulled && (g.x - wl.x) ** 2 + (g.y - wl.y) ** 2 < (wl.r * 1.6) ** 2) g.pulled = true;
+      }
+    }
+  }
 }
 
 // ---------- evolutions ----------
@@ -456,6 +563,34 @@ const sanctum: WeaponDef = {
   },
 };
 
+const wellspring: WeaponDef = {
+  id: 'wellspring',
+  name: 'Wellspring',
+  hue: 130,
+  maxLevel: 1,
+  from: 'siphon',
+  desc: 'Six tethers that drain the swarm and heal you.',
+  levels: ['Evolved Siphon: many tethers, each drain heals you'],
+  tick(w, ws, dt) {
+    drain(w, ws, dt, 'wellspring', 6 + w.stats.amount, 230 * w.stats.area, 16, 0.25, 0.12);
+  },
+};
+
+const horizon: WeaponDef = {
+  id: 'horizon',
+  name: 'Event Horizon',
+  hue: 250,
+  maxLevel: 1,
+  from: 'well',
+  desc: 'Huge wells that swallow gems and collapse in a blast.',
+  levels: ['Evolved Gravity Well: huge wells that pull in gems and collapse with a blast'],
+  tick(w, ws, dt) {
+    tickWells(w, 'horizon', dt);
+    if (!ready(w, ws, dt, 3.2)) return;
+    openWells(w, 'horizon', 2 + Math.floor(w.stats.amount / 2), 120 * w.stats.area, 3.4 * w.stats.duration, 170, 10);
+  },
+};
+
 export const WEAPONS: Record<WeaponId, WeaponDef> = {
   pulse,
   orbit,
@@ -473,6 +608,10 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   minefield,
   pinball,
   sanctum,
+  siphon,
+  wellspring,
+  well,
+  horizon,
 };
 
-export const BASE_WEAPONS: WeaponId[] = ['pulse', 'orbit', 'nova', 'arc', 'lance', 'mines', 'ricochet', 'halo'];
+export const BASE_WEAPONS: WeaponId[] = ['pulse', 'orbit', 'nova', 'arc', 'lance', 'mines', 'ricochet', 'halo', 'siphon', 'well'];

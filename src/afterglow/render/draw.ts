@@ -136,6 +136,27 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, fx: Fx, cam: 
     blit(ctx, sprite('circle', 20, 6, blink ? 'white' : 'normal'), sx(m.x), sy(m.y));
   }
 
+  // Gravity wells: a dark core inside swirling rings.
+  for (const wl of w.wells) {
+    if (!onScreen(wl.x, wl.y, wl.r)) continue;
+    const big = wl.weapon === 'horizon';
+    const fade = Math.min(1, wl.life * 2);
+    blit(ctx, glowSprite(big ? 265 : 250, wl.r * 1.1, 0.3 * fade), sx(wl.x), sy(wl.y));
+    ctx.beginPath();
+    ctx.arc(sx(wl.x), sy(wl.y), wl.r * 0.28 * k, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(6, 4, 18, ${0.85 * fade})`;
+    ctx.fill();
+    ctx.lineWidth = 1.6;
+    for (let i = 0; i < 3; i++) {
+      const a0 = time * (2.4 + i * 0.7) * (big ? -1 : 1) + i * 2.1;
+      const rr = wl.r * (0.45 + i * 0.22) * k;
+      ctx.beginPath();
+      ctx.arc(sx(wl.x), sy(wl.y), rr, a0, a0 + 2.2);
+      ctx.strokeStyle = `hsla(${big ? 275 : 250}, 100%, ${70 - i * 8}%, ${(0.75 - i * 0.18) * fade})`;
+      ctx.stroke();
+    }
+  }
+
   // Telegraphs: what's about to hurt you.
   for (const e of w.enemies) drawTelegraph(ctx, e, sx, sy, k, time);
 
@@ -172,6 +193,26 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, fx: Fx, cam: 
   }
 
   ctx.globalCompositeOperation = 'lighter';
+  // Siphon tethers.
+  if (w.tethers.length) {
+    ctx.lineCap = 'round';
+    for (const t of w.tethers) {
+      const wob = Math.sin(time * 18 + t.x * 0.05) * 3 * k;
+      const mx = (sx(p.x) + sx(t.x)) / 2 + wob;
+      const my = (sy(p.y) + sy(t.y)) / 2 - wob;
+      ctx.beginPath();
+      ctx.moveTo(sx(p.x), sy(p.y));
+      ctx.quadraticCurveTo(mx, my, sx(t.x), sy(t.y));
+      ctx.strokeStyle = `hsla(${t.hue}, 100%, 55%, 0.35)`;
+      ctx.lineWidth = 5 * k;
+      ctx.stroke();
+      ctx.strokeStyle = `hsla(${t.hue}, 100%, 80%, 0.85)`;
+      ctx.lineWidth = 1.6 * k;
+      ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
+  }
+
   // Orbiting blades.
   for (const b of w.blades) blit(ctx, sprite('diamond', b.hue, b.r * 0.9), sx(b.x), sy(b.y), time * 8);
 
