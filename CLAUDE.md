@@ -3,7 +3,8 @@
 A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 (`index.html` + `src/hub/`), one folder per game: `telegraph/`, `grove/`, `lantern/`,
 `afterglow/` (survivor-like), `delve/` (first-person ASCII crawler), `nightline/`
-(pseudo-3D ASCII racer), `glyph/` (Glyphwright, spell-crafting autobattler).
+(pseudo-3D ASCII racer), `glyph/` (Glyphwright, spell-crafting autobattler), `rewild/`
+(ecosystem builder on a hex island).
 
 - The owner plays and tests only on an Android phone (Chrome, portrait). Every UI
   change must work by touch at ~390 CSS px wide; tap targets ≥ 44px.
@@ -30,17 +31,22 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   - Afterglow: `npx vite-node scripts/afterglow/balance.ts` (bot survival per character).
   - Delve: `npx vite-node scripts/delve/balance.ts`; Nightline: `npx vite-node scripts/nightline/balance.ts`.
   - Glyphwright: `npx vite-node scripts/glyph/balance.ts` (smart bot win rate, deaths per wave).
+  - Rewild: `npx vite-node scripts/rewild/balance.ts 16 greedy 1` (score, species, stars; compare
+    with `random`), `scripts/rewild/probe.ts` (plays and causes of death), `trace.ts <seed>`.
 - ASCII games (Delve, Nightline) draw into a character `Grid` (src/shared/ascii.ts) painted
   with batched `fillText` runs; art lives in each game's `art.ts`.
 - Glyphwright runs are a seed + build actions (`B`uy/`M`ove/`S`ell/`R`eroll/`F`reeze/`G`o);
   battles are deterministic, so `replay(seed, a)` rebuilds the run.
+- Rewild runs are a seed + actions (`P<card>.<cell>` place, `R` new hand, `E` end season). The
+  season sim (src/rewild/core/sim.ts) visits cells in index order with one Rng per season, so
+  the UI's forecasts (clone + end season) are exact.
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)
   plus a shape in render/draw.ts and a color in palette.ts; tests in
   tests/telegraph/enemies.test.ts. Telegraphed attacks set `aim` and resolve via
   `release` at the start of the next enemy phase; a releasing enemy skips `act`.
 - Visual check: build, `npx vite preview`, screenshot with Playwright using the
   `Pixel 7` device profile. `window.__game` exposes each game's controller.
-- Bug reports from the owner look like `TELEGRAPH …`/`GROVE …`/`LANTERN …`/`GLYPH … seed=… a=…` (and the other games' equivalents);
+- Bug reports from the owner look like `TELEGRAPH …`/`GROVE …`/`LANTERN …`/`GLYPH …`/`REWILD … seed=… a=…` (and the other games' equivalents);
   reproduce with that game's `replay(seed, a)` or `<game>/?seed=…&a=…`.
 - The live site deploys only from `main` (CI pushes `dist/` to `gh-pages`);
   other branches just build and test.
