@@ -402,7 +402,7 @@ export class Game {
       return;
     }
     const left = s.plays;
-    const w = s.weather === 'fair' ? '' : `<div><b style="color:${WEATHER_COLOR[s.weather]}">${WEATHER_NAME[s.weather]}.</b> ${WEATHER_TEXT[s.weather].replace(/^[^:]*: /, '')}</div>`;
+    const w = s.weather === 'fair' ? '' : `<div><b style="color:${WEATHER_COLOR[s.weather]}">${WEATHER_NAME[s.weather]}.</b> ${WEATHER_TEXT[s.weather].replace(/^[^:]*: /, '').replace(/^./, (ch) => ch.toUpperCase())}</div>`;
     info.innerHTML =
       `<div class="title">${left > 0 ? `Play up to ${left} more card${left > 1 ? 's' : ''}` : 'Ready for the season'}</div>` +
       w +

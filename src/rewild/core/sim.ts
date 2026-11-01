@@ -178,8 +178,10 @@ export function simulate(s: GameState): SimEvent[] {
     if (p.id === 'lichen' || p.id === 'grass') count = 2;
     const targets = reach.filter((j) => !cells[j].plant && cells[j].burnt === 0 && plantOk(cells, j, p.id, wet[j]));
     rng.shuffle(targets);
+    // Lichen spores take hold fast; other seedlings start small.
+    const n0 = p.id === 'lichen' ? 2 : 1;
     for (const j of targets.slice(0, count)) {
-      cells[j].plant = { id: p.id, n: 1, age: 0 };
+      cells[j].plant = { id: p.id, n: n0, age: 0 };
       fresh.add(j);
       ev.push({ type: 'spread', from: i, to: j, id: p.id });
     }

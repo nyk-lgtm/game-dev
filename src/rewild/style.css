@@ -1,5 +1,6 @@
-/* Rewild: a calm green-and-earth palette over the shared shell. */
-:root {
+/* Rewild: a calm green-and-earth palette over the shared shell (on body, so it
+   wins over the shell's :root whatever order the bundle puts them in). */
+body {
   --bg: #0f1d1a;
   --panel: #142723;
   --line: #24403a;
@@ -9,7 +10,7 @@
   --gold: #f2c45a;
   --warn: #f0a24a;
 }
-body { background: var(--bg); }
+
 #hud { gap: 14px; }
 #hud .spacer { flex: 1; }
 #when { font-size: 17px; white-space: nowrap; }
