@@ -21,8 +21,27 @@ const afterglow = makeStore('afterglow.');
 const delve = makeStore('delve.');
 const nightline = makeStore('nightline.');
 const glyph = makeStore('glyph.');
+const rewild = makeStore('rewild.');
 
 const GAMES: GameCard[] = [
+  {
+    path: './rewild/',
+    title: 'Rewild',
+    tag: 'Ecosystem builder',
+    pitch: 'A bare island, five years. Seed lichen and grass, then bees, oaks, deer and wolves. Keep the web of life in balance.',
+    accent: '#7bd88f',
+    best: () => {
+      const p = rewild.load<{ best?: number; bestStars?: number } | null>('profile', null);
+      if (!p?.best) return null;
+      return `Best: ${p.best}${p.bestStars ? ` · ${'★'.repeat(p.bestStars)}` : ''}`;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#123a44"/>
+      <path d="M38 12l20 11v24L38 58 18 47V23z" fill="#c9b38a"/><path d="M38 20l13 7v16l-13 7-13-7V27z" fill="#6f8f4a"/>
+      <path d="M18 47l20 11 20-11v5L38 64 18 52z" fill="#7fc8d8" opacity="0.8"/>
+      <circle cx="33" cy="31" r="7" fill="#3f7a3a"/><circle cx="31" cy="29" r="3" fill="#5fa04e"/><rect x="32" y="36" width="2.4" height="6" fill="#6b4a2b"/>
+      <circle cx="45" cy="38" r="2" fill="#f2d14a"/><circle cx="42" cy="42" r="2" fill="#e86aa0"/><circle cx="47" cy="43" r="2" fill="#ffffff"/>
+      <ellipse cx="40" cy="48" rx="4" ry="2.4" fill="#b8763e"/></svg>`,
+  },
   {
     path: './afterglow/',
     title: 'Afterglow',

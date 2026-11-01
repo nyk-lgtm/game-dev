@@ -34,6 +34,7 @@ export default defineConfig({
         delve: resolve(__dirname, 'delve/index.html'),
         nightline: resolve(__dirname, 'nightline/index.html'),
         glyph: resolve(__dirname, 'glyph/index.html'),
+        rewild: resolve(__dirname, 'rewild/index.html'),
       },
     },
   },
