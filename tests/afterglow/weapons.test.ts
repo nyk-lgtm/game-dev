@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BASE_WEAPONS, PASSIVES, WEAPONS, step, type PassiveId, type WeaponId } from '../../src/afterglow/core';
 import { calmWorld, makeImmortal, put, secondsToSteps } from './helpers';
+import { recomputeStats } from '../../src/afterglow/core';
 
 const ALL = Object.keys(WEAPONS) as WeaponId[];
 
@@ -150,5 +151,40 @@ describe('weapons', () => {
     w.pickups.push({ kind: 'gem', x: well.x + 30, y: well.y, value: 1, pulled: false, alive: true });
     step(w, 0, 0);
     expect(w.pickups.some((p) => p.kind === 'gem' && p.pulled)).toBe(true);
+  });
+
+  it('lance multicast beams come in mirrored pairs, front and back', () => {
+    const hits = (ex: number, ey: number) => {
+      const w = calmWorld(10);
+      makeImmortal(w);
+      w.weapons = [{ id: 'lance', level: 1, cd: 0, t: 0, dealt: 0 }];
+      w.passives = { multicast: 1 };
+      recomputeStats(w);
+      w.player.fx = 0;
+      w.player.fy = -1;
+      const e = put(w, 'brute', ex, ey, 1e9);
+      e.speed = 0;
+      for (let i = 0; i < 20; i++) step(w, 0, 0);
+      return w.dealt.lance ?? 0;
+    };
+    // The extra beam leans 0.35 rad off the facing axis; its twin points the opposite way.
+    const off = 0.35;
+    const r = 150;
+    expect(hits(Math.sin(off) * r, -Math.cos(off) * r)).toBeGreaterThan(0);
+    expect(hits(-Math.sin(off) * r, Math.cos(off) * r)).toBeGreaterThan(0);
+  });
+
+  it('multicast gives nova an echo burst', () => {
+    const run = (multicast: number) => {
+      const w = calmWorld(11);
+      makeImmortal(w);
+      w.weapons = [{ id: 'nova', level: 1, cd: 0, t: 0, dealt: 0 }];
+      if (multicast) w.passives = { multicast };
+      recomputeStats(w);
+      put(w, 'brute', 0, -60, 1e9).speed = 0;
+      for (let i = 0; i < 60; i++) step(w, 0, 0);
+      return w.dealt.nova ?? 0;
+    };
+    expect(run(2)).toBeGreaterThan(run(0) * 1.5);
   });
 });

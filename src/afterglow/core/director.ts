@@ -30,6 +30,9 @@ export const WAVES: Wave[] = [
 const FINALE: Wave = { rate: 7, max: 220, mix: { drone: 0.4, orbiter: 0.25, spitter: 0.15, dart: 0.1, bloater: 0.1 } };
 
 export const HARD_CAP = 350;
+/** Most spitters alive at once, by minute; past the cap they arrive as drones. */
+export const SPITTER_CAP = [0, 0, 4, 5, 5, 5, 6, 7, 8, 8];
+const FINALE_SPITTERS = 6;
 const PRISM_AT = 300;
 /** Seconds after the Prism arrives that regular spawns stay halved. */
 const PRISM_LULL = 45;
@@ -113,6 +116,17 @@ export function spawnPoint(w: World): { x: number; y: number } {
   return { x: w.player.x + Math.cos(a) * d, y: w.player.y + Math.sin(a) * d };
 }
 
+function spitters(w: World): number {
+  let n = 0;
+  for (const e of w.enemies) if (e.kind === 'spitter' && e.alive) n++;
+  return n;
+}
+
+export function spitterCap(w: World): number {
+  if (w.time >= RUN_SECONDS) return FINALE_SPITTERS;
+  return SPITTER_CAP[Math.min(SPITTER_CAP.length - 1, Math.floor(w.time / 60))];
+}
+
 export function direct(w: World, dt: number): void {
   for (const ev of EVENTS) {
     if (w.time >= ev.at && !w.eventsDone.includes(ev.id)) {
@@ -142,6 +156,8 @@ export function direct(w: World, dt: number): void {
     w.spawnAcc -= 1;
     if (alive >= Math.min(wave.max, HARD_CAP)) continue;
     const s = spawnPoint(w);
-    spawnEnemy(w, pick(w, wave.mix), s.x, s.y);
+    let kind = pick(w, wave.mix);
+    if (kind === 'spitter' && spitters(w) >= spitterCap(w)) kind = 'drone';
+    spawnEnemy(w, kind, s.x, s.y);
   }
 }

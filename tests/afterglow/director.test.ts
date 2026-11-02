@@ -6,6 +6,7 @@ import {
   RUN_SECONDS,
   WAVES,
   createWorld,
+  spitterCap,
   currentWave,
   damage,
   step,
@@ -168,4 +169,20 @@ describe('soak', () => {
     expect(w.bullets.length).toBeLessThanOrEqual(300);
     expect(w.pickups.filter((p) => p.kind === 'gem').length).toBeLessThanOrEqual(200);
   }, 120_000);
+});
+
+describe('spitters', () => {
+  it('never exceed the per-minute cap from regular spawns', () => {
+    const w = createWorld(17, 'spark');
+    makeImmortal(w);
+    w.time = 150; // minute 2: spitters are 25% of the mix
+    let worst = 0;
+    for (let i = 0; i < 60 * 40; i++) {
+      step(w, 0, 0);
+      resolveWaiting(w);
+      const n = w.enemies.filter((e) => e.kind === 'spitter' && !e.elite).length;
+      worst = Math.max(worst, n - spitterCap(w));
+    }
+    expect(worst).toBeLessThanOrEqual(0);
+  });
 });

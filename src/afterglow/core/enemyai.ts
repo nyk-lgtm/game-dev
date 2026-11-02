@@ -19,10 +19,14 @@ export const PRISM_AIM = 0.8;
 /** A bloater's blast hits for this multiple of its contact damage. */
 export const BLOAT_BLAST = 1.5;
 
-function fire(w: World, x: number, y: number, dx: number, dy: number, speed: number, dmg: number, r = 6): void {
+function fire(w: World, x: number, y: number, dx: number, dy: number, speed: number, dmg: number, r = 6, life = 4): void {
   if (w.bullets.length >= MAX_BULLETS) return;
-  w.bullets.push({ x, y, vx: dx * speed, vy: dy * speed, r, dmg, life: 4, alive: true });
+  w.bullets.push({ x, y, vx: dx * speed, vy: dy * speed, r, dmg, life, alive: true });
 }
+
+/** Spitters hold fire while this many enemy shots are already in the air, so
+ *  regular enemies never fill the screen with bullets (bosses aren't limited). */
+export const SPIT_BUDGET = 14;
 
 /** Returns the enemy's intended velocity for this step. */
 export function think(w: World, e: Enemy, dt: number): { vx: number; vy: number } {
@@ -68,12 +72,13 @@ export function think(w: World, e: Enemy, dt: number): { vx: number; vy: number 
       if (d > 195) [vx, vy] = [ux * sp, uy * sp];
       else if (d < 140) [vx, vy] = [-ux * sp, -uy * sp];
       else [vx, vy] = [-uy * sp * 0.6, ux * sp * 0.6];
-      if (e.phase === 0 && e.t > 3.0 && d < 320) {
+      if (e.phase === 0 && e.t > 3.6 && d < 320 && w.bullets.length < SPIT_BUDGET) {
         e.phase = 1;
         e.t = 0;
       } else if (e.phase === 1) {
         if (e.t > SPIT_AIM) {
-          fire(w, e.x, e.y, ux, uy, 150, e.dmg);
+          // Short-lived: a missed shot fades before it can drift back on screen.
+          fire(w, e.x, e.y, ux, uy, 150, e.dmg, 6, 2.6);
           e.phase = 0;
           e.t = 0;
         }

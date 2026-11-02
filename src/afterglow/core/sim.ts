@@ -271,6 +271,9 @@ function bounce(w: World, s: World['shots'][number], from: Enemy): void {
   s.life = Math.max(s.life, 0.6);
 }
 
+/** Player mines glow teal: orange belongs to brutes, pink to danger. */
+export const MINE_HUE = 175;
+
 function updateMines(w: World, dt: number): void {
   for (const m of w.mines) {
     if (!m.alive) continue;
@@ -292,7 +295,7 @@ function detonate(w: World, m: World['mines'][number]): void {
   if (!m.alive) return;
   m.alive = false;
   enemiesWithin(w, m.x, m.y, m.blast, (e, d) => damage(w, e, m.dmg, m.weapon, (e.x - m.x) / (d || 1), (e.y - m.y) / (d || 1), 150));
-  w.fx.push({ type: 'boom', x: m.x, y: m.y, r: m.blast, color: 25 });
+  w.fx.push({ type: 'boom', x: m.x, y: m.y, r: m.blast, color: MINE_HUE, own: true });
   // Minefield blasts set off neighbors.
   if (m.weapon === 'minefield')
     for (const o of w.mines)

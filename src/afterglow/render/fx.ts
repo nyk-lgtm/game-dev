@@ -16,7 +16,7 @@ interface Particle {
 
 export type Effect =
   | { kind: 'ring'; x: number; y: number; r: number; hue: number; age: number; life: number }
-  | { kind: 'boom'; x: number; y: number; r: number; hue: number; age: number; life: number }
+  | { kind: 'boom'; x: number; y: number; r: number; hue: number; age: number; life: number; own: boolean }
   | { kind: 'beam'; x1: number; y1: number; x2: number; y2: number; w: number; hue: number; age: number; life: number }
   | { kind: 'chain'; pts: number[]; hue: number; age: number; life: number; seed: number };
 
@@ -68,9 +68,10 @@ export class Fx {
           break;
         case 'boom':
           this.counts.boom++;
-          this.effects.push({ kind: 'boom', x: e.x, y: e.y, r: e.r, hue: e.color, age: 0, life: 0.35 });
-          this.burst(e.x, e.y, e.color + 20, 10, 200, 2.2);
-          this.shake = Math.max(this.shake, 4);
+          this.effects.push({ kind: 'boom', x: e.x, y: e.y, r: e.r, hue: e.color, age: 0, life: e.own ? 0.25 : 0.35, own: !!e.own });
+          // Your own mines stay quiet: no shake, few sparks. Enemy blasts get the full show.
+          this.burst(e.x, e.y, e.color + 20, e.own ? 3 : 10, 200, 2.2);
+          if (!e.own) this.shake = Math.max(this.shake, 4);
           break;
         case 'beam':
           this.counts.beam++;

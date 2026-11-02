@@ -202,7 +202,7 @@ export type FxEvent =
   | { type: 'ring'; x: number; y: number; r: number; color: number }
   | { type: 'beam'; x1: number; y1: number; x2: number; y2: number; w: number; color: number }
   | { type: 'chain'; pts: number[]; color: number }
-  | { type: 'boom'; x: number; y: number; r: number; color: number }
+  | { type: 'boom'; x: number; y: number; r: number; color: number; own?: boolean }
   | { type: 'hurt'; dmg: number }
   | { type: 'pickup'; kind: PickupKind }
   | { type: 'levelUp' }

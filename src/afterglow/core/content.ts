@@ -48,7 +48,7 @@ export const PASSIVES: Record<PassiveId, PassiveDef> = {
   haste: { name: 'Haste', maxLevel: 5, desc: '-7% cooldowns', hue: 50, apply: (s, l) => (s.haste *= 1 - 0.07 * l) },
   reach: { name: 'Reach', maxLevel: 5, desc: '+10% area', hue: 270, apply: (s, l) => (s.area += 0.1 * l) },
   velocity: { name: 'Velocity', maxLevel: 5, desc: '+12% projectile speed and range', hue: 190, apply: (s, l) => (s.velocity += 0.12 * l) },
-  multicast: { name: 'Multicast', maxLevel: 3, desc: '+1 projectile / strike', hue: 320, apply: (s, l) => (s.amount += l) },
+  multicast: { name: 'Multicast', maxLevel: 3, desc: '+1 shot, blade, beam pair, mine or echo', hue: 320, apply: (s, l) => (s.amount += l) },
   duration: { name: 'Duration', maxLevel: 5, desc: '+12% effect duration', hue: 160, apply: (s, l) => (s.duration += 0.12 * l) },
   swift: { name: 'Swift', maxLevel: 5, desc: '+8% move speed', hue: 100, apply: (s, l) => (s.speed *= 1 + 0.08 * l) },
   vitality: { name: 'Vitality', maxLevel: 5, desc: '+20 max health', hue: 350, apply: (s, l) => (s.maxHp += 20 * l) },

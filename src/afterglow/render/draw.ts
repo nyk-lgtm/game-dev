@@ -1,7 +1,7 @@
 // Draws one frame of the world: background grid, pickups, telegraphs,
 // enemies, weapons, the player, bullets and effects.
 
-import { BLOAT_SWELL, DART_AIM, PRISM_AIM, SLAM_AIM, SLAM_RADIUS, SPIT_AIM, eclipseCycle, ENEMIES, RUN_SECONDS, type Enemy, type EnemyKind, type World } from '../core';
+import { BLOAT_SWELL, DART_AIM, MINE_HUE, PRISM_AIM, SLAM_AIM, SLAM_RADIUS, SPIT_AIM, eclipseCycle, ENEMIES, RUN_SECONDS, type Enemy, type EnemyKind, type World } from '../core';
 import type { Fx } from './fx';
 import { glowSprite, sprite, type Shape, type Sprite } from './sprites';
 
@@ -131,9 +131,11 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, fx: Fx, cam: 
   // Mines.
   for (const m of w.mines) {
     if (!onScreen(m.x, m.y)) continue;
+    // Small and steady: mines are yours, so they shouldn't compete with threats.
     const armed = m.arm <= 0;
-    const blink = armed && Math.sin(time * 12 + m.x) > 0;
-    blit(ctx, sprite('circle', 20, 6, blink ? 'white' : 'normal'), sx(m.x), sy(m.y));
+    ctx.globalAlpha = armed ? 0.75 : 0.4;
+    blit(ctx, sprite('circle', MINE_HUE, 4.5), sx(m.x), sy(m.y));
+    ctx.globalAlpha = 1;
   }
 
   // Gravity wells: a dark core inside swirling rings.
@@ -262,7 +264,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, fx: Fx, cam: 
         break;
       }
       case 'boom':
-        blit(ctx, glowSprite(e.hue, e.r, 0.8 * (1 - t)), sx(e.x), sy(e.y), 0, 0.5 + 0.6 * t);
+        blit(ctx, glowSprite(e.hue, e.r, (e.own ? 0.35 : 0.8) * (1 - t)), sx(e.x), sy(e.y), 0, 0.5 + 0.6 * t);
         break;
       case 'beam': {
         ctx.beginPath();

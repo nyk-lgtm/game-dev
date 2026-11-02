@@ -15,7 +15,7 @@ export const WEAPON_HUE: Record<string, number> = {
   nova: 270, supernova: 270,
   arc: 220, tempest: 220,
   lance: 50, railgun: 50,
-  mines: 20, minefield: 20,
+  mines: 175, minefield: 175,
   ricochet: 300, pinball: 300,
   halo: 45, sanctum: 45,
   siphon: 130, wellspring: 130,

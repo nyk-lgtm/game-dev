@@ -167,11 +167,21 @@ const nova: WeaponDef = {
   evolvesInto: 'supernova',
   tick(w, ws, dt) {
     const l = ws.level;
-    if (!ready(w, ws, dt, at([2.6, 2.6, 2.6, 2.2, 2.2, 2.2, 1.9, 1.9], l))) return;
     const r = at([105, 105, 120, 120, 120, 135, 135, 150], l) * w.stats.area;
     const dmg = at([16, 20, 20, 20, 27, 27, 27, 36], l);
+    // Multicast adds echoes: smaller follow-up bursts 0.25s apart (ws.t counts them down).
+    if (ws.t > 0) {
+      const before = Math.ceil(ws.t / 0.25);
+      ws.t -= dt;
+      if (Math.ceil(Math.max(0, ws.t) / 0.25) < before) {
+        burst(w, 'nova', w.player.x, w.player.y, r * 0.85, dmg * 0.6, 120);
+        w.fx.push({ type: 'ring', x: w.player.x, y: w.player.y, r: r * 0.85, color: 280 });
+      }
+    }
+    if (!ready(w, ws, dt, at([2.6, 2.6, 2.6, 2.2, 2.2, 2.2, 1.9, 1.9], l))) return;
     burst(w, 'nova', w.player.x, w.player.y, r, dmg, 170);
     w.fx.push({ type: 'ring', x: w.player.x, y: w.player.y, r, color: 270 });
+    ws.t = w.stats.amount * 0.25;
   },
 };
 
@@ -215,7 +225,11 @@ const lance: WeaponDef = {
     const p = w.player;
     const dirs = [0, Math.PI];
     if (l >= 4) dirs.push(Math.PI / 2, -Math.PI / 2);
-    for (let i = 0; i < w.stats.amount; i++) dirs.push((i % 2 ? -1 : 1) * (0.35 + 0.2 * Math.floor(i / 2)));
+    // Each extra projectile is a mirrored pair, so Lance stays symmetric front and back.
+    for (let i = 0; i < w.stats.amount; i++) {
+      const off = (i % 2 ? -1 : 1) * (0.35 + 0.2 * Math.floor(i / 2));
+      dirs.push(off, off + Math.PI);
+    }
     for (const a of dirs) {
       const d = rotate(p.fx, p.fy, a);
       beam(w, 'lance', p.x, p.y, d.x, d.y, length, width, dmg, 50);
@@ -226,7 +240,7 @@ const lance: WeaponDef = {
 const mines: WeaponDef = {
   id: 'mines',
   name: 'Mines',
-  hue: 20,
+  hue: 175,
   maxLevel: 8,
   desc: 'Drops mines that blow up when enemies step on them.',
   levels: ['Drops a mine behind you', '+6 damage', 'Bigger blasts', '+1 mine per drop', '+6 damage', 'Faster', 'Bigger blasts', '+1 mine, +8 damage'],
@@ -242,10 +256,13 @@ const mines: WeaponDef = {
   },
 };
 
+/** Live mines per weapon. More than this just carpets the screen. */
+const MAX_MINES = 14;
+
 function dropMines(w: World, id: WeaponId, n: number, spread: number, dmg: number, blast: number, life: number): void {
   const live = w.mines.filter((m) => m.alive && m.weapon === id).length;
   const p = w.player;
-  for (let i = 0; i < n && live + i < 24; i++) {
+  for (let i = 0; i < n && live + i < MAX_MINES; i++) {
     const a = w.rng.next() * TAU;
     const d = i === 0 ? 0 : spread + w.rng.next() * spread;
     w.mines.push({ weapon: id, x: p.x + Math.cos(a) * d, y: p.y + Math.sin(a) * d, arm: 0.4, life: life * w.stats.duration, r: 14, blast, dmg, alive: true });
@@ -466,9 +483,11 @@ const supernova: WeaponDef = {
   levels: ['Evolved Nova: huge bursts, each with an echo'],
   tick(w, ws, dt) {
     const p = w.player;
+    // One echo, plus one more per Multicast, 0.3s apart (ws.t counts them down).
     if (ws.t > 0) {
+      const before = Math.ceil(ws.t / 0.3);
       ws.t -= dt;
-      if (ws.t <= 0) {
+      if (Math.ceil(Math.max(0, ws.t) / 0.3) < before) {
         const r = 210 * w.stats.area;
         burst(w, 'supernova', p.x, p.y, r, 30, 220);
         w.fx.push({ type: 'ring', x: p.x, y: p.y, r, color: 290 });
@@ -478,7 +497,7 @@ const supernova: WeaponDef = {
     const r = 170 * w.stats.area;
     burst(w, 'supernova', p.x, p.y, r, 40, 220);
     w.fx.push({ type: 'ring', x: p.x, y: p.y, r, color: 270 });
-    ws.t = 0.3;
+    ws.t = 0.3 * (1 + w.stats.amount);
   },
 };
 
@@ -510,8 +529,10 @@ const railgun: WeaponDef = {
   tick(w, ws, dt) {
     if (!ready(w, ws, dt, 1.0)) return;
     const p = w.player;
-    for (let i = 0; i < 4; i++) {
-      const d = rotate(p.fx, p.fy, (i * Math.PI) / 2);
+    // A cross of beams; each Multicast adds a mirrored diagonal pair.
+    const n = 4 + 2 * w.stats.amount;
+    for (let i = 0; i < n; i++) {
+      const d = rotate(p.fx, p.fy, (i * 2 * Math.PI) / n);
       beam(w, 'railgun', p.x, p.y, d.x, d.y, 650 * w.stats.area, 30 * w.stats.area, 85, 50);
     }
   },
@@ -520,7 +541,7 @@ const railgun: WeaponDef = {
 const minefield: WeaponDef = {
   id: 'minefield',
   name: 'Minefield',
-  hue: 20,
+  hue: 175,
   maxLevel: 1,
   from: 'mines',
   desc: 'Scatters clusters of mines whose blasts set each other off.',
