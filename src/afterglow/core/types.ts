@@ -144,6 +144,8 @@ export interface Well {
 }
 
 export interface Bullet {
+  /** What fired it, for the death recap ("spitter shot", "prism shards"...). */
+  src: string;
   x: number;
   y: number;
   vx: number;
@@ -223,6 +225,8 @@ export interface World {
   time: number;
   tick: number;
   character: string;
+  /** Difficulty: index into NIGHTS. */
+  night: number;
   base: Stats;
   stats: Stats;
   player: Player;
@@ -261,6 +265,10 @@ export interface World {
   auras: { r: number; hue: number }[];
   /** Render-only: siphon tethers from the player to these points. */
   tethers: { x: number; y: number; hue: number }[];
+  /** Damage taken per source (for the death recap). */
+  taken: Record<string, number>;
+  /** Source of the killing blow ('' while alive). */
+  killedBy: string;
   /** Damage dealt per weapon (for the results screen). */
   dealt: Partial<Record<WeaponId, number>>;
 }

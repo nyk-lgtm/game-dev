@@ -3,7 +3,7 @@
 // Deterministic for a given seed and input sequence.
 
 import { Rng, mixSeed } from '../../shared/rng';
-import { CHARACTERS, ENEMIES, META, baseStats, xpToNext, type Profile } from './content';
+import { CHARACTERS, ENEMIES, META, NIGHTS, baseStats, xpToNext, type Profile } from './content';
 import { PLAYER_R, damage, enemiesWithin, hurtPlayer } from './combat';
 import { direct, spawnPoint } from './director';
 import { think } from './enemyai';
@@ -17,7 +17,7 @@ export const RECYCLE_DIST = 900;
 export const BASE_REROLLS = 2;
 export const BASE_BANISHES = 1;
 
-export function createWorld(seed: number, characterId = 'spark', profile?: Profile): World {
+export function createWorld(seed: number, characterId = 'spark', profile?: Profile, night = 0): World {
   const ch = CHARACTERS.find((c) => c.id === characterId) ?? CHARACTERS[0];
   const base = baseStats();
   ch.mod(base);
@@ -32,6 +32,7 @@ export function createWorld(seed: number, characterId = 'spark', profile?: Profi
     time: 0,
     tick: 0,
     character: ch.id,
+    night: Math.max(0, Math.min(NIGHTS.length - 1, night)),
     base,
     stats: { ...base },
     player: { x: 0, y: 0, hp: base.maxHp, fx: 0, fy: -1, iframes: 0, level: 1, xp: 0, revives: extras.revives },
@@ -60,6 +61,8 @@ export function createWorld(seed: number, characterId = 'spark', profile?: Profi
     grid: new SpatialHash(64),
     hitCd: new Map(),
     dealt: {},
+    taken: {},
+    killedBy: '',
     blades: [],
     auras: [],
     tethers: [],
@@ -177,7 +180,7 @@ function moveEnemies(w: World, dt: number): void {
     const dx = e.x - p.x;
     const dy = e.y - p.y;
     const d2 = dx * dx + dy * dy;
-    if (d2 < (e.r + PLAYER_R) ** 2) hurtPlayer(w, e.dmg);
+    if (d2 < (e.r + PLAYER_R) ** 2) hurtPlayer(w, e.dmg, e.elite ? `elite ${e.kind}` : e.kind);
     // Far behind? Bring it back around in front of the player.
     if (d2 > RECYCLE_DIST * RECYCLE_DIST) {
       const s = spawnPoint(w);
@@ -312,7 +315,7 @@ function moveBullets(w: World, dt: number): void {
     if (b.life <= 0) b.alive = false;
     else if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 < (b.r + PLAYER_R - 3) ** 2) {
       b.alive = false;
-      hurtPlayer(w, b.dmg);
+      hurtPlayer(w, b.dmg, b.src);
     }
   }
 }

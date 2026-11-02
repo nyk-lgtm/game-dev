@@ -300,7 +300,7 @@ export interface BotRun {
 export function playBot(seed: number, character = 'spark', maxSeconds = 780, opts: BotOptions = {}): BotRun {
   const policy = opts.policy ?? 'smart';
   const thinkEvery = opts.think ?? 10;
-  const w = createWorld(seed, character);
+  const w = createWorld(seed, character, undefined, Number(process.env.NIGHT ?? 0));
   if (opts.weapon) w.weapons[0].id = opts.weapon;
   const rng = new Rng(mixSeed(seed, 99));
   let peak = 0;

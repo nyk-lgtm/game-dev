@@ -2,7 +2,7 @@
 // and the two bosses. Spawns land just off-screen around the player.
 
 import { TAU } from './math';
-import { RUN_SECONDS } from './content';
+import { NIGHTS, RUN_SECONDS } from './content';
 import { spawnEnemy } from './combat';
 import type { EnemyKind, World } from './types';
 
@@ -136,13 +136,16 @@ export function direct(w: World, dt: number): void {
     }
   }
 
-  // An elite every minute from 1:30 on (not during the finale).
+  // An elite every minute from 1:30 on (not during the finale); harder nights send more.
+  const night = NIGHTS[w.night];
   const eliteId = `elite${Math.floor((w.time - 90) / 60)}`;
   if (w.time >= 90 && w.time < RUN_SECONDS && !w.eventsDone.includes(eliteId)) {
     w.eventsDone.push(eliteId);
-    const kind = pick(w, { ...currentWave(w).mix, drone: 0, mite: 0 });
-    const s = spawnPoint(w);
-    spawnEnemy(w, kind === 'drone' ? 'brute' : kind, s.x, s.y, true);
+    for (let k = 0; k < night.elites; k++) {
+      const kind = pick(w, { ...currentWave(w).mix, drone: 0, mite: 0 });
+      const s = spawnPoint(w);
+      spawnEnemy(w, kind === 'drone' ? 'brute' : kind, s.x, s.y, true);
+    }
   }
 
   const wave = currentWave(w);
@@ -150,11 +153,12 @@ export function direct(w: World, dt: number): void {
   // The swarm thins while the Prism is fresh, but only for a while: a Prism
   // left alive shouldn't halve the waves for the rest of the run.
   const lull = w.boss !== null && w.time < RUN_SECONDS && w.time < PRISM_AT + PRISM_LULL;
-  const rate = wave.rate * (lull ? 0.5 : 1);
+  const rate = wave.rate * night.rate * (lull ? 0.5 : 1);
+  const max = Math.min(HARD_CAP, wave.max * (1 + (night.rate - 1) / 2));
   w.spawnAcc += rate * dt;
   while (w.spawnAcc >= 1) {
     w.spawnAcc -= 1;
-    if (alive >= Math.min(wave.max, HARD_CAP)) continue;
+    if (alive >= max) continue;
     const s = spawnPoint(w);
     let kind = pick(w, wave.mix);
     if (kind === 'spitter' && spitters(w) >= spitterCap(w)) kind = 'drone';

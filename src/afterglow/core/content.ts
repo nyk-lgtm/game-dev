@@ -131,6 +131,34 @@ export const CHARACTERS: CharacterDef[] = [
   },
 ];
 
+// ---------- nights (difficulty) ----------
+
+export interface NightDef {
+  name: string;
+  text: string;
+  /** Multipliers on regular enemies. */
+  hp: number;
+  dmg: number;
+  speed: number;
+  /** Spawn rate and live-enemy ceiling. */
+  rate: number;
+  /** Boss health multiplier. */
+  boss: number;
+  /** Elites per minute. */
+  elites: number;
+  /** Shard payout multiplier. */
+  shards: number;
+}
+
+/** Win a night to unlock the next. */
+export const NIGHTS: NightDef[] = [
+  { name: 'Night 1', text: 'The night as you know it.', hp: 1, dmg: 1, speed: 1, rate: 1, boss: 1, elites: 1, shards: 1 },
+  { name: 'Night 2', text: 'Tougher swarms: +30% enemy health, +15% spawns. Shards ×1.5.', hp: 1.3, dmg: 1.1, speed: 1, rate: 1.15, boss: 1.15, elites: 1, shards: 1.5 },
+  { name: 'Night 3', text: '+60% enemy health, +30% spawns, quicker enemies. Shards ×2.', hp: 1.6, dmg: 1.2, speed: 1.06, rate: 1.3, boss: 1.3, elites: 1, shards: 2 },
+  { name: 'Night 4', text: '+100% health, +45% spawns, two elites a minute. Shards ×2.5.', hp: 2, dmg: 1.3, speed: 1.1, rate: 1.45, boss: 1.5, elites: 2, shards: 2.5 },
+  { name: 'Night 5', text: 'The longest night: +150% health, +60% spawns, hardened bosses. Shards ×3.', hp: 2.5, dmg: 1.4, speed: 1.14, rate: 1.6, boss: 1.8, elites: 2, shards: 3 },
+];
+
 // ---------- meta progression ----------
 
 export interface Profile {
@@ -142,6 +170,8 @@ export interface Profile {
   prismKills: number;
   wins: number;
   runs: number;
+  /** Highest night won (0 = none). */
+  nightsWon: number;
 }
 
 export interface MetaDef {
@@ -167,7 +197,7 @@ export const META: MetaDef[] = [
 ];
 
 export function emptyProfile(): Profile {
-  return { shards: 0, ranks: {}, bestTime: 0, bestLevel: 0, bestKills: 0, prismKills: 0, wins: 0, runs: 0 };
+  return { shards: 0, ranks: {}, bestTime: 0, bestLevel: 0, bestKills: 0, prismKills: 0, wins: 0, runs: 0, nightsWon: 0 };
 }
 
 /** XP needed to go from `level` to `level + 1`. */

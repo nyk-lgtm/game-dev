@@ -2,6 +2,7 @@
 
 import {
   CHARACTERS,
+  NIGHTS,
   MAX_PASSIVES,
   MAX_WEAPONS,
   META,
@@ -216,9 +217,34 @@ export interface RunSummary {
   level: number;
   kills: number;
   shards: number;
+  night: number;
   dealt: [WeaponId, number][];
+  /** Damage taken by source, largest first. */
+  taken: [string, number][];
+  killedBy: string;
   unlocked: string[];
 }
+
+/** One line of advice for whatever hurt you most. */
+const TIPS: Record<string, string> = {
+  'spitter shot': 'Spitters stop and aim before they fire: keep moving across their line, not along it.',
+  'bloater blast': 'Bloaters swell before they burst. Back off when one turns pink, or let it blow up its friends.',
+  bloater: 'Bloaters are slow. Kite them and let them pop away from you.',
+  brute: 'Brutes shrug off knockback. Circle them instead of backing up in a straight line.',
+  dart: 'Darts aim a dashed line first. Step sideways off the line, not backwards.',
+  warden: 'Wardens shield everything nearby. Kill them first.',
+  splitter: 'Splitters burst into mites. Area weapons (Nova, Halo, Mines) clean those up.',
+  drone: 'Drones swarm. Area damage and moving in wide circles keep them off you.',
+  mite: 'Mites are fast but frail. An aura or orbit weapon shreds them.',
+  orbiter: 'Orbiters circle in. Break out of the ring early instead of waiting.',
+  'prism shards': 'The Prism fires in rings with gaps. Slip through a gap rather than outrunning the ring.',
+  prism: 'The Prism lunges along its telegraphed line. Step aside when the line appears.',
+  'eclipse slam': 'The Eclipse marks the slam on you. Leave the pink circle as soon as it appears.',
+  'eclipse embers': 'Embers fly out from the slam circle. Stay well clear of where it lands.',
+  'eclipse spiral': 'The spiral has lanes. Move with the rotation, not against it.',
+};
+
+const sourceName = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function fmtTime(t: number): string {
   const m = Math.floor(t / 60);
@@ -229,7 +255,7 @@ export function fmtTime(t: number): string {
 export function showResults(r: RunSummary, h: { again(): void; menu(): void }): void {
   const p = screen('title');
   p.append(el('h1', 'logo', r.won ? 'DAWN' : 'FADED'));
-  p.append(el('p', 'sub', r.won ? 'You outlasted the Eclipse.' : 'The night took you.'));
+  p.append(el('p', 'sub', `${NIGHTS[r.night].name} · ${r.won ? 'You outlasted the Eclipse.' : 'The night took you.'}`));
   p.append(
     el(
       'table',
@@ -241,18 +267,28 @@ export function showResults(r: RunSummary, h: { again(): void; menu(): void }): 
   for (const [id, n] of r.dealt) {
     p.append(el('div', 'dmg', `<span style="width:76px">${WEAPONS[id].name}</span><div class="bar"><i style="width:${(100 * n) / top}%"></i></div><span>${Math.round(n).toLocaleString()}</span>`));
   }
+  if (r.taken.length) {
+    const total = r.taken.reduce((s, [, n]) => s + n, 0) || 1;
+    p.append(el('h3', 'recap', r.won ? 'What hurt you' : `Killed by ${r.killedBy ? sourceName(r.killedBy).toLowerCase() : 'the swarm'}`));
+    for (const [src, n] of r.taken.slice(0, 4)) {
+      const pct = Math.round((100 * n) / total);
+      p.append(el('div', 'dmg hurt', `<span style="width:112px">${sourceName(src)}</span><div class="bar"><i style="width:${pct}%"></i></div><span>${pct}%</span>`));
+    }
+    const tip = TIPS[r.killedBy] ?? TIPS[r.taken[0][0].replace(/^elite /, '')];
+    if (tip && !r.won) p.append(el('p', 'tip', tip));
+  }
   for (const u of r.unlocked) p.append(el('p', 'shards', `Unlocked: ${u}!`));
   p.append(button('Again', 'big', h.again), button('Menu', 'alt', h.menu));
 }
 
 export interface TitleHandlers {
-  start(character: string): void;
+  start(character: string, night: number): void;
   shop(): void;
   help(): void;
   hub(): void;
 }
 
-export function showTitle(profile: Profile, selected: string, h: TitleHandlers): void {
+export function showTitle(profile: Profile, selected: string, night: number, h: TitleHandlers): void {
   const p = screen('title');
   p.append(el('h1', 'logo', 'AFTERGLOW'));
   p.append(el('p', 'sub', 'Survive the night. Ten minutes until the Eclipse.'));
@@ -275,7 +311,25 @@ export function showTitle(profile: Profile, selected: string, h: TitleHandlers):
     grid.append(card);
   }
   p.append(grid);
-  p.append(button('Start', 'big', () => h.start(pick)));
+  // Night picker: unlocked by winning the night before.
+  const open = Math.min(NIGHTS.length, (profile.nightsWon ?? 0) + 1);
+  let n = Math.min(night, open - 1);
+  if (open > 1) {
+    const box = el('div', 'nights');
+    const prev = button('◀', 'alt', () => setNight(n - 1));
+    const next = button('▶', 'alt', () => setNight(n + 1));
+    const label = el('div', 'night');
+    const setNight = (k: number) => {
+      n = Math.max(0, Math.min(open - 1, k));
+      label.innerHTML = `<b>${NIGHTS[n].name}</b><span>${NIGHTS[n].text}</span>`;
+      prev.disabled = n === 0;
+      next.disabled = n === open - 1;
+    };
+    setNight(n);
+    box.append(prev, label, next);
+    p.append(box);
+  } else if ((profile.wins ?? 0) === 0) p.append(el('p', 'sub', 'Beat the Eclipse to unlock harder nights.'));
+  p.append(button('Start', 'big', () => h.start(pick, n)));
   const row = el('div', 'row');
   row.append(button('Upgrades', 'alt', h.shop), button('How to play', 'alt', h.help));
   p.append(row, button('All games', 'alt', h.hub));

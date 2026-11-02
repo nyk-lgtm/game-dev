@@ -1,7 +1,7 @@
 // Shared combat helpers: damage, kills and drops, player damage, spawning
 // player shots. Used by weapons, enemy behaviors and the main step.
 
-import { ENEMIES } from './content';
+import { ENEMIES, NIGHTS } from './content';
 import type { Enemy, EnemyKind, PickupKind, Shot, WeaponId, World } from './types';
 
 export const PLAYER_R = 12;
@@ -46,10 +46,11 @@ export function spawnEnemy(w: World, kind: EnemyKind, x: number, y: number, elit
   const d = ENEMIES[kind];
   const minutes = w.time / 60;
   const boss = kind === 'prism' || kind === 'eclipse';
-  const hpMul = boss ? 1 : 1 + minutes * 0.27 + minutes * minutes * 0.04;
-  const dmgMul = boss ? 1 : 1 + minutes * 0.06;
+  const n = NIGHTS[w.night];
+  const hpMul = boss ? n.boss : (1 + minutes * 0.27 + minutes * minutes * 0.04) * n.hp;
+  const dmgMul = boss ? 1 : (1 + minutes * 0.06) * n.dmg;
   // Later swarms are a little quicker, so outrunning them gets harder.
-  const speedMul = boss ? 1 : 1 + minutes * 0.015;
+  const speedMul = boss ? 1 : (1 + minutes * 0.015) * n.speed;
   const e: Enemy = {
     id: w.nextId++,
     kind,
@@ -132,11 +133,12 @@ export function kill(w: World, e: Enemy): void {
   }
 }
 
-export function hurtPlayer(w: World, amount: number): void {
+export function hurtPlayer(w: World, amount: number, source = 'unknown'): void {
   const p = w.player;
   if (p.iframes > 0 || w.status !== 'playing') return;
   const dmg = Math.max(1, amount - w.stats.armor);
   p.hp -= dmg;
+  w.taken[source] = (w.taken[source] ?? 0) + dmg;
   p.iframes = 0.4;
   w.fx.push({ type: 'hurt', dmg });
   if (p.hp > 0) return;
@@ -156,6 +158,7 @@ export function hurtPlayer(w: World, amount: number): void {
     return;
   }
   p.hp = 0;
+  w.killedBy = source;
   w.status = 'dead';
 }
 

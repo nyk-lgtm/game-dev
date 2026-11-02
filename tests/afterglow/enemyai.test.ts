@@ -97,7 +97,7 @@ describe('spitter', () => {
   it('a bullet that misses expires', () => {
     const w = calmWorld();
     makeImmortal(w);
-    w.bullets.push({ x: 0, y: 500, vx: 0, vy: 100, r: 6, dmg: 5, life: 0.1, alive: true });
+    w.bullets.push({ src: "test", x: 0, y: 500, vx: 0, vy: 100, r: 6, dmg: 5, life: 0.1, alive: true });
     stepN(w, 20);
     expect(w.bullets).toHaveLength(0);
   });

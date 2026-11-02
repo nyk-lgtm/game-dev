@@ -186,3 +186,24 @@ describe('spitters', () => {
     expect(worst).toBeLessThanOrEqual(0);
   });
 });
+
+describe('nights', () => {
+  it('harder nights make tougher enemies and spawn faster', async () => {
+    const { NIGHTS, spawnEnemy } = await import('../../src/afterglow/core');
+    const a = createWorld(5, 'spark', undefined, 0);
+    const b = createWorld(5, 'spark', undefined, 4);
+    expect(b.night).toBe(4);
+    const ea = spawnEnemy(a, 'drone', 0, 0);
+    const eb = spawnEnemy(b, 'drone', 0, 0);
+    expect(eb.hp / ea.hp).toBeCloseTo(NIGHTS[4].hp);
+    for (const w of [a, b]) {
+      w.time = 130;
+      w.eventsDone.push(...EVENTS.map((e) => e.id));
+    }
+    for (let i = 0; i < 600; i++) {
+      step(a, 0, 0);
+      step(b, 0, 0);
+    }
+    expect(b.enemies.length).toBeGreaterThan(a.enemies.length);
+  });
+});

@@ -19,9 +19,9 @@ export const PRISM_AIM = 0.8;
 /** A bloater's blast hits for this multiple of its contact damage. */
 export const BLOAT_BLAST = 1.5;
 
-function fire(w: World, x: number, y: number, dx: number, dy: number, speed: number, dmg: number, r = 6, life = 4): void {
+function fire(w: World, src: string, x: number, y: number, dx: number, dy: number, speed: number, dmg: number, r = 6, life = 4): void {
   if (w.bullets.length >= MAX_BULLETS) return;
-  w.bullets.push({ x, y, vx: dx * speed, vy: dy * speed, r, dmg, life, alive: true });
+  w.bullets.push({ src, x, y, vx: dx * speed, vy: dy * speed, r, dmg, life, alive: true });
 }
 
 /** Spitters hold fire while this many enemy shots are already in the air, so
@@ -78,7 +78,7 @@ export function think(w: World, e: Enemy, dt: number): { vx: number; vy: number 
       } else if (e.phase === 1) {
         if (e.t > SPIT_AIM) {
           // Short-lived: a missed shot fades before it can drift back on screen.
-          fire(w, e.x, e.y, ux, uy, 150, e.dmg, 6, 2.6);
+          fire(w, 'spitter shot', e.x, e.y, ux, uy, 150, e.dmg, 6, 2.6);
           e.phase = 0;
           e.t = 0;
         }
@@ -124,7 +124,7 @@ export function think(w: World, e: Enemy, dt: number): { vx: number; vy: number 
 function explode(w: World, e: Enemy): void {
   const r = 78;
   const p = w.player;
-  if ((p.x - e.x) ** 2 + (p.y - e.y) ** 2 < (r + 12) ** 2) hurtPlayer(w, e.dmg * BLOAT_BLAST);
+  if ((p.x - e.x) ** 2 + (p.y - e.y) ** 2 < (r + 12) ** 2) hurtPlayer(w, e.dmg * BLOAT_BLAST, 'bloater blast');
   e.alive = false;
   w.fx.push({ type: 'boom', x: e.x, y: e.y, r, color: 0 });
   enemiesWithin(w, e.x, e.y, r, (o, dd) => {
@@ -143,7 +143,7 @@ function prism(w: World, e: Enemy, ux: number, uy: number, d: number, chase: { v
       const off = e.ax * 0.3;
       for (let i = 0; i < n; i++) {
         const a = off + (i / n) * TAU;
-        fire(w, e.x, e.y, Math.cos(a), Math.sin(a), 120, 12, 7);
+        fire(w, 'prism shards', e.x, e.y, Math.cos(a), Math.sin(a), 120, 12, 7);
       }
       if (e.ax % 3 === 0 && d < 420) {
         e.phase = 1;
@@ -181,7 +181,7 @@ function eclipse(w: World, e: Enemy, chase: { vx: number; vy: number }) {
       const arms = (enraged ? 7 : 5) + fury;
       for (let i = 0; i < arms; i++) {
         const a = e.t * 1.7 + (i / arms) * TAU;
-        fire(w, e.x, e.y, Math.cos(a), Math.sin(a), 150, 28, 7);
+        fire(w, 'eclipse spiral', e.x, e.y, Math.cos(a), Math.sin(a), 150, 28, 7);
       }
     }
     return { vx: chase.vx * 0.3, vy: chase.vy * 0.3 };
@@ -214,13 +214,13 @@ function eclipse(w: World, e: Enemy, chase: { vx: number; vy: number }) {
     e.ay = 0;
     const r = SLAM_RADIUS;
     const p = w.player;
-    if ((p.x - e.sx) ** 2 + (p.y - e.sy) ** 2 < r * r) hurtPlayer(w, 65);
+    if ((p.x - e.sx) ** 2 + (p.y - e.sy) ** 2 < r * r) hurtPlayer(w, 65, 'eclipse slam');
     w.fx.push({ type: 'boom', x: e.sx, y: e.sy, r, color: 15 });
     // The impact throws a ring of embers outward from the edge of the blast.
     const n = (enraged ? 24 : 18) + fury * 3;
     for (let i = 0; i < n; i++) {
       const a = (i / n) * TAU + e.t;
-      fire(w, e.sx + Math.cos(a) * r * 0.5, e.sy + Math.sin(a) * r * 0.5, Math.cos(a), Math.sin(a), 120, 30, 7);
+      fire(w, 'eclipse embers', e.sx + Math.cos(a) * r * 0.5, e.sy + Math.sin(a) * r * 0.5, Math.cos(a), Math.sin(a), 120, 30, 7);
     }
   }
   return chase;

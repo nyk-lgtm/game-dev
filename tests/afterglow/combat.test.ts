@@ -400,3 +400,18 @@ describe('gem cap', () => {
     expect(w.pickups.filter((p) => p.kind === 'gem').length).toBeLessThanOrEqual(MAX_GEMS);
   });
 });
+
+describe('damage attribution', () => {
+  it('records what hurt the player and what killed them', async () => {
+    const { hurtPlayer } = await import('../../src/afterglow/core');
+    const { calmWorld } = await import('./helpers');
+    const w = calmWorld(2);
+    w.player.revives = 0;
+    hurtPlayer(w, 10, 'spitter shot');
+    expect(w.taken['spitter shot']).toBe(10);
+    w.player.iframes = 0;
+    hurtPlayer(w, 1e6, 'bloater blast');
+    expect(w.status).toBe('dead');
+    expect(w.killedBy).toBe('bloater blast');
+  });
+});

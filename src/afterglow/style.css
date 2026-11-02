@@ -113,6 +113,12 @@ button:disabled { opacity: 0.4; }
 .pips { display: flex; gap: 3px; margin-top: 4px; }
 .pips i { width: 10px; height: 4px; border-radius: 2px; background: rgba(140, 160, 220, 0.25); }
 .pips i.on { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+.nights { display: flex; gap: 8px; align-items: stretch; }
+.nights button { flex: 0 0 48px; min-height: 64px; padding: 0; }
+.nights .night { flex: 1; display: flex; flex-direction: column; justify-content: center; text-align: center; gap: 2px; padding: 6px 8px;
+  border: 1px solid rgba(255, 61, 139, 0.45); border-radius: 14px; background: rgba(40, 10, 30, 0.5); }
+.nights .night b { font-size: 16px; color: #ffb3cf; }
+.nights .night span { font-size: 12px; color: var(--muted); }
 .chars { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .chars .card { flex-direction: column; text-align: center; min-height: 0; }
 .stats { width: 100%; border-collapse: collapse; color: var(--muted); }
@@ -121,6 +127,10 @@ button:disabled { opacity: 0.4; }
 .dmg { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .dmg .bar { flex: 1; height: 8px; border-radius: 4px; background: rgba(94, 231, 255, 0.15); overflow: hidden; }
 .dmg .bar i { display: block; height: 100%; background: var(--cyan); }
+.dmg.hurt .bar { background: rgba(255, 61, 139, 0.15); }
+.dmg.hurt .bar i { background: #ff3d8b; }
+h3.recap { margin: 8px 0 0; font-size: 15px; text-align: center; color: #ffb3cf; }
+.tip { margin: 0; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255, 61, 139, 0.35); background: rgba(255, 61, 139, 0.07); color: var(--text); font-size: 14px; }
 .help li { margin-bottom: 6px; color: var(--muted); }
 .help b { color: var(--text); }
 

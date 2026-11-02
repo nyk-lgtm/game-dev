@@ -9,6 +9,7 @@ import {
   DT,
   ENEMIES,
   META,
+  NIGHTS,
   RUN_SECONDS,
   banish,
   choose,
@@ -44,6 +45,7 @@ export class Game {
   private sfx = new Sfx();
   private mode: Mode = 'title';
   private character = store.load<string>('character', 'spark');
+  private night = store.load<number>('night', 0);
   private ctx: CanvasRenderingContext2D;
   private cam: Camera = { x: 0, y: 0, k: 1, w: 0, h: 0 };
   private acc = 0;
@@ -75,8 +77,8 @@ export class Game {
     this.world = null;
     $('hud').hidden = true;
     this.sfx.stopMusic();
-    showTitle(this.profile, this.character, {
-      start: (c) => this.start(c),
+    showTitle(this.profile, this.character, this.night, {
+      start: (c, n) => this.start(c, n),
       shop: () => this.shop(),
       help: () => showHelp(() => this.title()),
       hub: () => (location.href = '../'),
@@ -100,10 +102,12 @@ export class Game {
     });
   }
 
-  start(character: string): void {
+  start(character: string, night = this.night): void {
     this.character = character;
+    this.night = night;
     store.save('character', character);
-    this.world = createWorld(randomSeed(), character, this.profile);
+    store.save('night', night);
+    this.world = createWorld(randomSeed(), character, this.profile, night);
     this.fx = new Fx();
     this.prismDown = false;
     this.acc = 0;
@@ -186,7 +190,7 @@ export class Game {
     else this.sfx.defeat();
     const before = new Set(CHARACTERS.filter((c) => !c.unlock || c.unlock.check(this.profile)).map((c) => c.id));
     const bonus = w.time / 20 + w.kills / 150 + (w.status === 'won' ? 150 : 0) + (this.prismDown ? 40 : 0);
-    const shards = Math.floor(w.shards + bonus * w.stats.greed);
+    const shards = Math.floor((w.shards + bonus * w.stats.greed) * NIGHTS[w.night].shards);
     const pr = this.profile;
     pr.shards += shards;
     pr.runs++;
@@ -195,10 +199,14 @@ export class Game {
     pr.bestKills = Math.max(pr.bestKills, w.kills);
     if (this.prismDown) pr.prismKills++;
     if (w.status === 'won') pr.wins++;
+    const nightUnlock = w.status === 'won' && w.night + 1 > (pr.nightsWon ?? 0) && w.night + 1 < NIGHTS.length;
+    if (w.status === 'won') pr.nightsWon = Math.max(pr.nightsWon ?? 0, w.night + 1);
     this.saveProfile();
     const unlocked = CHARACTERS.filter((c) => !before.has(c.id) && c.unlock?.check(pr)).map((c) => c.name);
+    if (nightUnlock) unlocked.push(NIGHTS[w.night + 1].name);
     const dealt = (Object.entries(w.dealt) as [WeaponId, number][]).sort((a, b) => b[1] - a[1]);
-    const summary: RunSummary = { won: w.status === 'won', time: w.time, level: w.player.level, kills: w.kills, shards, dealt, unlocked };
+    const taken = Object.entries(w.taken).sort((a, b) => b[1] - a[1]);
+    const summary: RunSummary = { won: w.status === 'won', time: w.time, level: w.player.level, kills: w.kills, shards, night: w.night, dealt, taken, killedBy: w.killedBy, unlocked };
     showResults(summary, { again: () => this.start(this.character), menu: () => this.title() });
   }
 
