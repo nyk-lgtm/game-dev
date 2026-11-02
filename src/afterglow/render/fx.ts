@@ -30,7 +30,7 @@ export class Fx {
   banner: { text: string; age: number } | null = null;
   levelFlash = 0;
   /** Event counts for this frame (drives audio). */
-  counts = { hit: 0, kill: 0, bigKill: 0, gem: 0, pickup: 0, chest: 0, hurt: 0, ring: 0, chain: 0, beam: 0, boom: 0, level: 0, warn: 0 };
+  counts = { hit: 0, kill: 0, bigKill: 0, gem: 0, pickup: 0, chest: 0, hurt: 0, ring: 0, chain: 0, beam: 0, boom: 0, mine: 0, level: 0, warn: 0 };
 
   private burst(x: number, y: number, hue: number, n: number, speed: number, size: number): void {
     for (let i = 0; i < n; i++) {
@@ -67,7 +67,8 @@ export class Fx {
           this.effects.push({ kind: 'ring', x: e.x, y: e.y, r: e.r, hue: e.color, age: 0, life: 0.35 });
           break;
         case 'boom':
-          this.counts.boom++;
+          if (e.own) this.counts.mine++;
+          else this.counts.boom++;
           this.effects.push({ kind: 'boom', x: e.x, y: e.y, r: e.r, hue: e.color, age: 0, life: e.own ? 0.25 : 0.35, own: !!e.own });
           // Your own mines stay quiet: no shake, few sparks. Enemy blasts get the full show.
           this.burst(e.x, e.y, e.color + 20, e.own ? 3 : 10, 200, 2.2);

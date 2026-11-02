@@ -276,6 +276,7 @@ export class Game {
     if (c.chain) this.sfx.zap();
     if (c.beam) this.sfx.beam();
     if (c.boom) this.sfx.boom();
+    else if (c.mine) this.sfx.mine();
     if (c.warn) this.sfx.warn();
     if (w.boss === null && w.eventsDone.includes('prism') && !this.prismDown && w.time < RUN_SECONDS) this.prismDown = true;
   }

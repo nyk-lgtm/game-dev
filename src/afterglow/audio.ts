@@ -400,6 +400,15 @@ export class Sfx {
     this.tone(t, 1100, 0.14, 0.05, { f1: 260, attack: 0.002, detune: 9 });
   }
 
+  /** Your own mines: a soft, short, muffled thump (enemy blasts keep the big boom). */
+  mine(): void {
+    const t = this.begin('mine', 0.16, LOW, 0.16);
+    if (t === null) return;
+    const f = 95 * rand(0.85, 1.15);
+    this.noise(t, 0.14, 0.05, 'lowpass', 900, 180, 0.8);
+    this.tone(t, f, 0.14, 0.09, { f1: f * 0.5, attack: 0.004 });
+  }
+
   boom(): void {
     const t = this.begin('boom', 0.1, MID, 0.62);
     if (t === null) return;
