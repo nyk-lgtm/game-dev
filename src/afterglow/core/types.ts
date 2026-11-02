@@ -70,7 +70,11 @@ export type WeaponId =
   | 'siphon'
   | 'wellspring'
   | 'well'
-  | 'horizon';
+  | 'horizon'
+  | 'pulsar'
+  | 'gyre'
+  | 'stormlance'
+  | 'maelstrom';
 
 export type PassiveId =
   | 'might'
@@ -216,6 +220,8 @@ export interface Choice {
   /** Level after taking it (1 = new). */
   level: number;
   evolves?: WeaponId;
+  /** For unions: the second weapon that merged in. */
+  merges?: WeaponId;
 }
 
 export interface World {

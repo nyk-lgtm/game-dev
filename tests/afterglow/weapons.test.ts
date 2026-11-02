@@ -6,8 +6,8 @@ import { recomputeStats } from '../../src/afterglow/core';
 const ALL = Object.keys(WEAPONS) as WeaponId[];
 
 describe('weapons', () => {
-  it('registers 20 weapons whose ids match their keys', () => {
-    expect(ALL).toHaveLength(20);
+  it("registers 24 weapons whose ids match their keys", () => {
+    expect(ALL).toHaveLength(24);
     for (const id of ALL) {
       expect(WEAPONS[id].id).toBe(id);
       expect(WEAPONS[id].maxLevel).toBeGreaterThanOrEqual(1);

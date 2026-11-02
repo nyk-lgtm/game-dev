@@ -7,6 +7,7 @@ import {
   MAX_WEAPONS,
   META,
   PASSIVES,
+  UNIONS,
   WEAPONS,
   type Choice,
   type PassiveId,
@@ -17,6 +18,12 @@ import {
 import { drawIcon, type Shape } from './render/sprites';
 
 const ui = () => document.getElementById('ui')!;
+
+/** The union a base weapon belongs to, if any. */
+function unionOf(id: WeaponId): WeaponId | undefined {
+  return UNIONS.find((u) => WEAPONS[u].union!.includes(id));
+}
+const partnerIn = (union: WeaponId, id: WeaponId): WeaponId => WEAPONS[union].union!.find((x) => x !== id)!;
 
 export const WEAPON_ICON: Record<WeaponId, Shape> = {
   pulse: 'dot',
@@ -39,6 +46,10 @@ export const WEAPON_ICON: Record<WeaponId, Shape> = {
   wellspring: 'cross',
   well: 'hex',
   horizon: 'hex',
+  pulsar: 'ring',
+  gyre: 'diamond',
+  stormlance: 'kite',
+  maelstrom: 'hex',
 };
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', html = ''): HTMLElementTagNameMap[K] {
@@ -86,11 +97,13 @@ function choiceCard(w: World, c: Choice, onClick: () => void): HTMLButtonElement
   let hint = '';
   if (c.kind === 'weapon') {
     const d = WEAPONS[c.id as WeaponId];
-    drawIcon(icon, WEAPON_ICON[d.id], d.hue, 52, !!d.from);
+    drawIcon(icon, WEAPON_ICON[d.id], d.hue, 52, !!d.from || !!d.union);
     name = d.name;
     desc = d.levels[c.level - 1] ?? d.desc;
-    tag = c.level === 1 ? 'new' : `lv ${c.level}`;
+    tag = c.merges ? 'union' : c.evolves ? 'evolved' : c.level === 1 ? 'new' : `lv ${c.level}`;
     if (d.evolvesWith) hint = `Max level + ${PASSIVES[d.evolvesWith].name} → ${WEAPONS[d.evolvesInto!].name}`;
+    const un = unionOf(d.id);
+    if (un && !c.evolves) hint += `${hint ? '<br>' : ''}Max level + max ${WEAPONS[partnerIn(un, d.id)].name} → ${WEAPONS[un].name}`;
     if (c.level === 1) card.classList.add('new');
   } else if (c.kind === 'passive') {
     const d = PASSIVES[c.id as PassiveId];
@@ -149,7 +162,8 @@ export function showLevelUp(w: World, h: LevelUpHandlers): void {
 export function showChest(w: World, got: Choice[], done: () => void): void {
   const p = screen();
   const evolved = got.some((c) => c.evolves);
-  p.append(el('h2', '', evolved ? 'Evolution!' : got.length > 1 ? `Treasure ×${got.length}` : 'Treasure'));
+  const union = got.some((c) => c.merges);
+  p.append(el('h2', '', union ? 'Union!' : evolved ? 'Evolution!' : got.length > 1 ? `Treasure ×${got.length}` : 'Treasure'));
   for (const c of got) {
     const card = choiceCard(w, c, () => {});
     if (c.evolves) card.classList.add('evo');
@@ -176,14 +190,23 @@ export function buildList(w: World): HTMLElement {
   for (const ws of w.weapons) {
     const d = WEAPONS[ws.id];
     let evo = '';
-    if (d.from) evo = 'Evolved';
+    const mark = (ok: boolean, t: string) => `<span class="${ok ? 'ok' : 'no'}">${ok ? '✓' : '·'} ${t}</span>`;
+    const lvOk = ws.level >= d.maxLevel;
+    if (d.union) evo = `Union of ${WEAPONS[d.union[0]].name} and ${WEAPONS[d.union[1]].name}`;
+    else if (d.from) evo = 'Evolved';
     else if (d.evolvesWith) {
-      const lvOk = ws.level >= d.maxLevel;
       const psOk = (w.passives[d.evolvesWith] ?? 0) > 0;
-      const mark = (ok: boolean, t: string) => `<span class="${ok ? 'ok' : 'no'}">${ok ? '✓' : '·'} ${t}</span>`;
       evo = `→ ${WEAPONS[d.evolvesInto!].name}: ${mark(lvOk, `lv ${ws.level}/${d.maxLevel}`)} ${mark(psOk, PASSIVES[d.evolvesWith].name)}${lvOk && psOk ? ' · open a chest' : ''}`;
     }
-    box.append(item(WEAPON_ICON[ws.id], d.hue, !!d.from, d.name, ws.level, d.maxLevel, evo));
+    // Union recipe for this weapon's family (evolved forms still qualify).
+    const un = unionOf(d.from ?? d.id);
+    if (un && !d.union) {
+      const partner = partnerIn(un, d.from ?? d.id);
+      const pw = w.weapons.find((x) => (WEAPONS[x.id].from ?? x.id) === partner);
+      const pOk = !!pw && pw.level >= WEAPONS[pw.id].maxLevel;
+      evo += `${evo ? '<br>' : ''}⊕ ${WEAPONS[un].name}: ${mark(lvOk, 'max')} ${mark(pOk, `max ${WEAPONS[partner].name}`)}${lvOk && pOk ? ' · open a chest' : ''}`;
+    }
+    box.append(item(WEAPON_ICON[ws.id], d.hue, !!d.from || !!d.union, d.name, ws.level, d.maxLevel, evo));
   }
   if (w.weapons.length < MAX_WEAPONS) box.append(el('div', 'empty', `${MAX_WEAPONS - w.weapons.length} free slot${MAX_WEAPONS - w.weapons.length > 1 ? 's' : ''}`));
   const passives = Object.entries(w.passives) as [PassiveId, number][];
@@ -366,6 +389,7 @@ export function showHelp(back: () => void): void {
       `<li><b>Drag anywhere</b> to move. That's the only control: your weapons fire on their own.</li>
        <li><b>Collect gems</b> to level up. Each level, pick one of three upgrades: new weapons, weapon levels, or passives.</li>
        <li><b>Evolve</b>: a weapon at max level plus its matching passive turns into something much stronger when you open a <b>chest</b>. Elites (gold rings) and bosses drop chests.</li>
+       <li><b>Unions</b>: some pairs of weapons, both at max level, merge into one in a chest (Halo + Nova, Orbit + Ricochet, Lance + Arc, Gravity Well + Mines). Evolved forms count, and it frees a slot.</li>
        <li><b>Pink means danger</b>: dashed lines are about to be charged down, pink circles are about to explode, pink orbs are enemy shots.</li>
        <li>Wardens (blue hexes) shield nearby enemies. Kill them first.</li>
        <li>At 5:00 the Prism arrives. At 10:00, the Eclipse. Beat it to see the dawn.</li>

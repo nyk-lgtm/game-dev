@@ -20,6 +20,7 @@ export const WEAPON_HUE: Record<string, number> = {
   halo: 45, sanctum: 45,
   siphon: 130, wellspring: 130,
   well: 250, horizon: 250,
+  pulsar: 285, gyre: 160, stormlance: 210, maelstrom: 230,
 };
 
 export function dropPickup(w: World, kind: PickupKind, x: number, y: number, value = 1): void {

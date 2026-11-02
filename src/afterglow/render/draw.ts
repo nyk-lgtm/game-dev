@@ -221,8 +221,8 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, fx: Fx, cam: 
   // Player shots.
   for (const s of w.shots) {
     if (!onScreen(s.x, s.y)) continue;
-    const disc = s.weapon === 'ricochet' || s.weapon === 'pinball';
-    const hue = disc ? 300 : 190;
+    const disc = s.weapon === 'ricochet' || s.weapon === 'pinball' || s.weapon === 'gyre';
+    const hue = s.weapon === 'gyre' ? 160 : disc ? 300 : 190;
     blit(ctx, sprite(disc ? 'disc' : 'dot', hue, s.r), sx(s.x), sy(s.y));
   }
   ctx.globalCompositeOperation = 'source-over';

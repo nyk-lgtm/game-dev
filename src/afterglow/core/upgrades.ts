@@ -1,7 +1,7 @@
 // Level-up choices, applying them, chests and evolutions.
 
 import { MAX_PASSIVES, MAX_WEAPONS, PASSIVES } from './content';
-import { BASE_WEAPONS, WEAPONS } from './weapons';
+import { BASE_WEAPONS, UNIONS, WEAPONS, familyOf } from './weapons';
 import type { Choice, PassiveId, WeaponId, World } from './types';
 
 export function recomputeStats(w: World): void {
@@ -26,7 +26,7 @@ export function upgradePool(w: World): { c: Choice; weight: number }[] {
   }
   if (w.weapons.length < MAX_WEAPONS) {
     for (const id of BASE_WEAPONS) {
-      const evolvedOwned = w.weapons.some((ws) => WEAPONS[ws.id].from === id);
+      const evolvedOwned = w.weapons.some((ws) => WEAPONS[ws.id].from === id || WEAPONS[ws.id].union?.includes(id));
       if (!owned.has(id) && !evolvedOwned) pool.push({ c: { kind: 'weapon', id, level: 1 }, weight: 2 });
     }
   }
@@ -103,7 +103,21 @@ export function evolvable(w: World): WeaponId[] {
     .map((ws) => ws.id);
 }
 
-/** Open a chest: 1, 3 or (rarely) 5 rewards. Evolutions come first. */
+/** Unions ready to form: both weapons of the pair held at max level (evolved forms count). */
+export function unionsReady(w: World): { into: WeaponId; a: number; b: number }[] {
+  const out: { into: WeaponId; a: number; b: number }[] = [];
+  for (const into of UNIONS) {
+    if (w.weapons.some((ws) => ws.id === into)) continue;
+    const [x, y] = WEAPONS[into].union!;
+    const maxed = (fam: WeaponId) => w.weapons.findIndex((ws) => familyOf(ws.id) === fam && ws.level >= WEAPONS[ws.id].maxLevel);
+    const a = maxed(x);
+    const b = maxed(y);
+    if (a >= 0 && b >= 0) out.push({ into, a, b });
+  }
+  return out;
+}
+
+/** Open a chest: 1, 3 or (rarely) 5 rewards. Evolutions come first, then unions. */
 export function openChest(w: World): Choice[] {
   const r = w.rng.next();
   const n = r < 0.06 ? 5 : r < 0.3 ? 3 : 1;
@@ -118,6 +132,18 @@ export function openChest(w: World): Choice[] {
       ws.cd = 0;
       ws.t = 0;
       got.push({ kind: 'weapon', id: into, level: 1, evolves: ev });
+      continue;
+    }
+    const un = unionsReady(w)[0];
+    if (un) {
+      const first = w.weapons[un.a];
+      const gone = w.weapons[un.b];
+      got.push({ kind: 'weapon', id: un.into, level: 1, evolves: first.id, merges: gone.id });
+      first.id = un.into;
+      first.level = 1;
+      first.cd = 0;
+      first.t = 0;
+      w.weapons = w.weapons.filter((ws) => ws !== gone);
       continue;
     }
     // Chests only upgrade what you already have.

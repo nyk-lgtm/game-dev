@@ -18,6 +18,8 @@ export interface WeaponDef {
   evolvesInto?: WeaponId;
   /** For evolved weapons: the base it replaces. */
   from?: WeaponId;
+  /** For union weapons: the two weapons (base or evolved family) that merge into it. */
+  union?: [WeaponId, WeaponId];
   tick(w: World, ws: WeaponState, dt: number): void;
 }
 
@@ -353,7 +355,7 @@ const well: WeaponDef = {
 };
 
 function aura(w: World, ws: WeaponState, dt: number, id: WeaponId, r: number, dmg: number, slow: number, healPerKill: number): void {
-  w.auras.push({ r, hue: id === 'sanctum' ? 55 : 45 });
+  w.auras.push({ r, hue: id === 'sanctum' ? 55 : id === 'pulsar' ? 285 : 45 });
   ws.t -= dt;
   const tick = ws.t <= 0;
   if (tick) ws.t += 0.33;
@@ -406,6 +408,15 @@ function tickWells(w: World, id: WeaponId, dt: number): void {
     wl.life -= dt;
     if (wl.life <= 0) {
       wl.alive = false;
+      if (id === 'maelstrom') {
+        // The collapse scatters a ring of mines where the well was.
+        let live = 0;
+        for (const m of w.mines) if (m.alive && m.weapon === 'maelstrom') live++;
+        for (let i = 0; i < 6 && live + i < 24; i++) {
+          const a = (i / 6) * TAU;
+          w.mines.push({ weapon: 'maelstrom', x: wl.x + Math.cos(a) * wl.r * 0.5, y: wl.y + Math.sin(a) * wl.r * 0.5, arm: 0.3, life: 6 * w.stats.duration, r: 14, blast: 80 * w.stats.area, dmg: 60, alive: true });
+        }
+      }
       if (id === 'horizon') {
         burst(w, id, wl.x, wl.y, wl.r * 1.2, wl.dmg * 4, 260);
         w.fx.push({ type: 'ring', x: wl.x, y: wl.y, r: wl.r * 1.2, color: 250 });
@@ -612,6 +623,94 @@ const horizon: WeaponDef = {
   },
 };
 
+// ---------- unions: two maxed weapons merge into one ----------
+
+const pulsar: WeaponDef = {
+  id: 'pulsar',
+  name: 'Pulsar',
+  hue: 285,
+  maxLevel: 1,
+  union: ['halo', 'nova'],
+  desc: 'A crushing aura that erupts in shockwaves.',
+  levels: ['Union of Halo and Nova: a slowing aura that erupts in shockwaves'],
+  tick(w, ws, dt) {
+    const p = w.player;
+    aura(w, ws, dt, 'pulsar', 110 * w.stats.area, 14, 0.55, 0);
+    if (!ready(w, ws, dt, 1.5)) return;
+    const r = 190 * w.stats.area;
+    burst(w, 'pulsar', p.x, p.y, r, 45, 240);
+    w.fx.push({ type: 'ring', x: p.x, y: p.y, r, color: 285 });
+  },
+};
+
+const gyre: WeaponDef = {
+  id: 'gyre',
+  name: 'Gyre',
+  hue: 160,
+  maxLevel: 1,
+  union: ['orbit', 'ricochet'],
+  desc: 'Spinning blades that fling bouncing discs.',
+  levels: ['Union of Orbit and Ricochet: blades fling bouncing discs'],
+  tick(w, ws, dt) {
+    const a = w.stats.area;
+    const n = 6 + w.stats.amount;
+    const radius = 85 * a;
+    ws.t += dt * 4;
+    orbitBlades(w, ws.t, 'gyre', n, radius, 26, 11 * a);
+    if (!ready(w, ws, dt, 0.9)) return;
+    const p = w.player;
+    const sp = 400 * w.stats.velocity;
+    for (let i = 0; i < n; i += 2) {
+      const ang = ws.t + (i / n) * TAU;
+      const ox = Math.cos(ang);
+      const oy = Math.sin(ang);
+      spawnShot(w, { weapon: 'gyre', x: p.x + ox * radius, y: p.y + oy * radius, vx: ox * sp, vy: oy * sp, dmg: 20, pierce: 99, bounces: 3, r: 8 * a, life: 1.6 * w.stats.duration, knock: 60 });
+    }
+  },
+};
+
+const stormlance: WeaponDef = {
+  id: 'stormlance',
+  name: 'Stormlance',
+  hue: 210,
+  maxLevel: 1,
+  union: ['lance', 'arc'],
+  desc: 'Beams in four directions that burst into chain lightning.',
+  levels: ['Union of Lance and Arc: four beams whose tips burst into lightning'],
+  tick(w, ws, dt) {
+    if (!ready(w, ws, dt, 1.0)) return;
+    const p = w.player;
+    const len = 330 * w.stats.area * Math.sqrt(w.stats.velocity);
+    const n = 4 + 2 * w.stats.amount;
+    for (let i = 0; i < n; i++) {
+      const d = rotate(p.fx, p.fy, (i * TAU) / n);
+      beam(w, 'stormlance', p.x, p.y, d.x, d.y, len, 26 * w.stats.area, 50, 210);
+      const tip = nearestEnemy(w, p.x + d.x * len * 0.8, p.y + d.y * len * 0.8, 160);
+      if (tip) chain(w, 'stormlance', tip, 3, 130 * w.stats.area, 26, 210);
+    }
+  },
+};
+
+const maelstrom: WeaponDef = {
+  id: 'maelstrom',
+  name: 'Maelstrom',
+  hue: 230,
+  maxLevel: 1,
+  union: ['well', 'mines'],
+  desc: 'Wells that collapse into rings of mines.',
+  levels: ['Union of Gravity Well and Mines: wells pull enemies in, then collapse into a ring of mines'],
+  tick(w, ws, dt) {
+    tickWells(w, 'maelstrom', dt);
+    if (!ready(w, ws, dt, 2.2)) return;
+    openWells(w, 'maelstrom', 2 + Math.floor(w.stats.amount / 2), 100 * w.stats.area, 2.6 * w.stats.duration, 150, 13);
+  },
+};
+
+/** The family of a weapon: the base it is, or was evolved from. */
+export const familyOf = (id: WeaponId): WeaponId => WEAPONS[id].from ?? id;
+
+export const UNIONS: WeaponId[] = ['pulsar', 'gyre', 'stormlance', 'maelstrom'];
+
 export const WEAPONS: Record<WeaponId, WeaponDef> = {
   pulse,
   orbit,
@@ -633,6 +732,10 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   wellspring,
   well,
   horizon,
+  pulsar,
+  gyre,
+  stormlance,
+  maelstrom,
 };
 
 export const BASE_WEAPONS: WeaponId[] = ['pulse', 'orbit', 'nova', 'arc', 'lance', 'mines', 'ricochet', 'halo', 'siphon', 'well'];

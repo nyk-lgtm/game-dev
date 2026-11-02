@@ -384,3 +384,45 @@ describe('evolutions', () => {
     expect(evolvedCount).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe('unions', () => {
+  it('two maxed partner weapons merge into their union in a chest, freeing a slot', async () => {
+    const { createWorld, openChest, WEAPONS } = await import('../../src/afterglow/core');
+    const w = createWorld(3);
+    w.weapons = [
+      { id: 'halo', level: 8, cd: 0, t: 0, dealt: 0 },
+      { id: 'pulse', level: 2, cd: 0, t: 0, dealt: 0 },
+      { id: 'nova', level: 8, cd: 0, t: 0, dealt: 0 },
+    ];
+    w.rng.next = () => 0.9; // a single reward
+    const got = openChest(w);
+    expect(got[0].id).toBe('pulsar');
+    expect(got[0].merges).toBe('nova');
+    expect(w.weapons.map((x) => x.id)).toEqual(['pulsar', 'pulse']);
+    expect(WEAPONS.pulsar.union).toEqual(['halo', 'nova']);
+  });
+
+  it('evolved forms count, and the parts are never offered again', async () => {
+    const { createWorld, openChest, upgradePool } = await import('../../src/afterglow/core');
+    const w = createWorld(4);
+    w.weapons = [
+      { id: 'railgun', level: 1, cd: 0, t: 0, dealt: 0 },
+      { id: 'arc', level: 8, cd: 0, t: 0, dealt: 0 },
+    ];
+    w.rng.next = () => 0.9;
+    expect(openChest(w)[0].id).toBe('stormlance');
+    const offered = upgradePool(w).map((p) => p.c.id);
+    expect(offered).not.toContain('lance');
+    expect(offered).not.toContain('arc');
+  });
+
+  it('a weapon not at max level does not merge', async () => {
+    const { createWorld, unionsReady } = await import('../../src/afterglow/core');
+    const w = createWorld(5);
+    w.weapons = [
+      { id: 'orbit', level: 7, cd: 0, t: 0, dealt: 0 },
+      { id: 'ricochet', level: 8, cd: 0, t: 0, dealt: 0 },
+    ];
+    expect(unionsReady(w)).toEqual([]);
+  });
+});
