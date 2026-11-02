@@ -93,3 +93,31 @@ describe('createWorld', () => {
     expect(w.rerolls).toBe(base.rerolls + 1);
   });
 });
+
+describe('monoliths arena', () => {
+  it('pillars are deterministic, keep the start clear, and block the player and enemy shots', async () => {
+    const { createWorld, pillarsNear, inPillar, step } = await import('../../src/afterglow/core');
+    const w = createWorld(9, 'spark', undefined, 0, 1);
+    const a = pillarsNear(w, 0, 0, 2000);
+    const b = pillarsNear(createWorld(9, 'spark', undefined, 0, 1), 0, 0, 2000);
+    expect(a.length).toBeGreaterThan(10);
+    expect(a).toEqual(b);
+    for (const p of a) expect(Math.hypot(p.x, p.y)).toBeGreaterThan(150);
+    expect(pillarsNear(createWorld(9), 0, 0, 2000)).toEqual([]);
+
+    // Walk straight into the nearest pillar: the player never ends up inside it.
+    const t = a.reduce((m, p) => (Math.hypot(p.x, p.y) < Math.hypot(m.x, m.y) ? p : m));
+    w.weapons = [];
+    w.spawnAcc = -1e9;
+    w.player.hp = 1e9;
+    const d = Math.hypot(t.x, t.y);
+    for (let i = 0; i < 600; i++) step(w, t.x / d, t.y / d);
+    expect(Math.hypot(w.player.x - t.x, w.player.y - t.y)).toBeGreaterThanOrEqual(t.r + 11);
+    expect(inPillar(w, t.x, t.y)).toBe(true);
+
+    // An enemy shot fired into the pillar dies there.
+    w.bullets.push({ src: 'test', x: t.x - t.r - 20, y: t.y, vx: 200, vy: 0, r: 6, dmg: 5, life: 3, alive: true });
+    for (let i = 0; i < 20; i++) step(w, 0, 0);
+    expect(w.bullets.length).toBe(0);
+  });
+});

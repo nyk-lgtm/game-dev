@@ -1,6 +1,7 @@
 // DOM screens: title, characters, shop, level-up, chest, pause, results, help.
 
 import {
+  ARENAS,
   CHARACTERS,
   NIGHTS,
   MAX_PASSIVES,
@@ -241,6 +242,7 @@ export interface RunSummary {
   kills: number;
   shards: number;
   night: number;
+  arena: number;
   dealt: [WeaponId, number][];
   /** Damage taken by source, largest first. */
   taken: [string, number][];
@@ -278,7 +280,7 @@ export function fmtTime(t: number): string {
 export function showResults(r: RunSummary, h: { again(): void; menu(): void }): void {
   const p = screen('title');
   p.append(el('h1', 'logo', r.won ? 'DAWN' : 'FADED'));
-  p.append(el('p', 'sub', `${NIGHTS[r.night].name} · ${r.won ? 'You outlasted the Eclipse.' : 'The night took you.'}`));
+  p.append(el('p', 'sub', `${NIGHTS[r.night].name} · ${ARENAS[r.arena].name} · ${r.won ? 'You outlasted the Eclipse.' : 'The night took you.'}`));
   p.append(
     el(
       'table',
@@ -305,13 +307,13 @@ export function showResults(r: RunSummary, h: { again(): void; menu(): void }): 
 }
 
 export interface TitleHandlers {
-  start(character: string, night: number): void;
+  start(character: string, night: number, arena: number): void;
   shop(): void;
   help(): void;
   hub(): void;
 }
 
-export function showTitle(profile: Profile, selected: string, night: number, h: TitleHandlers): void {
+export function showTitle(profile: Profile, selected: string, night: number, arena: number, h: TitleHandlers): void {
   const p = screen('title');
   p.append(el('h1', 'logo', 'AFTERGLOW'));
   p.append(el('p', 'sub', 'Survive the night. Ten minutes until the Eclipse.'));
@@ -352,7 +354,22 @@ export function showTitle(profile: Profile, selected: string, night: number, h: 
     box.append(prev, label, next);
     p.append(box);
   } else if ((profile.wins ?? 0) === 0) p.append(el('p', 'sub', 'Beat the Eclipse to unlock harder nights.'));
-  p.append(button('Start', 'big', () => h.start(pick, n)));
+  // Arena picker.
+  let ar = arena;
+  const arenas = el('div', 'arenas');
+  const arBtns = ARENAS.map((a, i) => {
+    const b = button(a.name, 'alt', () => {
+      ar = i;
+      arBtns.forEach((x, j) => x.classList.toggle('on', j === ar));
+      arText.textContent = ARENAS[ar].text;
+    });
+    b.classList.toggle('on', i === ar);
+    return b;
+  });
+  const arText = el('p', 'sub', ARENAS[ar].text);
+  arenas.append(...arBtns);
+  p.append(arenas, arText);
+  p.append(button('Start', 'big', () => h.start(pick, n, ar)));
   const row = el('div', 'row');
   row.append(button('Upgrades', 'alt', h.shop), button('How to play', 'alt', h.help));
   p.append(row, button('All games', 'alt', h.hub));

@@ -54,7 +54,7 @@ html, body {
   background: rgba(3, 4, 10, 0.86);
   overflow-y: auto;
 }
-#ui.title { background: radial-gradient(ellipse at 50% 30%, rgba(30, 60, 140, 0.35), rgba(3, 4, 10, 0.85) 70%); }
+#ui.title { background: radial-gradient(ellipse at 50% 30%, rgba(30, 60, 140, 0.35), rgba(3, 4, 10, 0.94) 70%), rgba(3, 4, 10, 0.6); }
 .panel { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 12px; margin: auto 0; flex-shrink: 0; }
 .slots { text-align: center; color: var(--muted); font-size: 13px; margin: -4px 0 0; }
 .slots b { color: var(--text); }
@@ -119,6 +119,9 @@ button:disabled { opacity: 0.4; }
   border: 1px solid rgba(255, 61, 139, 0.45); border-radius: 14px; background: rgba(40, 10, 30, 0.5); }
 .nights .night b { font-size: 16px; color: #ffb3cf; }
 .nights .night span { font-size: 12px; color: var(--muted); }
+.arenas { display: flex; gap: 8px; }
+.arenas button { flex: 1; }
+.arenas button.on { border-color: var(--cyan); box-shadow: 0 0 12px rgba(94, 231, 255, 0.35); color: var(--cyan); }
 .chars { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .chars .card { flex-direction: column; text-align: center; min-height: 0; }
 .stats { width: 100%; border-collapse: collapse; color: var(--muted); }

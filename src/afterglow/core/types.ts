@@ -233,6 +233,8 @@ export interface World {
   character: string;
   /** Difficulty: index into NIGHTS. */
   night: number;
+  /** Index into ARENAS (0 open grid, 1 monoliths). */
+  arena: number;
   base: Stats;
   stats: Stats;
   player: Player;

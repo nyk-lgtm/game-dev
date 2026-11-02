@@ -8,3 +8,4 @@ export * from './upgrades';
 export * from './sim';
 export * from './enemyai';
 export { randomSeed } from '../../shared/rng';
+export * from './arena';

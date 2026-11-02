@@ -46,6 +46,7 @@ export class Game {
   private mode: Mode = 'title';
   private character = store.load<string>('character', 'spark');
   private night = store.load<number>('night', 0);
+  private arena = store.load<number>('arena', 0);
   private ctx: CanvasRenderingContext2D;
   private cam: Camera = { x: 0, y: 0, k: 1, w: 0, h: 0 };
   private acc = 0;
@@ -77,8 +78,8 @@ export class Game {
     this.world = null;
     $('hud').hidden = true;
     this.sfx.stopMusic();
-    showTitle(this.profile, this.character, this.night, {
-      start: (c, n) => this.start(c, n),
+    showTitle(this.profile, this.character, this.night, this.arena, {
+      start: (c, n, a) => this.start(c, n, a),
       shop: () => this.shop(),
       help: () => showHelp(() => this.title()),
       hub: () => (location.href = '../'),
@@ -102,12 +103,14 @@ export class Game {
     });
   }
 
-  start(character: string, night = this.night): void {
+  start(character: string, night = this.night, arena = this.arena): void {
     this.character = character;
     this.night = night;
+    this.arena = arena;
     store.save('character', character);
     store.save('night', night);
-    this.world = createWorld(randomSeed(), character, this.profile, night);
+    store.save('arena', arena);
+    this.world = createWorld(randomSeed(), character, this.profile, night, arena);
     this.fx = new Fx();
     this.prismDown = false;
     this.acc = 0;
@@ -206,7 +209,7 @@ export class Game {
     if (nightUnlock) unlocked.push(NIGHTS[w.night + 1].name);
     const dealt = (Object.entries(w.dealt) as [WeaponId, number][]).sort((a, b) => b[1] - a[1]);
     const taken = Object.entries(w.taken).sort((a, b) => b[1] - a[1]);
-    const summary: RunSummary = { won: w.status === 'won', time: w.time, level: w.player.level, kills: w.kills, shards, night: w.night, dealt, taken, killedBy: w.killedBy, unlocked };
+    const summary: RunSummary = { won: w.status === 'won', time: w.time, level: w.player.level, kills: w.kills, shards, night: w.night, arena: w.arena, dealt, taken, killedBy: w.killedBy, unlocked };
     showResults(summary, { again: () => this.start(this.character), menu: () => this.title() });
   }
 

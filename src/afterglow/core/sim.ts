@@ -7,6 +7,7 @@ import { CHARACTERS, ENEMIES, META, NIGHTS, baseStats, xpToNext, type Profile } 
 import { PLAYER_R, damage, enemiesWithin, hurtPlayer } from './combat';
 import { direct, spawnPoint } from './director';
 import { think } from './enemyai';
+import { inPillar, pushOut } from './arena';
 import { SpatialHash } from './spatial';
 import { applyChoice, choiceKey, openChest, recomputeStats, rollChoices } from './upgrades';
 import { WEAPONS } from './weapons';
@@ -17,7 +18,7 @@ export const RECYCLE_DIST = 900;
 export const BASE_REROLLS = 2;
 export const BASE_BANISHES = 1;
 
-export function createWorld(seed: number, characterId = 'spark', profile?: Profile, night = 0): World {
+export function createWorld(seed: number, characterId = 'spark', profile?: Profile, night = 0, arena = 0): World {
   const ch = CHARACTERS.find((c) => c.id === characterId) ?? CHARACTERS[0];
   const base = baseStats();
   ch.mod(base);
@@ -33,6 +34,7 @@ export function createWorld(seed: number, characterId = 'spark', profile?: Profi
     tick: 0,
     character: ch.id,
     night: Math.max(0, Math.min(NIGHTS.length - 1, night)),
+    arena: arena === 1 ? 1 : 0,
     base,
     stats: { ...base },
     player: { x: 0, y: 0, hp: base.maxHp, fx: 0, fy: -1, iframes: 0, level: 1, xp: 0, revives: extras.revives },
@@ -92,6 +94,7 @@ export function step(w: World, ix: number, iy: number): void {
   }
   p.x += ix * st.speed * dt;
   p.y += iy * st.speed * dt;
+  pushOut(w, p, PLAYER_R);
   if (m > 0.2) {
     const ml = Math.sqrt(ix * ix + iy * iy);
     p.fx = ix / ml;
@@ -176,6 +179,8 @@ function moveEnemies(w: World, dt: number): void {
       o.x += ex * (1 - ho * 0.8);
       o.y += ey * (1 - ho * 0.8);
     });
+
+    if (e.kind !== 'prism' && e.kind !== 'eclipse') pushOut(w, e, e.r, p, e.speed * 0.6 * dt);
 
     const dx = e.x - p.x;
     const dy = e.y - p.y;
@@ -312,7 +317,7 @@ function moveBullets(w: World, dt: number): void {
     b.x += b.vx * dt;
     b.y += b.vy * dt;
     b.life -= dt;
-    if (b.life <= 0) b.alive = false;
+    if (b.life <= 0 || inPillar(w, b.x, b.y)) b.alive = false;
     else if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 < (b.r + PLAYER_R - 3) ** 2) {
       b.alive = false;
       hurtPlayer(w, b.dmg, b.src);

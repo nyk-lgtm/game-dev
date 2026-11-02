@@ -1,7 +1,7 @@
 // Draws one frame of the world: background grid, pickups, telegraphs,
 // enemies, weapons, the player, bullets and effects.
 
-import { BLOAT_SWELL, DART_AIM, MINE_HUE, PRISM_AIM, SLAM_AIM, SLAM_RADIUS, SPIT_AIM, eclipseCycle, ENEMIES, RUN_SECONDS, type Enemy, type EnemyKind, type World } from '../core';
+import { BLOAT_SWELL, DART_AIM, MINE_HUE, pillarsNear, PRISM_AIM, SLAM_AIM, SLAM_RADIUS, SPIT_AIM, eclipseCycle, ENEMIES, RUN_SECONDS, type Enemy, type EnemyKind, type World } from '../core';
 import type { Fx } from './fx';
 import { glowSprite, sprite, type Shape, type Sprite } from './sprites';
 
@@ -88,6 +88,35 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, fx: Fx, cam: 
   for (let x = gx; x < cam.w; x += g) for (let y = gy; y < cam.h; y += g) ctx.fillRect(x - 1, y - 1, 2, 2);
 
   const p = w.player;
+
+  // Monoliths: dark hexagonal pillars with a cold glowing rim.
+  if (w.arena === 1) {
+    const reach = Math.max(cam.w, cam.h) / k / 2 + 80;
+    for (const pl of pillarsNear(w, cam.x, cam.y, reach)) {
+      if (!onScreen(pl.x, pl.y, pl.r + 20)) continue;
+      const X = sx(pl.x);
+      const Y = sy(pl.y);
+      // Hex drawn so its edges straddle the collision circle (inradius 0.93r, corners 1.07r).
+      const R = pl.r * 1.07 * k;
+      blit(ctx, glowSprite(225, pl.r * 1.5, 0.22), X, Y);
+      const rot = (pl.x * 0.013 + pl.y * 0.007) % 1;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = rot + (i * Math.PI) / 3;
+        if (i === 0) ctx.moveTo(X + Math.cos(a) * R, Y + Math.sin(a) * R);
+        else ctx.lineTo(X + Math.cos(a) * R, Y + Math.sin(a) * R);
+      }
+      ctx.closePath();
+      const g = ctx.createRadialGradient(X - R * 0.3, Y - R * 0.3, R * 0.1, X, Y, R);
+      g.addColorStop(0, '#1d2350');
+      g.addColorStop(1, '#0a0c1f');
+      ctx.fillStyle = g;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = `hsla(225, 100%, 70%, ${0.55 + 0.15 * Math.sin(time * 1.5 + pl.x)})`;
+      ctx.stroke();
+    }
+  }
 
   // Auras under everything.
   for (const a of w.auras) {
