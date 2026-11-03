@@ -11,7 +11,9 @@ import {
   CASTERS,
   ENEMIES,
   HP_GROWTH,
+  MOD,
   MODS,
+  SLOW_TIME,
   REROLL_COST,
   RULES_VERSION,
   RUNES,
@@ -22,19 +24,23 @@ import {
   finishBattle,
   fits,
   get,
+  isBoss,
+  matchups,
   newGame,
   price,
   replay,
   sellValue,
   spellDps,
   tick,
-  waveQueue,
+  waveFoes,
+  warnings,
   type Action,
   type EnemyKind,
   type GameState,
   type Rune,
   type Slot,
   type Spell,
+  type WaveFoe,
 } from './core';
 import { Lane } from './lane';
 import { drawSigil } from './sigils';
@@ -189,7 +195,9 @@ export class Game {
       return;
     }
     const gained = s.gold - this.goldBefore;
-    this.banner(`Wave ${s.wave - 1} cleared`, `+${gained}● gold${b.leaked ? ` · ${b.leaked} leaked` : ''}`);
+    const interest = Math.min(3, Math.floor(this.goldBefore / 5));
+    const parts = [`${gained - interest - b.goldEarned} pay`, interest ? `${interest} interest` : '', b.goldEarned ? `${b.goldEarned} bounty` : ''].filter(Boolean);
+    this.banner(`Wave ${s.wave - 1} cleared`, `+${gained}● (${parts.join(' + ')})${b.leaked ? ` · −${b.leaked} tower` : ''}`);
     this.sfx.levelUp();
     this.render();
   }
@@ -224,7 +232,7 @@ export class Game {
         for (const f of b.fx) {
           if (f.type === 'cast') this.castGlow[f.row] = 1;
           else if (f.type === 'leak') this.sfx.hurt();
-          else if (f.type === 'kill' && ENEMIES[f.kind].gold >= 10) this.sfx.boom();
+          else if (f.type === 'kill' && isBoss(f.kind)) this.sfx.boom();
         }
         if (this.s.phase !== 'battle') {
           this.battleOver();
@@ -272,6 +280,7 @@ export class Game {
       for (let col = 0; col < 4; col++) slots.appendChild(this.makeSlot({ area: 'loom', row, col }));
       const sum = document.createElement('div');
       sum.className = 'sum';
+      sum.onclick = () => this.showSpell(row);
       const cd = document.createElement('div');
       cd.className = 'cd';
       r.append(slots, sum, cd);
@@ -283,12 +292,43 @@ export class Game {
     for (let i = 0; i < 5; i++) {
       const o = document.createElement('div');
       o.className = 'offer';
+      const nm = document.createElement('div');
+      nm.className = 'nm';
+      o.appendChild(nm);
       o.appendChild(this.makeSlot({ area: 'shop', i }));
       const p = document.createElement('div');
       p.className = 'price';
       o.appendChild(p);
       offers.appendChild(o);
     }
+  }
+
+  private foeCache: { key: string; foes: WaveFoe[] } | null = null;
+  /** The foes of the coming (or current) wave. */
+  private foes(): WaveFoe[] {
+    const key = `${this.s.seed}:${this.s.wave}`;
+    if (this.foeCache?.key !== key) this.foeCache = { key, foes: waveFoes(this.s.seed, this.s.wave) };
+    return this.foeCache.foes;
+  }
+
+  /** The row's spell if rune `r` went into its first free slot that fits (undefined if none). */
+  private preview(row: number, r: Rune): Spell | null | undefined {
+    const cells = this.s.loom[row];
+    if (this.sel?.area === 'loom' && this.sel.row === row) return undefined;
+    const caster = RUNES[r.id].kind === 'caster';
+    const col = caster ? (cells[0] ? -1 : 0) : cells[0] ? cells.findIndex((x, c) => c > 0 && !x) : -1;
+    if (col < 0) return undefined;
+    const copy = [...cells];
+    copy[col] = r;
+    return compileRow(copy);
+  }
+
+  /** Where the player's copies of a rune sit, in merge order ("row 2", "bench"). */
+  private where(r: Rune): string[] {
+    const out: string[] = [];
+    this.s.loom.forEach((row, i) => row.forEach((x) => x && x.id === r.id && x.tier === r.tier && out.push(`row ${i + 1}`)));
+    for (const x of this.s.bench) if (x && x.id === r.id && x.tier === r.tier) out.push('bench');
+    return out;
   }
 
   /** How many identical runes (id + tier) the player already owns. */
@@ -321,6 +361,9 @@ export class Game {
         wrap.classList.toggle('poor', !!o && !o.sold && price(o.rune) > s.gold);
         el.classList.toggle('merge', !!o && !o.sold && o.rune.tier < 3 && this.owned(o.rune) >= 2);
         (wrap.lastChild as HTMLElement).textContent = o ? `${price(o.rune)}●` : '';
+        const nm = wrap.firstChild as HTMLElement;
+        nm.textContent = o ? `${RUNES[o.rune.id].name}${o.rune.tier > 1 ? ` ${ROMAN[o.rune.tier]}` : ''}` : '';
+        nm.classList.toggle('cast', !!o && RUNES[o.rune.id].kind === 'caster');
       }
     }
     // Valid targets for the current selection.
@@ -330,7 +373,24 @@ export class Game {
       const ok = !!selRune && !battle && at.area !== 'shop' && !same(at, this.sel) && fits(selRune, at) && (this.sel!.area !== 'shop' || !get(s, at));
       el.classList.toggle('ok', ok);
     }
-    for (let row = 0; row < 3; row++) $(`row${row}`).querySelector('.sum')!.innerHTML = rowSummary(compileRow(s.loom[row]));
+    const foes = this.foes();
+    for (let row = 0; row < 3; row++) {
+      const sp = compileRow(s.loom[row]);
+      const warn = sp && !battle ? warnings(sp, foes)[0] : undefined;
+      const pv = selRune && !battle ? this.preview(row, selRune) : undefined;
+      let extra = '';
+      if (pv) {
+        const before = sp ? spellDps(sp) : 0;
+        const after = spellDps(pv);
+        const had = sp ? warnings(sp, foes).map((w) => w.text) : [];
+        const bad = warnings(pv, foes).find((w) => w.level === 2 && !had.includes(w.text));
+        const d = Math.round(after - before);
+        extra = `<span class="up">here → ${Math.round(after)} dps${sp ? ` (${d >= 0 ? '+' : ''}${d})` : ''}${bad ? ' <span class="bad">⚠</span>' : ''}</span>`;
+      } else if (warn) extra = `<span class="warn${warn.level === 2 ? ' bad' : ''}">⚠ ${warn.text}</span>`;
+      const el = $(`row${row}`);
+      el.querySelector('.sum')!.innerHTML = rowSummary(sp, extra);
+      el.classList.toggle('pv', !!pv);
+    }
     const reroll = $('rerollBtn') as HTMLButtonElement;
     reroll.disabled = s.gold < REROLL_COST || battle;
     $('freezeBtn').classList.toggle('on', s.frozen);
@@ -353,7 +413,9 @@ export class Game {
           ? 'Tap a rune in the shop to buy it. Each row casts one spell: a <b>caster</b> on the left, then up to 3 <b>modifiers</b>, read left → right.'
           : empty >= 0 && s.wave > 1
             ? `Row ${empty + 1} has no caster: it stays silent. Three identical runes merge into a stronger one.`
-            : 'Drag runes to rearrange. Order matters: <b>Echo</b> repeats only what is to its left. Three of a kind merge.'
+            : s.wave <= 3
+              ? 'Tap a spell (the text beside a row) to see what each rune adds and how it fares against the next wave.'
+              : 'Drag runes to rearrange. Order matters: <b>Echo</b> repeats only what is to its left. Three of a kind merge.'
       }</div>`;
       return;
     }
@@ -363,7 +425,7 @@ export class Game {
     const div = document.createElement('div');
     div.className = 'txt';
     if (this.sel.area === 'shop') {
-      const merge = r.tier < 3 && this.owned(r) >= 2 ? ` <span class="star">★ completes a set → ${ROMAN[r.tier + 1]}</span>` : '';
+      const merge = r.tier < 3 && this.owned(r) >= 2 ? ` <span class="star">★ merges with yours (${this.where(r).slice(0, 2).join(', ')}) → ${ROMAN[r.tier + 1]}</span>` : '';
       div.innerHTML = `${name} · ${price(r)}●${merge}<br>${def.text(r.tier)}`;
       const b = document.createElement('button');
       b.className = 'primary';
@@ -373,7 +435,9 @@ export class Game {
       b.onclick = () => this.buy(i);
       tip.replaceChildren(div, b);
     } else {
-      div.innerHTML = `${name}<br>${def.text(r.tier)}`;
+      const n = this.owned(r);
+      const set = r.tier < 3 && n > 1 ? ` · <span class="star">${n}/3 for ${ROMAN[r.tier + 1]}</span>` : '';
+      div.innerHTML = `${name}${set}<br>${def.text(r.tier)}`;
       const b = document.createElement('button');
       b.className = 'secondary';
       b.textContent = `Sell +${sellValue(r)}●`;
@@ -392,11 +456,9 @@ export class Game {
       info.innerHTML = '';
       return;
     }
-    const counts = new Map<EnemyKind, number>();
-    for (const [, k] of waveQueue(this.s.seed, this.s.wave)) counts.set(k, (counts.get(k) ?? 0) + 1);
-    const chips = [...counts.entries()].map(([k, n]) => {
+    const chips = this.foes().map(({ kind: k, count: n }) => {
       const d = ENEMIES[k];
-      const boss = d.gold >= 10 || k === 'lich';
+      const boss = isBoss(k);
       return `<span class="chip${boss ? ' boss' : ''}"><i style="background:hsl(${d.hue},85%,55%)"></i>${d.name}${n > 1 ? ` ×${n}` : ''}</span>`;
     });
     info.innerHTML = `<div class="head">Wave ${this.s.wave} incoming · tap for details</div>${chips.join('')}`;
@@ -593,21 +655,36 @@ export class Game {
 
   private buyAt(i: number, to?: Slot): boolean {
     const before = this.tiers();
+    const had = this.owns();
     const ok = this.act({ t: 'buy', i, to });
     if (ok) {
       this.sfx.pickup();
-      if (this.tiers() > before) this.merged();
+      if (this.tiers() > before) {
+        // The merged rune(s): owned now, not before; the highest tier last.
+        const made = this.owns().filter((k) => {
+          const i = had.indexOf(k);
+          if (i < 0) return true;
+          had.splice(i, 1);
+          return false;
+        });
+        this.merged(made.map((k) => ({ id: k.split(':')[0], tier: Number(k.split(':')[1]) }) as Rune).filter((r) => r.tier > 1).sort((a, b) => a.tier - b.tier));
+      }
     }
     return ok;
+  }
+
+  private owns(): string[] {
+    return [...this.s.loom.flat(), ...this.s.bench].filter((r): r is Rune => !!r).map((r) => `${r.id}:${r.tier}`);
   }
 
   private tiers(): number {
     return [...this.s.loom.flat(), ...this.s.bench].reduce((n, r) => n + (r && r.tier > 1 ? r.tier : 0), 0);
   }
 
-  private merged(): void {
+  private merged(made: Rune[]): void {
     this.sfx.evolve();
-    this.banner('Runes merged', 'three became one');
+    const r = made[made.length - 1];
+    this.banner(r ? `${RUNES[r.id].name} ${ROMAN[r.tier]}!` : 'Runes merged', 'three became one: check your rows');
   }
 
   // ---- cards ----
@@ -658,9 +735,57 @@ export class Game {
         <li><b>Three identical runes merge</b> into the next tier (I → II → III). The ★ in the shop marks a rune that completes a set.</li>
         <li>Between waves you earn 5 gold, more in later waves, plus <b>interest</b>: +1 per 5 gold banked (max +3). <b>Freeze</b> keeps the shop for next wave.</li>
         <li>Armor eats a flat amount of every hit, so big hits beat many small ones. Some foes resist elements. Tap the wave preview to see them.</li>
+        <li><b>Tap a spell</b> (the text beside its row) for a rune-by-rune breakdown and how it hits the next wave. <b style="color:#ffb86b">⚠</b> marks foes it struggles with.</li>
        </ul>`,
       [{ label: 'Got it', primary: true, onClick: closeOverlay }],
     );
+  }
+
+  /** The spell a loom row compiles into: rune by rune, then against the coming wave. */
+  showSpell(row: number): void {
+    const cells = this.s.loom[row];
+    const sp = compileRow(cells);
+    const close = [{ label: 'Close', primary: true, onClick: closeOverlay }];
+    if (!sp) {
+      showCard(
+        `<h2>Row ${row + 1} is silent</h2><p>Put a <b>caster</b> (Bolt, Beam, Nova, Rain or Orb) in its first slot. The modifiers to its right then change that spell one at a time, <b>left to right</b>.</p>`,
+        close,
+      );
+      return;
+    }
+    const steps: string[] = [];
+    let prev: Spell | null = null;
+    cells.forEach((r, i) => {
+      if (!r) return;
+      const cur = compileRow(cells.map((x, j) => (j <= i ? x : null)))!;
+      steps.push(`<canvas data-rune="${r.id}" data-tier="${r.tier}"></canvas><div><b>${RUNES[r.id].name} ${ROMAN[r.tier]}</b> · ${prev ? spellDiff(prev, cur) : baseLine(cur)}</div>`);
+      prev = cur;
+    });
+    const foes = matchups(sp, this.foes())
+      .map((m) => {
+        const d = ENEMIES[m.kind];
+        const note = !m.canHit
+          ? '<span class="bad">flies over it</span>'
+          : m.resist === 0
+            ? `<span class="bad">immune to ${sp.element}</span>`
+            : [m.resist !== 1 ? `${sp.element} ×${m.resist}` : '', m.armor ? `armor ${m.armor}` : ''].filter(Boolean).join(', ');
+        const cls = m.ratio < 0.25 ? 'bad' : m.ratio < 0.6 ? 'warn' : 'good';
+        return `<div><i style="background:hsl(${d.hue},85%,55%)"></i>${d.name}${m.count > 1 ? ` ×${m.count}` : ''} · <span class="${cls}">${r0(m.perHit)} a hit</span>${note ? ` · ${note}` : ''}</div>`;
+      })
+      .join('');
+    const dur = sp.cooldown.toFixed(2);
+    showCard(
+      `<h2>${spellName(sp)}</h2>
+       <p><b>${r0(sp.dmg)}</b> dmg${sp.caster === 'nova' ? ' to every foe in the blast' : sp.count > 1 ? ` × ${sp.count} ${UNIT[sp.caster]}` : ''} · every <b>${dur}s</b>${sp.echoes.length ? ` · then ${sp.echoes.length} echo${sp.echoes.length > 1 ? 'es' : ''}` : ''} · ~<b>${Math.round(spellDps(sp))}</b> dps</p>
+       <div class="scroll">
+       <div class="steps">${steps.join('')}</div>
+       <p class="sub">Against wave ${this.s.wave}</p>
+       <div class="foes">${foes}</div>
+       </div>`,
+      close,
+    );
+    for (const c of document.querySelectorAll<HTMLCanvasElement>('.steps canvas[data-rune]'))
+      drawSigil(c, { id: c.dataset.rune as Rune['id'], tier: Number(c.dataset.tier) as Rune['tier'] }, 34);
   }
 
   private showRunes(): void {
@@ -671,17 +796,21 @@ export class Game {
   }
 
   private showFoes(): void {
-    const kinds = Object.keys(ENEMIES) as EnemyKind[];
+    const coming = new Map(this.foes().map((f) => [f.kind, f]));
+    const all = Object.keys(ENEMIES) as EnemyKind[];
+    const kinds = [...coming.keys(), ...all.filter((k) => !coming.has(k))];
     const html = kinds
-      .map((k) => {
+      .map((k, i) => {
         const d = ENEMIES[k];
+        const f = coming.get(k);
+        const head = i === 0 ? `<p class="sub">Wave ${this.s.wave}</p>` : i === coming.size ? '<p class="sub">Later</p>' : '';
         const res = Object.entries(d.resist)
           .map(([el, m]) => `${el} ×${m}`)
           .join(', ');
-        return `<div><i style="background:hsl(${d.hue},85%,55%)"></i><b>${d.name}</b> · ${Math.round(d.hp)} hp${d.armor ? ` · armor ${d.armor}` : ''}${d.shield ? ` · shield ${d.shield}` : ''}${d.flying ? ' · flies' : ''}${res ? ` · ${res}` : ''}<br>${d.blurb}</div>`;
+        return `${head}<div${f ? '' : ' class="later"'}><i style="background:hsl(${d.hue},85%,55%)"></i><b>${d.name}</b>${f && f.count > 1 ? ` ×${f.count}` : ''} · ${Math.round(f ? f.hp : d.hp)} hp${d.armor ? ` · armor ${d.armor}` : ''}${d.shield ? ` · shield ${d.shield}` : ''}${d.flying ? ' · flies' : ''}${res ? ` · ${res}` : ''}<br>${d.blurb}</div>`;
       })
       .join('');
-    showCard(`<h2>Foes</h2><div class="scroll foes">${html}</div><p>Normal foes gain ${Math.round(HP_GROWTH * 100)}% HP each wave.</p>`, [
+    showCard(`<h2>Foes</h2><div class="scroll foes">${html}</div><p>Normal foes gain ${Math.round(HP_GROWTH * 100)}% of their base HP each wave; bosses don't.</p>`, [
       { label: 'Close', primary: true, onClick: closeOverlay },
     ]);
   }
@@ -722,13 +851,45 @@ function spellName(sp: Spell): string {
   return `${el}${RUNES[sp.caster].name}`;
 }
 
-function rowSummary(sp: Spell | null): string {
-  if (!sp) return '<b style="color:var(--muted)">— silent —</b>needs a caster';
+function rowSummary(sp: Spell | null, extra = ''): string {
+  if (!sp) return `<b style="color:var(--muted)">— silent —</b>${extra || '<div>needs a caster</div>'}`;
   const tags: string[] = [];
   if (sp.count > 1) tags.push(`×${sp.count}`);
   if (sp.chain) tags.push(`arcs ${sp.chain}`);
   if (sp.echoes.length) tags.push(`echo ×${sp.echoes.length}`);
   if (sp.slow) tags.push('slows');
   if (sp.burn) tags.push('burns');
-  return `<b>${spellName(sp)}${tags.length ? ` <span style="font-weight:500;color:var(--muted)">${tags.join(' · ')}</span>` : ''}</b><span class="dps">${Math.round(spellDps(sp))} dps</span> · ${sp.cooldown.toFixed(1)}s`;
+  return `<b>${spellName(sp)}${tags.length ? ` <span style="font-weight:500;color:var(--muted)">${tags.join(' · ')}</span>` : ''}</b><div><span class="dps">${Math.round(spellDps(sp))} dps</span> · ${sp.cooldown.toFixed(1)}s</div>${extra}`;
+}
+
+const r0 = (x: number) => String(Math.round(x));
+const pc = (x: number) => `${Math.round(x * 100)}%`;
+const UNIT: Record<Spell['caster'], string> = { bolt: 'bolts', beam: 'beams', nova: 'blast', rain: 'strikes', orb: 'orbs' };
+
+/** What a caster rune starts with. */
+function baseLine(sp: Spell): string {
+  const n = sp.caster === 'nova' ? 'a blast around the tower' : `${sp.count} ${sp.count === 1 ? UNIT[sp.caster].slice(0, -1) : UNIT[sp.caster]}`;
+  return `${r0(sp.dmg)} dmg · ${n} · every ${sp.cooldown.toFixed(1)}s`;
+}
+
+/** What one modifier changed, given the spell before and after it. */
+function spellDiff(a: Spell, b: Spell): string {
+  const out: string[] = [];
+  if (b.element !== a.element) out.push(`turns <b>${b.element}</b>`);
+  if (Math.abs(b.dmg - a.dmg) > 0.05) out.push(`dmg ${r0(a.dmg)} → <b>${r0(b.dmg)}</b>`);
+  if (b.count !== a.count) out.push(b.caster === 'nova' ? `blast ${pc((1 + (b.count - 1) * 0.35) / (1 + (a.count - 1) * 0.35) - 1)} wider` : `${a.count} → <b>${b.count}</b> ${UNIT[b.caster]}`);
+  if (b.area > a.area * 1.01 && b.count === a.count) out.push(b.caster === 'nova' ? `blast ${pc(b.area / a.area - 1)} wider` : 'bigger hits');
+  if (Math.abs(b.cooldown - a.cooldown) > 0.005) out.push(`every ${a.cooldown.toFixed(2)}s → <b>${b.cooldown.toFixed(2)}s</b>`);
+  if (b.burn !== a.burn) out.push(`burns <b>${r0(b.burn)}/s</b> for 3s`);
+  if (b.slow !== a.slow) out.push(`slows <b>${pc(b.slow)}</b> for ${SLOW_TIME}s`);
+  if (b.chain !== a.chain) out.push(`arcs to <b>${b.chain}</b> more foes at ${pc(MOD.stormDmg)}`);
+  if (b.pierce !== a.pierce && (b.caster === 'bolt' || b.caster === 'orb')) out.push(`passes through <b>${b.pierce}</b> foes`);
+  if (b.shred !== a.shred) out.push(`ignores <b>${b.shred}</b> armor`);
+  if (b.leech !== a.leech) out.push(`<b>${pc(b.leech)}</b> chance a kill heals the tower`);
+  if (b.gild !== a.gild) out.push(`<b>${pc(b.gild)}</b> chance a kill gives +1●`);
+  if (b.echoes.length !== a.echoes.length) {
+    const e = b.echoes[b.echoes.length - 1];
+    out.push(`<b>casts again</b>: a copy of everything to its left (${r0(e.dmg)} dmg${e.count > 1 ? ` ×${e.count}` : ''})`);
+  }
+  return out.join(' · ') || '<span style="color:var(--danger)">no effect here</span>';
 }

@@ -4,3 +4,4 @@ export * from './runes';
 export * from './battle';
 export * from './state';
 export * from './replay';
+export * from './matchup';

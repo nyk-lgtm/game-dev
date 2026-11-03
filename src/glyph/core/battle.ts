@@ -143,12 +143,18 @@ function battleRng(s: GameState, b: Battle, salt: number): number {
   return new Rng(mixSeed(mixSeed(s.seed, salt), s.wave * 100000 + Math.round(b.t * 60) * 7 + b.kills)).next();
 }
 
+/** One hit's damage after the foe's elemental resistance and armor (min 1 unless immune). */
+export function mitigate(kind: EnemyKind, sp: Pick<Spell, 'element' | 'shred'>, dmg: number): number {
+  const d = ENEMIES[kind];
+  const amount = dmg * (d.resist[sp.element] ?? 1);
+  return Math.max(amount > 0 ? 1 : 0, amount - Math.max(0, d.armor - sp.shred));
+}
+
 /** Apply a hit. Returns damage dealt. */
 function hit(s: GameState, b: Battle, e: Enemy, sp: Spell, dmg: number, chainLeft = sp.chain): number {
   if (!e.alive) return 0;
   const d = ENEMIES[e.kind];
-  let amount = dmg * (d.resist[sp.element] ?? 1);
-  amount = Math.max(amount > 0 ? 1 : 0, amount - Math.max(0, d.armor - sp.shred));
+  let amount = mitigate(e.kind, sp, dmg);
   if (e.shield > 0) {
     const absorbed = Math.min(e.shield, amount);
     e.shield -= absorbed;

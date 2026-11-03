@@ -1,7 +1,7 @@
 // Battle lane renderer: enemies march down toward the tower at the bottom,
 // spells flare as they resolve.
 
-import { ASPECT, ELEMENT_HUE, ENEMIES, type Battle, type BattleFx, type Element, type EnemyKind } from './core';
+import { ASPECT, ELEMENT_HUE, ENEMIES, isBoss, type Battle, type BattleFx, type Element, type EnemyKind } from './core';
 
 interface Flash {
   fx: BattleFx;
@@ -22,7 +22,10 @@ export class Lane {
       const life = f.type === 'beam' ? 0.25 : f.type === 'nova' ? 0.4 : f.type === 'chain' ? 0.2 : f.type === 'strike' ? 0.35 : f.type === 'kill' ? 0.4 : 0.15;
       if (this.flashes.length < 160) this.flashes.push({ fx: f, age: 0, life });
       if (f.type === 'kill' && f.gold > 0) this.floaters.push({ x: f.x, y: f.y, text: `+${f.gold}`, age: 0, hue: 48 });
-      if (f.type === 'leak') this.shake = 8;
+      if (f.type === 'leak') {
+        this.shake = 8;
+        this.floaters.push({ x: 0.5 + (Math.random() - 0.5) * 0.2, y: 0.9, text: `−${f.dmg}`, age: 0, hue: 350 });
+      }
     }
   }
 
@@ -232,10 +235,33 @@ export class Lane {
         ctx.fillRect(X(e.x) - 2, Y(e.y) - 2, 4, 4);
       }
     }
+    // Boss health across the top of the lane: shield (blue) then HP.
+    const boss = b.enemies.find((e) => e.alive && isBoss(e.kind));
+    if (boss) {
+      const d = ENEMIES[boss.kind];
+      const bw = lw - 24;
+      const bx = X(0) + 12;
+      const by = Y(0) + 16;
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(bx, by, bw, 6);
+      ctx.fillStyle = `hsla(${d.hue}, 80%, 58%, 0.85)`;
+      ctx.fillRect(bx, by, bw * Math.max(0, boss.hp / boss.maxHp), 6);
+      if (boss.shield > 0) {
+        ctx.fillStyle = 'rgba(150,200,255,0.9)';
+        ctx.fillRect(bx, by - 4, bw * Math.min(1, boss.shield / d.shield), 3);
+      }
+      ctx.font = '700 12px system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#fff';
+      ctx.fillText(d.name, bx, by - 7);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.fillText(`${Math.ceil(boss.hp)}${boss.shield > 0 ? ` +${Math.ceil(boss.shield)} shield` : ''}`, bx + bw, by - 7);
+    }
     ctx.font = '700 12px system-ui, sans-serif';
     ctx.textAlign = 'center';
     for (const f of this.floaters) {
-      ctx.fillStyle = `rgba(255,209,102,${1 - f.age / 0.9})`;
+      ctx.fillStyle = `hsla(${f.hue}, 100%, 70%, ${1 - f.age / 0.9})`;
       ctx.fillText(f.text, X(f.x), Y(f.y) - 10 - f.age * 20);
     }
   }
