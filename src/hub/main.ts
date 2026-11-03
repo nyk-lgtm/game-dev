@@ -185,6 +185,8 @@ const DAILY = [
   { path: './afterglow/?daily', title: 'Afterglow', store: afterglow, accent: '#ff3d8b' },
   { path: './rewild/?daily', title: 'Rewild', store: rewild, accent: '#7bd88f' },
   { path: './glyph/?daily', title: 'Glyphwright', store: glyph, accent: '#b08cff' },
+  { path: './delve/?daily', title: 'Delve', store: delve, accent: '#ffb347' },
+  { path: './nightline/?daily', title: 'Nightline', store: nightline, accent: '#ff2a6d' },
 ];
 const daily = document.getElementById('daily')!;
 daily.innerHTML = `<h3>Daily challenges <span>${prettyDay()}</span></h3><p>The same run for everyone today. A new one at midnight.</p>`;

@@ -35,7 +35,9 @@ header p { margin: 6px 0 0; color: var(--muted); }
 #daily h3 { margin: 0; font-size: 17px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 #daily h3 span { font-size: 12px; font-weight: 600; color: #ffd166; }
 #daily p { margin: 4px 0 10px; color: var(--muted); font-size: 13px; }
-.daily-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.daily-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.daily-row a { grid-column: span 2; }
+.daily-row a:nth-child(n + 4) { grid-column: span 3; }
 .daily-row a { min-height: 56px; padding: 8px 6px; border-radius: 12px; text-decoration: none; color: inherit; text-align: center;
   display: flex; flex-direction: column; justify-content: center; gap: 2px;
   background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--accent); }
