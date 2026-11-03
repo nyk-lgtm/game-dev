@@ -6,6 +6,7 @@ import { Sfx } from '../afterglow/audio';
 import { closeOverlay, showCard } from '../shared/cards';
 import { copyText, toast } from '../shared/debug';
 import { makeStore } from '../shared/storage';
+import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey } from '../shared/daily';
 import {
   ANIMALS,
   ALL_IDS,
@@ -139,9 +140,13 @@ export class Game {
 
   // ---------------------------------------------------------------- run
 
-  start(seed: number, a = '', fromLink = false) {
+  /** Today's date while playing the daily island, else null. */
+  daily: string | null = null;
+
+  start(seed: number, a = '', fromLink = false, daily: string | null = null) {
     this.seed = seed;
     this.replayOnly = fromLink;
+    this.daily = daily;
     try {
       this.actions = decodeAll(a);
       this.s = replay(seed, this.actions);
@@ -153,13 +158,15 @@ export class Game {
     this.card = -1;
     this.cell = -1;
     this.refresh(false);
+    if (daily && this.actions.length === 0) this.queueBanner(`Daily island · ${prettyDay(daily)}`, '#f2c45a');
     this.queueBanner(`${SEASON_NAMES[seasonOf(this.s.season)]}, year ${yearOf(this.s.season)}`);
     if (this.s.over) setTimeout(() => this.showEnd(), 300);
   }
 
   private persist() {
     if (this.replayOnly) return;
-    store.save('run', this.s.over ? null : { v: RULES_VERSION, seed: this.seed, a: this.actions.map(encode).join(',') });
+    const run = this.s.over ? null : { v: RULES_VERSION, seed: this.seed, a: this.actions.map(encode).join(','), day: this.daily };
+    store.save(this.daily ? 'dailyRun' : 'run', run);
   }
 
   private act(a: Action): SimEvent[] | null {
@@ -173,8 +180,18 @@ export class Game {
   newIsland() {
     closeOverlay();
     this.replayOnly = false;
+    leaveDaily();
     this.start((Math.random() * 0xffffffff) >>> 0);
     this.persist();
+  }
+
+  /** Today's daily island: resume it if started, else begin it. */
+  playDaily() {
+    closeOverlay();
+    const day = todayKey();
+    const saved = store.load<{ v: number; seed: number; a: string; day: string } | null>('dailyRun', null);
+    if (saved && saved.v === RULES_VERSION && saved.day === day) this.start(saved.seed, saved.a, false, day);
+    else this.start(dailySeed('rewild', day), '', false, day);
   }
 
   // ---------------------------------------------------------------- input
@@ -492,6 +509,9 @@ export class Game {
         },
       },
       { label: 'Copy bug report', onClick: () => this.copyReport() },
+      this.daily
+        ? { label: 'Back to my island', onClick: () => this.resumeOwn() }
+        : { label: `Daily island · ${loadDaily(store)?.label ?? 'not played'}`, onClick: () => this.playDaily() },
       { label: 'New island', onClick: () => this.confirmNew() },
       { label: 'Back to Game Lab', onClick: () => (location.href = '../') },
     ]);
@@ -569,6 +589,8 @@ export class Game {
     showCard(`<h2>Weather</h2>${rows.join('')}`, [{ label: 'Close', primary: true, onClick: closeOverlay }]);
   }
 
+  private dailyResult: ReturnType<typeof recordDaily> | null = null;
+
   private recordEnd() {
     if (this.replayOnly) return;
     const p = store.load<Profile>('profile', { best: 0, bestStars: 0, runs: 0 });
@@ -576,6 +598,7 @@ export class Game {
     p.best = Math.max(p.best, this.s.score);
     p.bestStars = Math.max(p.bestStars, starsFor(this.s.score));
     store.save('profile', p);
+    if (this.daily) this.dailyResult = recordDaily(store, this.s.score, `${this.s.score} · ${'★'.repeat(starsFor(this.s.score)) || 'no stars'}`, this.daily);
     this.persist();
   }
 
@@ -592,14 +615,33 @@ export class Game {
       <div class="stars">${'★'.repeat(stars)}<span class="off">${'★'.repeat(3 - stars)}</span></div>
       <p>Score <b>${s.score}</b>${best ? ` · best ${best}` : ''}. ${species.size} species live on the island now; at its peak, ${s.stats.maxSpecies}.</p>
       <p style="font-size:12px">Stars at ${STARS.join(' / ')}.</p>
+      ${this.daily ? `<p><b style="color:var(--gold)">Daily island · ${prettyDay(this.daily)}</b><br>${this.dailyResult?.improved ? 'New best for today!' : `Today's best: ${loadDaily(store, this.daily)?.score ?? s.score}`}</p>` : ''}
       <h3>Species, season by season</h3><div class="chart">${chart}</div>
       <h3>Goals</h3>${this.goalsHtml()}`,
       [
         { label: 'New island', primary: true, onClick: () => this.newIsland() },
+        ...(this.daily ? [{ label: 'Replay today’s island', onClick: () => this.restartDaily() }] : []),
         { label: 'Look at the island', onClick: closeOverlay },
         { label: 'Back to Game Lab', onClick: () => (location.href = '../') },
       ],
     );
+  }
+
+  /** Leave the daily and pick up your own saved island (or a fresh one). */
+  resumeOwn() {
+    closeOverlay();
+    leaveDaily();
+    const saved = store.load<{ v: number; seed: number; a: string } | null>('run', null);
+    if (saved && saved.v === RULES_VERSION) this.start(saved.seed, saved.a);
+    else this.start((Math.random() * 0xffffffff) >>> 0);
+  }
+
+  /** Start today's daily island over from the beginning. */
+  restartDaily() {
+    closeOverlay();
+    const day = todayKey();
+    this.start(dailySeed('rewild', day), '', false, day);
+    this.persist();
   }
 
   async copyReport() {

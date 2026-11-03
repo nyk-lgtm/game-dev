@@ -1,4 +1,5 @@
 import { installErrorOverlay } from '../shared/debug';
+import { wantsDaily } from '../shared/daily';
 import { RULES_VERSION, randomSeed } from './core';
 import { Game, store } from './game';
 
@@ -14,7 +15,8 @@ if (p.has('seed') && Number.isFinite(Number(p.get('seed')))) {
   const a = p.get('a') ?? '';
   game.start(Number(p.get('seed')), a === '-' ? '' : a, true);
   history.replaceState(null, '', location.pathname);
-} else if (saved && saved.v === RULES_VERSION) game.start(saved.seed, saved.a);
+} else if (wantsDaily()) game.playDaily();
+else if (saved && saved.v === RULES_VERSION) game.start(saved.seed, saved.a);
 else game.start(randomSeed());
 
 if (!store.load('seenHelp', false)) game.showHelp();

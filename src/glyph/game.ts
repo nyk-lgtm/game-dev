@@ -4,6 +4,7 @@
 import { closeOverlay, showCard } from '../shared/cards';
 import { BUILD, copyText, toast } from '../shared/debug';
 import { makeStore } from '../shared/storage';
+import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey } from '../shared/daily';
 import { Sfx } from '../afterglow/audio';
 import {
   BENCH_SIZE,
@@ -101,8 +102,14 @@ export class Game {
 
   // ---- run lifecycle ----
 
-  start(seed: number, actions = '', fromLink = false): void {
+  /** Today's date while playing the daily run, else null. */
+  daily: string | null = null;
+  private dailyResult: ReturnType<typeof recordDaily> | null = null;
+
+  start(seed: number, actions = '', fromLink = false, daily: string | null = null): void {
     this.seed = seed;
+    this.daily = daily;
+    this.dailyResult = null;
     this.sel = null;
     this.lane = new Lane();
     try {
@@ -117,16 +124,36 @@ export class Game {
     if (!fromLink) this.persist();
     this.render();
     if (this.s.phase === 'over' || this.s.phase === 'won') this.showEnd();
+    else if (daily && this.actions.length === 0) this.banner('Daily run', prettyDay(daily));
   }
 
   newRun(): void {
     closeOverlay();
+    leaveDaily();
     this.start((Math.random() * 2 ** 31) >>> 0);
+  }
+
+  /** Today's daily run: resume it if started, else begin it. */
+  playDaily(fresh = false): void {
+    closeOverlay();
+    const day = todayKey();
+    const saved = store.load<{ v: number; seed: number; a: string; day: string } | null>('dailyRun', null);
+    if (!fresh && saved && saved.v === RULES_VERSION && saved.day === day) this.start(saved.seed, saved.a, false, day);
+    else this.start(dailySeed('glyph', day), '', false, day);
+  }
+
+  /** Leave the daily and pick up your own saved run. */
+  resumeOwn(): void {
+    closeOverlay();
+    leaveDaily();
+    const saved = store.load<{ v: number; seed: number; a: string } | null>('run', null);
+    if (saved && saved.v === RULES_VERSION) this.start(saved.seed, saved.a);
+    else this.start((Math.random() * 2 ** 31) >>> 0);
   }
 
   private persist(): void {
     if (this.replayOnly) return;
-    store.save('run', { v: RULES_VERSION, seed: this.seed, a: this.actions.join(',') });
+    store.save(this.daily ? 'dailyRun' : 'run', { v: RULES_VERSION, seed: this.seed, a: this.actions.join(','), day: this.daily });
   }
 
   private act(a: Action): boolean {
@@ -175,6 +202,7 @@ export class Game {
     p.runs++;
     if (this.s.phase === 'won') p.wins++;
     store.save('profile', p);
+    if (this.daily) this.dailyResult = recordDaily(store, reached, this.s.phase === 'won' ? 'won' : `wave ${reached}`, this.daily);
   }
 
   // ---- frame loop ----
@@ -602,6 +630,9 @@ export class Game {
           },
         },
         { label: 'Copy bug report', onClick: () => this.copyReport() },
+        this.daily
+          ? { label: 'Back to my run', onClick: () => this.resumeOwn() }
+          : { label: `Daily run · ${loadDaily(store)?.label ?? 'not played'}`, onClick: () => this.playDaily() },
         {
           label: 'New run',
           onClick: () =>
@@ -665,9 +696,11 @@ export class Game {
     showCard(
       `<h2>${won ? 'The Lich is unmade' : 'The tower falls'}</h2>
        <p>${won ? `All ${WAVES} waves held.` : `Fell on wave ${this.s.wave} of ${WAVES}.`} ${this.s.totalKills} foes slain.</p>
-       <ul>${spells}</ul>`,
+       <ul>${spells}</ul>
+       ${this.daily ? `<p><b>Daily run · ${prettyDay(this.daily)}</b><br>${this.dailyResult?.improved ? 'New best for today!' : `Today's best: ${loadDaily(store, this.daily)?.label ?? '—'}`}</p>` : ''}`,
       [
         { label: 'New run', primary: true, onClick: () => this.newRun() },
+        ...(this.daily ? [{ label: 'Retry today’s run', onClick: () => this.playDaily(true) }] : []),
         { label: 'Copy bug report', onClick: () => this.copyReport() },
         { label: 'Back to Game Lab', onClick: () => (location.href = '../') },
       ],

@@ -35,6 +35,13 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     with `random`), `scripts/rewild/probe.ts` (plays and causes of death), `trace.ts <seed>`.
 - ASCII games (Delve, Nightline) draw into a character `Grid` (src/shared/ascii.ts) painted
   with batched `fillText` runs; art lives in each game's `art.ts`.
+- Daily challenges (src/shared/daily.ts): `<game>/?daily` plays today's seed (`dailySeed(game, day)`,
+  local date); each game keeps its in-progress daily under `dailyRun` and today's best under `daily`.
+  Wired for Afterglow, Rewild and Glyphwright; the hub's Daily section links them.
+- Afterglow extras: Nights 1-5 (`NIGHTS` in content.ts, unlocked by `profile.nightsWon`), arenas
+  (`ARENAS`/pillars in core/arena.ts, hashed from the seed), unions (`union` on a WeaponDef: two
+  maxed weapons merge in a chest), and player damage is attributed (`w.taken`, `w.killedBy`).
+  `NIGHT=n ARENA=1 npx vite-node scripts/afterglow/probe.ts` probes them.
 - Glyphwright runs are a seed + build actions (`B`uy/`M`ove/`S`ell/`R`eroll/`F`reeze/`G`o);
   battles are deterministic, so `replay(seed, a)` rebuilds the run.
 - Rewild runs are a seed + actions (`P<card>.<cell>` place, `R` new hand, `E` end season). The

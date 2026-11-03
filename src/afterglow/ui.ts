@@ -17,6 +17,7 @@ import {
   type World,
 } from './core';
 import { drawIcon, type Shape } from './render/sprites';
+import { prettyDay } from '../shared/daily';
 
 const ui = () => document.getElementById('ui')!;
 
@@ -243,6 +244,7 @@ export interface RunSummary {
   shards: number;
   night: number;
   arena: number;
+  daily: { day: string; improved: boolean; best: string } | null;
   dealt: [WeaponId, number][];
   /** Damage taken by source, largest first. */
   taken: [string, number][];
@@ -303,17 +305,20 @@ export function showResults(r: RunSummary, h: { again(): void; menu(): void }): 
     if (tip && !r.won) p.append(el('p', 'tip', tip));
   }
   for (const u of r.unlocked) p.append(el('p', 'shards', `Unlocked: ${u}!`));
+  if (r.daily) p.append(el('div', 'daily', `<b>Daily · ${r.daily.day}</b><span>${r.daily.improved ? 'New best for today!' : `Today's best: ${r.daily.best}`}</span>`));
   p.append(button('Again', 'big', h.again), button('Menu', 'alt', h.menu));
 }
 
 export interface TitleHandlers {
   start(character: string, night: number, arena: number): void;
+  /** Leave daily mode for a normal run. */
+  normal(): void;
   shop(): void;
   help(): void;
   hub(): void;
 }
 
-export function showTitle(profile: Profile, selected: string, night: number, arena: number, h: TitleHandlers): void {
+export function showTitle(profile: Profile, selected: string, night: number, arena: number, daily: { day: string; arena: number; best: string | null } | null, h: TitleHandlers): void {
   const p = screen('title');
   p.append(el('h1', 'logo', 'AFTERGLOW'));
   p.append(el('p', 'sub', 'Survive the night. Ten minutes until the Eclipse.'));
@@ -339,6 +344,15 @@ export function showTitle(profile: Profile, selected: string, night: number, are
   // Night picker: unlocked by winning the night before.
   const open = Math.min(NIGHTS.length, (profile.nightsWon ?? 0) + 1);
   let n = Math.min(night, open - 1);
+  if (daily) {
+    const d = el('div', 'daily');
+    d.innerHTML = `<b>Daily challenge</b><span>${prettyDay(daily.day)} · ${ARENAS[daily.arena].name} · Night 1</span><span>Same swarm for everyone today. ${daily.best ? `Your best: ${daily.best}` : 'Not played yet.'}</span>`;
+    p.append(d, button('Start daily', 'big', () => h.start(pick, 0, daily.arena)), button('Normal run instead', 'alt', h.normal));
+    const row = el('div', 'row');
+    row.append(button('Upgrades', 'alt', h.shop), button('How to play', 'alt', h.help));
+    p.append(row, button('All games', 'alt', h.hub));
+    return;
+  }
   if (open > 1) {
     const box = el('div', 'nights');
     const prev = button('◀', 'alt', () => setNight(n - 1));

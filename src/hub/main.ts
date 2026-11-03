@@ -2,6 +2,7 @@
 
 import { BUILD } from '../shared/debug';
 import { makeStore } from '../shared/storage';
+import { loadDaily, prettyDay } from '../shared/daily';
 
 interface GameCard {
   path: string;
@@ -179,4 +180,25 @@ for (const g of GAMES) {
   }</div><span class="go">›</span>`;
   list.appendChild(a);
 }
+// Today's challenges: the same seed for everyone, one per game.
+const DAILY = [
+  { path: './afterglow/?daily', title: 'Afterglow', store: afterglow, accent: '#ff3d8b' },
+  { path: './rewild/?daily', title: 'Rewild', store: rewild, accent: '#7bd88f' },
+  { path: './glyph/?daily', title: 'Glyphwright', store: glyph, accent: '#b08cff' },
+];
+const daily = document.getElementById('daily')!;
+daily.innerHTML = `<h3>Daily challenges <span>${prettyDay()}</span></h3><p>The same run for everyone today. A new one at midnight.</p>`;
+const row = document.createElement('div');
+row.className = 'daily-row';
+for (const d of DAILY) {
+  const a = document.createElement('a');
+  a.href = d.path;
+  a.style.setProperty('--accent', d.accent);
+  const best = loadDaily(d.store);
+  a.innerHTML = `<b>${d.title}</b><span>${best ? `${best.label}` : 'Play'}</span>`;
+  if (best) a.classList.add('done');
+  row.appendChild(a);
+}
+daily.appendChild(row);
+
 document.getElementById('build')!.textContent = `build ${BUILD}`;

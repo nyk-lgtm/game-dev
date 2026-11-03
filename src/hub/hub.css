@@ -31,4 +31,16 @@ header p { margin: 6px 0 0; color: var(--muted); }
 .game p { margin: 0; color: var(--muted); font-size: 14px; }
 .game .best { font-size: 13px; color: var(--text); }
 .game .go { flex: none; font-size: 22px; color: var(--accent); }
+#daily { padding: 14px; border-radius: 16px; background: linear-gradient(160deg, #1e1a10, var(--card)); border: 1px solid #4a3d1c; }
+#daily h3 { margin: 0; font-size: 17px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+#daily h3 span { font-size: 12px; font-weight: 600; color: #ffd166; }
+#daily p { margin: 4px 0 10px; color: var(--muted); font-size: 13px; }
+.daily-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.daily-row a { min-height: 56px; padding: 8px 6px; border-radius: 12px; text-decoration: none; color: inherit; text-align: center;
+  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--accent); }
+.daily-row a b { font-size: 14px; }
+.daily-row a span { font-size: 12px; color: var(--muted); }
+.daily-row a.done span { color: #ffd166; }
+.daily-row a:active { transform: scale(0.97); }
 #build { color: var(--muted); font-size: 12px; text-align: center; }

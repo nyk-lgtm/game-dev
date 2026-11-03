@@ -3,6 +3,7 @@
 
 import { toast } from '../shared/debug';
 import { makeStore } from '../shared/storage';
+import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey, wantsDaily } from '../shared/daily';
 import { Sfx } from './audio';
 import {
   CHARACTERS,
@@ -35,6 +36,9 @@ import { fmtTime, hideUi, showChest, showHelp, showLevelUp, showPause, showResul
 const store = makeStore('afterglow.');
 const $ = (id: string) => document.getElementById(id)!;
 
+/** The daily's arena alternates with the seed. */
+const dailyArena = (day: string) => dailySeed('afterglow-arena', day) % 2;
+
 type Mode = 'title' | 'run' | 'paused' | 'choice' | 'over';
 
 export class Game {
@@ -47,6 +51,9 @@ export class Game {
   private character = store.load<string>('character', 'spark');
   private night = store.load<number>('night', 0);
   private arena = store.load<number>('arena', 0);
+  /** Today's date while in daily mode (?daily), else null. */
+  private daily: string | null = wantsDaily() ? todayKey() : null;
+  private dailyResult: ReturnType<typeof recordDaily> | null = null;
   private ctx: CanvasRenderingContext2D;
   private cam: Camera = { x: 0, y: 0, k: 1, w: 0, h: 0 };
   private acc = 0;
@@ -78,8 +85,14 @@ export class Game {
     this.world = null;
     $('hud').hidden = true;
     this.sfx.stopMusic();
-    showTitle(this.profile, this.character, this.night, this.arena, {
+    const daily = this.daily ? { day: this.daily, arena: dailyArena(this.daily), best: loadDaily(store, this.daily)?.label ?? null } : null;
+    showTitle(this.profile, this.character, this.night, this.arena, daily, {
       start: (c, n, a) => this.start(c, n, a),
+      normal: () => {
+        this.daily = null;
+        leaveDaily();
+        this.title();
+      },
       shop: () => this.shop(),
       help: () => showHelp(() => this.title()),
       hub: () => (location.href = '../'),
@@ -105,12 +118,18 @@ export class Game {
 
   start(character: string, night = this.night, arena = this.arena): void {
     this.character = character;
-    this.night = night;
-    this.arena = arena;
     store.save('character', character);
-    store.save('night', night);
-    store.save('arena', arena);
-    this.world = createWorld(randomSeed(), character, this.profile, night, arena);
+    this.dailyResult = null;
+    if (this.daily) {
+      // Everyone gets the same night: same seed, same arena, Night 1.
+      this.world = createWorld(dailySeed('afterglow', this.daily), character, this.profile, 0, dailyArena(this.daily));
+    } else {
+      this.night = night;
+      this.arena = arena;
+      store.save('night', night);
+      store.save('arena', arena);
+      this.world = createWorld(randomSeed(), character, this.profile, night, arena);
+    }
     this.fx = new Fx();
     this.prismDown = false;
     this.acc = 0;
@@ -207,9 +226,13 @@ export class Game {
     this.saveProfile();
     const unlocked = CHARACTERS.filter((c) => !before.has(c.id) && c.unlock?.check(pr)).map((c) => c.name);
     if (nightUnlock) unlocked.push(NIGHTS[w.night + 1].name);
+    if (this.daily) {
+      const won = w.status === 'won';
+      this.dailyResult = recordDaily(store, Math.floor(w.time) + (won ? 10000 : 0), won ? `Dawn in ${fmtTime(w.time)}` : fmtTime(w.time), this.daily);
+    }
     const dealt = (Object.entries(w.dealt) as [WeaponId, number][]).sort((a, b) => b[1] - a[1]);
     const taken = Object.entries(w.taken).sort((a, b) => b[1] - a[1]);
-    const summary: RunSummary = { won: w.status === 'won', time: w.time, level: w.player.level, kills: w.kills, shards, night: w.night, arena: w.arena, dealt, taken, killedBy: w.killedBy, unlocked };
+    const summary: RunSummary = { won: w.status === 'won', time: w.time, level: w.player.level, kills: w.kills, shards, night: w.night, arena: w.arena, daily: this.daily ? { day: prettyDay(this.daily), improved: !!this.dailyResult?.improved, best: this.dailyResult?.best.label ?? '' } : null, dealt, taken, killedBy: w.killedBy, unlocked };
     showResults(summary, { again: () => this.start(this.character), menu: () => this.title() });
   }
 
