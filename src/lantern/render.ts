@@ -51,6 +51,14 @@ const NPC_COLORS: Record<NpcId, string> = {
   child: '#70a1ff',
   hermit: '#c39bff',
 };
+/** Short role labels drawn over people so you can tell who is who. */
+const NPC_LABELS: Record<NpcId, string> = {
+  elder: 'Elder',
+  smith: 'Smith',
+  healer: 'Healer',
+  child: 'Pip',
+  hermit: 'Hermit',
+};
 
 const hash = (x: number, y: number) => ((x * 73856093) ^ (y * 19349663)) >>> 0;
 
@@ -179,6 +187,37 @@ export function draw(
       ctx.fillRect(0, 0, w, h);
     }
   }
+
+  // Name tags over people in view (after the terrain so nothing covers them).
+  // The Elder carries the quest: while she has something to say she is
+  // flagged with "!", and pinned to the screen edge when out of view.
+  ctx.font = `700 ${Math.max(10, Math.round(v.cellH * 0.4))}px ui-monospace, monospace`;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#0b0b0e';
+  const tag = (text: string, x: number, y: number, color: string) => {
+    const half = ctx.measureText(text).width / 2 + 4;
+    const tx = Math.min(w - half, Math.max(half, x));
+    const ty = Math.min(h - 10, Math.max(10, y));
+    ctx.strokeText(text, tx, ty);
+    ctx.fillStyle = color;
+    ctx.fillText(text, tx, ty);
+  };
+  for (const [i, mk] of m.markers) {
+    if (mk.marker.kind !== 'npc') continue;
+    const x = i % m.w;
+    const y = Math.floor(i / m.w);
+    const npc = mk.marker.npc;
+    const flagged = npc === 'elder' && (s.quest === 'none' || s.quest === 'ember');
+    const label = flagged ? `! ${NPC_LABELS[npc]}` : NPC_LABELS[npc];
+    const inView = x >= v.x0 && y >= v.y0 && x < v.x0 + v.cols && y < v.y0 + v.rows;
+    const { cx, cy } = center(x, y);
+    if (inView && (!lit || lit.has(i))) tag(label, cx, cy - v.cellH * 0.62, NPC_COLORS[npc]);
+    else if (flagged && !lit) {
+      const arrow = x < v.x0 ? '◀ ' : x >= v.x0 + v.cols ? '▶ ' : y < v.y0 ? '▲ ' : '▼ ';
+      tag(`${arrow}${NPC_LABELS[npc]}`, cx, cy, NPC_COLORS[npc]);
+    }
+  }
+  ctx.font = font;
 
   // Planned walk.
   ctx.fillStyle = 'rgba(255,209,102,0.35)';

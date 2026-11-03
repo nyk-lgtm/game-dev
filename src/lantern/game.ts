@@ -5,6 +5,7 @@ import { copyText, toast } from '../shared/debug';
 import {
   ARMORS,
   MAPS,
+  MONSTERS,
   NPC_NAMES,
   RULES_VERSION,
   WEAPONS,
@@ -157,19 +158,23 @@ export class Game {
       this.walk = null;
       return;
     }
-    const before = this.visibleMonsters();
+    const before = new Set(this.visibleMonsters().map((mo) => mo.id));
     const events = this.act({ type: 'step', dir }, true);
     const stop = events.some((e) =>
       ['hit', 'miss', 'kill', 'talk', 'read', 'loot', 'levelUp', 'enterMap', 'playerDown', 'win'].includes(e.type),
     );
     if (stop || w.dirs.length === 0 && w.chase === null) this.walk = null;
-    else if (this.visibleMonsters() > before) {
-      this.walk = null;
-      this.say('Something moves nearby.');
+    else {
+      const fresh = this.visibleMonsters().find((mo) => !before.has(mo.id));
+      if (fresh) {
+        this.walk = null;
+        const def = MONSTERS[fresh.kind];
+        this.say(`${/^[A-Z]/.test(def.name) ? 'The' : 'A'} ${def.name}! ${def.blurb}`);
+      }
     }
   }
 
-  private visibleMonsters(): number {
+  private visibleMonsters() {
     const s = this.state;
     const m = WORLD[s.player.map];
     const lit = MAPS[s.player.map].dark ? fov(m, s.player.pos) : null;
@@ -179,7 +184,7 @@ export class Game {
         mo.map === s.player.map &&
         Math.max(Math.abs(mo.pos.x - s.player.pos.x), Math.abs(mo.pos.y - s.player.pos.y)) <= 8 &&
         (!lit || lit.has(mo.pos.y * m.w + mo.pos.x)),
-    ).length;
+    );
   }
 
   /** Apply an action if legal; returns its events. */
