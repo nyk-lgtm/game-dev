@@ -1,7 +1,7 @@
 // Rewild bots. greedy: tries every card on every legal cell, simulates the
 // season plus a couple of idle seasons, keeps the best. random: any legal move.
 import { Rng, mixSeed } from '../../src/shared/rng';
-import { apply, census, clone, encode, newGame, placeError, seasonPoints, type Action, type GameState } from '../../src/rewild/core';
+import { GOALS, apply, census, clone, encode, newGame, placeError, seasonPoints, type Action, type GameState } from '../../src/rewild/core';
 
 export interface Result { seed: number; s: GameState; actions: string }
 
@@ -12,7 +12,14 @@ function value(s: GameState, look: number): number {
   for (let k = 0; k < look && !t.over; k++) apply(t, { type: 'end' });
   const v = t.score + (t.over ? 0 : seasonPoints(t.cells) * 2);
   const c = census(t.cells);
-  return v + c.species.size * 3 + c.life * 0.2;
+  // Partial credit for goals on the way, so the bot works toward them like a player would.
+  let g = 0;
+  for (const goal of t.goals) {
+    if (goal.done) continue;
+    const m = GOALS.find((d) => d.id === goal.id)!.measure(t);
+    g += (goal.reward * Math.min(1, m / goal.target)) * 0.6;
+  }
+  return v + c.species.size * 3 + c.life * 0.2 + g;
 }
 
 export function legal(s: GameState): Action[] {

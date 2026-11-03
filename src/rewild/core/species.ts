@@ -20,6 +20,10 @@ export interface PlantDef {
   grows: number[];
   /** How it spreads once full (n = 3). */
   spread: 'self' | 'pollinated' | 'birds' | 'water' | 'none';
+  /** Size from which it spreads (default 3, full). */
+  spreadAt?: number;
+  /** Plants it can take over: placed or seeded onto them, it shades them out. */
+  over?: PlantId[];
   text: string;
 }
 
@@ -60,8 +64,8 @@ export const PLANTS: Record<PlantId, PlantDef> = {
   },
   grass: {
     id: 'grass', kind: 'plant', name: 'Grass', tier: 1, on: ['soil'], minFert: 1, maxFert: 3, minWet: 0, maxWet: 3, start: 2,
-    grows: [0, 1, 2], spread: 'self',
-    text: 'Needs soil. Grows fast and spreads on its own. Burns in dry summers.',
+    grows: [0, 1, 2], spread: 'self', spreadAt: 2,
+    text: 'Needs soil. Grows fast and spreads on its own once half grown. Each autumn it enriches poor soil. Burns in dry summers.',
   },
   reeds: {
     id: 'reeds', kind: 'plant', name: 'Reeds', tier: 1, on: ['shallows', 'marsh', 'pond'], minFert: 0, maxFert: 3, minWet: 0, maxWet: 3, start: 1,
@@ -69,19 +73,19 @@ export const PLANTS: Record<PlantId, PlantDef> = {
     text: 'Grow in shallow water. When full, they silt the shallows up into rich marsh.',
   },
   flowers: {
-    id: 'flowers', kind: 'plant', name: 'Wildflowers', tier: 2, on: ['soil'], minFert: 1, maxFert: 3, minWet: 1, maxWet: 3, start: 2,
-    grows: [0, 1], spread: 'pollinated',
-    text: 'Need soil and some moisture. Only spread where bees are nearby.',
+    id: 'flowers', kind: 'plant', name: 'Wildflowers', tier: 1, on: ['soil'], minFert: 1, maxFert: 3, minWet: 1, maxWet: 3, start: 2,
+    grows: [0, 1], spread: 'pollinated', spreadAt: 2,
+    text: 'Need soil and some moisture. Only spread where bees live within 2 cells. Enrich poor soil in autumn.',
   },
   shrub: {
-    id: 'shrub', kind: 'plant', name: 'Berry shrub', tier: 2, on: ['soil'], minFert: 2, maxFert: 3, minWet: 1, maxWet: 3, start: 1,
-    grows: [0, 1], spread: 'birds',
-    text: 'Needs rich soil. Songbirds carry its seeds up to 2 cells away. Deer browse it.',
+    id: 'shrub', kind: 'plant', name: 'Berry shrub', tier: 2, on: ['soil'], minFert: 1, maxFert: 3, minWet: 1, maxWet: 3, start: 1,
+    grows: [0, 1], spread: 'birds', over: ['grass'],
+    text: 'Can be planted into grass. Songbirds carry its seeds up to 2 cells away. Deer browse it.',
   },
   tree: {
-    id: 'tree', kind: 'plant', name: 'Oak', tier: 2, on: ['soil'], minFert: 2, maxFert: 3, minWet: 2, maxWet: 3, start: 1,
-    grows: [0, 1], spread: 'birds',
-    text: 'Needs rich, moist soil; grows in spring and summer. A full oak keeps nearby soil moist. Songbirds spread acorns; deer eat saplings.',
+    id: 'tree', kind: 'plant', name: 'Oak', tier: 2, on: ['soil'], minFert: 2, maxFert: 3, minWet: 1, maxWet: 3, start: 1,
+    grows: [0, 1], spread: 'birds', over: ['grass', 'shrub'],
+    text: 'Can take over grass and shrubs. Grows in spring and summer; a full oak keeps nearby soil moist. Songbirds spread acorns; deer keep saplings small.',
   },
   fungi: {
     id: 'fungi', kind: 'plant', name: 'Fungi', tier: 2, on: ['soil'], minFert: 0, maxFert: 3, minWet: 1, maxWet: 3, start: 1,
@@ -99,7 +103,7 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
   rabbit: {
     id: 'rabbit', kind: 'animal', name: 'Rabbits', tier: 1, on: ['soil', 'sand'], eats: ['grass', 'flowers'], consumes: true, value: 1, need: 1,
     hibernates: false, start: 2, breeds: [0, 1, 2], range: 1,
-    text: 'Graze grass and flowers. Breed fast; can strip a meadow bare.',
+    text: 'Graze grass and flowers. Breed fast; too many keep every meadow cropped short so it never spreads.',
   },
   songbird: {
     id: 'songbird', kind: 'animal', name: 'Songbirds', tier: 2, on: ['soil', 'sand', 'rock', 'marsh'], eats: ['shrub', 'tree', 'bees'], consumes: false, value: 1, need: 1,
@@ -117,7 +121,7 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
     text: 'Browse shrubs, saplings and grass. Too many deer and no forest can grow. They flee from wolves.',
   },
   fox: {
-    id: 'fox', kind: 'animal', name: 'Foxes', tier: 3, on: ['soil', 'sand', 'rock'], eats: ['rabbit', 'frog'], consumes: true, value: 2, need: 1,
+    id: 'fox', kind: 'animal', name: 'Foxes', tier: 2, on: ['soil', 'sand', 'rock'], eats: ['rabbit', 'frog'], consumes: true, value: 2, need: 1,
     hibernates: false, start: 1, breeds: [0], range: 2,
     text: 'Hunt rabbits and frogs. Keep rabbits from stripping the meadows.',
   },
@@ -144,6 +148,11 @@ export const isPlant = (id: SpeciesId): id is PlantId => id in PLANTS;
 export function plantFits(id: PlantId, c: Cell, wet: number): boolean {
   const d = PLANTS[id];
   return d.on.includes(c.t) && c.fert >= d.minFert && c.fert <= d.maxFert && wet >= d.minWet && wet <= d.maxWet;
+}
+
+/** Can this plant root on a cell holding `here` (nothing, or a plant it shades out)? */
+export function canRootOver(id: PlantId, here: PlantId | undefined): boolean {
+  return !here || (PLANTS[id].over?.includes(here) ?? false);
 }
 
 export function animalFits(id: AnimalId, c: Cell): boolean {

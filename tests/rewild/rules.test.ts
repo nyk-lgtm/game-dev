@@ -16,6 +16,7 @@ import {
   newGame,
   placeError,
   replay,
+  seasonReport,
   simulate,
   weatherFor,
   type Action,
@@ -203,6 +204,108 @@ describe('ecology', () => {
     for (const j of ADJ[sh]) if (s.cells[j].t === 'shallows') s.cells[j].plant = { id: 'reeds', n: 3, age: 0 };
     simulate(s);
     expect(s.stats.pondsMade).toBe(1);
+  });
+});
+
+describe('succession and grazing', () => {
+  /** An inland soil cell with soil neighbors, and moisture 1 under fair skies. */
+  const meadow = (s: GameState, fert: number) => {
+    const i = s.cells.findIndex((c, k) => c.t !== 'pond' && ADJ[k].length === 6 && ADJ[k].every((j) => s.cells[j].t !== 'pond'));
+    for (const k of [i, ...ADJ[i]]) {
+      s.cells[k].t = 'soil';
+      s.cells[k].fert = fert;
+    }
+    return i;
+  };
+
+  it('grazers crop plants but never kill them', () => {
+    const s = blank(51);
+    s.weather = 'fair';
+    s.season = 3; // winter: nothing grows back
+    const i = meadow(s, 1);
+    s.cells[i].plant = { id: 'grass', n: 2, age: 1 };
+    s.cells[i].animal = { id: 'deer', n: 3, age: 1 };
+    for (let k = 0; k < 3; k++) simulate(s);
+    expect(s.cells[i].plant?.n).toBe(1);
+  });
+
+  it('grass spreads once half grown', () => {
+    const s = blank(52);
+    s.weather = 'fair';
+    s.season = 0;
+    const i = meadow(s, 1);
+    s.cells[i].plant = { id: 'grass', n: 2, age: 1 };
+    const ev = simulate(s);
+    expect(ev.filter((e) => e.type === 'spread' && e.id === 'grass').length).toBe(1);
+  });
+
+  it('shrubs and oaks can be planted into grass, but not onto other plants', () => {
+    const s = newGame(53);
+    const i = meadow(s, 2);
+    s.cells[i].plant = { id: 'grass', n: 3, age: 1 };
+    s.cells[i].animal = null;
+    s.weather = 'storm'; // wet enough everywhere
+    s.hand = ['shrub', 'tree', 'flowers', 'lichen'];
+    expect(placeError(s, 0, i)).toBeNull();
+    expect(placeError(s, 1, i)).toBeNull();
+    expect(placeError(s, 2, i)).toMatch(/growing here/);
+    expect(apply(s, { type: 'place', card: 1, cell: i })).not.toBeNull();
+    expect(s.cells[i].plant).toEqual({ id: 'tree', n: 1, age: 0 });
+  });
+
+  it('songbirds seed oaks into nearby grass', () => {
+    const s = blank(54);
+    s.weather = 'fair';
+    s.season = 0;
+    const i = meadow(s, 2);
+    s.cells[i].plant = { id: 'tree', n: 3, age: 4 };
+    s.cells[i].animal = { id: 'songbird', n: 2, age: 1 };
+    for (const j of ADJ[i]) s.cells[j].plant = { id: 'grass', n: 3, age: 1 };
+    const ev = simulate(s);
+    const seeded = ev.filter((e) => e.type === 'spread' && e.id === 'tree');
+    expect(seeded.length).toBe(1);
+  });
+
+  it('simulating plants only leaves the animals alone', () => {
+    const s = newGame(55);
+    apply(s, { type: 'place', card: 0, cell: s.cells.findIndex((c) => c.t === 'rock') });
+    const t = clone(s);
+    simulate(t, true);
+    expect(t.cells.map((c) => c.animal)).toEqual(s.cells.map((c) => c.animal));
+  });
+});
+
+describe('season report', () => {
+  it('tallies growth, losses and land changes with their causes', () => {
+    const s = blank(61);
+    s.weather = 'fair';
+    s.season = 0;
+    const rock = s.cells.findIndex((c, i) => c.t === 'rock' && ADJ[i].filter((j) => s.cells[j].t === 'rock').length >= 2);
+    s.cells[rock].plant = { id: 'lichen', n: 3, age: 2 };
+    const soil = s.cells.findIndex((c, i) => i !== rock && c.t === 'soil' && !ADJ[i].includes(rock));
+    s.cells[soil].animal = { id: 'rabbit', n: 1, age: 0 };
+    const before = clone(s);
+    const ev = apply(s, { type: 'end' })!;
+    const r = seasonReport(before, ev, s);
+    expect(r.spread).toContainEqual({ id: 'lichen', n: 2, why: undefined, by: undefined });
+    expect(r.land.soil).toBe(1);
+    // The lone rabbits had nothing to eat anywhere.
+    expect(r.lost.map((t) => t.id)).toContain('rabbit');
+    expect(r.points).toBe(s.log[0].points);
+  });
+
+  it('names the hunter', () => {
+    const s = blank(62);
+    s.weather = 'fair';
+    s.season = 1;
+    const i = s.cells.findIndex((c, k) => c.t !== 'pond' && ADJ[k].length === 6);
+    const j = ADJ[i][0];
+    for (const k of [i, j]) s.cells[k].t = 'soil';
+    s.cells[i].animal = { id: 'fox', n: 1, age: 1 };
+    s.cells[j].animal = { id: 'rabbit', n: 1, age: 1 };
+    const before = clone(s);
+    const r = seasonReport(before, apply(s, { type: 'end' })!, s);
+    expect(r.lost).toContainEqual({ id: 'rabbit', n: 1, why: 'hunted', by: 'fox' });
   });
 });
 

@@ -35,15 +35,23 @@ body {
 }
 #banner.show { opacity: 1; transform: translate(-50%, 0); }
 
-#panel { height: 104px; padding: 8px 14px; gap: 10px; }
+#panel { height: 124px; padding: 6px 14px 8px; gap: 10px; }
 #info { font-size: 13px; }
 #info .title { font-size: 15px; }
 #info .row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 #info .tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
 #info .warn { color: var(--warn); font-weight: 700; }
 #info .good { color: var(--accent); font-weight: 700; }
-#info .act { display: inline-block; margin-left: 6px; min-height: 36px; padding: 0 12px; border-radius: 10px;
+#info .act { display: inline-block; margin-left: 6px; min-height: 44px; padding: 0 14px; border-radius: 10px;
   border: 1px solid var(--line); background: transparent; color: var(--text); font-weight: 700; font-size: 13px; }
+#info .head { flex-wrap: nowrap; align-items: center; min-height: 44px; }
+#info .head .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#info .head .act { flex: none; }
+#info .line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#info .gold, .card .gold { color: var(--gold); font-weight: 700; }
+#info .land { color: #e8c890; }
+.card h3.warn { color: var(--warn); }
+.card h3.good { color: var(--accent); }
 
 #handRow {
   display: flex; gap: 8px; padding: 8px 10px 10px;
@@ -57,7 +65,7 @@ body {
   color: var(--text); display: flex; flex-direction: column; align-items: center; gap: 2px;
   font-size: 11.5px; font-weight: 700; line-height: 1.1; text-align: center;
 }
-.card-sp canvas { width: 56px; height: 56px; }
+.card-sp canvas { width: 48px; height: 48px; flex: none; }
 .card-sp .kind { font-size: 9.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
 .card-sp.sel { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(123, 216, 143, 0.35), 0 0 18px rgba(123, 216, 143, 0.25); transform: translateY(-3px); }
 .card-sp.used { visibility: hidden; }
@@ -72,7 +80,7 @@ body {
 @keyframes pulse { 50% { box-shadow: 0 0 0 4px rgba(123, 216, 143, 0.35); } }
 body.busy #handRow { pointer-events: none; opacity: 0.6; }
 
-.card .goal { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; }
+.card .goal { flex: none; display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; }
 .card .goal .bar { flex: 0 0 64px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .card .goal .bar i { display: block; height: 100%; background: var(--accent); }
 .card .goal.done { border-color: var(--gold); }
@@ -84,7 +92,7 @@ body.busy #handRow { pointer-events: none; opacity: 0.6; }
 .card .sp div { font-size: 13px; color: var(--muted); }
 .card .sp b { display: block; font-size: 14px; }
 .card .sp.locked { opacity: 0.45; }
-.card .chart { display: flex; align-items: flex-end; gap: 2px; height: 60px; }
+.card .chart { flex: none; display: flex; align-items: flex-end; gap: 2px; height: 60px; }
 .card .chart i { flex: 1; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 2px; }
 .card .stars { font-size: 30px; letter-spacing: 6px; color: var(--gold); text-align: center; }
 .card .stars .off { color: var(--line); }

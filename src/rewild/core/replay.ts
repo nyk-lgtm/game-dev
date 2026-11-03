@@ -3,7 +3,7 @@
 import { apply, newGame } from './rules';
 import type { Action, GameState } from './types';
 
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 2;
 
 export function encode(a: Action): string {
   if (a.type === 'place') return `P${a.card}.${a.cell}`;

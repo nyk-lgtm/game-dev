@@ -5,7 +5,7 @@
 
 import { Rng, mixSeed } from '../../shared/rng';
 import { ADJ, ADJ6, NEAR2, RING, N } from './island';
-import { ANIMALS, PLANTS, WATER, animalFits, plantFits } from './species';
+import { ANIMALS, PLANTS, WATER, animalFits, canRootOver, plantFits } from './species';
 import type { AnimalId, Cell, GameState, PlantId, SimEvent, SpeciesId, Weather } from './types';
 
 export const SEASONS = 20;
@@ -90,7 +90,7 @@ export function foodAt(cells: Cell[], i: number, id: AnimalId, sea: number): num
   let food = 0;
   for (const j of [i, ...ADJ[i]]) {
     const c = cells[j];
-    if (c.plant && def.eats.includes(c.plant.id)) food += c.plant.n;
+    if (c.plant && def.eats.includes(c.plant.id)) food += def.consumes ? c.plant.n - 1 : c.plant.n;
     if (j !== i && c.animal && def.eats.includes(c.animal.id) && awake(c.animal.id, sea)) food += c.animal.n * def.value;
   }
   return food;
@@ -101,7 +101,9 @@ export function needOf(id: AnimalId, n: number, weather: Weather, sea: number): 
   return n * ANIMALS[id].need * (weather === 'harsh' && sea === 3 ? 2 : 1);
 }
 
-export function simulate(s: GameState): SimEvent[] {
+/** Plays a season. With `plantsOnly` it stops before the animals act, to show
+ * what food they will find. */
+export function simulate(s: GameState, plantsOnly = false): SimEvent[] {
   const ev: SimEvent[] = [];
   const rng = new Rng(mixSeed(s.seed, 7000 + s.season));
   const sea = seasonOf(s.season);
@@ -142,7 +144,7 @@ export function simulate(s: GameState): SimEvent[] {
           if (a.n <= 0) {
             c.animal = null;
             ev.push({ type: 'die', cell: i, id: a.id, why: 'burnt' });
-          } else ev.push({ type: 'shrink', cell: i, id: a.id });
+          } else ev.push({ type: 'shrink', cell: i, id: a.id, why: 'burnt' });
         }
         for (const j of ADJ[i]) {
           if (!seen.has(j) && burnable(j)) {
@@ -165,18 +167,19 @@ export function simulate(s: GameState): SimEvent[] {
   // Spread from plants that were full at the start of the season.
   for (let i = 0; i < N; i++) {
     const p = start[i];
-    if (!p || p.n < 3 || !growing(p.id) || cells[i].burnt > 0) continue;
+    if (!p || cells[i].plant !== p || !growing(p.id) || cells[i].burnt > 0) continue;
     const def = PLANTS[p.id];
+    if (p.n < (def.spreadAt ?? 3)) continue;
     let reach: readonly number[] = ADJ[i];
     let count = 1;
     if (def.spread === 'none') continue;
-    if (def.spread === 'pollinated' && !(calm && hasNear(i, 'bees', ADJ[i]))) continue;
+    if (def.spread === 'pollinated' && !(calm && hasNear(i, 'bees', NEAR2[i]))) continue;
     if (def.spread === 'birds') {
       if (!(calm && hasNear(i, 'songbird', NEAR2[i]))) continue;
       reach = NEAR2[i];
     }
-    if (p.id === 'lichen' || p.id === 'grass') count = 2;
-    const targets = reach.filter((j) => !cells[j].plant && cells[j].burnt === 0 && plantOk(cells, j, p.id, wet[j]));
+    if (p.n === 3 && (p.id === 'lichen' || p.id === 'grass')) count = 2;
+    const targets = reach.filter((j) => !fresh.has(j) && canRootOver(p.id, cells[j].plant?.id) && cells[j].burnt === 0 && plantOk(cells, j, p.id, wet[j]));
     rng.shuffle(targets);
     // Lichen spores take hold fast; other seedlings start small.
     const n0 = p.id === 'lichen' ? 2 : 1;
@@ -223,11 +226,12 @@ export function simulate(s: GameState): SimEvent[] {
         ev.push({ type: 'grow', cell: i, id: p.id });
       }
     } else {
+      const dry = wet2[i] < PLANTS[p.id].minWet;
       p.n--;
       if (p.n <= 0) {
         c.plant = null;
-        ev.push({ type: 'die', cell: i, id: p.id, why: wet2[i] < PLANTS[p.id].minWet ? 'too dry' : 'unsuited' });
-      } else ev.push({ type: 'shrink', cell: i, id: p.id });
+        ev.push({ type: 'die', cell: i, id: p.id, why: dry ? 'too dry' : 'unsuited' });
+      } else ev.push({ type: 'shrink', cell: i, id: p.id, why: dry ? 'too dry' : 'unsuited' });
     }
   }
 
@@ -237,7 +241,7 @@ export function simulate(s: GameState): SimEvent[] {
     for (let i = 0; i < N; i++) {
       const p = cells[i].plant;
       if (!p) continue;
-      if (p.id === 'grass' && p.n === 3 && cells[i].fert < 2) add[i] = Math.max(add[i], 1);
+      if ((p.id === 'grass' || p.id === 'flowers') && p.n >= 2 && cells[i].fert < 2) add[i] = Math.max(add[i], 1);
       if (p.id === 'tree' && p.n === 3) add[i] = Math.max(add[i], 1);
       if (p.id === 'fungi' && p.n >= 2) {
         add[i] = Math.max(add[i], 1);
@@ -253,6 +257,7 @@ export function simulate(s: GameState): SimEvent[] {
   }
 
   // --- Animals ---
+  if (plantsOnly) return ev;
   const acted = new Set<number>();
   const order: number[] = [];
   for (let i = 0; i < N; i++) if (cells[i].animal) order.push(i);
@@ -272,7 +277,7 @@ export function simulate(s: GameState): SimEvent[] {
       let animal = false;
       for (const j of src) {
         const c = cells[j];
-        if (c.plant && def.eats.includes(c.plant.id) && c.plant.n > bestN) {
+        if (c.plant && def.eats.includes(c.plant.id) && c.plant.n > 1 && c.plant.n > bestN) {
           best = j;
           bestN = c.plant.n;
           animal = false;
@@ -292,16 +297,12 @@ export function simulate(s: GameState): SimEvent[] {
         left -= def.value;
         if (prey.n <= 0) {
           c.animal = null;
-          ev.push({ type: 'die', cell: best, id: prey.id, why: 'hunted' });
-        }
+          ev.push({ type: 'die', cell: best, id: prey.id, why: 'hunted', by: id });
+        } else ev.push({ type: 'shrink', cell: best, id: prey.id, why: 'hunted', by: id });
       } else {
-        const p = c.plant!;
-        p.n--;
+        // Grazers crop a plant but never take its last unit: the roots regrow.
+        c.plant!.n--;
         left -= 2;
-        if (p.n <= 0) {
-          c.plant = null;
-          ev.push({ type: 'die', cell: best, id: p.id, why: 'eaten' });
-        }
       }
     }
   };
@@ -407,7 +408,7 @@ export function simulate(s: GameState): SimEvent[] {
     if (a.n <= 0) {
       cells[i].animal = null;
       ev.push({ type: 'die', cell: i, id: a.id, why: home ? 'starved' : 'no home' });
-    } else ev.push({ type: 'shrink', cell: i, id: a.id });
+    } else ev.push({ type: 'shrink', cell: i, id: a.id, why: home ? 'hungry' : 'no home' });
   }
 
   return ev;

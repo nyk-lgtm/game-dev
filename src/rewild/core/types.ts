@@ -91,12 +91,15 @@ export interface GameState {
 
 export type Action = { type: 'place'; card: number; cell: number } | { type: 'reroll' } | { type: 'end' };
 
+/** Why a population shrank or died. */
+export type Cause = 'burnt' | 'too dry' | 'unsuited' | 'hunted' | 'flooded' | 'starved' | 'hungry' | 'no home';
+
 /** What happened during a season, for animation and the report. */
 export type SimEvent =
   | { type: 'grow'; cell: number; id: SpeciesId }
   | { type: 'spread'; from: number; to: number; id: SpeciesId }
-  | { type: 'shrink'; cell: number; id: SpeciesId }
-  | { type: 'die'; cell: number; id: SpeciesId; why: string }
+  | { type: 'shrink'; cell: number; id: SpeciesId; why: Cause; by?: AnimalId }
+  | { type: 'die'; cell: number; id: SpeciesId; why: Cause; by?: AnimalId }
   | { type: 'move'; from: number; to: number; id: AnimalId }
   | { type: 'eat'; cell: number; prey: number; id: AnimalId }
   | { type: 'terraform'; cell: number; from: Terrain; to: Terrain }

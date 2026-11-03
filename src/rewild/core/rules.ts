@@ -3,7 +3,7 @@
 
 import { Rng, mixSeed } from '../../shared/rng';
 import { makeIsland } from './island';
-import { ALL_IDS, ANIMALS, PLANTS, SPECIES, animalFits, isPlant } from './species';
+import { ALL_IDS, ANIMALS, PLANTS, SPECIES, animalFits, canRootOver, isPlant } from './species';
 import { SEASONS, census, moisture, plantOk, seasonPoints, simulate, weatherFor } from './sim';
 import type { Action, Cell, GameState, Goal, SimEvent, SpeciesId } from './types';
 
@@ -29,19 +29,19 @@ const cellsWith = (s: GameState, f: (c: Cell) => boolean) => s.cells.filter(f).l
 
 export const GOALS: GoalDef[] = [
   { id: 'soil', targets: [10, 13, 16], reward: 40, text: (n) => `Turn ${n} rock or sand cells into soil`, measure: (s) => s.stats.soilMade },
-  { id: 'oaks', targets: [4, 5, 6], reward: 50, text: (n) => `Grow ${n} full oaks at once`, measure: (s) => cellsWith(s, (c) => c.plant?.id === 'tree' && c.plant.n === 3) },
+  { id: 'oaks', targets: [2, 3, 4], reward: 50, text: (n) => `Grow ${n} full oaks at once`, measure: (s) => cellsWith(s, (c) => c.plant?.id === 'tree' && c.plant.n === 3) },
   { id: 'species', targets: [12, 13, 14], reward: 60, text: (n) => `Have ${n} species living at once`, measure: (s) => census(s.cells).species.size },
   { id: 'ponds', targets: [2, 3], reward: 50, text: (n) => `Beavers dam ${n} new ponds`, measure: (s) => s.stats.pondsMade },
-  { id: 'meadow', targets: [8, 10, 12], reward: 40, text: (n) => `${n} cells of wildflowers at once`, measure: (s) => cellsWith(s, (c) => c.plant?.id === 'flowers') },
+  { id: 'meadow', targets: [6, 8, 10], reward: 40, text: (n) => `${n} cells of wildflowers at once`, measure: (s) => cellsWith(s, (c) => c.plant?.id === 'flowers') },
   { id: 'marsh', targets: [5, 6, 8], reward: 40, text: (n) => `${n} cells of marsh`, measure: (s) => cellsWith(s, (c) => c.t === 'marsh') },
-  { id: 'forest', targets: [10, 12, 15], reward: 50, text: (n) => `${n} cells of oak or shrub at once`, measure: (s) => cellsWith(s, (c) => c.plant?.id === 'tree' || c.plant?.id === 'shrub') },
+  { id: 'forest', targets: [6, 8, 10], reward: 50, text: (n) => `${n} cells of oak or shrub at once`, measure: (s) => cellsWith(s, (c) => c.plant?.id === 'tree' || c.plant?.id === 'shrub') },
   { id: 'wolves', targets: [3, 4, 6], reward: 60, text: (n) => `Wolves and deer together for ${n} seasons`, measure: (s) => s.stats.wolfDeer },
   { id: 'birds', targets: [4, 5, 6], reward: 40, text: (n) => `Songbirds on ${n} cells at once`, measure: (s) => cellsWith(s, (c) => c.animal?.id === 'songbird') },
   { id: 'frogs', targets: [3, 4, 5], reward: 40, text: (n) => `Frogs on ${n} cells at once`, measure: (s) => cellsWith(s, (c) => c.animal?.id === 'frog') },
 ];
 
 /** Final-score thresholds for one, two and three stars. */
-export const STARS = [600, 1100, 1600];
+export const STARS = [700, 1300, 1850];
 export const starsFor = (score: number) => STARS.filter((t) => score >= t).length;
 
 export function newGame(seed: number): GameState {
@@ -107,7 +107,7 @@ export function placeError(s: GameState, card: number, cell: number): string | n
   const c = s.cells[cell];
   if (!id || !c) return 'Nothing to place';
   if (isPlant(id)) {
-    if (c.plant) return 'Already growing something';
+    if (!canRootOver(id, c.plant?.id)) return c.plant ? `${PLANTS[c.plant.id].name} is growing here` : 'Already growing something';
     const wet = moisture(s.cells, s.weather)[cell];
     if (!plantOk(s.cells, cell, id, wet)) {
       const d = PLANTS[id];

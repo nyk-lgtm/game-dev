@@ -8,6 +8,7 @@ import { copyText, toast } from '../shared/debug';
 import { makeStore } from '../shared/storage';
 import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey } from '../shared/daily';
 import {
+  ADJ,
   ANIMALS,
   ALL_IDS,
   PLANTS,
@@ -31,6 +32,8 @@ import {
   placeError,
   replay,
   decodeAll,
+  seasonReport,
+  simulate,
   seasonOf,
   starsFor,
   weatherFor,
@@ -38,6 +41,7 @@ import {
   type Action,
   type Cell,
   type GameState,
+  type SeasonReport,
   type SimEvent,
   type SpeciesId,
   type Terrain,
@@ -45,6 +49,7 @@ import {
 } from './core';
 import { COLORS, drawIcon } from './render/art';
 import { Board, iconCanvas, type Mark } from './render/board';
+import { causeNow, fate, lower, reportHtml, say, summaryLines } from './story';
 
 export const store = makeStore('rewild.');
 
@@ -78,6 +83,26 @@ function units(s: GameState, id: SpeciesId): number {
   return n;
 }
 
+/** Why a species placed on cell i would not thrive, from a trial season's events. */
+function placeWhy(id: SpeciesId, i: number, ev: SimEvent[], after: GameState): string {
+  for (const e of ev) {
+    if (e.type === 'move' && e.from === i && e.id === id) return 'it would wander off to find food';
+    if ((e.type === 'die' || e.type === 'shrink') && e.cell === i && e.id === id) {
+      if (e.why === 'hungry' || e.why === 'starved') return 'not enough food in reach';
+      return causeNow(e.why, id, e.by);
+    }
+  }
+  if (isPlant(id)) {
+    const sea = seasonOf(after.season - 1);
+    if (!PLANTS[id].grows.includes(sea)) return `it doesn't grow in ${SEASON_NAMES[sea].toLowerCase()}`;
+    if (ev.some((e) => e.type === 'eat' && e.prey === i)) return 'grazers would crop it';
+    return 'it would barely grow';
+  }
+  return 'it would barely grow';
+}
+
+const cap = (t: string) => t.replace(/^./, (ch) => ch.toUpperCase());
+
 const dots = (n: number, max = 3) => '●'.repeat(n) + '○'.repeat(Math.max(0, max - n));
 
 export function needsText(id: SpeciesId): string {
@@ -108,6 +133,13 @@ export class Game {
   cell = -1;
   private wet: number[] = [];
   private marks = new Map<number, Mark>();
+  /** Why a placement would struggle, per marked cell. */
+  private markWhy = new Map<number, string>();
+  /** A 'bad' cell tapped once: the next tap on it places anyway. */
+  private armed = -1;
+  /** What the last season did, and what the next one would do if nothing is played. */
+  report: SeasonReport | null = null;
+  risk: SeasonReport | null = null;
   private busyUntil = 0;
   private banners: { text: string; color?: string }[] = [];
   private bannerTimer = 0;
@@ -157,10 +189,26 @@ export class Game {
     }
     this.card = -1;
     this.cell = -1;
+    this.report = this.lastReport();
     this.refresh(false);
     if (daily && this.actions.length === 0) this.queueBanner(`Daily island · ${prettyDay(daily)}`, '#f2c45a');
     this.queueBanner(`${SEASON_NAMES[seasonOf(this.s.season)]}, year ${yearOf(this.s.season)}`);
     if (this.s.over) setTimeout(() => this.showEnd(), 300);
+  }
+
+  /** Rebuilds the report of the last season played (after a reload). */
+  private lastReport(): SeasonReport | null {
+    let k = this.actions.length - 1;
+    while (k >= 0 && this.actions[k].type !== 'end') k--;
+    if (k < 0) return null;
+    try {
+      const s = replay(this.seed, this.actions.slice(0, k));
+      const before = clone(s);
+      const ev = apply(s, { type: 'end' });
+      return ev ? seasonReport(before, ev, s) : null;
+    } catch {
+      return null;
+    }
   }
 
   private persist() {
@@ -228,6 +276,13 @@ export class Game {
         return;
       }
       const id = this.s.hand[this.card];
+      if (this.marks.get(i) === 'bad' && this.armed !== i) {
+        // A doomed placement takes a second tap, after saying why.
+        this.armed = i;
+        this.sfx.click();
+        this.render();
+        return;
+      }
       this.act({ type: 'place', card: this.card, cell: i });
       this.sfx.pickup();
       this.board.floatText(i, SPECIES[id].name, COLORS[id], this.now());
@@ -263,14 +318,15 @@ export class Game {
   endSeason() {
     if (this.busy() || this.s.over) return;
     const before = this.s.season;
+    const prev = clone(this.s);
     const ev = this.act({ type: 'end' });
     if (!ev) return;
+    this.report = seasonReport(prev, ev, this.s);
     this.sfx.click();
     this.card = -1;
-    const keep = this.cell;
+    // Clear the selection so the panel shows what the season did.
     this.cell = -1;
     this.refresh(true, ev);
-    this.cell = keep;
     const log = this.s.log[this.s.log.length - 1];
     this.busyUntil = performance.now() + 900;
     document.body.classList.add('busy');
@@ -278,6 +334,7 @@ export class Game {
       document.body.classList.remove('busy');
       this.render();
     }, 900);
+    this.banners = []; // drop news of earlier seasons still waiting to show
     this.queueBanner(`${SEASON_NAMES[seasonOf(before)]}: +${log.points} points · ${log.species} species`, '#f2c45a');
     for (const e of ev) {
       if (e.type === 'goal') {
@@ -306,6 +363,13 @@ export class Game {
   /** State changed: recompute moisture and hints, repaint everything. */
   private refresh(fade: boolean, ev: SimEvent[] = []) {
     this.wet = moisture(this.s.cells, this.s.weather);
+    this.risk = null;
+    if (!this.s.over) {
+      const t = clone(this.s);
+      const before = clone(t);
+      const tev = apply(t, { type: 'end' });
+      if (tev) this.risk = seasonReport(before, tev, t);
+    }
     const now = this.now();
     this.board.set(this.s, this.wet, fade, now);
     if (ev.length) this.board.play(ev, now);
@@ -316,19 +380,30 @@ export class Game {
 
   private computeMarks() {
     this.marks = new Map();
+    this.markWhy = new Map();
+    this.armed = -1;
     if (this.card >= 0 && this.s.hand[this.card]) {
       const id = this.s.hand[this.card];
+      // Sleepers placed in winter are judged by how they fare once they wake.
+      const look = !isPlant(id) && ANIMALS[id].hibernates && seasonOf(this.s.season) === 3 && this.s.season < SEASONS - 1 ? 2 : 1;
+      const run = (t: GameState) => {
+        let ev: SimEvent[] = [];
+        for (let k = 0; k < look; k++) ev = apply(t, { type: 'end' }) ?? [];
+        return ev;
+      };
       const base = clone(this.s);
-      apply(base, { type: 'end' });
+      run(base);
       const baseUnits = units(base, id);
-      const start = SPECIES[id].kind === 'plant' ? PLANTS[id as keyof typeof PLANTS].start : ANIMALS[id as keyof typeof ANIMALS].start;
+      const start = isPlant(id) ? PLANTS[id].start : ANIMALS[id].start;
       for (let i = 0; i < this.s.cells.length; i++) {
         if (placeError(this.s, this.card, i) !== null) continue;
         const t = clone(this.s);
         apply(t, { type: 'place', card: this.card, cell: i });
-        apply(t, { type: 'end' });
+        const ev = run(t);
         const d = units(t, id) - baseUnits;
-        this.marks.set(i, d >= start ? 'good' : d > 0 ? 'weak' : 'bad');
+        const m: Mark = d >= start ? 'good' : d > 0 ? 'weak' : 'bad';
+        this.marks.set(i, m);
+        if (m !== 'good') this.markWhy.set(i, placeWhy(id, i, ev, t));
       }
     }
     this.board.marks = this.marks;
@@ -336,7 +411,7 @@ export class Game {
 
   render() {
     const s = this.s;
-    this.board.selected = this.cell;
+    this.board.selected = this.armed >= 0 ? this.armed : this.cell;
     const season = Math.min(s.season, SEASONS - 1);
     $('when').textContent = s.over ? 'Done' : `${yearOf(season)} · ${SEASON_NAMES[seasonOf(season)]}`;
     $('score').textContent = String(s.score);
@@ -366,7 +441,7 @@ export class Game {
       const anywhere = this.s.cells.some((_, k) => placeError(this.s, i, k) === null);
       if (!anywhere) b.classList.add('nowhere');
       if (this.s.plays <= 0) b.classList.add('nowhere');
-      b.appendChild(iconCanvas(id, 56, (g, r) => drawIcon(g, r, r, r * 0.92, id)));
+      b.appendChild(iconCanvas(id, 48, (g, r) => drawIcon(g, r, r, r * 0.92, id)));
       const name = document.createElement('div');
       name.textContent = SPECIES[id].name;
       const kind = document.createElement('div');
@@ -402,14 +477,24 @@ export class Game {
     const undo = last?.type === 'place' ? ' <button class="act" id="undoBtn">Undo</button>' : '';
     if (this.card >= 0 && s.hand[this.card]) {
       const id = s.hand[this.card];
-      const good = [...this.marks.values()].filter((m) => m === 'good').length;
-      const weak = [...this.marks.values()].filter((m) => m === 'weak').length;
+      if (this.armed >= 0) {
+        info.innerHTML =
+          `<div class="title">${SPECIES[id].name} would not last here</div>` +
+          `<div><span class="warn">${cap(this.markWhy.get(this.armed) ?? 'it would not survive')}.</span></div>` +
+          `<div>Tap the cell again to place it anyway, or pick a glowing cell.</div>`;
+        return;
+      }
+      const marks = [...this.marks.values()];
+      const good = marks.filter((m) => m === 'good').length;
+      const weak = marks.filter((m) => m === 'weak').length;
+      const doomed = marks.length - good - weak;
+      const why = this.topWhy();
       const where =
         this.marks.size === 0
-          ? `<span class="warn">Nowhere to put it yet.</span>`
+          ? `<span class="warn">Nowhere to put it yet.</span> ${this.nowhereHint(id)}`
           : good
-            ? `<span class="good">${good} cells</span> where it will thrive${weak ? `, <span class="warn">${weak}</span> where it will struggle` : ''}.`
-            : `<span class="warn">It would struggle anywhere right now.</span>`;
+            ? `<span class="good">${good} cell${good > 1 ? 's' : ''}</span> where it will thrive${weak ? `, <span class="warn">${weak}</span> where it will struggle${why ? ` (${why})` : ''}` : doomed ? `; on dark cells it won't last${why ? ` (${why})` : ''}` : ''}.`
+            : `<span class="warn">It would struggle anywhere right now${why ? `: ${why}` : ''}.</span>`;
       info.innerHTML = `<div class="row"><span class="title">${SPECIES[id].name}</span><span class="tag">${needsText(id)}</span></div><div>${SPECIES[id].text}</div><div>${where}</div>`;
       return;
     }
@@ -419,12 +504,40 @@ export class Game {
       return;
     }
     const left = s.plays;
-    const w = s.weather === 'fair' ? '' : `<div><b style="color:${WEATHER_COLOR[s.weather]}">${WEATHER_NAME[s.weather]}.</b> ${WEATHER_TEXT[s.weather].replace(/^[^:]*: /, '').replace(/^./, (ch) => ch.toUpperCase())}</div>`;
+    const title = left > 0 ? `Play up to ${left} more card${left > 1 ? 's' : ''}` : 'Ready for the season';
+    const rep = this.report;
+    const lines: string[] = [];
+    if (s.weather !== 'fair') {
+      lines.push(`<b style="color:${WEATHER_COLOR[s.weather]}">${WEATHER_NAME[s.weather]}:</b> ${WEATHER_TEXT[s.weather].replace(/^[^:]*: /, '')}`);
+    }
+    if (rep) lines.push(...summaryLines(rep, this.risk, lines.length ? 2 : 3));
+    else lines.push(left > 0 ? 'Pick a card, then a glowing cell. Tap any cell to see what lives there.' : 'End the season to watch the island grow.');
     info.innerHTML =
-      `<div class="title">${left > 0 ? `Play up to ${left} more card${left > 1 ? 's' : ''}` : 'Ready for the season'}</div>` +
-      w +
-      `<div>${left > 0 ? 'Pick a card, then a glowing cell. Tap any cell to inspect it.' : 'End the season to watch the island grow.'}${undo}</div>`;
+      `<div class="row head"><span class="title">${title}</span>${undo}${rep ? '<button class="act" id="repBtn">Report</button>' : ''}</div>` +
+      lines.map((l) => `<div class="${rep ? 'line' : ''}">${l}</div>`).join('');
     $('undoBtn')?.addEventListener('click', () => this.undo());
+    $('repBtn')?.addEventListener('click', () => this.showReport());
+  }
+
+  /** The most common reason placements on amber or dark cells would struggle. */
+  private topWhy(): string {
+    const n = new Map<string, number>();
+    for (const w of this.markWhy.values()) n.set(w, (n.get(w) ?? 0) + 1);
+    return [...n].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+  }
+
+  private nowhereHint(id: SpeciesId): string {
+    if (!isPlant(id)) return `It lives on ${ANIMALS[id].on.map((t) => TERRAIN_NAME[t].toLowerCase()).join(', ')}.`;
+    if (id === 'fungi') return 'Grow an oak or shrub first.';
+    const d = PLANTS[id];
+    if (d.minFert >= 2) return 'Grass and fungi make soil richer each autumn.';
+    if (d.on.includes('soil') && !d.on.includes('rock')) return 'Lichen turns rock and sand into soil.';
+    return '';
+  }
+
+  showReport() {
+    if (!this.report) return;
+    showCard(reportHtml(this.report, this.risk), [{ label: 'Close', primary: true, onClick: closeOverlay }]);
   }
 
   private cellInfo(i: number): string {
@@ -439,33 +552,66 @@ export class Game {
         `<span class="tag">moisture ${dots(this.wet[i])}</span>${c.burnt ? '<span class="tag">ash</span>' : ''}</div>`,
     );
     const next = clone(s);
-    apply(next, { type: 'end' });
+    const ev = apply(next, { type: 'end' }) ?? [];
     const nc = next.cells[i];
     const parts: string[] = [];
     if (c.plant) parts.push(`<b>${SPECIES[c.plant.id].name}</b> ${dots(c.plant.n)}`);
     if (c.animal) {
       const a = c.animal;
       const need = needOf(a.id, a.n, s.weather, sea);
-      const food = foodAt(s.cells, i, a.id, sea);
-      parts.push(`<b>${SPECIES[a.id].name}</b> ${dots(a.n)} <span class="${food >= need ? 'good' : 'warn'}">food ${food}/${need}</span>`);
+      // Animals eat after the plants have grown: count food as they will find it.
+      const grown = clone(s);
+      simulate(grown, true);
+      const food = foodAt(grown.cells, i, a.id, sea);
+      parts.push(need ? `<b>${SPECIES[a.id].name}</b> ${dots(a.n)} <span class="${food >= need ? 'good' : 'warn'}">food ${food}/${need}</span>` : `<b>${SPECIES[a.id].name}</b> ${dots(a.n)} asleep`);
     }
     if (parts.length) lines.push(`<div>${parts.join(' · ')}</div>`);
-    lines.push(`<div>Next season: ${this.forecast(c, nc)}</div>`);
+    lines.push(`<div>Next season: ${this.forecast(c, nc, i, ev)}</div>`);
     return lines.join('');
   }
 
-  private forecast(c: Cell, n: Cell): string {
+  /** What next season does to cell i, with reasons, from a trial run's events. */
+  private forecast(c: Cell, n: Cell, i: number, ev: SimEvent[]): string {
     const out: string[] = [];
-    if (n.t !== c.t) out.push(`becomes ${TERRAIN_NAME[n.t].toLowerCase()}`);
-    const pop = (a: { id: SpeciesId; n: number } | null, b: { id: SpeciesId; n: number } | null) => {
-      if (a && (!b || b.id !== a.id)) out.push(`<span class="warn">${SPECIES[a.id].name.toLowerCase()} ${a.id === 'lichen' && n.t === 'soil' ? 'crumbles into soil' : 'gone'}</span>`);
-      else if (a && b && b.n > a.n) out.push(`<span class="good">${SPECIES[a.id].name.toLowerCase()} grows</span>`);
-      else if (a && b && b.n < a.n) out.push(`<span class="warn">${SPECIES[a.id].name.toLowerCase()} shrinks</span>`);
-      if (b && (!a || a.id !== b.id)) out.push(`<span class="good">${SPECIES[b.id].name.toLowerCase()} arrives</span>`);
-    };
-    pop(c.plant, n.plant);
-    pop(c.animal, n.animal);
-    if (n.fert > c.fert && n.t === 'soil') out.push('richer soil');
+    const good = (t: string) => out.push(`<span class="good">${t}</span>`);
+    const bad = (t: string) => out.push(`<span class="warn">${t}</span>`);
+    const crumbles = c.plant?.id === 'lichen' && !n.plant && n.t === 'soil';
+    if (n.t !== c.t && !crumbles) out.push(`becomes ${TERRAIN_NAME[n.t].toLowerCase()}`);
+    const hit = (id: SpeciesId) => ev.find((e) => (e.type === 'die' || e.type === 'shrink') && e.cell === i && e.id === id) as
+      | Extract<SimEvent, { type: 'die' | 'shrink' }>
+      | undefined;
+    const grazers = [...new Set(ev.filter((e) => e.type === 'eat' && e.prey === i && c.plant && ANIMALS[e.id].eats.includes(c.plant.id)).map((e) => (e as { id: SpeciesId }).id))];
+    const p = c.plant;
+    const q = n.plant;
+    const sea = seasonOf(this.s.season);
+    if (p) {
+      const h = hit(p.id);
+      const by = grazers.map(lower).join(', ');
+      if (crumbles) good(`lichen crumbles the ${TERRAIN_NAME[c.t].toLowerCase()} into soil`);
+      else if (q && q.id !== p.id) bad(`${say(q.id, 'shades', 'shade')} out the ${lower(p.id)}`);
+      else if (!q) bad(fate(p.id, h?.why, h?.by, true));
+      else if (q.n > p.n) good(say(p.id, 'grows', 'grow'));
+      else if (q.n < p.n) bad(h ? fate(p.id, h.why, h.by, false) : `${say(p.id, 'is', 'are')} grazed by ${by}`);
+      else if (grazers.length) bad(`${say(p.id, 'is', 'are')} kept short by ${by}`);
+      else if (p.n < 3 && !PLANTS[p.id].grows.includes(sea)) {
+        const next = [1, 2, 3].map((k) => (sea + k) % 4).find((x) => PLANTS[p.id].grows.includes(x))!;
+        out.push(`${say(p.id, 'rests', 'rest')} until ${SEASON_NAMES[next].toLowerCase()}`);
+      }
+    }
+    if (q && (!p || p.id !== q.id)) good(p ? say(q.id, 'takes root', 'take root') : say(q.id, 'spreads here', 'spread here'));
+    const a = c.animal;
+    const b = n.animal;
+    if (a) {
+      const h = hit(a.id);
+      const moved = ev.some((e) => e.type === 'move' && e.from === i);
+      const wolves = a.id === 'deer' && ADJ[i].some((k) => this.s.cells[k].animal?.id === 'wolf');
+      if (moved) bad(`${lower(a.id)} move away ${wolves ? 'from the wolves' : 'to find food'}`);
+      else if (!b || b.n < a.n) bad(fate(a.id, h?.why, h?.by, !b));
+      else if (b.n > a.n) good(`${lower(a.id)} have young`);
+      if (ev.some((e) => e.type === 'spread' && e.from === i && e.id === a.id)) good(`${lower(a.id)} send young out`);
+    }
+    if (b && ev.some((e) => (e.type === 'move' || e.type === 'spread') && e.to === i)) good(`${lower(b.id)} arrive`);
+    if (n.fert > c.fert && n.t === 'soil' && c.t === 'soil') out.push('richer soil');
     return out.length ? out.join(', ') : 'no change';
   }
 
@@ -533,10 +679,10 @@ export class Game {
       <ul>
         <li>Each season you get <b>4 species cards</b> and may play <b>2</b>. Pick a card, then a glowing cell: <b style="color:#9effb4">green</b> cells are where it will thrive, <b style="color:#ffc46e">amber</b> where it will struggle.</li>
         <li>Then <b>end the season</b>. Plants grow, spread and change the land; animals eat, breed, move or starve.</li>
-        <li>Life changes the land: <b>lichen</b> turns rock into soil, <b>grass</b> and <b>fungi</b> enrich it, <b>reeds</b> silt shallows into marsh, <b>beavers</b> dam ponds. Wet ground lets flowers, shrubs and oaks take hold.</li>
-        <li>Every season scores <b>species²/2 + life/5</b>: variety matters most. Hunters keep grazers in check; grazers left alone strip the land.</li>
+        <li>Life changes the land: <b>lichen</b> turns rock into soil, <b>grass</b> and <b>fungi</b> enrich it, <b>reeds</b> silt shallows into marsh, <b>beavers</b> dam ponds. Shrubs and oaks can be planted into grass once the soil is rich enough.</li>
+        <li>Every season scores <b>species²/2 + life/5</b>: variety matters most. Grazers crop plants short so they can't spread; hunters keep grazers in check.</li>
         <li>Watch the weather: droughts dry the land, lightning starts wildfires in dry meadows, harsh winters starve animals.</li>
-        <li>Tap any cell to see what lives there and what will happen to it next season.</li>
+        <li>Tap any cell to see what lives there and what will happen to it next season. After each season, <b>Report</b> shows what grew, what died and why.</li>
       </ul>`,
       [{ label: 'Play', primary: true, onClick: closeOverlay }],
     );
@@ -552,7 +698,8 @@ export class Game {
       row.className = 'sp' + (d.tier > this.s.tier ? ' locked' : '');
       row.appendChild(iconCanvas(id, 40, (g, r) => drawIcon(g, r, r, r * 0.92, id)));
       const t = document.createElement('div');
-      const unlock = d.tier > this.s.tier ? ` <i>(arrives once ${UNLOCK[d.tier - 2].species} species live here)</i>` : '';
+      const u = UNLOCK[d.tier - 2];
+      const unlock = d.tier > this.s.tier ? ` <i>(arrives once ${u?.species} species live here, or by ${SEASON_NAMES[seasonOf(u?.season ?? 0)].toLowerCase()} of year ${yearOf(u?.season ?? 0)})</i>` : '';
       t.innerHTML = `<b>${d.name} <span style="color:var(--muted);font-weight:400">· ${d.kind}</span></b>${needsText(id)}. ${d.text}${unlock}`;
       row.appendChild(t);
       list.appendChild(row);
@@ -610,10 +757,14 @@ export class Game {
     const chart = s.log.map((l) => `<i style="height:${Math.round((l.species / max) * 100)}%" title="${l.species}"></i>`).join('');
     const best = store.load<Profile>('profile', { best: 0, bestStars: 0, runs: 0 }).best;
     const { species } = census(s.cells);
+    const landCells = s.cells.filter((c) => c.t !== 'shallows' && c.t !== 'pond' && c.t !== 'sea');
+    const land = landCells.length;
+    const green = landCells.filter((c) => c.plant).length;
     showCard(
       `<h2>Five years on</h2>
       <div class="stars">${'★'.repeat(stars)}<span class="off">${'★'.repeat(3 - stars)}</span></div>
       <p>Score <b>${s.score}</b>${best ? ` · best ${best}` : ''}. ${species.size} species live on the island now; at its peak, ${s.stats.maxSpecies}.</p>
+      <p>Plants cover <b>${green}</b> of ${land} land cells. Life made <b>${s.stats.soilMade}</b> new soil${s.stats.pondsMade ? ` and <b>${s.stats.pondsMade}</b> pond${s.stats.pondsMade > 1 ? 's' : ''}` : ''}.</p>
       <p style="font-size:12px">Stars at ${STARS.join(' / ')}.</p>
       ${this.daily ? `<p><b style="color:var(--gold)">Daily island · ${prettyDay(this.daily)}</b><br>${this.dailyResult?.improved ? 'New best for today!' : `Today's best: ${loadDaily(store, this.daily)?.score ?? s.score}`}</p>` : ''}
       <h3>Species, season by season</h3><div class="chart">${chart}</div>
