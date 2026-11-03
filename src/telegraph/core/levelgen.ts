@@ -1,7 +1,7 @@
 // Procedural floor generation. Deterministic per (run seed, depth).
 
 import { distanceField, playerWalkable } from './board';
-import { ENEMIES, faceToward } from './enemies';
+import { ENEMIES, PYLON_REST, faceToward } from './enemies';
 import { distance, key, neighbors, offsetToAxial, type Hex } from '../../shared/hex';
 import { Rng, mixSeed } from '../../shared/rng';
 import type { Enemy, EnemyKind, GameState, Player, Tile } from './types';
@@ -76,18 +76,26 @@ function tryFloor(rng: Rng, depth: number): Floor | null {
     if (tiles[key(h)] === 'floor' && !field.has(key(h))) tiles[key(h)] = 'wall';
   }
 
-  // Enemies: spend a depth-scaled budget.
+  // Enemies: each floor fields a squad of a few kinds (so floors have a
+  // character: a firing line, a bomb pit, a hook-and-smash trap), always
+  // including any kind that first appears on this depth. Spend a depth-scaled
+  // budget on the squad, one of each kind first.
   const spots = rng.shuffle(
     cells.filter((h) => tiles[key(h)] === 'floor' && distance(h, START) >= 4),
   );
-  // Prefer spots not adjacent to each other.
   const enemies: Omit<Enemy, 'id'>[] = [];
-  let budget = 1 + 3 * depth;
-  const kinds = (Object.keys(ENEMIES) as EnemyKind[]).filter((k) => ENEMIES[k].minDepth <= depth);
+  let budget = Math.max(4, 3 * depth);
+  const squad = pickSquad(rng, depth);
+  const count = (k: EnemyKind) => enemies.filter((e) => e.kind === k).length;
+  const canAdd = (k: EnemyKind) => ENEMIES[k].cost <= budget && count(k) < (ENEMIES[k].max ?? MAX_ENEMIES);
   while (budget > 0 && enemies.length < MAX_ENEMIES) {
-    const affordable = kinds.filter((k) => ENEMIES[k].cost <= budget);
+    // Brutes fill in around the squad once each squad kind has shown up.
+    const pool = squad.includes('brute') || squad.some((k) => count(k) === 0) ? squad : [...squad, 'brute' as const];
+    const affordable = pool.filter(canAdd);
     if (affordable.length === 0) break;
-    const kind = rng.pick(affordable);
+    const missing = affordable.filter((k) => count(k) === 0);
+    const kind = missing.length ? missing[0] : rng.pick(affordable);
+    // Prefer spots not adjacent to each other.
     const idx = spots.findIndex((h) => enemies.every((e) => distance(e.pos, h) >= 2));
     const pos = idx >= 0 ? spots.splice(idx, 1)[0] : spots.shift();
     if (!pos) break;
@@ -99,7 +107,8 @@ function tryFloor(rng: Rng, depth: number): Floor | null {
       maxHp: def.maxHp,
       staggered: false,
       aim: null,
-      reload: 0,
+      // Pylons start out of step with each other.
+      reload: kind === 'pylon' ? rng.int(0, PYLON_REST) : 0,
       facing: faceToward(pos, START),
     });
     budget -= def.cost;
@@ -107,6 +116,15 @@ function tryFloor(rng: Rng, depth: number): Floor | null {
   if (enemies.length === 0) return null;
 
   return { tiles, stairs, start: START, enemies };
+}
+
+/** Kinds that may spawn on a floor: brutes alone on depth 1, then 2-3 kinds. */
+export function pickSquad(rng: Rng, depth: number): EnemyKind[] {
+  const unlocked = (Object.keys(ENEMIES) as EnemyKind[]).filter((k) => ENEMIES[k].minDepth <= depth);
+  const fresh = unlocked.filter((k) => ENEMIES[k].minDepth === depth);
+  const rest = rng.shuffle(unlocked.filter((k) => !fresh.includes(k)));
+  const size = depth <= 1 ? 1 : depth < 5 ? 2 : 3;
+  return [...fresh, ...rest].slice(0, Math.max(size, fresh.length));
 }
 
 /** Load a generated floor into a state (keeps player HP and run data). */

@@ -59,7 +59,7 @@ export class Animator {
           break;
         }
         case 'attack': {
-          if (ev.kind === 'charge') break;
+          if (ev.kind === 'charge' || ev.kind === 'zap') break;
           const dur = ev.kind === 'bash' ? 130 : ev.by === PLAYER_ID ? 90 : 140;
           const reach = ev.kind === 'bash' ? 0.4 : ev.by === PLAYER_ID ? 0.25 : 0.35;
           steps.push({
@@ -158,6 +158,72 @@ export class Animator {
               };
             },
             end: () => (scene.current.projectile = null),
+          });
+          break;
+        }
+        case 'hook': {
+          const g = unit(ev.by);
+          const from = g ? { q: g.q, r: g.r } : ev.path[0];
+          const end = ev.path.at(-1) ?? from;
+          const len = Math.max(1, ev.path.length);
+          steps.push({
+            dur: 50 * len + 60,
+            start: () => {
+              const u = unit(ev.by);
+              if (u) u.aim = null;
+            },
+            update: (t) =>
+              (scene.current.hook = {
+                fromQ: from.q,
+                fromR: from.r,
+                q: lerp(from.q, end.q, t),
+                r: lerp(from.r, end.r, t),
+              }),
+          });
+          const to = ev.to ?? from;
+          const dragged = ev.target !== null && ev.to !== null;
+          steps.push({
+            dur: dragged ? 45 * len + 80 : 120,
+            start: () => {
+              if (ev.target === PLAYER_ID) navigator.vibrate?.(25);
+            },
+            update: (t) => {
+              const k = ease(t);
+              const hq = lerp(end.q, to.q, k);
+              const hr = lerp(end.r, to.r, k);
+              scene.current.hook = { fromQ: from.q, fromR: from.r, q: hq, r: hr };
+              if (dragged) {
+                const u = unit(ev.target!);
+                if (u) {
+                  u.q = hq;
+                  u.r = hr;
+                }
+              }
+            },
+            end: () => {
+              scene.current.hook = null;
+              if (ev.target === PLAYER_ID) floater('hooked!', C.grappler, to);
+            },
+          });
+          break;
+        }
+        case 'zap': {
+          const ends = ev.rays.map((r) => r[r.length - 1]);
+          steps.push({
+            dur: 280,
+            start: () => {
+              const u = unit(ev.by);
+              if (u) {
+                u.aim = null;
+                u.reload = 1;
+              }
+              scene.current.shake = Math.max(scene.current.shake, 4);
+            },
+            update: (t) => {
+              const u = unit(ev.by);
+              scene.current.zap = { q: u?.q ?? 0, r: u?.r ?? 0, ends, t };
+            },
+            end: () => (scene.current.zap = null),
           });
           break;
         }

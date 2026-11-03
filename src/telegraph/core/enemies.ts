@@ -15,6 +15,10 @@ export const BOMB_MIN_RANGE = 2;
 export const BOMB_MAX_RANGE = 4;
 /** Bombs explode on the second enemy phase after landing: two moves to get clear. */
 export const BOMB_FUSE = 2;
+export const HOOK_RANGE = 4;
+export const ZAP_RANGE = 3;
+/** Pylon rest after a discharge: it charges again on the following turn. */
+export const PYLON_REST = 1;
 
 export interface EnemyDef {
   kind: EnemyKind;
@@ -24,6 +28,8 @@ export interface EnemyDef {
   cost: number;
   /** First depth this enemy can appear on. */
   minDepth: number;
+  /** Most of this kind on one floor. */
+  max?: number;
   blurb: string;
   act(s: GameState, e: Enemy, events: GameEvent[]): void;
   release?(s: GameState, e: Enemy, events: GameEvent[]): void;
@@ -128,6 +134,28 @@ export function hasCharge(s: GameState, from: Hex): number {
   return lineTo(s, from, 2, CHARGE_RANGE, (t) => t === 'floor');
 }
 
+export function hasHook(s: GameState, from: Hex): number {
+  return lineTo(s, from, 2, HOOK_RANGE, (t) => t === 'floor');
+}
+
+/** Hexes a readied hook will fly over: plain floor only, up to its range. */
+export function hookPath(s: GameState, e: Enemy): Hex[] {
+  if (e.aim === null) return [];
+  const out: Hex[] = [];
+  let cur = e.pos;
+  for (let i = 0; i < HOOK_RANGE; i++) {
+    cur = add(cur, DIRS[e.aim]);
+    if (tileAt(s, cur) !== 'floor') break;
+    out.push(cur);
+  }
+  return out;
+}
+
+/** The six rays a pylon discharges along (walls stop them; lava and units don't). */
+export function zapRays(s: GameState, e: Enemy): Hex[][] {
+  return DIRS.map((_, d) => ray(s, e.pos, d, ZAP_RANGE)).filter((r) => r.length > 0);
+}
+
 /** Hexes a readied shot will fly through (up to the first wall). */
 export function shotPath(s: GameState, e: Enemy): Hex[] {
   return e.aim === null ? [] : ray(s, e.pos, e.aim, ARCHER_RANGE);
@@ -182,7 +210,7 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     name: 'Guard',
     maxHp: 2,
     cost: 3,
-    minDepth: 2,
+    minDepth: 3,
     blurb:
       'Shield blocks stabs, lunges and arrows from the 3 hexes it faces; it only smashes those 3. Turns slowly — get behind it.',
     act(s, e, events) {
@@ -252,7 +280,7 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     name: 'Bomber',
     maxHp: 1,
     cost: 3,
-    minDepth: 3,
+    minDepth: 5,
     blurb:
       'Lobs a bomb at your hex from 2–4 away. Two turns later it blasts that hex and the 6 around it — enemies too.',
     act(s, e, events) {
@@ -273,7 +301,7 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     name: 'Charger',
     maxHp: 2,
     cost: 4,
-    minDepth: 4,
+    minDepth: 7,
     blurb:
       'Lines up on you, then next turn charges until it rams something (1 damage). Dies in lava. Rests after. Never aims from next to you.',
     act(s, e, events) {
@@ -308,6 +336,95 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
       if (hit !== null) {
         events.push({ type: 'attack', kind: 'charge', by: e.id, target: hit });
         damageUnit(s, hit, 1, events);
+      }
+    },
+  },
+
+  grappler: {
+    kind: 'grappler',
+    name: 'Grappler',
+    maxHp: 2,
+    cost: 3,
+    minDepth: 4,
+    max: 2,
+    blurb:
+      'Aims a hook down a line; next turn it drags the first thing in it (you or an enemy) right next to itself. Smashes you if you end next to it.',
+    act(s, e, events) {
+      const p = s.player.pos;
+      const ok = ready(e);
+      if (isAdjacent(e.pos, p)) {
+        smash(s, e, events);
+        return;
+      }
+      if (ok) {
+        const dir = hasHook(s, e.pos);
+        if (dir >= 0) {
+          e.aim = dir;
+          e.facing = dir;
+          events.push({ type: 'aim', by: e.id, dir });
+          return;
+        }
+      }
+      reposition(s, e, events, (h) => (hasHook(s, h) >= 0 ? 10 : 0) - Math.abs(distance(h, p) - 3));
+    },
+    release(s, e, events) {
+      const full = hookPath(s, e);
+      e.aim = null;
+      e.reload = 1;
+      const i = full.findIndex((h) => occupied(s, h));
+      const path = i >= 0 ? full.slice(0, i + 1) : full;
+      if (i < 0) {
+        events.push({ type: 'hook', by: e.id, path, target: null, to: null });
+        return;
+      }
+      const victim = unitAt(s, full[i])!;
+      const ve = enemyAt(s, full[i]);
+      if (ve && shieldBlocks(ve, i === 0 ? e.pos : full[i - 1])) {
+        events.push({ type: 'hook', by: e.id, path, target: null, to: null });
+        events.push({ type: 'blocked', target: ve.id });
+        return;
+      }
+      const to = full[0];
+      events.push({ type: 'hook', by: e.id, path, target: victim, to });
+      if (victim === PLAYER_ID) s.player.pos = to;
+      else ve!.pos = to;
+    },
+  },
+
+  pylon: {
+    kind: 'pylon',
+    name: 'Pylon',
+    maxHp: 2,
+    cost: 3,
+    minDepth: 6,
+    max: 2,
+    blurb:
+      'Never moves. Charges up, then next turn zaps all 6 lines out to 3 hexes (1 damage to everyone on them, enemies too; walls stop it). Rests a turn, then charges again.',
+    act(_s, e, events) {
+      if (!ready(e)) return;
+      e.aim = 0;
+      events.push({ type: 'aim', by: e.id, dir: 0 });
+    },
+    release(s, e, events) {
+      e.aim = null;
+      e.reload = PYLON_REST;
+      const rays = zapRays(s, e);
+      events.push({ type: 'zap', by: e.id, rays });
+      // Find every victim first so deaths mid-zap can't change who gets hit.
+      const hits: { id: number; from: Hex }[] = [];
+      for (const r of rays)
+        r.forEach((h, i) => {
+          const u = unitAt(s, h);
+          if (u !== null) hits.push({ id: u, from: i === 0 ? e.pos : r[i - 1] });
+        });
+      for (const { id, from } of hits) {
+        const ve = id === PLAYER_ID ? undefined : s.enemies.find((x) => x.id === id);
+        if (ve && shieldBlocks(ve, from)) {
+          events.push({ type: 'blocked', target: ve.id });
+          continue;
+        }
+        events.push({ type: 'attack', kind: 'zap', by: e.id, target: id });
+        damageUnit(s, id, 1, events);
       }
     },
   },

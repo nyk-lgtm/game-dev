@@ -10,5 +10,7 @@
 .c-guard { color: #7aa2ff; font-weight: 700; }
 .c-bomber { color: #c084fc; font-weight: 700; }
 .c-charger { color: #a3e635; font-weight: 700; }
+.c-grappler { color: #e9dcc4; font-weight: 700; }
+.c-pylon { color: #f472b6; font-weight: 700; }
 .c-heal { color: var(--heal); font-weight: 700; }
 .c-threat { color: #ff3355; font-weight: 700; }

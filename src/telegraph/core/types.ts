@@ -2,7 +2,7 @@ import type { Hex } from '../../shared/hex';
 
 export type Tile = 'floor' | 'wall' | 'lava' | 'stairs';
 
-export type EnemyKind = 'brute' | 'archer' | 'guard' | 'bomber' | 'charger';
+export type EnemyKind = 'brute' | 'archer' | 'guard' | 'bomber' | 'charger' | 'grappler' | 'pylon';
 
 export interface Enemy {
   id: number;
@@ -12,7 +12,10 @@ export interface Enemy {
   maxHp: number;
   /** Bashed this turn: skips its next action and loses its aim. */
   staggered: boolean;
-  /** Direction index (DIRS) of a readied shot or charge, or null. */
+  /**
+   * Direction index (DIRS) of a readied shot, charge or hook, or null. A
+   * charged pylon (which fires every way at once) stores 0.
+   */
   aim: number | null;
   /** Turns until this enemy may aim or throw again. */
   reload: number;
@@ -56,7 +59,7 @@ export interface GameState {
 
 export type Action = { type: 'move'; to: Hex } | { type: 'bash'; target: Hex } | { type: 'wait' };
 
-export type AttackKind = 'stab' | 'lunge' | 'smash' | 'bash' | 'charge';
+export type AttackKind = 'stab' | 'lunge' | 'smash' | 'bash' | 'charge' | 'zap';
 
 /** Target id 0 is the player; enemies use positive ids. */
 export const PLAYER_ID = 0;
@@ -80,6 +83,10 @@ export type GameEvent =
   | { type: 'fuseTick' }
   | { type: 'explode'; at: Hex }
   | { type: 'charge'; id: number; from: Hex; to: Hex }
+  /** A hook flies along `path`; `target` (if any) is dragged from the path's end to `to`. */
+  | { type: 'hook'; by: number; path: Hex[]; target: number | null; to: Hex | null }
+  /** A pylon discharges along each ray (walls stop a ray, units don't). */
+  | { type: 'zap'; by: number; rays: Hex[][] }
   | { type: 'descend'; depth: number; healed: boolean }
   | { type: 'playerDeath' };
 

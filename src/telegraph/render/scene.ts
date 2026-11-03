@@ -2,7 +2,7 @@
 // away from the game state (units mid-move, flashing, fading); when idle it is
 // rebuilt from the state.
 
-import { PLAYER_ID, type EnemyKind, type GameState } from '../core';
+import { PLAYER_ID, type EnemyKind, type GameState, type Hex } from '../core';
 
 export interface VisUnit {
   id: number;
@@ -38,6 +38,10 @@ export interface Scene {
   units: Map<number, VisUnit>;
   projectile: { q: number; r: number; dir: number; kind: 'arrow' | 'bomb'; lift: number } | null;
   bombs: { q: number; r: number; fuse: number }[];
+  /** Pylon discharge: origin, ray ends, progress 0..1. */
+  zap: { q: number; r: number; ends: Hex[]; t: number } | null;
+  /** A hook in flight (or reeling in): grappler position and hook head. */
+  hook: { fromQ: number; fromR: number; q: number; r: number } | null;
   /** Explosion flash: center and progress 0..1. */
   blast: { q: number; r: number; t: number } | null;
   floaters: Floater[];
@@ -87,6 +91,8 @@ export function sceneFromState(s: GameState, prev?: Scene): Scene {
     projectile: null,
     bombs: s.bombs.map((b) => ({ q: b.pos.q, r: b.pos.r, fuse: b.fuse })),
     blast: null,
+    zap: null,
+    hook: null,
     floaters: prev?.floaters ?? [],
     shake: prev?.shake ?? 0,
     hurt: prev?.hurt ?? 0,

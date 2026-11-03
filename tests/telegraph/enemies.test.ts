@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DIRS,
+  ENEMIES,
   PLAYER_ID,
   Rng,
   add,
@@ -9,6 +10,7 @@ import {
   encodeAction,
   eq,
   frontArc,
+  generateFloor,
   hex,
   isLegal,
   key,
@@ -19,6 +21,7 @@ import {
   replay,
   threats,
   type Action,
+  type EnemyKind,
   type GameEvent,
   type GameState,
   type Hex,
@@ -657,5 +660,190 @@ describe('fuzz: greedy bot mixed with random actions', () => {
       expect(replay(run, code)).toEqual(s);
     }
     expect(bashes).toBeGreaterThan(0);
+  });
+});
+
+describe('grappler', () => {
+  /** Grappler at (3,0), hook aimed down column q=3 when `aim` is 2. */
+  const make = (player: Hex, extra: Partial<Parameters<typeof addEnemy>[3]> = {}) => {
+    const s = blankState(player);
+    const g = addEnemy(s, 'grappler', hex(3, 0), extra);
+    return { s, g };
+  };
+
+  it('aims down a clear floor line 2..4 away, not at 5 or across lava', () => {
+    const near = make(hex(3, 4));
+    const r = applyAction(near.s, move(hex(3, 3)));
+    expect(r.events).toContainEqual({ type: 'aim', by: near.g.id, dir: 2 });
+
+    const far = make(hex(3, 6));
+    expect(enemy(applyAction(far.s, move(hex(3, 5))).state, far.g.id)!.aim).toBeNull();
+
+    const lava = make(hex(3, 4));
+    lava.s.tiles[key(hex(3, 2))] = 'lava';
+    expect(enemy(applyAction(lava.s, move(hex(3, 3))).state, lava.g.id)!.aim).toBeNull();
+  });
+
+  it('drags the player next to itself, where a waiting brute smashes at once', () => {
+    const { s, g } = make(hex(3, 3), { aim: 2 });
+    addEnemy(s, 'brute', hex(2, 1)); // next to (3,1), far from the player
+    const o = previewAction(s, move(hex(3, 4)));
+    expect(o.hookedTo).toEqual(hex(3, 1));
+    expect(o.damageTaken).toBe(1);
+
+    const { state, events } = applyAction(s, move(hex(3, 4))); // stays in the line
+    expect(events).toContainEqual({
+      type: 'hook',
+      by: g.id,
+      path: [hex(3, 1), hex(3, 2), hex(3, 3), hex(3, 4)],
+      target: PLAYER_ID,
+      to: hex(3, 1),
+    });
+    expect(state.player.pos).toEqual(hex(3, 1));
+    expect(state.player.hp).toBe(2);
+    expect(enemy(state, g.id)).toMatchObject({ aim: null, reload: 1 });
+  });
+
+  it('stepping out of the line dodges: the hook flies its full range and catches nothing', () => {
+    const { s, g } = make(hex(3, 3), { aim: 2 });
+    const { state, events } = applyAction(s, move(hex(4, 3)));
+    const hook = events.find((e) => e.type === 'hook');
+    expect(hook).toMatchObject({ by: g.id, target: null, to: null });
+    expect(hook && hook.type === 'hook' && hook.path).toHaveLength(4);
+    expect(state.player.pos).toEqual(hex(4, 3));
+    expect(previewAction(s, move(hex(4, 3))).hookedTo).toBeNull();
+  });
+
+  it('hooks the first enemy in the line instead', () => {
+    const { s, g } = make(hex(3, 5), { aim: 2 });
+    const b = addEnemy(s, 'brute', hex(3, 3));
+    const { events } = applyAction(s, move(hex(4, 5)));
+    expect(events).toContainEqual({
+      type: 'hook',
+      by: g.id,
+      path: [hex(3, 1), hex(3, 2), hex(3, 3)],
+      target: b.id,
+      to: hex(3, 1),
+    });
+    // The hook stops at that enemy, so the threat line does too.
+    const line = threats(s).lines.find((l) => l.kind === 'hook')!;
+    expect(line.path.at(-1)).toEqual(hex(3, 3));
+  });
+
+  it("a guard's shield facing the grappler blocks the hook", () => {
+    const { s, g } = make(hex(5, 5), { aim: 2 });
+    const guard = addEnemy(s, 'guard', hex(3, 2), { facing: 5 });
+    const { state, events } = applyAction(s, move(hex(5, 6)));
+    expect(events).toContainEqual({ type: 'blocked', target: guard.id });
+    expect(events.find((e) => e.type === 'hook')).toMatchObject({ by: g.id, target: null });
+    expect(enemy(state, guard.id)!.pos).toEqual(hex(3, 2));
+  });
+
+  it('smashes when you end next to it, but not on the turn it reels in', () => {
+    const idle = make(hex(4, 1));
+    expect(threats(idle.s).melee.has(key(hex(4, 0)))).toBe(true);
+    expect(applyAction(idle.s, move(hex(4, 0))).state.player.hp).toBe(2);
+
+    const busy = make(hex(4, 1), { aim: 2 });
+    expect(threats(busy.s).melee.has(key(hex(4, 0)))).toBe(false);
+    expect(applyAction(busy.s, move(hex(4, 0))).state.player.hp).toBe(3);
+  });
+
+  it('bashing a grappler cancels its hook', () => {
+    const { s, g } = make(hex(3, 1), { aim: 2 });
+    const { state, events } = applyAction(s, bash(g.pos));
+    expect(has(events, 'hook')).toBe(false);
+    expect(has(events, "stagger")).toBe(true);
+    expect(enemy(state, g.id)!.aim).toBeNull();
+  });
+});
+
+describe('pylon', () => {
+  const PY = hex(3, 3);
+
+  it('charges, zaps all six lines out to 3 the next turn, rests, then charges again; never moves', () => {
+    let s = blankState(hex(1, 2)); // off every ray
+    const py = addEnemy(s, 'pylon', PY);
+    const r1 = applyAction(s, move(hex(0, 2)));
+    expect(r1.events).toContainEqual({ type: 'aim', by: py.id, dir: 0 });
+    expect(threats(r1.state).lines.filter((l) => l.kind === 'zap')).toHaveLength(6);
+    s = r1.state;
+    const near = addEnemy(s, 'brute', hex(5, 3)); // 2 away on the east ray
+    const out = addEnemy(s, 'brute', hex(3, 7)); // 4 away: out of range
+
+    const r2 = applyAction(s, move(hex(1, 2)));
+    const zap = r2.events.find((e) => e.type === 'zap');
+    expect(zap && zap.type === 'zap' && zap.rays).toHaveLength(6);
+    expect(zap && zap.type === 'zap' && zap.rays.every((ray) => ray.length <= 3)).toBe(true);
+    expect(enemy(r2.state, near.id)!.hp).toBe(1);
+    expect(enemy(r2.state, out.id)!.hp).toBe(2);
+    expect(r2.state.player.hp).toBe(3);
+    expect(enemy(r2.state, py.id)).toMatchObject({ aim: null, reload: 1, pos: PY });
+    expect(threats(r2.state).lines.some((l) => l.kind === 'zap')).toBe(false);
+
+    const r3 = applyAction(r2.state, move(hex(0, 2)));
+    expect(enemy(r3.state, py.id)).toMatchObject({ aim: null, reload: 0, pos: PY });
+    const r4 = applyAction(r3.state, move(hex(1, 2)));
+    expect(enemy(r4.state, py.id)).toMatchObject({ aim: 0, pos: PY });
+  });
+
+  it('hits a player on a line; walls stop it, lava does not, and it passes through units', () => {
+    const run = (setup?: (s: GameState) => void) => {
+      const s = blankState(hex(2, 1));
+      addEnemy(s, 'pylon', PY, { aim: 0 });
+      setup?.(s);
+      return applyAction(s, move(hex(3, 1))); // onto the north ray, 2 away
+    };
+    expect(run().state.player.hp).toBe(2);
+    expect(run((s) => (s.tiles[key(hex(3, 2))] = 'wall')).state.player.hp).toBe(3);
+    expect(run((s) => (s.tiles[key(hex(3, 2))] = 'lava')).state.player.hp).toBe(2);
+    let b = 0;
+    const through = run((s) => (b = addEnemy(s, 'archer', hex(3, 2)).id));
+    expect(through.events).toContainEqual({ type: 'attack', kind: 'zap', by: 1, target: b });
+    expect(through.events).toContainEqual({ type: 'attack', kind: 'zap', by: 1, target: PLAYER_ID });
+    expect(through.state.player.hp).toBe(2);
+  });
+
+  it("a guard's shield blocks the zap when it faces the pylon", () => {
+    for (const [facing, hp] of [
+      [2, 2],
+      [5, 1],
+    ] as const) {
+      const s = blankState(hex(0, 6));
+      addEnemy(s, 'pylon', PY, { aim: 0 });
+      const guard = addEnemy(s, 'guard', hex(3, 2), { facing });
+      const { state } = applyAction(s, move(hex(0, 7)));
+      expect(enemy(state, guard.id)!.hp).toBe(hp);
+    }
+  });
+
+  it('bashing a charged pylon cancels the zap', () => {
+    const s = blankState(hex(3, 2));
+    const py = addEnemy(s, 'pylon', PY, { aim: 0 });
+    const { state, events } = applyAction(s, bash(PY));
+    expect(has(events, 'zap')).toBe(false);
+    expect(state.player.hp).toBe(3);
+    expect(enemy(state, py.id)).toMatchObject({ aim: null, pos: hex(3, 4) });
+  });
+});
+
+describe('floor squads', () => {
+  it('every kind shows up on the floor it unlocks, caps hold, and floors mix few kinds', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      for (const k of Object.keys(ENEMIES) as EnemyKind[]) {
+        const f = generateFloor(seed, ENEMIES[k].minDepth);
+        expect(f.enemies.some((e) => e.kind === k)).toBe(true);
+      }
+      for (let depth = 1; depth <= 12; depth++) {
+        const f = generateFloor(seed, depth);
+        const kinds = new Set(f.enemies.map((e) => e.kind));
+        expect(kinds.size).toBeLessThanOrEqual(4); // a squad of up to 3, plus brutes
+        for (const k of kinds) {
+          expect(ENEMIES[k].minDepth).toBeLessThanOrEqual(depth);
+          const n = f.enemies.filter((e) => e.kind === k).length;
+          expect(n).toBeLessThanOrEqual(ENEMIES[k].max ?? 99);
+        }
+      }
+    }
   });
 });

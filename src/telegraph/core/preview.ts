@@ -3,7 +3,7 @@
 
 import { enemyAt, tileAt } from './board';
 import { frontArc } from './combat';
-import { chargePath, shotPath } from './enemies';
+import { chargePath, hookPath, shotPath, zapRays } from './enemies';
 import { eq, key, neighbors, type Hex } from '../../shared/hex';
 import { applyAction } from './resolve';
 import { PLAYER_ID, type Action, type GameState } from './types';
@@ -11,8 +11,8 @@ import { PLAYER_ID, type Action, type GameState } from './types';
 export interface Threats {
   /** Hexes where ending your turn gets you smashed. */
   melee: Set<string>;
-  /** Readied shot and charge lines, per enemy. */
-  lines: { by: number; kind: 'shot' | 'charge'; path: Hex[] }[];
+  /** Readied shot, charge, hook and zap lines, per enemy (a pylon has one per ray). */
+  lines: { by: number; kind: 'shot' | 'charge' | 'hook' | 'zap'; path: Hex[] }[];
   /** Bomb blast areas (center first); `fuse` 1 means it explodes this coming enemy turn. */
   blasts: { fuse: number; hexes: Hex[] }[];
 }
@@ -35,6 +35,8 @@ export function threats(s: GameState): Threats {
     if (e.hp <= 0) continue;
     if (e.kind === 'brute') for (const n of neighbors(e.pos)) if (onBoard(n)) melee.add(key(n));
     if (e.kind === 'guard') for (const n of frontArc(e)) if (onBoard(n)) melee.add(key(n));
+    // A grappler that just threw its hook can't smash this turn (it's busy reeling in).
+    if (e.kind === 'grappler' && e.aim === null) for (const n of neighbors(e.pos)) if (onBoard(n)) melee.add(key(n));
     if (e.aim === null) continue;
     if (e.kind === 'archer') {
       // The arrow stops at the first enemy in the line (it takes the hit).
@@ -43,6 +45,13 @@ export function threats(s: GameState): Threats {
       lines.push({ by: e.id, kind: 'shot', path: i < 0 ? path : path.slice(0, i + 1) });
     } else if (e.kind === 'charger') {
       lines.push({ by: e.id, kind: 'charge', path: chargePath(s, e, (h) => !eq(h, e.pos) && staysPut(h)) });
+    } else if (e.kind === 'grappler') {
+      // The hook catches the first enemy still standing in the line.
+      const path = hookPath(s, e);
+      const i = path.findIndex(staysPut);
+      lines.push({ by: e.id, kind: 'hook', path: i < 0 ? path : path.slice(0, i + 1) });
+    } else if (e.kind === 'pylon') {
+      for (const path of zapRays(s, e)) lines.push({ by: e.id, kind: 'zap', path });
     }
   }
   const blasts = s.bombs.map((b) => ({ fuse: b.fuse, hexes: [b.pos, ...neighbors(b.pos)].filter(onBoard) }));
@@ -57,11 +66,21 @@ export interface Outcome {
   /** Descending with the floor cleared restores 1 HP. */
   healed: boolean;
   dies: boolean;
+  /** Where the player stands after the enemy turn, if a hook drags them there. */
+  hookedTo: Hex | null;
 }
 
 export function previewAction(s: GameState, a: Action): Outcome {
   const { events } = applyAction(s, a);
-  const out: Outcome = { damageTaken: 0, kills: [], wounded: [], descends: false, healed: false, dies: false };
+  const out: Outcome = {
+    damageTaken: 0,
+    kills: [],
+    wounded: [],
+    descends: false,
+    healed: false,
+    dies: false,
+    hookedTo: null,
+  };
   for (const ev of events) {
     if (ev.type === 'damage') {
       if (ev.target === PLAYER_ID) out.damageTaken += ev.amount;
@@ -71,6 +90,7 @@ export function previewAction(s: GameState, a: Action): Outcome {
       out.descends = true;
       out.healed = ev.healed;
     } else if (ev.type === 'playerDeath') out.dies = true;
+    else if (ev.type === 'hook' && ev.target === PLAYER_ID) out.hookedTo = ev.to;
   }
   out.wounded = out.wounded.filter((id) => !out.kills.includes(id));
   return out;

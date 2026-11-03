@@ -159,6 +159,38 @@ export function draw(
     ctx.fill();
   }
 
+  // Pylon discharge.
+  if (scene.zap) {
+    const z = scene.zap;
+    const o = hexToPx(L, z.q, z.r);
+    ctx.globalAlpha = 1 - z.t;
+    for (const end of z.ends) {
+      const b = hexToPx(L, end.q, end.r);
+      drawBolt(ctx, o.x, o.y, b.x, b.y, S, time, C.zap, 4);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Hook in flight: chain from the grappler to the hook.
+  if (scene.hook) {
+    const hk = scene.hook;
+    const a = hexToPx(L, hk.fromQ, hk.fromR);
+    const b = hexToPx(L, hk.q, hk.r);
+    ctx.save();
+    ctx.strokeStyle = C.chain;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([S * 0.12, S * 0.08]);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.translate(b.x, b.y);
+    ctx.rotate(Math.atan2(b.y - a.y, b.x - a.x));
+    drawHookGlyph(ctx, S, C.chain);
+    ctx.restore();
+  }
+
   // Projectile.
   if (scene.projectile?.kind === 'bomb') {
     const p = scene.projectile;
@@ -239,7 +271,7 @@ function drawThreatLine(
   L: Layout,
   scene: Scene,
   by: number,
-  kind: 'shot' | 'charge',
+  kind: 'shot' | 'charge' | 'hook' | 'zap',
   path: Hex[],
   time: number,
 ): void {
@@ -249,13 +281,36 @@ function drawThreatLine(
   for (const p of path) {
     const { x, y } = hexToPx(L, p.q, p.r);
     hexPath(ctx, x, y, S * 0.94);
-    ctx.fillStyle = `rgba(${C.threat}, ${kind === 'charge' ? 0.26 : 0.2})`;
+    ctx.fillStyle = `rgba(${C.threat}, ${kind === 'charge' || kind === 'zap' ? 0.26 : 0.2})`;
     ctx.fill();
   }
   const a = hexToPx(L, shooter.q, shooter.r);
   const end = path[path.length - 1];
   const b = hexToPx(L, end.q, end.r);
   const ang = Math.atan2(b.y - a.y, b.x - a.x);
+  if (kind === 'zap') {
+    drawBolt(ctx, a.x, a.y, b.x, b.y, S, time, `rgba(${C.threat}, 0.95)`, 3);
+    return;
+  }
+  if (kind === 'hook') {
+    // A chain of links running out to a hook at the far end.
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const gap = S * 0.32;
+    const offset = (time / 40) % gap;
+    ctx.save();
+    ctx.strokeStyle = `rgba(${C.threat}, 0.9)`;
+    ctx.lineWidth = 2.5;
+    for (let d = S * 0.45 + offset; d < len - S * 0.2; d += gap) {
+      ctx.beginPath();
+      ctx.ellipse(a.x + Math.cos(ang) * d, a.y + Math.sin(ang) * d, S * 0.11, S * 0.07, ang, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.translate(b.x, b.y);
+    ctx.rotate(ang);
+    drawHookGlyph(ctx, S, `rgba(${C.threat}, 0.95)`);
+    ctx.restore();
+    return;
+  }
   ctx.save();
   if (kind === 'shot') {
     ctx.setLineDash([S * 0.25, S * 0.18]);
@@ -301,6 +356,52 @@ function drawThreatLine(
   ctx.lineTo(0, S * 0.18);
   ctx.fill();
   ctx.restore();
+}
+
+/** A jagged lightning line from (ax, ay) to (bx, by) that flickers over time. */
+function drawBolt(
+  ctx: CanvasRenderingContext2D,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  S: number,
+  time: number,
+  color: string,
+  width: number,
+): void {
+  const len = Math.hypot(bx - ax, by - ay);
+  const ang = Math.atan2(by - ay, bx - ax);
+  const n = Math.max(3, Math.round(len / (S * 0.35)));
+  const seed = Math.floor(time / 90);
+  ctx.save();
+  ctx.translate(ax, ay);
+  ctx.rotate(ang);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(S * 0.4, 0);
+  for (let i = 1; i <= n; i++) {
+    const x = S * 0.4 + ((len - S * 0.4) * i) / n;
+    const j = i === n ? 0 : Math.sin(seed * 12.9898 + i * 78.233) * S * 0.16;
+    ctx.lineTo(x, j);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** A hook shape pointing along +x, drawn at the origin. */
+function drawHookGlyph(ctx: CanvasRenderingContext2D, S: number, color: string): void {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(2.5, S * 0.08);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-S * 0.2, 0);
+  ctx.lineTo(S * 0.12, 0);
+  ctx.arc(S * 0.12, S * 0.12, S * 0.12, -Math.PI / 2, Math.PI / 2, false);
+  ctx.lineTo(S * 0.02, S * 0.24);
+  ctx.stroke();
 }
 
 function drawBlastZone(ctx: CanvasRenderingContext2D, L: Layout, hexes: Hex[], fuse: number, time: number): void {
@@ -488,6 +589,69 @@ function drawUnit(ctx: CanvasRenderingContext2D, L: Layout, u: VisUnit, time: nu
       ctx.arc(ex * S, S * 0.02, S * 0.06, 0, TAU);
       ctx.fill();
     }
+  } else if (u.kind === 'grappler') {
+    // Grappler: a squat bone-coloured hexagon with a hook held out front.
+    const ang = dirAngle(L, u.aim ?? u.facing);
+    ctx.save();
+    ctx.rotate(ang);
+    if (u.aim === null) {
+      ctx.translate(S * 0.42, -S * 0.1);
+      drawHookGlyph(ctx, S, C.grappler);
+    }
+    ctx.restore();
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i + Math.PI / 6;
+      const px = Math.cos(a) * S * 0.44;
+      const py = Math.sin(a) * S * 0.42;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = flash ? '#ffffff' : C.grappler;
+    ctx.fill();
+    ctx.lineWidth = S * 0.08;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = C.grapplerDark;
+    ctx.stroke();
+    ctx.fillStyle = C.grapplerDark;
+    for (const ex of [-0.13, 0.13]) {
+      ctx.beginPath();
+      ctx.arc(ex * S, -S * 0.04, S * 0.065, 0, TAU);
+      ctx.fill();
+    }
+  } else if (u.kind === 'pylon') {
+    // Pylon: a tall crystal on a base; glows and crackles when charged.
+    const charged = u.aim !== null;
+    if (charged) {
+      const pulse = 0.5 + 0.5 * Math.sin(time / 70);
+      ctx.beginPath();
+      ctx.arc(0, -S * 0.05, S * (0.55 + 0.08 * pulse), 0, TAU);
+      ctx.fillStyle = `rgba(244,114,182,${0.25 + 0.2 * pulse})`;
+      ctx.fill();
+    }
+    ctx.fillStyle = C.pylonDark;
+    ctx.beginPath();
+    ctx.ellipse(0, S * 0.3, S * 0.36, S * 0.13, 0, 0, TAU);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(0, -S * 0.62);
+    ctx.lineTo(S * 0.26, -S * 0.08);
+    ctx.lineTo(0, S * 0.32);
+    ctx.lineTo(-S * 0.26, -S * 0.08);
+    ctx.closePath();
+    ctx.fillStyle = flash ? '#ffffff' : charged ? C.zap : C.pylon;
+    ctx.fill();
+    ctx.lineWidth = S * 0.07;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = C.pylonDark;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, -S * 0.4);
+    ctx.lineTo(0, S * 0.12);
+    ctx.strokeStyle = charged ? C.pylon : C.pylonDark;
+    ctx.lineWidth = S * 0.05;
+    ctx.stroke();
   } else {
     // Charger: a heavy arrowhead pointing where it faces.
     const ang = dirAngle(L, u.aim ?? u.facing);
@@ -566,6 +730,24 @@ function drawPreview(
   ctx.fillStyle = C.player;
   ctx.fill();
   ctx.globalAlpha = 1;
+  if (out.hookedTo) {
+    // Dragged by a hook: dashed ring where you end up, joined to the ghost.
+    const h = hexToPx(L, out.hookedTo.q, out.hookedTo.r);
+    ctx.save();
+    ctx.setLineDash([S * 0.12, S * 0.1]);
+    ctx.strokeStyle = C.grappler;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(h.x, h.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(h.x, h.y, S * 0.38, 0, TAU);
+    ctx.stroke();
+    ctx.restore();
+    drawOutcomeMarks(ctx, L, scene, out, time, h.x, h.y);
+    return;
+  }
   drawOutcomeMarks(ctx, L, scene, out, time, x, y);
 }
 

@@ -13,7 +13,11 @@ import {
   type GameState,
 } from '../../src/telegraph/core';
 
-export function greedyAction(s: GameState): Action {
+/**
+ * `visits` (optional) counts how often the bot has stood on each hex this
+ * floor; revisits are penalised so it can't dither forever in a standoff.
+ */
+export function greedyAction(s: GameState, visits?: Map<string, number>): Action {
   const acts = legalActions(s);
   if (acts[0].type === 'wait') return acts[0];
   const field = distanceField(s, s.stairs, playerWalkable);
@@ -25,7 +29,8 @@ export function greedyAction(s: GameState): Action {
     const score =
       -o.damageTaken * 100 + (o.dies ? -1000 : 0) + o.kills.length * 8 + o.wounded.length * 3 -
       (field.get(key(at)) ?? 50) * 2 + (o.descends ? (s.enemies.length > 0 ? 5 : 40) : 0) -
-      (a.type === 'bash' ? 4 : 0);
+      (a.type === 'bash' ? 4 : 0) -
+      (visits?.get(key(at)) ?? 0) * 3;
     if (score > bestScore) {
       bestScore = score;
       best = a;
@@ -37,10 +42,15 @@ export function greedyAction(s: GameState): Action {
 export function playGreedy(seed: number, maxTurns = 600) {
   let s = newRun(seed);
   let actions = '';
+  let visits = new Map<string, number>();
   while (s.status === 'playing' && s.turn < maxTurns) {
-    const a = greedyAction(s);
+    const a = greedyAction(s, visits);
     actions += encodeAction(s, a);
+    const depth = s.depth;
     s = applyAction(s, a).state;
+    if (s.depth !== depth) visits = new Map();
+    const k = key(s.player.pos);
+    visits.set(k, (visits.get(k) ?? 0) + 1);
   }
   return { state: s, actions };
 }

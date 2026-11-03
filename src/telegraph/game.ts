@@ -17,6 +17,7 @@ import {
   replay,
   threats,
   type Action,
+  type Enemy,
   type GameState,
   type Hex,
   type Outcome,
@@ -29,6 +30,14 @@ import { fitBoard, pxToHex, type Layout } from './render/layout';
 import { sceneFromState, type Scene } from './render/scene';
 import { load, save } from './storage';
 import { HELP_HTML, closeOverlay, enemyIntroHtml, renderHud, renderPanel, showCard } from './ui/dom';
+
+/** A short note on what an enemy is about to do, for the inspect panel. */
+function statusOf(e: Enemy): string {
+  if (e.staggered) return ' · dazed';
+  if (e.aim !== null) return ` · <span class="bad">${e.kind === 'pylon' ? 'zaps after your move' : 'aiming'}</span>`;
+  if (e.reload > 0) return ' · resting';
+  return e.kind === 'pylon' ? ' · charges after your move' : '';
+}
 
 interface SavedRun {
   seed: number;
@@ -184,6 +193,7 @@ export class Game {
       if (o.descends) parts.push('<span class="good">Take the stairs</span>');
       if (o.kills.length) parts.push(`<span class="good">Kills ${o.kills.length}</span>`);
       if (o.wounded.length) parts.push(`Wounds ${o.wounded.length}`);
+      if (o.hookedTo) parts.push('<span class="bad">Hooked!</span>');
       if (o.dies) parts.push('<span class="bad">You will die</span>');
       else if (o.damageTaken) parts.push(`<span class="bad">You take ${o.damageTaken} damage</span>`);
       else if (!o.descends) parts.push('Safe');
@@ -213,7 +223,10 @@ export class Game {
         const adjacent = isAdjacent(e.pos, s.player.pos);
         const bashNote =
           adjacent && s.player.bashCd > 0 ? `<br><b>Bash ready in ${s.player.bashCd}.</b>` : '';
-        renderPanel(`<div class="title">${def.name} · ${e.hp}/${e.maxHp} HP</div>${def.blurb}${bashNote}`, null);
+        renderPanel(
+          `<div class="title">${def.name} · ${e.hp}/${e.maxHp} HP${statusOf(e)}</div>${def.blurb}${bashNote}`,
+          null,
+        );
         return;
       }
     }
