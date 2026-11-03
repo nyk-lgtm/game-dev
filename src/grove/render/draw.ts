@@ -20,6 +20,8 @@ export interface Overlay {
   ghost: Drawable | null;
   /** Bolt targeting: occupied cells are highlighted. */
   targets: Hex[];
+  /** Empty cells where the piece in hand would merge right away. */
+  hints: Hex[];
 }
 
 export function drawBoard(
@@ -52,6 +54,18 @@ export function drawBoard(
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.restore();
+  }
+
+  // Merge hints: a soft pulsing ring on hexes where the piece in hand merges.
+  if (ov.hints.length) {
+    const pulse = 0.5 + 0.5 * Math.sin(time / 380);
+    for (const t of ov.hints) {
+      const { x, y } = hexToPx(L, t.q, t.r);
+      hexPath(ctx, x, y, S * 0.62);
+      ctx.strokeStyle = `rgba(155,214,106,${0.25 + 0.3 * pulse})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
   }
 
   // Pieces.

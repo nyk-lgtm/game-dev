@@ -12,6 +12,7 @@ import {
   encodeAction,
   eq,
   isLegal,
+  mergeSpots,
   nameOf,
   newGame,
   onBoard,
@@ -74,6 +75,8 @@ export class Game {
   private selected: Hex | null = null;
   private outcome: Outcome | null = null;
   private inspect: Hex | null = null;
+  /** Empty hexes where the piece in hand merges at once (refreshed per turn). */
+  private hints: Hex[] = [];
   private last = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -191,6 +194,7 @@ export class Game {
     this.drawSlot('stashCanvas', s.stash, 52);
     this.drawSlot('nextCanvas', upcoming(s), 52);
     $('curLabel').textContent = pieceName(s.current);
+    this.hints = busy ? [] : mergeSpots(s);
 
     const info = $('info');
     const btn = $<HTMLButtonElement>('actBtn');
@@ -201,6 +205,9 @@ export class Game {
     }
     if (s.status === 'over') {
       info.innerHTML = `<div class="title">Board full.</div>Final score ${s.score.toLocaleString()}.`;
+      btn.hidden = false;
+      btn.textContent = 'New game';
+      btn.onclick = () => this.newGame();
       return;
     }
     if (this.selected && this.outcome) {
@@ -215,7 +222,12 @@ export class Game {
       }
       parts.push(o.points > 0 ? `+${o.points}` : 'No points');
       if (o.over) parts.push('<span class="bad">Fills the board</span>');
-      info.innerHTML = `<div class="title">${parts.join(' · ')}</div>Tap again or press Place.`;
+      const placed = o.crystal ?? (s.current.kind === 'plant' ? s.current : null);
+      const hint =
+        o.group === 2 && placed
+          ? `Makes a pair: one more ${nameOf(placed.kind, placed.tier)} next to it merges.`
+          : 'Tap again or press Place.';
+      info.innerHTML = `<div class="title">${parts.join(' · ')}</div>${hint}`;
       btn.hidden = false;
       btn.textContent = 'Place';
       btn.onclick = () => this.selected && this.commit({ type: 'place', at: this.selected });
@@ -280,6 +292,7 @@ export class Game {
       `<h2>The grove is full</h2><p>Score ${this.state.score.toLocaleString()} · Best ${best.toLocaleString()} · Biggest plant: ${nameOf('plant', this.state.bestTier)} · ${this.state.turn} turns</p>`,
       [
         { label: 'New game', primary: true, onClick: () => this.newGame() },
+        { label: 'See the grove', onClick: closeOverlay },
         { label: 'Copy bug report', onClick: () => this.copyReport() },
         { label: 'All games', onClick: () => (location.href = '../') },
       ],
@@ -336,6 +349,7 @@ export class Game {
           outcome: idle ? this.outcome : null,
           ghost: idle ? s.current : null,
           targets: idle && s.current.kind === 'bolt' ? CELLS.filter((h) => cellAt(s, h) !== null) : [],
+          hints: idle && !this.selected ? this.hints : [],
         },
         t,
       );
