@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#10201c" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Rewild</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2310201c'/%3E%3Cpath d='M16 26V12M16 16c-5 0-7-4-7-8 5 0 7 4 7 8zM16 20c4 0 7-3 7-7-4 0-7 3-7 7z' stroke='%237bd88f' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+    <script type="module" crossorigin src="../assets/rewild-U9O8cIOJ.js"></script>
+    <link rel="modulepreload" crossorigin href="../assets/rng-CRt1nCqa.js">
+    <link rel="modulepreload" crossorigin href="../assets/daily-BAS4CWkv.js">
+    <link rel="modulepreload" crossorigin href="../assets/hex-CS7kKvDW.js">
+    <link rel="modulepreload" crossorigin href="../assets/audio-wBoJdJfy.js">
+    <link rel="modulepreload" crossorigin href="../assets/cards-C00xaF-Q.js">
+    <link rel="modulepreload" crossorigin href="../assets/hexlayout-Pfprzn7V.js">
+    <link rel="stylesheet" crossorigin href="../assets/rewild-BfLAGraM.css">
+    <link rel="stylesheet" crossorigin href="../assets/shell-C56ydWqY.css">
+  </head>
+  <body>
+    <div id="app">
+      <header id="hud">
+        <div class="stat"><span class="label">Year</span><span id="when" class="value">1</span></div>
+        <div class="stat"><span class="label">Score</span><span id="score" class="value">0</span></div>
+        <button id="weatherBtn" class="chip" aria-label="Weather"></button>
+        <div class="spacer"></div>
+        <button id="goalsBtn" class="icon-btn" aria-label="Goals"><span id="goalsCount">0/3</span></button>
+        <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>
+      </header>
+      <main id="stage">
+        <canvas id="board"></canvas>
+        <div id="banner"></div>
+      </main>
+      <section id="panel"><div id="info"></div></section>
+      <section id="handRow">
+        <div id="hand"></div>
+        <div id="handBtns">
+          <button id="endBtn" class="primary">End season</button>
+          <button id="rerollBtn" class="secondary">New hand</button>
+        </div>
+      </section>
+    </div>
+    <div id="overlay" hidden></div>
+    <div id="errors"></div>
+  </body>
+</html>
