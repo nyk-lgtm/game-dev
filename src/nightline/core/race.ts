@@ -17,13 +17,18 @@ export const CENTRIFUGAL = 0.32;
 export const START_CLOCK = 65;
 export const NITRO_MAX = 4;
 export const CAR_COUNT = 16;
+/** Score multiplier gained per harder (right-hand) branch. */
+export const RISK_STEP = 0.25;
 /**
  * Rear-end contact: lateral distance between car centers (in road
  * half-widths) at which the player's sprite and a traffic sprite overlap on
- * screen. Measured from the art on a Pixel 7: ~0.29-0.35 (hatchback..sports
- * car) at zero gap, ~0.4 half a segment ahead (near traffic is size-capped).
+ * screen. Measured from the art on a Pixel 7 (player car drawn 1:1):
+ * ~0.27-0.32 (hatchback..sports car) at zero gap.
  */
-export const CAR_HIT_W = 0.35;
+export const CAR_HIT_W = 0.32;
+/** An overtake this close sideways (but clean) is a near miss: bonus points and nitro. */
+export const NEAR_MISS_W = CAR_HIT_W + 0.18;
+export const NEAR_MISS_POINTS = 150;
 /** Traffic appears at least this many segments ahead, beyond the renderer's draw distance (170), so cars never pop in. */
 export const SPAWN_MIN = 175;
 export const SPAWN_SPAN = 100;
@@ -51,6 +56,7 @@ export function newRace(seed: number): Race {
     cars: [],
     nextCarId: 1,
     score: 0,
+    mult: 1,
     passed: 0,
     crashes: 0,
     status: 'racing',
@@ -158,16 +164,17 @@ export function step(r: Race, input: Input): void {
     }
     // Overtakes: ahead of you before this step, behind you after it.
     if (cz0 > before && c.z <= p.z) {
+      const close = Math.abs(c.x - p.x) < NEAR_MISS_W;
       r.passed++;
-      r.score += 100;
-      p.nitro = Math.min(NITRO_MAX, p.nitro + 0.35);
-      r.fx.push({ type: 'pass' });
+      r.score += (100 + (close ? NEAR_MISS_POINTS : 0)) * r.mult;
+      p.nitro = Math.min(NITRO_MAX, p.nitro + (close ? 0.6 : 0.35));
+      r.fx.push({ type: 'pass', close });
     }
   }
   if (Math.floor(r.time * 2) !== Math.floor((r.time - dt) * 2)) spawnTraffic(r);
 
   // Distance score.
-  r.score += (p.speed * dt) / 100;
+  r.score += ((p.speed * dt) / 100) * r.mult;
 
   // Checkpoint / fork.
   const stage = r.stages[r.stage];
@@ -175,7 +182,7 @@ export function step(r: Race, input: Input): void {
   if (stage && segIndex >= stage.end) {
     if (r.stage + 1 >= STAGES) {
       r.status = 'finished';
-      r.score += Math.max(0, r.clock) * 1000;
+      r.score += Math.max(0, r.clock) * 1000 * r.mult;
       r.fx.push({ type: 'finish' });
       return;
     }
@@ -188,11 +195,12 @@ export function step(r: Race, input: Input): void {
     const b = new TrackBuilder(r.segments);
     const built = buildStage(b, r.seed + pos * 31, level, biome, side === 1);
     buildFork(b, level, pos, biome);
-    const bonus = 46 + level * 2 - (side === 1 ? 4 : 0);
+    const bonus = 46 + level * 2 - (side === 1 ? 2 : 0);
     r.stages.push({ biome, start: built.start, end: built.end, bonus });
     r.stage = level;
     r.clock += bonus;
-    r.fx.push({ type: 'checkpoint', stage: level, bonus });
+    if (side === 1) r.mult += RISK_STEP;
+    r.fx.push({ type: 'checkpoint', stage: level, bonus, hard: side === 1 });
   }
 
   if (r.clock <= 0) {

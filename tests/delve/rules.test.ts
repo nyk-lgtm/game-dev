@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   ETHER_MP,
   MONSTERS,
+  SHOP_DEPTHS,
+  SIZE,
+  VIGOR_HP,
   MP_REGEN_EVERY,
   SIGHT,
   SPELLS,
@@ -15,6 +18,8 @@ import {
   isLegal,
   los,
   monsterAt,
+  runScore,
+  stock,
   type GameState,
   type Monster,
 } from '../../src/delve/core';
@@ -607,5 +612,146 @@ describe('floors and the Warden', () => {
     expect(monsterAt(s, m.x, m.y)).toBe(m);
     m.hp = 0;
     expect(monsterAt(s, m.x, m.y)).toBeUndefined();
+  });
+});
+
+describe('the merchant', () => {
+  /** Step onto stairs that lead to a merchant's depth. */
+  const arrive = (gold = 1000) => {
+    const s = setup(['@>'], { dir: E });
+    s.depth = SHOP_DEPTHS[0] - 1;
+    s.player.gold = gold;
+    return act(s, 'forward');
+  };
+
+  it('waits at the foot of the stairs on merchant depths, and only there', () => {
+    const r = arrive();
+    expect(r.state.depth).toBe(SHOP_DEPTHS[0]);
+    expect(r.events).toContainEqual({ type: 'shop' });
+    expect(r.state.shop).toEqual(stock(r.state));
+    expect(r.state.shop!.length).toBe(4);
+    const plain = setup(['@>'], { dir: E });
+    expect(act(plain, 'forward').state.shop).toBeNull();
+  });
+
+  it('while the stall is open only buying and leaving are legal, and neither takes a turn', () => {
+    const { state } = arrive();
+    for (const t of ['forward', 'left', 'use', 'wait'] as const) expect(isLegal(state, { type: t })).toBe(false);
+    expect(isLegal(state, { type: 'leave' })).toBe(true);
+    const left = act(state, 'leave').state;
+    expect(left.shop).toBeNull();
+    expect(left.turn).toBe(state.turn);
+    expect(isLegal(left, { type: 'forward' })).toBe(true);
+    expect(isLegal(left, { type: 'leave' })).toBe(false);
+  });
+
+  it('buying costs gold, delivers the goods once, and needs enough gold', () => {
+    const { state } = arrive();
+    const slot = (k: string) => state.shop!.findIndex((o) => o.kind === k);
+    const p = state.shop![slot('potion')];
+    let s = act(state, { type: 'buy', slot: slot('potion') }).state;
+    expect(s.player.gold).toBe(state.player.gold - p.price);
+    expect(s.player.potions).toBe(state.player.potions + 1);
+    expect(s.turn).toBe(state.turn);
+    expect(isLegal(s, { type: 'buy', slot: slot('potion') })).toBe(false);
+    s = act(s, { type: 'buy', slot: slot('vigor') }).state;
+    expect(s.player.maxHp).toBe(state.player.maxHp + VIGOR_HP);
+    const poor = arrive(0).state;
+    for (let i = 0; i < 4; i++) expect(isLegal(poor, { type: 'buy', slot: i })).toBe(false);
+  });
+
+  it('gear is sold only as an upgrade', () => {
+    const { state } = arrive();
+    const i = state.shop!.findIndex((o) => o.kind === 'weapon' || o.kind === 'armor');
+    const o = state.shop![i];
+    const s = act(state, { type: 'buy', slot: i }).state;
+    expect(o.kind === 'weapon' ? s.player.weapon : s.player.armor).toBe(o.value);
+    const geared = structuredClone(state);
+    geared.player.weapon = geared.player.armor = 4;
+    expect(isLegal(geared, { type: 'buy', slot: i })).toBe(false);
+  });
+});
+
+describe('scrolls, deaths and score', () => {
+  it('a scroll of seeing reveals every walkable cell of the floor', () => {
+    const s = setup(['@?.....', '#####.#', '....>..'], { dir: E });
+    s.items[0].kind = 'map';
+    const r = act(s, 'forward').state;
+    for (let k = 0; k < SIZE * SIZE; k++) if (r.level.tiles[k] !== 'wall') expect(r.level.seen[k]).toBe(true);
+    expect(r.level.seen[idx(1 + 4, 1 + 2)]).toBe(true);
+  });
+
+  it('remembers what killed you', () => {
+    let s = setup(['@g'], { dir: E });
+    s.player.hp = 1;
+    for (let i = 0; i < 40 && s.status === 'playing'; i++) s = act(s, 'wait').state;
+    expect(s.status).toBe('dead');
+    expect(s.killer).toBe('ghoul');
+  });
+
+  it('names the Warden without a capital mid-sentence', () => {
+    const s = setup(['@W'], { dir: E });
+    tough(mon(s, 'warden'));
+    s.player.hp = s.player.maxHp = 9999;
+    let st = s;
+    for (let i = 0; i < 10; i++) st = act(st, 'use').state;
+    expect(st.log.join('\n')).toMatch(/You hit the Warden/);
+    expect(st.log.join('\n')).not.toMatch(/You hit The Warden/);
+  });
+
+  it('score grows with depth, experience and victory', () => {
+    const s = setup(['@'], { dir: E });
+    const deeper = structuredClone(s);
+    deeper.depth += 1;
+    expect(runScore(deeper)).toBeGreaterThan(runScore(s));
+    const won = structuredClone(s);
+    won.status = 'won';
+    expect(runScore(won)).toBeGreaterThan(runScore(s));
+  });
+});
+
+describe('the cutpurse', () => {
+  it('snatches gold on a landed blow, runs instead of fighting, and drops the loot when killed', () => {
+    let s = setup(['@t......'], { dir: E });
+    s.player.gold = 500;
+    s.depth = 3;
+    s.player.hp = s.player.maxHp = 999;
+    let stole = 0;
+    for (let i = 0; i < 20 && !stole; i++) {
+      const r = act(s, 'wait');
+      s = r.state;
+      for (const e of r.events) if (e.type === 'stolen') stole = e.gold;
+    }
+    expect(stole).toBeGreaterThan(0);
+    expect(s.player.gold).toBe(500 - stole);
+    const t = mon(s, 'thief');
+    expect(t.loot).toBe(stole);
+    // It flees rather than hitting again.
+    const hp = s.player.hp;
+    const x = t.x;
+    s = act(s, 'wait').state;
+    expect(s.player.hp).toBe(hp);
+    expect(mon(s, 'thief').x).toBeGreaterThan(x);
+    // Catch it: the gold drops where it falls.
+    const c = structuredClone(s);
+    const m = mon(c, 'thief');
+    m.x = c.player.x + 1;
+    m.hp = 1;
+    let k = c;
+    for (let i = 0; i < 10 && k.monsters.some((o) => o.kind === 'thief'); i++) {
+      k.monsters.find((o) => o.kind === 'thief')!.x = k.player.x + 1;
+      k = act(k, 'use').state;
+    }
+    expect(k.monsters.some((o) => o.kind === 'thief')).toBe(false);
+    expect(k.items.some((it) => it.kind === 'gold' && it.value === stole)).toBe(true);
+  });
+
+  it('slips away for good once out of sight', () => {
+    let s = setup(['@t...', '####.', '####.', '####.', '####.'], { dir: E });
+    const t = mon(s, 'thief');
+    t.loot = 40;
+    for (let i = 0; i < 10 && s.monsters.length; i++) s = act(s, 'wait').state;
+    expect(s.monsters.length).toBe(0);
+    expect(s.kills).toBe(0);
   });
 });

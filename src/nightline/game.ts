@@ -1,13 +1,14 @@
 // Nightline controller: steering input, the fixed-step loop, HUD, screens.
 
 import { closeOverlay, showCard } from '../shared/cards';
+import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey } from '../shared/daily';
 import { MONO, cellWidth, makeGrid, paintGrid, type Grid } from '../shared/ascii';
 import { makeStore } from '../shared/storage';
 import { Sfx } from '../afterglow/audio';
 import { LOGO } from './art';
-import { BIOME_NAMES, DT, MAX_SPEED, NITRO_MAX, newRace, randomSeed, stageProgress, step, type Input, type Race } from './core';
+import { BIOME_NAMES, DT, MAX_SPEED, NEAR_MISS_POINTS, NITRO_MAX, RISK_STEP, SEG_LEN, STAGES, TREE, newRace, randomSeed, stageProgress, step, type Input, type Race } from './core';
 import { Engine } from './engine';
-import { advanceSky, drawRace, type SkyState, type View } from './render';
+import { FORK_LEAD, advanceSky, drawRace, type SkyState, type View } from './render';
 
 const store = makeStore('nightline.');
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -33,6 +34,10 @@ export class Game {
   private flashTimer = 0;
   /** Pending "next biome" banner after a checkpoint. */
   private bannerTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Today's date while driving the daily route, else null. */
+  private day: string | null = null;
+  /** Last text written to each HUD element (DOM writes only on change). */
+  private hudCache = new Map<string, string>();
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d', { alpha: false })!;
@@ -52,19 +57,33 @@ export class Game {
   private bindInput(): void {
     let id: number | null = null;
     let x0 = 0;
+    const stick = $('stick');
+    const knob = stick.firstElementChild as HTMLElement;
     this.canvas.addEventListener('pointerdown', (e) => {
       if (id !== null) return;
       id = e.pointerId;
       x0 = e.clientX;
+      if (this.tilt || !this.running) return;
+      // A little slider under your thumb shows how hard you're steering.
+      stick.style.left = `${x0}px`;
+      stick.style.top = `${e.clientY - 46}px`;
+      knob.style.transform = '';
+      stick.hidden = false;
+      if (!$('hint').hidden) {
+        $('hint').hidden = true;
+        store.save('steered', true);
+      }
     });
     this.canvas.addEventListener('pointermove', (e) => {
       if (e.pointerId !== id || this.tilt) return;
       // The further you drag from where you touched, the harder you steer.
       this.steer = Math.max(-1, Math.min(1, (e.clientX - x0) / 70));
+      knob.style.transform = `translateX(${this.steer * 64}px)`;
     });
     const up = (e: PointerEvent) => {
       if (e.pointerId !== id) return;
       id = null;
+      stick.hidden = true;
       if (!this.tilt) this.steer = 0;
     };
     this.canvas.addEventListener('pointerup', up);
@@ -111,16 +130,38 @@ export class Game {
   title(): void {
     this.running = false;
     this.clearBanner();
+    leaveDaily();
+    this.day = null;
     $('hud').hidden = true;
     this.sfx.stopMusic();
     const best = store.load<number>('best', 0);
+    const goals = store.load<number[]>('goals', []);
+    const daily = loadDaily(store);
+    const goalList = TREE[STAGES - 1]
+      .map((b, i) => `<span style="color:${goals.includes(i) ? '#ffd166' : '#4a3a6a'}">${goals.includes(i) ? '[x]' : '[ ]'} ${BIOME_NAMES[b]}</span>`)
+      .join('<br>');
     showCard(
-      `<pre>${LOGO.join('\n')}</pre><p>Five stages. One clock. Pick your road at every fork.</p>${best ? `<p class="meta">Best score ${best.toLocaleString()}</p>` : ''}`,
+      `<pre>${LOGO.join('\n')}</pre><p>Five stages. One clock. Pick your road at every fork: right is harder, but every hard road raises your score multiplier.</p>${best ? `<p class="meta">Best score ${best.toLocaleString()}</p>` : ''}<p class="meta" style="text-align:left;display:inline-block;margin:0 auto">Goals reached ${goals.length}/${TREE[STAGES - 1].length}<br>${goalList}</p>`,
       [
         { label: 'Drive', primary: true, onClick: () => this.start() },
+        { label: `Daily route · ${daily ? daily.label : 'not driven'}`, onClick: () => this.start(todayKey()) },
         { label: `Steering: ${this.tilt ? 'tilt' : 'drag'}`, onClick: () => this.toggleTilt() },
         { label: 'How to play', onClick: () => this.help() },
         { label: 'All games', onClick: () => (location.href = '../') },
+      ],
+      false,
+    );
+  }
+
+  /** Opened with ?daily: today's route, one tap away (the tap also unlocks audio). */
+  dailyCard(): void {
+    const day = todayKey();
+    const best = loadDaily(store, day);
+    showCard(
+      `<pre>${LOGO.join('\n')}</pre><h2>Daily route</h2><p>${prettyDay(day)}: the same road and traffic for everyone today.</p>${best ? `<p class="meta">Today's best ${best.label} · ${best.plays} ${best.plays === 1 ? 'drive' : 'drives'}</p>` : ''}`,
+      [
+        { label: 'Drive', primary: true, onClick: () => this.start(day) },
+        { label: 'Title', onClick: () => this.title() },
       ],
       false,
     );
@@ -143,25 +184,33 @@ export class Game {
       <li><b>Drag</b> left or right anywhere to steer (or turn on <b>tilt</b> on the title screen).</li>
       <li>You accelerate on your own. Hold <b>BOOST</b> to burn nitro; hold <b>BRAKE</b> to slow for tight turns.</li>
       <li>Curves push you outward. The grass slows you down; roadside objects stop you dead.</li>
-      <li>Passing cars refills nitro. Ramming them costs speed.</li>
+      <li>Passing cars refills nitro; a <b>close</b> pass (just beside them) scores extra and refills more. Ramming them costs speed.</li>
       <li>Reach each checkpoint before the clock runs out to earn more time.</li>
-      <li>At the end of each stage the road forks: stay <b>left</b> for the gentler route or <b>right</b> for a harder, faster-scoring one.</li></ul>`,
+      <li>At the end of each stage the road forks (a yellow divider and arrows mark it): be <b>left</b> of the divider for the gentler route or <b>right</b> for a harder one. Each hard road adds x${RISK_STEP} to your score multiplier but gives a little less time.</li>
+      <li>There are five different goals at the end of the last stage. Can you reach them all?</li></ul>`,
       [{ label: 'Back', primary: true, onClick: () => this.title() }],
       false,
     );
   }
 
-  start(): void {
+  /** Start a race; with `day`, that day's daily route (the same road and traffic for everyone). */
+  start(day: string | null = null): void {
     closeOverlay();
     this.clearBanner();
-    this.race = newRace(randomSeed());
+    this.day = day;
+    if (!day) leaveDaily();
+    this.hudCache.clear();
+    this.race = newRace(day ? dailySeed('nightline', day) : randomSeed());
     this.sky = { offset: 0 };
     this.acc = 0;
     this.steer = 0;
     this.running = true;
     $('hud').hidden = false;
+    $('stick').hidden = true;
+    // Until you've steered once, say how.
+    $('hint').hidden = this.tilt || store.load('steered', false);
     this.sfx.startMusic();
-    this.say('GO!');
+    this.say(day ? 'DAILY · GO!' : 'GO!');
   }
 
   private pause(): void {
@@ -193,13 +242,26 @@ export class Game {
     const score = Math.round(r.score);
     const best = store.load<number>('best', 0);
     if (score > best) store.save('best', score);
-    const route = r.stages.map((s) => BIOME_NAMES[s.biome]).join(' > ');
+    // Which of the five goals (if any) this was.
+    let goalLine = '';
+    if (won) {
+      const pos = r.route.reduce((a, b) => a + b, 0);
+      const goals = store.load<number[]>('goals', []);
+      const fresh = !goals.includes(pos);
+      if (fresh) store.save('goals', [...goals, pos].sort());
+      goalLine = `<p>${fresh ? '<b>New goal reached!</b> ' : ''}Goals ${goals.length + (fresh ? 1 : 0)}/${TREE[STAGES - 1].length}</p>`;
+    }
+    const day = this.day;
+    const daily = day ? recordDaily(store, score, `${score.toLocaleString()}${won ? ' · goal' : ` · stage ${r.stage + 1}`}`, day) : null;
+    const dailyLine = day ? `<p><b>Daily route · ${prettyDay(day)}</b><br>${daily!.improved ? 'New best for today!' : `Today's best: ${daily!.best.score.toLocaleString()}`}</p>` : '';
+    const route = r.stages.map((s, i) => `<span style="color:${i && r.route[i - 1] ? '#ff2a6d' : '#05d9e8'}">${BIOME_NAMES[s.biome]}</span>`).join(' &gt; ');
     setTimeout(
       () =>
         showCard(
-          `<h2>${won ? 'GOAL!' : 'TIME UP'}</h2><p>${route}</p><p><b>${score.toLocaleString()}</b> points${score > best ? ' · new best!' : ''}</p><p>${r.passed} cars passed · ${r.crashes} crashes · ${Math.round(r.time)}s</p>`,
+          `<h2>${won ? 'GOAL!' : 'TIME UP'}</h2><p>${route}</p><p><b>${score.toLocaleString()}</b> points${r.mult > 1 ? ` (x${r.mult})` : ''}${score > best ? ' · new best!' : ''}</p>${goalLine}<p>${r.passed} cars passed · ${r.crashes} crashes · ${Math.round(r.time)}s</p>${dailyLine}`,
           [
-            { label: 'Drive again', primary: true, onClick: () => this.start() },
+            { label: day ? 'Retry today’s route' : 'Drive again', primary: true, onClick: () => this.start(day) },
+            ...(day ? [{ label: 'Free drive', onClick: () => this.start() }] : []),
             { label: 'Title', onClick: () => this.title() },
           ],
           false,
@@ -213,11 +275,13 @@ export class Game {
     this.bannerTimer = undefined;
   }
 
-  private say(text: string): void {
+  private say(text: string, secs = 1.6): void {
+    // A near-miss shout never cuts short a checkpoint or route banner.
+    if (secs < 1 && this.flashTimer > 0.8) return;
     const f = $('flash');
     f.textContent = text;
     f.classList.add('show');
-    this.flashTimer = 1.6;
+    this.flashTimer = secs;
   }
 
   // ---------- loop ----------
@@ -271,7 +335,7 @@ export class Game {
   private handleFx(r: Race): void {
     for (const e of r.fx) {
       if (e.type === 'checkpoint') {
-        this.say(`EXTENDED +${e.bonus}s`);
+        this.say(e.hard ? `HARD ROAD x${r.mult} · +${e.bonus}s` : `EXTENDED +${e.bonus}s`);
         this.sfx.levelUp();
         const biome = BIOME_NAMES[r.stages[e.stage].biome].toUpperCase();
         this.clearBanner();
@@ -285,7 +349,13 @@ export class Game {
           this.sfx.boom();
           navigator.vibrate?.(60);
         }
-      } else if (e.type === 'pass') this.sfx.gem();
+      } else if (e.type === 'pass') {
+        this.sfx.gem();
+        if (e.close) {
+          this.say(`CLOSE! +${NEAR_MISS_POINTS * r.mult}`, 0.7);
+          navigator.vibrate?.(12);
+        }
+      }
       else if (e.type === 'offroad') navigator.vibrate?.(8);
       else if (e.type === 'finish') this.say('GOAL!');
       else if (e.type === 'timeout') this.say('TIME UP');
@@ -316,15 +386,46 @@ export class Game {
     this.hud(r);
   }
 
+  /** Set an element's text (or a style width) only when it changed. */
+  private set(id: string, value: string, width = false): void {
+    const key = width ? `${id}.w` : id;
+    if (this.hudCache.get(key) === value) return;
+    this.hudCache.set(key, value);
+    if (width) $(id).style.width = value;
+    else $(id).textContent = value;
+  }
+
   private hud(r: Race): void {
     const p = r.player;
-    $('speed').textContent = String(Math.round((p.speed / MAX_SPEED) * 290));
-    const clock = $('clock');
-    clock.textContent = String(Math.ceil(r.clock));
-    clock.classList.toggle('low', r.clock < 10);
-    $('score').textContent = Math.round(r.score).toLocaleString();
-    $('stageName').textContent = `${r.stage + 1}/5 ${BIOME_NAMES[r.stages[r.stage].biome].toUpperCase()}`;
-    $('progFill').style.width = `${stageProgress(r) * 100}%`;
-    $('nitroFill').style.width = `${(p.nitro / NITRO_MAX) * 100}%`;
+    this.set('speed', String(Math.round((p.speed / MAX_SPEED) * 290)));
+    this.set('clock', String(Math.ceil(r.clock)));
+    const low = r.clock < 10 ? '1' : '';
+    if (this.hudCache.get('low') !== low) {
+      this.hudCache.set('low', low);
+      $('clock').classList.toggle('low', !!low);
+    }
+    this.set('score', Math.round(r.score).toLocaleString());
+    this.set('mult', r.mult > 1 ? `x${r.mult}` : '');
+    this.set('stageName', `${r.stage + 1}/5 ${BIOME_NAMES[r.stages[r.stage].biome].toUpperCase()}`);
+    this.set('progFill', `${(stageProgress(r) * 100).toFixed(1)}%`, true);
+    this.set('nitroFill', `${((p.nitro / NITRO_MAX) * 100).toFixed(1)}%`, true);
+    // The fork panel: both destinations, with the side you're on lit up.
+    const stage = r.stages[r.stage];
+    const toFork = stage.end - p.z / SEG_LEN;
+    const forkOn = r.status === 'racing' && r.stage + 1 < STAGES && toFork > 0 && toFork < FORK_LEAD + 50;
+    const side = forkOn ? (p.x > 0 ? 'R' : 'L') : '';
+    const key = forkOn ? `${r.stage}${side}` : '';
+    if (this.hudCache.get('fork') !== key) {
+      this.hudCache.set('fork', key);
+      $('fork').hidden = !forkOn;
+      if (forkOn) {
+        const pos = r.route.reduce((a, b) => a + b, 0);
+        const next = TREE[r.stage + 1];
+        $('forkL').innerHTML = `&lt; ${BIOME_NAMES[next[pos]].toUpperCase()}<small>gentle · x${r.mult}</small>`;
+        $('forkR').innerHTML = `${BIOME_NAMES[next[pos + 1]].toUpperCase()} &gt;<small>hard · x${r.mult + RISK_STEP}</small>`;
+        $('forkL').classList.toggle('on', side === 'L');
+        $('forkR').classList.toggle('on', side === 'R');
+      }
+    }
   }
 }

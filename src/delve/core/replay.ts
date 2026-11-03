@@ -3,7 +3,7 @@
 import { applyAction, newGame } from './rules';
 import type { Action, GameState, SpellId } from './types';
 
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 
 const CODES: Record<string, Action> = {
   f: { type: 'forward' },
@@ -20,12 +20,18 @@ const CODES: Record<string, Action> = {
   I: { type: 'cast', spell: 'frost' },
   H: { type: 'cast', spell: 'heal' },
   B: { type: 'cast', spell: 'blink' },
+  '1': { type: 'buy', slot: 0 },
+  '2': { type: 'buy', slot: 1 },
+  '3': { type: 'buy', slot: 2 },
+  '4': { type: 'buy', slot: 3 },
+  x: { type: 'leave' },
 };
 
 export function encodeAction(a: Action): string {
   for (const [k, v] of Object.entries(CODES)) {
     if (v.type !== a.type) continue;
     if (a.type === 'cast' && (v as { spell: SpellId }).spell !== a.spell) continue;
+    if (a.type === 'buy' && (v as { slot: number }).slot !== a.slot) continue;
     return k;
   }
   throw new Error(`no code for ${JSON.stringify(a)}`);

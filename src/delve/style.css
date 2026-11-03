@@ -18,9 +18,18 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .bar span { position: relative; padding-left: 6px; font-size: 11px; font-weight: 700; }
 #depth { font-size: 20px; font-weight: 800; color: var(--amber); min-width: 40px; text-align: center; }
 #menuBtn { width: 44px; height: 44px; background: #0d0b09; color: var(--amber); border: 1px solid var(--line); font: 800 20px var(--mono); }
+#viewBox { position: relative; }
 #view { display: block; width: 100%; touch-action: none; background: #000; }
+#foe { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); width: min(78%, 320px); padding: 4px 8px 5px; background: rgba(0,0,0,0.78); border: 1px solid #5a2a1a; pointer-events: none; }
+#foe .row { display: flex; justify-content: space-between; font-size: 13px; }
+#foe b { color: #ff8a6a; }
+#foe .bar { height: 7px; margin-top: 3px; border-color: #3a1a12; }
+#foe .bar i { background: #c0392b; transition: width 0.15s; }
+#foeNote { margin-top: 3px; font-size: 10px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar.low i { animation: pulse 0.8s ease-in-out infinite alternate; }
+@keyframes pulse { to { background: #d23a3a; } }
 #deck { display: flex; gap: 8px; padding: 6px 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); min-height: 0; flex: 1; }
-#map { flex: none; width: 150px; height: 150px; align-self: center; }
+#map { flex: none; width: 150px; height: 150px; align-self: center; cursor: pointer; }
 #side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
 #stats { font-size: 11px; color: var(--dim); }
 #stats b { color: var(--text); }
@@ -31,7 +40,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 #pad button.main { color: var(--amber); border-color: #6b4a1f; }
 #pad button.act { color: #ffd9a0; background: #1c130a; border-color: #6b4a1f; }
 #pad button:active { background: #2a1d0e; }
-#pad button:disabled { opacity: 0.35; }
+#pad button:disabled, #pad button.dim { opacity: 0.4; }
 #pad button.wide { grid-column: span 1; }
 #overlay { position: fixed; inset: 0; z-index: 10; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; padding: 16px; }
 #overlay[hidden] { display: none; }

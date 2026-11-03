@@ -69,6 +69,8 @@ export interface Race {
   cars: Car[];
   nextCarId: number;
   score: number;
+  /** Score multiplier: each harder (right-hand) branch taken raises it. */
+  mult: number;
   passed: number;
   crashes: number;
   status: 'racing' | 'over' | 'finished';
@@ -77,9 +79,9 @@ export interface Race {
 }
 
 export type RaceFx =
-  | { type: 'checkpoint'; stage: number; bonus: number }
+  | { type: 'checkpoint'; stage: number; bonus: number; hard: boolean }
   | { type: 'crash'; hard: boolean }
-  | { type: 'pass' }
+  | { type: 'pass'; close: boolean }
   | { type: 'offroad' }
   | { type: 'boost' }
   | { type: 'finish' }

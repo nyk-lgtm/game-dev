@@ -15,9 +15,10 @@ export const RUNOUT = 260;
 export const TREE: BiomeId[][] = [
   ['city'],
   ['desert', 'forest'],
-  ['coast', 'desert', 'snow'],
-  ['forest', 'coast', 'snow', 'desert'],
-  ['coast', 'snow', 'forest', 'city', 'desert'],
+  ['coast', 'snow', 'desert'],
+  ['forest', 'desert', 'coast', 'snow'],
+  // Five different goals; no branch ever leads into the biome you just drove.
+  ['coast', 'snow', 'forest', 'desert', 'city'],
 ];
 
 export const BIOME_NAMES: Record<BiomeId, string> = {

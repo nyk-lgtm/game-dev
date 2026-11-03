@@ -3,9 +3,9 @@
 // after which every awake monster acts.
 
 import { Rng, mixSeed } from '../../shared/rng';
-import { ARMORS, ARMOR_DEF, ETHER_MP, MAX_DEPTH, MONSTERS, POTION_HEAL, SPELLS, WEAPONS, WEAPON_ATK, XP_TABLE, fireDamage } from './content';
+import { ARMORS, ARMOR_DEF, ETHER_MP, GEAR_PRICE, MAX_DEPTH, MONSTERS, POTION_HEAL, SHOP_DEPTHS, SPELLS, THEFT_PER_DEPTH, VIGOR_HP, WEAPONS, WEAPON_ATK, XP_TABLE, fireDamage } from './content';
 import { SIZE, distances, generateFloor } from './gen';
-import { DX, DY, type Action, type Dir, type GameEvent, type GameState, type Monster, type MonsterKind, type SpellId, type StepResult, type Tile } from './types';
+import { DX, DY, type Action, type Dir, type GameEvent, type GameState, type Monster, type MonsterKind, type Offer, type SpellId, type StepResult, type Tile } from './types';
 
 const LOG_MAX = 30;
 export const SIGHT = 7;
@@ -29,7 +29,7 @@ function rollInt(s: GameState, lo: number, hi: number): number {
 /** "the giant rat", but "The Warden" (whose name already carries its article). */
 function the(kind: MonsterKind, start = false): string {
   const name = MONSTERS[kind].name;
-  if (name.startsWith('The ')) return name;
+  if (name.startsWith('The ')) return start ? name : `the ${name.slice(4)}`;
   return `${start ? 'The' : 'the'} ${name.toLowerCase()}`;
 }
 function say(s: GameState, text: string): void {
@@ -61,7 +61,12 @@ function markSeen(s: GameState): void {
 export function isLegal(s: GameState, a: Action): boolean {
   if (s.status !== 'playing') return false;
   const p = s.player;
+  // At a merchant's stall nothing else happens until you leave it.
+  if (s.shop) return a.type === 'leave' || (a.type === 'buy' && canBuy(s, s.shop[a.slot]));
   switch (a.type) {
+    case 'buy':
+    case 'leave':
+      return false;
     case 'potion':
       return p.potions > 0 && p.hp < p.maxHp;
     case 'ether':
@@ -117,6 +122,15 @@ export function applyAction(prev: GameState, a: Action): StepResult {
       break;
     case 'cast':
       cast(s, a.spell, ev);
+      break;
+    case 'buy':
+      buy(s, s.shop![a.slot], ev);
+      took = false;
+      break;
+    case 'leave':
+      s.shop = null;
+      say(s, 'The merchant packs up and is gone.');
+      took = false;
       break;
   }
   if (took && s.status === 'playing') {
@@ -220,8 +234,13 @@ function damage(s: GameState, m: Monster, dmg: number, ev: GameEvent[], prefix =
     ev.push({ type: 'win' });
     return;
   }
+  // A cutpurse drops what it took.
+  if (m.loot) {
+    s.items.push({ id: s.nextId++, kind: 'gold', x: m.x, y: m.y, value: m.loot });
+    say(s, `Your ${m.loot} gold spills across the floor.`);
+  }
   // Monsters sometimes leave something behind.
-  if (roll(s) < 0.18) {
+  else if (roll(s) < 0.18) {
     const kind = roll(s) < 0.6 ? 'potion' : 'gold';
     s.items.push({ id: s.nextId++, kind, x: m.x, y: m.y, value: kind === 'gold' ? rollInt(s, 3, 8) * s.depth : 0 });
   }
@@ -268,6 +287,10 @@ function pickup(s: GameState, ev: GameEvent[]): void {
         p.gold += it.value;
         text = `${it.value} gold`;
         break;
+      case 'map':
+        reveal(s);
+        text = 'a scroll of seeing. The floor unfolds in your mind';
+        break;
       case 'weapon':
         if (it.value > p.weapon) {
           p.weapon = it.value;
@@ -295,6 +318,96 @@ function descend(s: GameState, ev: GameEvent[]): void {
   p.hp = Math.min(p.maxHp, p.hp + Math.ceil(p.maxHp * 0.15));
   say(s, s.depth === MAX_DEPTH ? 'The air is cold. Something vast waits ahead.' : `You descend to depth ${s.depth}.`);
   ev.push({ type: 'descend', depth: s.depth });
+  if (SHOP_DEPTHS.includes(s.depth)) {
+    s.shop = stock(s);
+    say(s, 'A hooded merchant waits at the foot of the stairs.');
+    ev.push({ type: 'shop' });
+  }
+}
+
+/** Mark every walkable cell of the floor (and the walls around it) as seen. */
+export function reveal(s: GameState): void {
+  for (let y = 0; y < SIZE; y++)
+    for (let x = 0; x < SIZE; x++) {
+      if (s.level.seen[idx(x, y)]) continue;
+      let near = false;
+      for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1 && !near; dx++) near = s.level.tiles[idx(x + dx, y + dy)] !== 'wall' && inside(x + dx, y + dy);
+      if (near) s.level.seen[idx(x, y)] = true;
+    }
+}
+
+// ---------- the merchant ----------
+
+/** The stall's wares for this depth (fixed by seed and depth). */
+export function stock(s: GameState): Offer[] {
+  const d = s.depth;
+  const rng = new Rng(mixSeed(s.seed, 777 + d));
+  const tier = Math.min(4, Math.floor(d / 2.5) + 1);
+  const gear = rng.next() < 0.5 ? 'weapon' : 'armor';
+  return [
+    { kind: 'potion', value: 0, price: 40 + 8 * d, sold: false },
+    rng.next() < 0.5 ? { kind: 'ether', value: 0, price: 30 + 5 * d, sold: false } : { kind: 'map', value: 0, price: 15 + 3 * d, sold: false },
+    { kind: gear, value: tier, price: GEAR_PRICE[tier] + 15 * d, sold: false },
+    { kind: 'vigor', value: VIGOR_HP, price: 90 + 15 * d, sold: false },
+  ];
+}
+
+export function offerName(o: Offer): string {
+  switch (o.kind) {
+    case 'potion':
+      return 'Healing potion';
+    case 'ether':
+      return 'Ether';
+    case 'map':
+      return 'Scroll of seeing';
+    case 'weapon':
+      return WEAPONS[o.value];
+    case 'armor':
+      return ARMORS[o.value];
+    case 'vigor':
+      return `Vigor draught (+${o.value} max HP)`;
+  }
+}
+
+export function canBuy(s: GameState, o: Offer | undefined): boolean {
+  if (!o || o.sold || s.player.gold < o.price) return false;
+  if (o.kind === 'weapon') return o.value > s.player.weapon;
+  if (o.kind === 'armor') return o.value > s.player.armor;
+  return true;
+}
+
+function buy(s: GameState, o: Offer, ev: GameEvent[]): void {
+  const p = s.player;
+  p.gold -= o.price;
+  o.sold = true;
+  switch (o.kind) {
+    case 'potion':
+      p.potions++;
+      break;
+    case 'ether':
+      p.ethers++;
+      break;
+    case 'map':
+      reveal(s);
+      break;
+    case 'weapon':
+      p.weapon = o.value;
+      break;
+    case 'armor':
+      p.armor = o.value;
+      break;
+    case 'vigor':
+      p.maxHp += o.value;
+      p.hp += o.value;
+      break;
+  }
+  say(s, `You buy ${offerName(o).replace(/ \(.*\)$/, '')} for ${o.price} gold.`);
+  ev.push({ type: 'buy', kind: o.kind });
+}
+
+/** A run's score: experience, depth reached, and a bonus for beating the Warden. */
+export function runScore(s: GameState): number {
+  return s.player.xp + s.depth * 100 + s.kills * 5 + (s.status === 'won' ? 2000 : 0);
 }
 
 /** The first monster in a straight line ahead, within range, before any wall. */
@@ -380,8 +493,18 @@ function monsterTurn(s: GameState, ev: GameEvent[]): void {
       }
     }
 
-    if (d === 1) {
-      hurt(s, m, def.atk, ev);
+    // A cutpurse with your gold runs for it.
+    const fleeing = !!m.loot;
+    if (d === 1 && !fleeing) {
+      if (hurt(s, m, def.atk, ev) && m.kind === 'thief' && s.status === 'playing') {
+        const take = Math.min(s.player.gold, THEFT_PER_DEPTH * s.depth);
+        if (take > 0) {
+          s.player.gold -= take;
+          m.loot = take;
+          say(s, `The cutpurse snatches ${take} gold!`);
+          ev.push({ type: 'stolen', gold: take });
+        }
+      }
       continue;
     }
     // Ranged: shoot along a clear straight line.
@@ -404,7 +527,7 @@ function monsterTurn(s: GameState, ev: GameEvent[]): void {
         const nx = m.x + DX[k];
         const ny = m.y + DY[k];
         const nd = inside(nx, ny) ? dist[idx(nx, ny)] : -1;
-        if (nd >= 0 && (best < 0 || nd < best)) {
+        if (nd >= 0 && (fleeing ? nd > best : best < 0 || nd < best)) {
           best = nd;
           step = [DX[k], DY[k]];
         }
@@ -423,6 +546,11 @@ function monsterTurn(s: GameState, ev: GameEvent[]): void {
     if (def.ghost && (nx <= 0 || ny <= 0 || nx >= SIZE - 1 || ny >= SIZE - 1)) continue;
     m.x = nx;
     m.y = ny;
+    // Out of sight with your gold, a cutpurse slips away for good.
+    if (fleeing && Math.abs(m.x - p.x) + Math.abs(m.y - p.y) >= 4 && !los(s, m.x, m.y, p.x, p.y)) {
+      m.hp = 0;
+      say(s, 'Coins jingle away into the dark. The cutpurse is gone.');
+    }
   }
 }
 
@@ -435,10 +563,11 @@ function monsterBetween(s: GameState, m: Monster): boolean {
   return false;
 }
 
-function hurt(s: GameState, m: Monster, atk: number, ev: GameEvent[], what = ''): void {
+/** A monster's blow at the player; true if it landed. */
+function hurt(s: GameState, m: Monster, atk: number, ev: GameEvent[], what = ''): boolean {
   if (roll(s) > 0.8) {
     say(s, `${what || the(m.kind, true)} misses you.`);
-    return;
+    return false;
   }
   const dmg = Math.max(1, atk - defenceOf(s) + rollInt(s, -1, 1));
   s.player.hp -= dmg;
@@ -447,9 +576,11 @@ function hurt(s: GameState, m: Monster, atk: number, ev: GameEvent[], what = '')
   if (s.player.hp <= 0) {
     s.player.hp = 0;
     s.status = 'dead';
+    s.killer = m.kind;
     say(s, 'You die in the dark.');
     ev.push({ type: 'death' });
   }
+  return true;
 }
 
 // ---------- setup ----------
@@ -490,6 +621,8 @@ export function newGame(seed: number): GameState {
     log: ['You descend into the dark with a torch and a dagger.'],
     status: 'playing',
     kills: 0,
+    shop: null,
+    killer: null,
   };
   enterFloor(s, 1);
   markSeen(s);

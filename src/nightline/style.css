@@ -15,15 +15,31 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 #stage { margin: 0 auto; width: 70%; text-align: center; font-size: 11px; letter-spacing: 0.25em; color: var(--cyan); }
 #prog { height: 4px; margin-top: 4px; background: rgba(5, 217, 232, 0.2); }
 #progFill { display: block; height: 100%; width: 0; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+#mult { font-size: 12px; font-weight: 800; color: #ff2a6d; min-height: 15px; }
+#fork { position: absolute; top: calc(env(safe-area-inset-top) + 124px); left: 10px; right: 10px; text-align: center; }
+#fork .label { color: #ffd166; text-shadow: 0 0 8px #ff8a3d; animation: blink 0.6s steps(2) infinite; }
+#fork .sides { display: flex; gap: 8px; margin-top: 6px; }
+#fork .sides div { flex: 1; padding: 6px 4px; border: 2px solid; font-size: 12px; font-weight: 800; letter-spacing: 0.04em; background: rgba(10, 4, 24, 0.7); opacity: 0.45; transition: opacity 0.15s, transform 0.15s; }
+#forkL { color: #05d9e8; border-color: #05d9e8; }
+#forkR { color: #ff2a6d; border-color: #ff2a6d; }
+#fork .sides div.on { opacity: 1; transform: scale(1.06); box-shadow: 0 0 14px currentColor; }
+#fork small { display: block; font-size: 10px; font-weight: 600; color: #b9a6e8; margin-top: 2px; }
 #flash { position: absolute; top: 24%; left: 0; right: 0; text-align: center; font-size: 26px; font-weight: 900; letter-spacing: 0.1em; color: #ffd166; text-shadow: 0 0 14px #ff2a6d; opacity: 0; transition: opacity 0.25s; }
 #flash.show { opacity: 1; }
 #pauseBtn { pointer-events: auto; position: absolute; top: calc(env(safe-area-inset-top) + 70px); right: 10px; width: 44px; height: 44px; background: rgba(10, 4, 24, 0.6); color: var(--text); border: 1px solid #4a2a7a; font: 800 14px var(--mono); }
-#controls { position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 14px); display: flex; align-items: flex-end; justify-content: space-between; padding: 0 12px; gap: 12px; }
-#controls button { pointer-events: auto; touch-action: none; width: 96px; height: 64px; border: 2px solid; background: rgba(10, 4, 24, 0.55); font: 900 15px var(--mono); letter-spacing: 0.08em; }
+/* Both pedals bottom-right (below the car) so the left thumb can steer anywhere without touching them. */
+#controls { position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 14px); display: flex; align-items: flex-end; justify-content: space-between; padding: 0 12px; gap: 16px; }
+#pedals { display: flex; gap: 8px; }
+#controls button { pointer-events: auto; touch-action: none; width: 100px; height: 64px; border: 2px solid; background: rgba(10, 4, 24, 0.55); font: 900 15px var(--mono); letter-spacing: 0.08em; }
+#controls #brakeBtn { width: 84px; }
+#nitroBox { flex: 1; max-width: 160px; margin-bottom: 8px; }
+#stick { position: absolute; width: 150px; height: 14px; margin-left: -75px; margin-top: -7px; border: 1px solid rgba(185, 166, 232, 0.5); border-radius: 7px; background: rgba(10, 4, 24, 0.35); }
+#stick i { position: absolute; top: 50%; left: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: #05d9e8; box-shadow: 0 0 10px #05d9e8; }
+#hint { position: absolute; left: 0; right: 0; top: 58%; text-align: center; font-size: 14px; font-weight: 800; letter-spacing: 0.15em; color: #05d9e8; text-shadow: 0 0 10px #05d9e8; animation: blink 0.8s steps(2) infinite; }
 #brakeBtn { color: #b9a6e8; border-color: #4a2a7a; }
 #boostBtn { color: #ffd166; border-color: #ff8a3d; box-shadow: 0 0 14px rgba(255, 138, 61, 0.4); }
 #controls button.down { background: rgba(255, 138, 61, 0.35); }
-#nitro { flex: 1; height: 10px; margin-bottom: 26px; border: 1px solid #ff8a3d; }
+#nitro { height: 10px; margin-top: 3px; border: 1px solid #ff8a3d; }
 #nitroFill { display: block; height: 100%; width: 50%; background: linear-gradient(90deg, #ff8a3d, #ffd166); }
 #overlay { position: fixed; inset: 0; z-index: 10; background: rgba(5, 1, 15, 0.86); display: flex; align-items: center; justify-content: center; padding: 16px; }
 #overlay[hidden] { display: none; }

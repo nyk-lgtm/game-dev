@@ -136,7 +136,7 @@ export function generateFloor(seed: number, depth: number): Floor {
     for (let x = 0; x < SIZE; x++) if (tiles[idx(x, y)] === 'floor' && dist[idx(x, y)] >= 4) spots.push({ x, y });
   rng.shuffle(spots);
   const monsters: Omit<Monster, 'id'>[] = [];
-  const kinds = (Object.keys(MONSTERS) as MonsterKind[]).filter((k) => depth >= MONSTERS[k].depths[0] && depth <= MONSTERS[k].depths[1]);
+  const kinds = (Object.keys(MONSTERS) as MonsterKind[]).filter((k) => MONSTERS[k].weight > 0 && depth >= MONSTERS[k].depths[0] && depth <= MONSTERS[k].depths[1]);
   const mk = (kind: MonsterKind, x: number, y: number): Omit<Monster, 'id'> => ({ kind, x, y, hp: MONSTERS[kind].hp, maxHp: MONSTERS[kind].hp, wait: 0, awake: false, stun: 0 });
   if (boss) {
     const c = center(rooms[1]);
@@ -158,6 +158,12 @@ export function generateFloor(seed: number, depth: number): Floor {
       const s = spots.pop()!;
       monsters.push(mk(kind, s.x, s.y));
     }
+    // Now and then a cutpurse lurks as well (on top of the usual crowd).
+    const t = MONSTERS.thief.depths;
+    if (depth >= t[0] && depth <= t[1] && spots.length && rng.next() < 0.5) {
+      const s = spots.pop()!;
+      monsters.push(mk('thief', s.x, s.y));
+    }
   }
   const items: Omit<Item, 'id'>[] = [];
   const nItems = boss ? 2 : rng.int(4, 7);
@@ -169,10 +175,11 @@ export function generateFloor(seed: number, depth: number): Floor {
     let kind: ItemKind;
     let value = 0;
     if (r < 0.12) kind = 'potion';
-    else if (r < 0.24) kind = 'ether';
+    else if (r < 0.22) kind = 'ether';
+    else if (r < 0.28) kind = 'map';
     else if (r < 0.62) {
       kind = 'gold';
-      value = rng.int(5, 12) * depth;
+      value = rng.int(4, 9) * depth;
     } else if (r < 0.81) {
       kind = 'weapon';
       value = Math.min(4, Math.floor(depth / 2.5) + rng.int(0, 1));

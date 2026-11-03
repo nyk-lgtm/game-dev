@@ -8,7 +8,7 @@ export const DY = [-1, 0, 1, 0] as const;
 
 export type Tile = 'wall' | 'floor' | 'door' | 'open' | 'stairs' | 'pillar';
 
-export type MonsterKind = 'rat' | 'bat' | 'skeleton' | 'archer' | 'slime' | 'ghoul' | 'wraith' | 'golem' | 'mage' | 'warden';
+export type MonsterKind = 'rat' | 'bat' | 'skeleton' | 'archer' | 'slime' | 'thief' | 'ghoul' | 'wraith' | 'golem' | 'mage' | 'warden';
 
 export interface Monster {
   id: number;
@@ -23,6 +23,8 @@ export interface Monster {
   awake: boolean;
   /** Turns of being stunned / frozen. */
   stun: number;
+  /** Gold a cutpurse has snatched from you (dropped when it dies). */
+  loot?: number;
 }
 
 export type ItemKind =
@@ -34,7 +36,8 @@ export type ItemKind =
   | 'gold'
   | 'weapon'
   | 'armor'
-  | 'key';
+  | 'key'
+  | 'map';
 
 export interface Item {
   id: number;
@@ -46,6 +49,17 @@ export interface Item {
 }
 
 export type SpellId = 'fire' | 'frost' | 'blink' | 'heal';
+
+/** What a merchant sells between floors. */
+export type OfferKind = 'potion' | 'ether' | 'map' | 'weapon' | 'armor' | 'vigor';
+
+export interface Offer {
+  kind: OfferKind;
+  /** Gear tier for weapon/armor. */
+  value: number;
+  price: number;
+  sold: boolean;
+}
 
 export interface Player {
   x: number;
@@ -88,6 +102,10 @@ export interface GameState {
   log: string[];
   status: 'playing' | 'dead' | 'won';
   kills: number;
+  /** A merchant's stall, open on arrival at some depths; while open only buy/leave are legal. */
+  shop: Offer[] | null;
+  /** What landed the killing blow. */
+  killer: MonsterKind | null;
 }
 
 export type Action =
@@ -101,7 +119,9 @@ export type Action =
   | { type: 'wait' }
   | { type: 'potion' }
   | { type: 'ether' }
-  | { type: 'cast'; spell: SpellId };
+  | { type: 'cast'; spell: SpellId }
+  | { type: 'buy'; slot: number }
+  | { type: 'leave' };
 
 export type GameEvent =
   | { type: 'move' }
@@ -117,6 +137,9 @@ export type GameEvent =
   | { type: 'descend'; depth: number }
   | { type: 'levelUp'; level: number }
   | { type: 'shot'; by: MonsterKind }
+  | { type: 'stolen'; gold: number }
+  | { type: 'buy'; kind: OfferKind }
+  | { type: 'shop' }
   | { type: 'death' }
   | { type: 'win' };
 

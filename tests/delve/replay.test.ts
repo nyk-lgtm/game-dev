@@ -16,6 +16,11 @@ const ALL: Action[] = [
   { type: 'cast', spell: 'frost' },
   { type: 'cast', spell: 'heal' },
   { type: 'cast', spell: 'blink' },
+  { type: 'buy', slot: 0 },
+  { type: 'buy', slot: 1 },
+  { type: 'buy', slot: 2 },
+  { type: 'buy', slot: 3 },
+  { type: 'leave' },
 ];
 
 describe('replay codes', () => {
@@ -27,8 +32,11 @@ describe('replay codes', () => {
   });
 
   it('malformed codes throw', () => {
-    for (const bad of ['x', '', 'ff', ' ', 'Z', '1']) expect(() => decodeAction(bad)).toThrow();
-    expect(() => replay(1, 'ffx')).toThrow();
+    for (const bad of ['y', '', 'ff', ' ', 'Z', '0', '5']) expect(() => decodeAction(bad)).toThrow();
+    expect(() => replay(1, 'ffy')).toThrow();
+    // Buying or leaving with no merchant around is illegal.
+    expect(() => replay(1, 'x')).toThrow();
+    expect(() => replay(1, '1')).toThrow();
     // An illegal action in the string (a potion at full health) throws too.
     expect(() => replay(1, 'p')).toThrow();
   });

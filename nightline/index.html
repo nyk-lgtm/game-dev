@@ -15,15 +15,23 @@
       <div id="top">
         <div class="cell"><span class="label">Speed</span><span id="speed">0</span></div>
         <div class="cell time"><span class="label">Time</span><span id="clock">60</span></div>
-        <div class="cell"><span class="label">Score</span><span id="score">0</span></div>
+        <div class="cell"><span class="label">Score</span><span id="score">0</span><span id="mult"></span></div>
       </div>
       <div id="stage"><span id="stageName">NEON CITY</span><div id="prog"><i id="progFill"></i></div></div>
+      <div id="fork" hidden>
+        <div class="label">FORK AHEAD · KEEP LEFT OR RIGHT</div>
+        <div class="sides"><div id="forkL"></div><div id="forkR"></div></div>
+      </div>
       <div id="flash"></div>
       <button id="pauseBtn" aria-label="Pause">||</button>
+      <div id="stick" hidden><i></i></div>
+      <div id="hint" hidden>DRAG ANYWHERE TO STEER</div>
       <div id="controls">
-        <button id="brakeBtn">BRAKE</button>
-        <div id="nitro"><i id="nitroFill"></i></div>
-        <button id="boostBtn">BOOST</button>
+        <div id="nitroBox"><span class="label">NITRO</span><div id="nitro"><i id="nitroFill"></i></div></div>
+        <div id="pedals">
+          <button id="brakeBtn">BRAKE</button>
+          <button id="boostBtn">BOOST</button>
+        </div>
       </div>
     </div>
     <div id="overlay" hidden></div>

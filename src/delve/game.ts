@@ -2,29 +2,42 @@
 // the ASCII view, minimap, HUD, menus and saving.
 
 import { closeOverlay, showCard } from '../shared/cards';
+import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey } from '../shared/daily';
 import { copyText, toast } from '../shared/debug';
 import { makeStore } from '../shared/storage';
 import { DEATH_ART, LOGO, MONSTER_ART, ITEM_ART, VICTORY_ART } from './art';
 import {
   ARMORS,
+  DX,
+  DY,
   MAX_DEPTH,
+  MONSTERS,
   RULES_VERSION,
+  SHOP_DEPTHS,
+  SIGHT,
   SIZE,
   SPELLS,
   WEAPONS,
   XP_TABLE,
   applyAction,
   attackOf,
+  canBuy,
   defenceOf,
   encodeAction,
   idx,
   isLegal,
+  los,
   newGame,
+  offerName,
+  opaqueTile,
   randomSeed,
   replay,
+  runScore,
+  tileAt,
   type Action,
   type GameEvent,
   type GameState,
+  type Monster,
   type MonsterKind,
 } from './core';
 import { castView, makeGrid, paintGrid, type Grid, type Pose, type Sprite } from './view';
@@ -36,6 +49,7 @@ const MONSTER_LOOK: Record<MonsterKind, { hue: number; sat: number; scale: numbe
   rat: { hue: 30, sat: 30, scale: 0.32 },
   bat: { hue: 280, sat: 25, scale: 0.28, lift: 0.35 },
   slime: { hue: 110, sat: 60, scale: 0.42 },
+  thief: { hue: 150, sat: 25, scale: 0.7 },
   skeleton: { hue: 45, sat: 15, scale: 0.82 },
   archer: { hue: 45, sat: 22, scale: 0.82 },
   ghoul: { hue: 90, sat: 25, scale: 0.78 },
@@ -44,10 +58,12 @@ const MONSTER_LOOK: Record<MonsterKind, { hue: number; sat: number; scale: numbe
   golem: { hue: 25, sat: 12, scale: 1.0 },
   warden: { hue: 280, sat: 30, scale: 1.25 },
 };
-const ITEM_HUE: Record<string, [number, number]> = { potion: [0, 70], ether: [215, 70], gold: [48, 90], weapon: [200, 15], armor: [200, 15] };
+const ITEM_HUE: Record<string, [number, number]> = { potion: [0, 70], ether: [215, 70], gold: [48, 90], weapon: [200, 15], armor: [200, 15], map: [40, 45] };
+/** Map glyph and color per item kind. */
+const ITEM_GLYPH: Record<string, [string, string]> = { potion: ['!', '#ff5a6a'], ether: ['!', '#5ab4ff'], gold: ['$', '#ffd36b'], weapon: [')', '#c9d4e0'], armor: ['[', '#c9d4e0'], map: ['?', '#e8d7a8'] };
 
 /** Minimap letters, one per monster kind. */
-const MAP_GLYPH: Record<MonsterKind, string> = { rat: 'r', bat: 'b', slime: 'j', skeleton: 's', archer: 'a', ghoul: 'g', wraith: 'W', mage: 'c', golem: 'G', warden: 'X' };
+const MAP_GLYPH: Record<MonsterKind, string> = { rat: 'r', bat: 'b', slime: 'j', thief: 't', skeleton: 's', archer: 'a', ghoul: 'g', wraith: 'W', mage: 'c', golem: 'G', warden: 'X' };
 
 const angleOf = (dir: number) => ((dir - 1) * Math.PI) / 2;
 
@@ -55,6 +71,20 @@ interface SavedRun {
   seed: number;
   actions: string;
   v: number;
+  /** The day (YYYY-MM-DD) when this is a daily descent. */
+  day?: string | null;
+  /** Depth reached, for the title screen (saves replaying the run to show it). */
+  depth?: number;
+}
+
+/** Floating text over the view (damage numbers and the like). */
+interface Popup {
+  text: string;
+  color: string;
+  /** Anchor as a fraction of the view's rows / cols. */
+  row: number;
+  col: number;
+  t: number;
 }
 
 export class Game {
@@ -83,6 +113,10 @@ export class Game {
   /** Something changed that the idle (torch-rate) redraw wouldn't pick up soon enough. */
   private dirty = true;
   private lastTick = -1;
+  private popups: Popup[] = [];
+  /** The monster you last struck, kept on the foe bar for a moment. */
+  private lastFoe: { id: number; t: number } | null = null;
+  private dailyResult: ReturnType<typeof recordDaily> | null = null;
 
   constructor() {
     this.view = $<HTMLCanvasElement>('view');
@@ -96,7 +130,7 @@ export class Game {
   // ---------- lifecycle ----------
 
   /** Start (or restore) a run. With `replayLink`, the run is a bug-report replay and is never saved. */
-  start(seed: number, actions = '', replayLink = false): void {
+  start(seed: number, actions = '', replayLink = false, day: string | null = null): void {
     let s: GameState;
     let note = replayLink ? 'Replay: progress here is not saved' : '';
     try {
@@ -108,7 +142,12 @@ export class Game {
     }
     if (note) toast(note);
     this.replaying = replayLink;
-    this.run = { seed, actions, v: RULES_VERSION };
+    this.run = { seed, actions, v: RULES_VERSION, day };
+    this.dailyResult = null;
+    this.popups = [];
+    this.lastFoe = null;
+    if (!day) leaveDaily();
+    else if (!actions) toast(`Daily descent · ${prettyDay(day)}`);
     this.state = s;
     this.snapPose();
     this.resize();
@@ -116,14 +155,36 @@ export class Game {
     this.persist();
     this.refresh();
     if (s.status !== 'playing') this.showEnd();
+    else if (s.shop) this.showShop();
+  }
+
+  /** Today's daily descent: resume it if started, else begin it. */
+  playDaily(): void {
+    closeOverlay();
+    const day = todayKey();
+    const saved = store.load<SavedRun | null>('dailyRun', null);
+    if (saved && saved.day === day && saved.v === RULES_VERSION) this.start(saved.seed, saved.actions, false, day);
+    else this.start(dailySeed('delve', day), '', false, day);
   }
 
   private persist(): void {
     if (this.replaying) return;
-    store.save('run', this.state.status === 'playing' ? this.run : null);
+    this.run.depth = this.state.depth;
+    store.save(this.run.day ? 'dailyRun' : 'run', this.state.status === 'playing' ? this.run : null);
     const best = store.load<number>('best', 0);
     if (this.state.depth > best) store.save('best', this.state.depth);
-    if (this.state.status === 'won') store.save('wins', store.load<number>('wins', 0) + 1);
+  }
+
+  /** Records for a run that just ended (called once, when it ends). */
+  private recordEnd(): { score: number; newBest: boolean } {
+    const s = this.state;
+    const score = runScore(s);
+    if (this.replaying) return { score, newBest: false };
+    if (s.status === 'won') store.save('wins', store.load<number>('wins', 0) + 1);
+    const best = store.load<number>('bestScore', 0);
+    if (score > best) store.save('bestScore', score);
+    if (this.run.day) this.dailyResult = recordDaily(store, score, `${score} · ${s.status === 'won' ? 'won' : `depth ${s.depth}`}`, this.run.day);
+    return { score, newBest: score > best };
   }
 
   private snapPose(): void {
@@ -139,12 +200,15 @@ export class Game {
       b.addEventListener('click', () => {
         const a = b.dataset.a!;
         if (a === 'magic') this.showSpells();
+        else if (a === 'map') this.showMap();
         else this.act({ type: a } as Action);
       });
     }
     // Swipes on the view: up/down step, left/right turn, tap = use.
     let start: { x: number; y: number; t: number } | null = null;
     this.view.addEventListener('pointerdown', (e) => (start = { x: e.clientX, y: e.clientY, t: performance.now() }));
+    this.view.addEventListener('pointercancel', () => (start = null));
+    $('map').addEventListener('click', () => this.showMap());
     this.view.addEventListener('pointerup', (e) => {
       if (!start) return;
       const dx = e.clientX - start.x;
@@ -163,18 +227,20 @@ export class Game {
       };
       const t = map[e.key.toLowerCase()];
       if (t) this.act({ type: t } as Action);
+      if (e.key.toLowerCase() === 'm' && $('overlay').hidden && this.state) this.showMap();
       if (e.key.toLowerCase() === 'f') this.act({ type: 'cast', spell: 'fire' });
     });
   }
 
-  act(a: Action): void {
-    if (!$('overlay').hidden || !this.state) return;
+  act(a: Action, fromCard = false): void {
+    if ((!fromCard && !$('overlay').hidden) || !this.state) return;
     if (this.anim) {
       this.queued = a;
       return;
     }
     if (!isLegal(this.state, a)) {
-      if (a.type === 'potion' || a.type === 'ether' || a.type === 'cast') toast(a.type === 'cast' ? 'Not enough MP' : 'Nothing to drink, or no need');
+      if (a.type === 'potion' || a.type === 'ether') toast(this.state.player[a.type === 'potion' ? 'potions' : 'ethers'] ? (a.type === 'potion' ? 'Already at full health' : 'MP is already full') : `No ${a.type}s left`);
+      else if (a.type === 'cast') toast('Not enough MP');
       return;
     }
     const before = this.state;
@@ -185,6 +251,11 @@ export class Game {
     this.persist();
     this.refresh();
     this.dirty = true;
+  }
+
+  private pop(text: string, color: string, row: number, col = 0.5): void {
+    if (this.popups.length > 6) this.popups.shift();
+    this.popups.push({ text, color, row, col, t: 0 });
   }
 
   private react(events: GameEvent[]): void {
@@ -207,18 +278,37 @@ export class Game {
         case 'hit':
           this.flash.set(e.target, 0.18);
           this.swing = 1;
+          this.lastFoe = { id: e.target, t: 2.5 };
+          this.pop(e.crit ? `CRIT ${e.dmg}!` : String(e.dmg), e.crit ? '#ffd23a' : '#ffffff', 0.3, 0.5 + (((e.target * 7 + s.turn) % 5) - 2) * 0.03);
           break;
         case 'miss':
           this.swing = 1;
+          this.lastFoe = { id: e.target, t: 2.5 };
+          this.pop('miss', '#9a9080', 0.3);
           break;
         case 'hurt':
           this.hurtFlash = 1;
+          this.pop(`-${e.dmg}`, '#ff4d4d', 0.62, 0.5);
           navigator.vibrate?.(30);
+          break;
+        case 'stolen':
+          this.pop(`-${e.gold} GOLD`, '#ffd36b', 0.5);
+          toast('A cutpurse took your gold! Catch it before it gets away.');
+          break;
+        case 'kill':
+          this.pop(e.kind === 'warden' ? 'THE WARDEN FALLS' : `${MONSTERS[e.kind].name.toUpperCase()} SLAIN`, '#ffb347', 0.18);
+          break;
+        case 'pickup':
+          this.pop(`+ ${e.text.replace(/^(a|an) /, '').replace(/\..*$/, '').replace(/ \(.*\)$/, '')}`, '#ffe08a', 0.45);
+          break;
+        case 'shop':
+          setTimeout(() => this.state.shop && this.showShop(), 350);
           break;
         case 'bump':
           this.bump = 1;
           break;
         case 'bolt':
+          if (e.spell === 'heal') break;
           this.bolt = { t: 0, color: e.spell === 'fire' ? '#ff8a3d' : e.spell === 'frost' ? '#7fe3ff' : '#c9a6ff' };
           break;
         case 'levelUp':
@@ -229,9 +319,11 @@ export class Game {
           toast(e.depth === MAX_DEPTH ? 'The deepest hall' : `Depth ${e.depth}`);
           break;
         case 'death':
-        case 'win':
-          setTimeout(() => this.showEnd(), 600);
+        case 'win': {
+          const rec = this.recordEnd();
+          setTimeout(() => this.showEnd(rec.newBest), 700);
           break;
+        }
       }
     }
   }
@@ -255,14 +347,20 @@ export class Game {
   }
 
   showTitle(): void {
+    leaveDaily();
     const best = store.load<number>('best', 0);
+    const bestScore = store.load<number>('bestScore', 0);
+    const wins = store.load<number>('wins', 0);
     const saved = store.load<SavedRun | null>('run', null);
     const canResume = saved && saved.v === RULES_VERSION;
+    const daily = loadDaily(store);
+    const records = [best ? `Deepest: ${best}` : '', bestScore ? `Best score: ${bestScore}` : '', wins ? `Wins: ${wins}` : ''].filter(Boolean).join(' · ');
     showCard(
-      `<pre>${LOGO.join('\n')}</pre><p style="text-align:center">Ten floors down, the Warden waits.</p>${best ? `<p class="meta">Deepest: ${best}${store.load<number>('wins', 0) ? ` · Wins: ${store.load<number>('wins', 0)}` : ''}</p>` : ''}`,
+      `<pre>${LOGO.join('\n')}</pre><p style="text-align:center">Ten floors down, the Warden waits.</p>${records ? `<p class="meta">${records}</p>` : ''}`,
       [
-        ...(canResume ? [{ label: 'Continue', primary: true, onClick: () => (closeOverlay(), this.start(saved!.seed, saved!.actions)) }] : []),
+        ...(canResume ? [{ label: saved!.depth ? `Continue (depth ${saved!.depth})` : 'Continue', primary: true, onClick: () => (closeOverlay(), this.start(saved!.seed, saved!.actions)) }] : []),
         { label: 'New descent', primary: !canResume, onClick: () => (closeOverlay(), this.start(randomSeed())) },
+        { label: `Daily descent · ${daily ? daily.label : 'not played'}`, onClick: () => this.playDaily() },
         { label: 'How to play', onClick: () => this.showHelp() },
         { label: 'All games', onClick: () => (location.href = '../') },
       ],
@@ -270,47 +368,112 @@ export class Game {
     );
   }
 
-  showHelp(): void {
+  showHelp(fromMenu = false): void {
     showCard(
       `<h2>How to play</h2><ul>
       <li><b>FWD / BACK / STEP</b> move one cell. <b>TURN</b> is free; everything else takes a turn.</li>
       <li>Or swipe on the view: up/down to step, left/right to turn, tap to hit or open doors.</li>
-      <li>Walk into a monster (or press <b>HIT</b>) to attack. Walk into a door to open it.</li>
-      <li><b>CAST</b> spells with MP: Firebolt from the start, more as you level.</li>
+      <li>Walk into a monster (or press <b>HIT</b>) to attack. The bar at the top of the view shows the foe in front of you.</li>
+      <li>Red arrows at the edges of the view warn of foes beside or behind you: turn to face them.</li>
+      <li><b>CAST</b> spells with MP (it slowly comes back): Firebolt from the start, Frost at level 3, Mend at 5, Blink at 7.</li>
       <li>Monsters act only when you do. Archers and cultists shoot down straight corridors.</li>
-      <li>Find the stairs (<b>&gt;</b> on the floor and the map) on each floor. Floor 10 holds the Warden.</li>
-      <li>The map shows what you've seen. Red letters are monsters.</li></ul>`,
-      [{ label: 'Back', primary: true, onClick: () => this.showTitle() }],
+      <li>Find the stairs (<b>&gt;</b>) on each floor. Floor 10 holds the Warden.</li>
+      <li>Gather gold: a merchant waits on floors ${SHOP_DEPTHS.join(' and ')} with potions, gear and vigor.</li>
+      <li><b>MAP</b> (or tap the minimap) shows the whole floor you've seen. A scroll of seeing reveals it all.</li></ul>`,
+      [{ label: 'Back', primary: true, onClick: () => (fromMenu ? this.showMenu() : this.showTitle()) }],
       false,
     );
   }
 
   showMenu(): void {
     const s = this.state;
+    if (!s) return;
     showCard(
-      `<h2>Depth ${s.depth}</h2><p>Turn ${s.turn} · ${s.kills} kills · ${s.player.gold} gold</p>`,
+      `<h2>Depth ${s.depth}${this.run.day ? ' · daily' : ''}</h2><p>Turn ${s.turn} · ${s.kills} kills · ${s.player.gold} gold · score ${runScore(s)}</p>`,
       [
         { label: 'Resume', primary: true, onClick: closeOverlay },
-        { label: 'How to play', onClick: () => this.showHelp() },
+        { label: 'How to play', onClick: () => this.showHelp(true) },
         { label: 'Copy bug report', onClick: () => this.copyReport() },
-        { label: 'Abandon descent', onClick: () => (this.replaying || store.save('run', null), this.showTitle()) },
+        { label: 'Abandon descent', onClick: () => (this.replaying || store.save(this.run.day ? 'dailyRun' : 'run', null), this.showTitle()) },
         { label: 'All games', onClick: () => (location.href = '../') },
       ],
     );
   }
 
-  private showEnd(): void {
+  private showEnd(newBest = false): void {
     const s = this.state;
     const won = s.status === 'won';
+    const score = runScore(s);
+    const cause = won ? 'You struck down the Warden.' : s.killer ? `Slain by ${MONSTERS[s.killer].name.startsWith('The ') ? MONSTERS[s.killer].name.toLowerCase() : `a ${MONSTERS[s.killer].name.toLowerCase()}`} on depth ${s.depth}.` : `Fell on depth ${s.depth}.`;
+    const day = this.run.day;
+    const dailyLine = day ? `<p style="text-align:center"><b>Daily descent · ${prettyDay(day)}</b><br>${this.dailyResult?.improved ? 'New best for today!' : `Today's best: ${loadDaily(store, day)?.score ?? score}`}</p>` : '';
     showCard(
       `<pre>${(won ? VICTORY_ART : DEATH_ART).join('\n')}</pre><h2 style="text-align:center">${won ? 'The deep is quiet' : 'Lost in the dark'}</h2>
-      <p style="text-align:center">Depth ${s.depth} · Level ${s.player.level} · ${s.kills} kills · ${s.turn} turns</p>`,
+      <p style="text-align:center">${cause}</p>
+      <p style="text-align:center">Score <b>${score}</b>${newBest ? ' · <b>new best!</b>' : ''}</p>
+      <p style="text-align:center">Level ${s.player.level} · ${s.kills} kills · ${s.player.gold} gold · ${s.turn} turns</p>${dailyLine}`,
       [
         { label: 'New descent', primary: true, onClick: () => (closeOverlay(), this.start(randomSeed())) },
+        ...(day && !this.replaying ? [{ label: 'Retry today’s descent', onClick: () => (closeOverlay(), this.start(dailySeed('delve', day), '', false, day)) }] : []),
         { label: 'Title', onClick: () => this.showTitle() },
       ],
       false,
     );
+  }
+
+  /** The merchant's stall: buy what you can afford, then move on. */
+  private showShop(): void {
+    const s = this.state;
+    if (!s.shop) return;
+    const p = s.player;
+    const owned = (kind: string, v: number) => (kind === 'weapon' && v <= p.weapon) || (kind === 'armor' && v <= p.armor);
+    const opts = s.shop.map((o, i) => ({
+      label: o.sold ? `${offerName(o)} - sold` : `${offerName(o)} - ${o.price}g${owned(o.kind, o.value) ? ' (you have as good)' : ''}`,
+      onClick: () => {
+        this.act({ type: 'buy', slot: i }, true);
+        navigator.vibrate?.(15);
+        this.showShop();
+      },
+    }));
+    showCard(
+      `<h2>The merchant</h2><p>"Coin for comfort, delver." You have <b>${p.gold}</b> gold.</p><p class="meta">ATK ${attackOf(s)} · DEF ${defenceOf(s)} · HP ${p.hp}/${p.maxHp} · ${p.potions} potions · ${p.ethers} ethers</p>`,
+      [...opts, { label: 'Move on', primary: true, onClick: () => (this.act({ type: 'leave' }, true), closeOverlay()) }],
+      false,
+    );
+    document.querySelectorAll<HTMLButtonElement>('#overlay .card button').forEach((b, i) => {
+      if (i < s.shop!.length) b.disabled = !canBuy(s, s.shop![i]);
+    });
+  }
+
+  /** The whole floor as far as you've seen it. */
+  private showMap(): void {
+    const s = this.state;
+    if (!s || s.shop) return;
+    showCard(`<h2>Depth ${s.depth}</h2><canvas id="fullMap" style="width:100%;aspect-ratio:1;display:block"></canvas><p class="meta">&gt; stairs · + door · ! potion/ether · $ gold · ) [ gear · ? scroll · red letters: foes in sight</p>`, [
+      { label: 'Close', primary: true, onClick: closeOverlay },
+    ]);
+    const c = $<HTMLCanvasElement>('fullMap');
+    const css = c.clientWidth || 300;
+    const dpr = Math.min(2, devicePixelRatio || 1);
+    c.width = Math.round(css * dpr);
+    c.height = Math.round(css * dpr);
+    const ctx = c.getContext('2d')!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Frame what you've seen (at least 13 cells across) so early floors aren't specks.
+    let x0 = SIZE, y0 = SIZE, x1 = 0, y1 = 0;
+    for (let k = 0; k < SIZE * SIZE; k++)
+      if (s.level.seen[k]) {
+        const x = k % SIZE;
+        const y = (k / SIZE) | 0;
+        x0 = Math.min(x0, x);
+        y0 = Math.min(y0, y);
+        x1 = Math.max(x1, x);
+        y1 = Math.max(y1, y);
+      }
+    const span = Math.min(SIZE, Math.max(13, x1 - x0 + 3, y1 - y0 + 3));
+    const cx = Math.round((x0 + x1) / 2 - span / 2);
+    const cy = Math.round((y0 + y1) / 2 - span / 2);
+    this.paintMap(ctx, css, cx, cy, span, true);
   }
 
   private async copyReport(): Promise<void> {
@@ -330,12 +493,49 @@ export class Game {
     $('depth').textContent = `D${s.depth}`;
     $('potCount').textContent = String(p.potions);
     $('ethCount').textContent = String(p.ethers);
+    $('hpFill').parentElement!.classList.toggle('low', p.hp < p.maxHp * 0.3);
+    document.querySelector('#pad [data-a=potion]')!.classList.toggle('dim', !isLegal(s, { type: 'potion' }));
+    document.querySelector('#pad [data-a=ether]')!.classList.toggle('dim', !isLegal(s, { type: 'ether' }));
+    document.querySelector('#pad [data-a=magic]')!.classList.toggle('dim', !s.player.spells.some((id) => isLegal(s, { type: 'cast', spell: id })));
+    this.refreshFoe();
     const next = XP_TABLE[p.level];
     $('stats').innerHTML = `LV <b>${p.level}</b> XP ${p.xp}${next ? '/' + next : ''} · ATK <b>${attackOf(s)}</b> DEF <b>${defenceOf(s)}</b><br>${WEAPONS[p.weapon]} · ${ARMORS[p.armor]} · <b>${p.gold}</b>g`;
     $('log').innerHTML = s.log
       .slice(-4)
       .map((l) => `<div>${l.replace(/</g, '&lt;')}</div>`)
       .join('');
+  }
+
+  /** The monster straight ahead in sight (or the one you just struck). */
+  private foe(): Monster | null {
+    const s = this.state;
+    const p = s.player;
+    for (let d = 1; d <= 7; d++) {
+      const x = p.x + DX[p.dir] * d;
+      const y = p.y + DY[p.dir] * d;
+      const m = s.monsters.find((o) => o.hp > 0 && o.x === x && o.y === y);
+      if (m) return m;
+      if (opaqueTile(tileAt(s, x, y))) break;
+    }
+    if (this.lastFoe) return s.monsters.find((o) => o.id === this.lastFoe!.id && o.hp > 0) ?? null;
+    return null;
+  }
+
+  private foeKey = '';
+  private refreshFoe(): void {
+    const m = this.state.status === 'playing' ? this.foe() : null;
+    const key = m ? `${m.id}:${m.hp}:${m.awake}:${m.stun}` : '';
+    if (key === this.foeKey) return;
+    this.foeKey = key;
+    const el = $('foe');
+    el.hidden = !m;
+    if (!m) return;
+    const def = MONSTERS[m.kind];
+    const tags = [!m.awake ? 'asleep' : '', m.stun > 0 ? `frozen ${m.stun}` : '', def.range ? 'ranged' : '', def.ghost ? 'walks through walls' : '', def.slow ? 'slow' : ''].filter(Boolean).join(' · ');
+    $('foeName').textContent = def.name;
+    $('foeHp').textContent = `${Math.max(0, m.hp)}/${m.maxHp}`;
+    $('foeFill').style.width = `${(100 * Math.max(0, m.hp)) / m.maxHp}%`;
+    $('foeNote').textContent = tags ? `${def.blurb} (${tags})` : def.blurb;
   }
 
   // ---------- rendering ----------
@@ -371,7 +571,11 @@ export class Game {
     if (!this.state) return;
     // Redraw every frame only while something moves; otherwise at the torch's
     // flicker rate (10 Hz), which is all an idle view changes by.
-    const busy = !!this.anim || this.flash.size > 0 || this.hurtFlash > 0 || this.swing > 0 || this.bump > 0 || !!this.bolt;
+    const busy = !!this.anim || this.flash.size > 0 || this.hurtFlash > 0 || this.swing > 0 || this.bump > 0 || !!this.bolt || this.popups.length > 0;
+    if (this.lastFoe && (this.lastFoe.t -= dt) <= 0) {
+      this.lastFoe = null;
+      this.refreshFoe();
+    }
     const tick = Math.floor(t / 100);
     if (!busy && !this.dirty && tick === this.lastTick) return;
     this.lastTick = tick;
@@ -401,6 +605,8 @@ export class Game {
       this.bolt.t += dt * 4;
       if (this.bolt.t >= 1) this.bolt = null;
     }
+    for (const p of this.popups) p.t += dt;
+    if (this.popups.length && this.popups[0].t > 0.9) this.popups = this.popups.filter((p) => p.t <= 0.9);
     this.draw(t / 1000);
   }
 
@@ -428,6 +634,8 @@ export class Game {
     }
     castView(grid, this.state, pose, this.cw / this.chh, flicker, this.sprites());
     this.overlayHands(time);
+    this.overlayThreats(time);
+    this.overlayPopups();
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, this.vw, this.vh);
     const x0 = Math.floor((this.vw - grid.cols * this.cw) / 2);
@@ -465,44 +673,149 @@ export class Game {
     }
   }
 
+  /** Foes beside or behind you (which the view can't show): arrows on its edges. */
+  private overlayThreats(time: number): void {
+    const s = this.state;
+    if (s.status !== 'playing') return;
+    const g = this.grid;
+    const p = s.player;
+    const fx = DX[p.dir];
+    const fy = DY[p.dir];
+    const rx = DX[(p.dir + 1) % 4];
+    const ry = DY[(p.dir + 1) % 4];
+    let left = '';
+    let right = '';
+    let back = '';
+    for (const m of s.monsters) {
+      if (m.hp <= 0 || !m.awake) continue;
+      const dx = m.x - p.x;
+      const dy = m.y - p.y;
+      const f = dx * fx + dy * fy;
+      const r = dx * rx + dy * ry;
+      if (f > 0 && Math.abs(r) <= f * 0.6) continue; // in view
+      const d = Math.abs(dx) + Math.abs(dy);
+      const def = MONSTERS[m.kind];
+      const aimed = def.range > 0 && (dx === 0 || dy === 0) && d <= def.range;
+      if (d > 2 && !aimed) continue;
+      const name = def.name.replace(/^(Giant|Cave|Bone|Stone|The) /, '').toUpperCase();
+      if (f > 0 || Math.abs(r) > Math.abs(f)) {
+        if (r < 0) left ||= name;
+        else right ||= name;
+      } else back ||= name;
+    }
+    if (!left && !right && !back) return;
+    const on = Math.floor(time * 4) % 2 === 0;
+    const col = on ? '#ff4d4d' : '#b02a2a';
+    // Each label sits on a cleared patch so it reads over busy wall textures.
+    const put = (r: number, c: number, str: string) => {
+      for (let i = -1; i <= str.length; i++) {
+        const cc = c + i;
+        if (r < 0 || r >= g.rows || cc < 0 || cc >= g.cols) continue;
+        const ch = str[i] ?? ' ';
+        g.ch[r * g.cols + cc] = ch;
+        g.color[r * g.cols + cc] = col;
+      }
+    };
+    const mid = Math.floor(g.rows * 0.45);
+    if (left) {
+      const w = left.length + 3;
+      put(mid - 1, 0, '<<'.padEnd(w));
+      put(mid, 0, '<< ' + left);
+      put(mid + 1, 0, '<<'.padEnd(w));
+    }
+    if (right) {
+      const w = right.length + 3;
+      put(mid - 1, g.cols - w, '>>'.padStart(w));
+      put(mid, g.cols - w, right + ' >>');
+      put(mid + 1, g.cols - w, '>>'.padStart(w));
+    }
+    if (back) {
+      const label = `vv ${back} BEHIND vv`;
+      put(g.rows - 7, Math.floor((g.cols - label.length) / 2), label);
+    }
+  }
+
+  private overlayPopups(): void {
+    const g = this.grid;
+    for (const p of this.popups) {
+      const r = Math.round(g.rows * p.row - p.t * 4);
+      const c = Math.round(g.cols * p.col - p.text.length / 2);
+      if (r < 0 || r >= g.rows) continue;
+      for (let i = 0; i < p.text.length; i++) {
+        const cc = c + i;
+        if (cc < 0 || cc >= g.cols) continue;
+        g.ch[r * g.cols + cc] = p.text[i];
+        g.color[r * g.cols + cc] = p.color;
+      }
+      // A dark band behind the text so it reads over walls.
+      for (const rr of [r - 1, r + 1])
+        if (rr >= 0 && rr < g.rows)
+          for (let i = -1; i <= p.text.length; i++) {
+            const cc = c + i;
+            if (cc >= 0 && cc < g.cols && g.color[rr * g.cols + cc] !== p.color) g.ch[rr * g.cols + cc] = ' ';
+          }
+    }
+  }
+
   private drawMap(): void {
     const ctx = this.mapCtx;
-    const s = this.state;
-    const p = s.player;
-    const span = 11;
-    const cell = 150 / span;
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, 150, 150);
-    ctx.font = `700 ${Math.floor(cell * 1.05)}px ui-monospace, 'Droid Sans Mono', monospace`;
+    const span = 13;
+    const p = this.state.player;
+    this.paintMap(ctx, 150, p.x - (span >> 1), p.y - (span >> 1), span, false);
+  }
+
+  /** Draw the seen map: `span` cells from (x0, y0) into a square of `px` CSS pixels. */
+  private paintMap(ctx: CanvasRenderingContext2D, px: number, x0: number, y0: number, span: number, whole: boolean): void {
+    const s = this.state;
+    const p = s.player;
+    const cell = px / span;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, px, px);
+    ctx.font = `700 ${Math.floor(cell * 1.1)}px ui-monospace, 'Droid Sans Mono', monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const half = Math.floor(span / 2);
-    for (let dy = -half; dy <= half; dy++)
-      for (let dx = -half; dx <= half; dx++) {
-        const x = p.x + dx;
-        const y = p.y + dy;
+    const at = (x: number, y: number): [number, number] => [(x - x0 + 0.5) * cell, (y - y0 + 0.5) * cell];
+    const within = (x: number, y: number) => x >= x0 && y >= y0 && x < x0 + span && y < y0 + span;
+    for (let y = y0; y < y0 + span; y++)
+      for (let x = x0; x < x0 + span; x++) {
         if (x < 0 || y < 0 || x >= SIZE || y >= SIZE || !s.level.seen[idx(x, y)]) continue;
         const t = s.level.tiles[idx(x, y)];
         const [ch, col] =
-          t === 'wall' ? ['#', '#5c5446'] : t === 'pillar' ? ['O', '#7a705c'] : t === 'door' ? ['+', '#a8743a'] : t === 'open' ? ["'", '#a8743a'] : t === 'stairs' ? ['>', '#ffb347'] : ['.', '#3a352c'];
+          t === 'wall' ? ['#', '#5c5446'] : t === 'pillar' ? ['O', '#7a705c'] : t === 'door' ? ['+', '#c0843a'] : t === 'open' ? ["'", '#a8743a'] : t === 'stairs' ? ['>', '#ffb347'] : ['.', '#4a4438'];
+        if (t === 'stairs') {
+          ctx.fillStyle = '#4a2d08';
+          ctx.fillRect((x - x0) * cell, (y - y0) * cell, cell, cell);
+        }
         ctx.fillStyle = col;
-        ctx.fillText(ch, (dx + half + 0.5) * cell, (dy + half + 0.5) * cell);
+        ctx.fillText(ch, ...at(x, y));
       }
     for (const it of s.items) {
-      const dx = it.x - p.x;
-      const dy = it.y - p.y;
-      if (Math.abs(dx) > half || Math.abs(dy) > half || !s.level.seen[idx(it.x, it.y)]) continue;
-      ctx.fillStyle = '#ffd36b';
-      ctx.fillText('!', (dx + half + 0.5) * cell, (dy + half + 0.5) * cell);
+      if (!within(it.x, it.y) || !s.level.seen[idx(it.x, it.y)]) continue;
+      const [ch, col] = ITEM_GLYPH[it.kind] ?? ['*', '#ffd36b'];
+      ctx.fillStyle = col;
+      ctx.fillText(ch, ...at(it.x, it.y));
     }
     for (const m of s.monsters) {
-      const dx = m.x - p.x;
-      const dy = m.y - p.y;
-      if (Math.abs(dx) > half || Math.abs(dy) > half || !m.awake) continue;
+      if (!within(m.x, m.y) || !m.awake) continue;
+      // Only what you can actually see on the full map; the minimap keeps the old "awake" rule.
+      if (whole && !this.inSight(m)) continue;
       ctx.fillStyle = '#ff4d4d';
-      ctx.fillText(MAP_GLYPH[m.kind], (dx + half + 0.5) * cell, (dy + half + 0.5) * cell);
+      ctx.fillText(MAP_GLYPH[m.kind], ...at(m.x, m.y));
     }
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText('^>v<'[p.dir], (half + 0.5) * cell, (half + 0.5) * cell);
+    // You: an amber square with your facing as a dark arrow (so it never reads as the stairs).
+    const [px0, py0] = at(p.x, p.y);
+    ctx.fillStyle = '#ffd36b';
+    ctx.fillRect(px0 - cell / 2 + 0.5, py0 - cell / 2 + 0.5, cell - 1, cell - 1);
+    ctx.fillStyle = '#000';
+    ctx.fillText('^>v<'[p.dir], px0, py0);
+  }
+
+  private inSight(m: Monster): boolean {
+    const p = this.state.player;
+    const dx = m.x - p.x;
+    const dy = m.y - p.y;
+    return dx * dx + dy * dy <= SIGHT * SIGHT + 2 && los(this.state, p.x, p.y, m.x, m.y);
   }
 }

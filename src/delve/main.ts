@@ -1,3 +1,4 @@
+import { wantsDaily } from '../shared/daily';
 import { installErrorOverlay, toast } from '../shared/debug';
 import { Game } from './game';
 
@@ -17,7 +18,8 @@ if (p.has('seed') && p.get('seed') !== '' && Number.isFinite(Number(p.get('seed'
     toast(`Bad replay link: seed "${p.get('seed')}"`);
     history.replaceState(null, '', location.pathname);
   }
-  game.showTitle();
+  if (wantsDaily()) game.playDaily();
+  else game.showTitle();
 }
 
 // Handle for automated browser tests.

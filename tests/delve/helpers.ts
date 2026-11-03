@@ -1,7 +1,7 @@
 import { MONSTERS, SIZE, applyAction, newGame, type Action, type Dir, type GameState, type ItemKind, type MonsterKind, type StepResult, type Tile } from '../../src/delve/core';
 
 const TILES: Record<string, Tile> = { '#': 'wall', '.': 'floor', '+': 'door', "'": 'open', '>': 'stairs', O: 'pillar' };
-const MONSTER_CHARS: Record<string, MonsterKind> = { r: 'rat', b: 'bat', s: 'skeleton', a: 'archer', l: 'slime', g: 'ghoul', w: 'wraith', m: 'mage', G: 'golem', W: 'warden' };
+const MONSTER_CHARS: Record<string, MonsterKind> = { r: 'rat', b: 'bat', s: 'skeleton', a: 'archer', l: 'slime', g: 'ghoul', w: 'wraith', t: 'thief', m: 'mage', G: 'golem', W: 'warden' };
 const ITEM_CHARS: Record<string, ItemKind> = { '!': 'potion', '?': 'ether', $: 'gold', ')': 'weapon', '[': 'armor' };
 
 export interface SetupOpts {

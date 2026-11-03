@@ -4,12 +4,17 @@
 
 import { blitArt, clearGrid, put, text, type Art, type Grid } from '../shared/ascii';
 import { FORK_SIGN, PLAYER_BOOST, PLAYER_CAR, PROPS, SKYLINES, TRAFFIC } from './art';
-import { SEG_LEN, segmentAt, type BiomeId, type Race } from './core';
+import { MAX_SPEED, SEG_LEN, STAGES, segmentAt, type BiomeId, type Race } from './core';
 
 export const ROAD_W = 2000;
 export const CAM_HEIGHT = 1000;
 export const CAM_DEPTH = 1 / Math.tan((100 / 2) * (Math.PI / 180));
 export const DRAW_DIST = 170;
+/** Segments before a fork where the road is split by a painted divider with arrows. */
+export const FORK_LEAD = 70;
+/** Colors for the gentler (left) and harder (right) branch, shared with the HUD. */
+export const EASY_COLOR = '#05d9e8';
+export const HARD_COLOR = '#ff2a6d';
 
 interface Palette {
   skyTop: string;
@@ -51,12 +56,21 @@ export interface View {
 /** Background state that scrolls with the curves. */
 export interface SkyState {
   offset: number;
+  /** 0..1 smoothed speed "kick" that widens the field of view as you go faster. */
+  kick?: number;
 }
 
 /** Scroll the skyline for one simulation step (call once per `step`, not per drawn frame). */
 export function advanceSky(sky: SkyState, r: Race): void {
   const p = r.player;
   sky.offset += segmentAt(r, p.z).curve * (p.speed / 8000) * 0.12;
+  const target = Math.min(1, p.speed / MAX_SPEED) * 0.7 + (p.boosting ? 0.3 : 0);
+  sky.kick = (sky.kick ?? 0) + (target - (sky.kick ?? 0)) * 0.04;
+}
+
+/** Camera depth (inverse field of view): a little wider at speed for a sense of rush. */
+export function camDepth(sky: SkyState): number {
+  return CAM_DEPTH * (1 - 0.22 * (sky.kick ?? 0));
 }
 
 /** Screen row the player's car stands on: above the on-screen BRAKE/BOOST buttons. */
@@ -69,10 +83,10 @@ export function carBottomRow(v: View): number {
  * projects exactly onto the car sprite's bottom row. The race core treats
  * `player.z` as the car's position, so crashes line up with what's drawn.
  */
-export function playerDepth(v: View): number {
+export function playerDepth(v: View, depth = CAM_DEPTH): number {
   const halfW = (v.cols * v.cw) / 2;
   const below = Math.max(v.ch, (carBottomRow(v) - v.horizon) * v.ch);
-  return (CAM_DEPTH * CAM_HEIGHT * halfW) / below;
+  return (depth * CAM_HEIGHT * halfW) / below;
 }
 
 /** Ground height at world z (a segment's `y` is its far end). */
@@ -87,7 +101,8 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
   clearGrid(g);
   const p = r.player;
   // The camera trails the car; clamp at the start line (there's no road behind it).
-  const camZ = Math.max(0, p.z - playerDepth(v));
+  const D = camDepth(sky);
+  const camZ = Math.max(0, p.z - playerDepth(v, D));
   const base = segmentAt(r, camZ);
   const pal = PALETTES[segmentAt(r, p.z).biome];
   const W = v.cols * v.cw;
@@ -146,7 +161,7 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
   const clips: number[] = [];
   /** Project a road-center point; `curveX` is the accumulated curve offset (world units). */
   const project = (curveX: number, wy: number, wz: number) => {
-    const scale = CAM_DEPTH / Math.max(1, wz - camZ);
+    const scale = D / Math.max(1, wz - camZ);
     return {
       x: halfW + scale * (curveX - camX) * halfW,
       y: horizonPx - scale * (wy - camY) * halfW,
@@ -154,6 +169,8 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
       scale,
     };
   };
+  const stageEnd = r.stages[r.stage]?.end ?? Infinity;
+  const hasFork = r.stage + 1 < STAGES;
   for (let n = 0; n < DRAW_DIST; n++) {
     const seg = r.segments[base.index + n];
     if (!seg) break;
@@ -167,9 +184,14 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
     dx += seg.curve;
     proj[n] = p1;
     clips[n] = maxy;
-    if (seg.z + SEG_LEN - camZ <= CAM_DEPTH || p2.y >= p1.y || p2.y >= maxy) continue;
+    if (seg.z + SEG_LEN - camZ <= D || p2.y >= p1.y || p2.y >= maxy) continue;
     const band = Math.floor(seg.index / 3) % 2;
     const sp = PALETTES[seg.biome];
+    // Approaching a fork: a divider down the middle, arrows on each half. At the goal: a checkered line.
+    const toEnd = stageEnd - seg.index;
+    const forkPaint = hasFork && toEnd > 0 && toEnd <= FORK_LEAD;
+    const arrows = forkPaint && Math.floor(seg.index / 4) % 3 === 0;
+    const goal = !hasFork && toEnd >= -3 && toEnd < 1;
     const rTop = Math.max(0, Math.ceil(p2.y / v.ch));
     const rBot = Math.min(v.rows - 1, Math.floor(Math.min(p1.y, maxy) / v.ch));
     for (let rr = rTop; rr <= rBot; rr++) {
@@ -184,7 +206,10 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
         let col: string;
         if (au <= 1) {
           const lane = band === 0 && (Math.abs(au - 1 / 3) < 0.035 || au < 0.02);
-          if (lane) [chx, col] = ['|', sp.lane];
+          if (goal) [chx, col] = ['#', (Math.floor((u + 1) * 8) + seg.index) % 2 ? '#ffffff' : '#30304a'];
+          else if (forkPaint && au < 0.03) [chx, col] = ['#', '#ffd166'];
+          else if (arrows && au > 0.4 && au < 0.7) [chx, col] = u < 0 ? ['<', EASY_COLOR] : ['>', HARD_COLOR];
+          else if (lane) [chx, col] = ['|', sp.lane];
           else [chx, col] = [band ? '=' : '-', sp.road[band]];
         } else if (au <= 1.13) [chx, col] = ['#', sp.rumble[band]];
         else {
@@ -238,17 +263,19 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
   const art = p.boosting ? PLAYER_BOOST : p.steer < -0.35 ? PLAYER_CAR.left : p.steer > 0.35 ? PLAYER_CAR.right : PLAYER_CAR.straight;
   const offroad = Math.abs(p.x) > 1 && p.speed > 50;
   const bounce = offroad ? Math.round(Math.sin(time * 40)) : 0;
-  const carRows = Math.min(art.rows.length * 1.2, v.rows * 0.16);
+  // Drawn at 1:1 where it fits: resampling ASCII art doubles letters and lines.
+  const carRows = Math.min(art.rows.length, v.rows * 0.16);
   const carBottom = carBottomRow(v);
   blitArt(g, art, carRows, carBottom + bounce, v.cols / 2, '#ff2a6d', { solid: true });
 
-  // Boost streaks.
-  if (p.boosting)
-    for (let i = 0; i < 14; i++) {
-      const rr = v.horizon + 3 + Math.floor(hash(i + Math.floor(time * 30) * 13) * (v.rows - v.horizon - 6));
-      const left = hash(i * 3 + Math.floor(time * 30)) < 0.5;
-      const c0 = left ? 0 : v.cols - 6;
-      text(g, rr, c0, left ? '----  ' : '  ----', '#ffffff');
-    }
+  // Speed streaks: a few faint ones near top speed, a storm while boosting.
+  const pct = p.speed / MAX_SPEED;
+  const streaks = p.boosting ? 14 : pct > 0.8 ? Math.round((pct - 0.8) * 30) : 0;
+  for (let i = 0; i < streaks; i++) {
+    const rr = v.horizon + 3 + Math.floor(hash(i + Math.floor(time * 30) * 13) * (v.rows - v.horizon - 6));
+    const left = hash(i * 3 + Math.floor(time * 30)) < 0.5;
+    const c0 = left ? 0 : v.cols - 6;
+    text(g, rr, c0, left ? '----  ' : '  ----', p.boosting ? '#ffffff' : '#8890b0');
+  }
   return { skyGradient: [pal.skyTop, pal.skyBot], horizonRow: v.horizon };
 }

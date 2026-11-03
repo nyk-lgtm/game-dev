@@ -18,6 +18,7 @@ export type MonsterArtId =
   | 'rat'
   | 'bat'
   | 'slime'
+  | 'thief'
   | 'skeleton'
   | 'archer'
   | 'ghoul'
@@ -26,7 +27,7 @@ export type MonsterArtId =
   | 'golem'
   | 'warden';
 
-export type ItemArtId = 'potion' | 'ether' | 'gold' | 'weapon' | 'armor';
+export type ItemArtId = 'potion' | 'ether' | 'gold' | 'weapon' | 'armor' | 'map';
 
 export const MONSTER_ART: Record<MonsterArtId, { large: Art; small: Art }> = {
   rat: {
@@ -114,6 +115,38 @@ export const MONSTER_ART: Record<MonsterArtId, { large: Art; small: Art }> = {
         ' \'----\' ',
       ],
       accents: { '@': '#f4ff7a' },
+    },
+  },
+  thief: {
+    large: {
+      rows: [
+        '       .-"""""-.       ',
+        '      /  _____  \\      ',
+        '     |  / o o \\  |     ',
+        '     |  \\__^__/  |     ',
+        '      \\_ \'---\' _/      ',
+        '   .--\'/   |   \\\'--.   ',
+        '  /   /    |    \\   \\  ',
+        ' / /| |   _|_   | |\\ \\ ',
+        '(_/ | |  ($$$)  | | \\_)',
+        ' /> | |   \'"\'   | |    ',
+        '//  |_|_________|_|    ',
+        '      |    |    |      ',
+        '      |    |    |      ',
+        '     _|   / \\   |_     ',
+        '    (____/   \\____)    ',
+      ],
+      accents: { 'o': '#9dff6b', '$': '#ffd36b' },
+    },
+    small: {
+      rows: [
+        ' .-"-. ',
+        '( o o )',
+        ' \\_^_/ ',
+        '/|($)|\\',
+        ' /   \\ ',
+      ],
+      accents: { 'o': '#9dff6b', '$': '#ffd36b' },
     },
   },
   skeleton: {
@@ -395,6 +428,16 @@ export const ITEM_ART: Record<ItemArtId, Art> = {
       'o=##=o',
       '  ()  ',
     ],
+  },
+  map: {
+    rows: [
+      ' _______ ',
+      '(_)~~~~~)',
+      '  |~ ~~ |',
+      '  |~~ ~ |',
+      '  (_____)',
+    ],
+    accents: { '~': '#d9b46a' },
   },
   armor: {
     rows: [

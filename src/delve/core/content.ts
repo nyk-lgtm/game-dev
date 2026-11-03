@@ -29,6 +29,7 @@ export const MONSTERS: Record<MonsterKind, MonsterDef> = {
   slime: { name: 'Slime', hp: 26, atk: 5, def: 0, xp: 8, slow: 1, range: 0, erratic: 0, ghost: false, depths: [2, 6], weight: 2, blurb: 'Slow, but soaks up blows.' },
   skeleton: { name: 'Skeleton', hp: 22, atk: 7, def: 2, xp: 10, slow: 0, range: 0, erratic: 0, ghost: false, depths: [2, 7], weight: 3, blurb: 'Rattling bones, rusty blade.' },
   archer: { name: 'Bone archer', hp: 16, atk: 7, def: 1, xp: 11, slow: 0, range: 5, erratic: 0, ghost: false, depths: [3, 9], weight: 2, blurb: 'Shoots down straight corridors.' },
+  thief: { name: 'Cutpurse', hp: 14, atk: 4, def: 1, xp: 12, slow: 0, range: 0, erratic: 0, ghost: false, depths: [3, 8], weight: 0, blurb: 'Grabs your gold and runs.' },
   ghoul: { name: 'Ghoul', hp: 38, atk: 13, def: 2, xp: 16, slow: 0, range: 0, erratic: 0, ghost: false, depths: [4, 10], weight: 2, blurb: 'Hits hard and never tires.' },
   wraith: { name: 'Wraith', hp: 32, atk: 15, def: 3, xp: 18, slow: 0, range: 0, erratic: 0, ghost: true, depths: [5, 10], weight: 1.5, blurb: 'Drifts through walls.' },
   mage: { name: 'Cultist', hp: 26, atk: 16, def: 2, xp: 20, slow: 0, range: 6, erratic: 0, ghost: false, depths: [5, 10], weight: 1.5, blurb: 'Hurls fire from afar.' },
@@ -59,8 +60,16 @@ export const SPELLS: Record<SpellId, SpellDef> = {
 export const POTION_HEAL = 0.5;
 export const ETHER_MP = 6;
 export const MAX_DEPTH = 10;
+/** Gold a cutpurse snatches per depth (capped by what you carry). */
+export const THEFT_PER_DEPTH = 12;
 /** Total XP needed to reach level i + 1. */
 export const XP_TABLE = [0, 15, 55, 120, 210, 360, 560, 900, 1300, 1800, 2400, 3100];
+
+/** Depths where a merchant waits at the foot of the stairs. */
+export const SHOP_DEPTHS = [4, 7];
+/** Max HP a vigor draught adds. */
+export const VIGOR_HP = 6;
+export const GEAR_PRICE = [0, 60, 110, 170, 240];
 
 export function fireDamage(level: number): number {
   return 5 + level * 2;

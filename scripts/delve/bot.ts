@@ -13,6 +13,7 @@ import {
   SPELLS,
   WEAPON_ATK,
   applyAction,
+  canBuy,
   encodeAction,
   idx,
   inside,
@@ -166,10 +167,20 @@ export interface BotMemory {
   targetSince: number;
 }
 
+/** At a merchant: gear upgrades first, then vigor, potions, the rest; then leave. */
+function shopAction(s: GameState): Action {
+  const order = ['weapon', 'armor', 'vigor', 'potion', 'map', 'ether'];
+  const slots = s.shop!.map((o, i) => ({ o, i })).sort((a, b) => order.indexOf(a.o.kind) - order.indexOf(b.o.kind));
+  for (const { o, i } of slots) if (canBuy(s, o)) return { type: 'buy', slot: i };
+  return { type: 'leave' };
+}
+
 export function botAction(s: GameState, mem: BotMemory): Action {
+  if (s.shop) return shopAction(s);
   const p = s.player;
   const wait: Action = { type: 'wait' };
-  const vis = s.monsters.filter((m) => visible(s, m));
+  // A cutpurse running off with gold isn't worth a chase.
+  const vis = s.monsters.filter((m) => visible(s, m) && !m.loot);
   const awakeNear = vis.filter((m) => m.awake && Math.abs(m.x - p.x) + Math.abs(m.y - p.y) <= 6);
 
   // Heal when hurt: Mend first (cheap), then potions.
