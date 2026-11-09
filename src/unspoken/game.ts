@@ -62,6 +62,10 @@ const TABS: { label: string; cats: Category[] }[] = [
   { label: 'Grammar', cats: ['grammar'] },
 ];
 
+type Page = { kind: 'intro' } | { kind: 'panel'; p: Panel } | { kind: 'riddle'; c: Challenge; i: number } | { kind: 'next' };
+type Backdrop = State['world']['chapters'][number]['backdrop'];
+const PLACE: Record<Backdrop, string> = { shore: 'Shore', market: 'Market', houses: 'Houses', murals: 'Murals', mountain: 'Mountain' };
+
 interface Profile {
   finished: number;
   best: number;
@@ -91,6 +95,12 @@ export class Game {
   private freshChapter = -1;
   /** Chapter whose scenes are cached (only one at a time, to spare phone memory). */
   private cachedView = -1;
+  /** Page within the chapter being viewed. */
+  private page = 0;
+  /** Direction of the last page turn, for the slide-in. */
+  private slide = 0;
+  /** Scenes that just came clear (animate once). */
+  private justCleared = new Set<string>();
 
   constructor() {
     this.sfx.setMuted(store.load('muted', false));
@@ -99,6 +109,7 @@ export class Game {
     $('sheet').onclick = (e) => {
       if (e.target === $('sheet')) this.closeSheet();
     };
+    this.bindSwipe();
     new ResizeObserver(() => {
       const w = this.sceneWidth();
       if (Math.abs(w - this.cacheWidth) > 4) this.render();
@@ -124,6 +135,7 @@ export class Game {
     this.composeMarks.clear();
     this.pickWrong.clear();
     this.view = this.s.chapter;
+    this.page = 0;
     this.render();
     $('main').scrollTop = 0;
     if (this.s.over) setTimeout(() => this.showEnding(), 300);
@@ -170,7 +182,7 @@ export class Game {
   // ---------------------------------------------------------------- scenes
 
   private sceneWidth(): number {
-    return Math.max(200, Math.min(560, $('main').clientWidth - 24 - 22));
+    return Math.max(200, Math.min(560, $('main').clientWidth - 32));
   }
 
   private scene(key: string, frame: Frame, w: number, h: number, backdrop: State['world']['chapters'][number]['backdrop']): HTMLCanvasElement {
@@ -214,8 +226,8 @@ export class Game {
     else if (st.some((x) => x === 'doubt')) b.classList.add('doubt');
     else if (st.some((x) => x === 'guessed' || x === 'known')) b.classList.add('guessed');
     if (label) {
-      const read = parts.map((m) => (this.s.notebook[m] ? short(this.s.notebook[m]) : this.status(m) === 'doubt' ? '✗' : '?'));
-      b.appendChild(el('span', 'gl', read.join(' · ')));
+      const read = parts.map((m) => (this.s.notebook[m] ? short(this.s.notebook[m]) : this.status(m) === 'doubt' ? '✗' : ''));
+      b.appendChild(el('span', 'gl', read.some(Boolean) ? read.map((x) => x || '…').join(' · ') : ''));
     }
     b.onclick = onTap ?? (() => this.openSheet(t.m, t));
     return b;
@@ -227,102 +239,214 @@ export class Game {
     return row;
   }
 
-  // ---------------------------------------------------------------- page
+  // ---------------------------------------------------------------- pages
+
+  /** The pages of a chapter: its journal entry, its scenes, its riddles, and a way on. */
+  private pages(ch: number): Page[] {
+    const c = this.s.world.chapters[ch];
+    const out: Page[] = [{ kind: 'intro' }, ...c.panels.map((p) => ({ kind: 'panel' as const, p })), ...c.challenges.map((x, i) => ({ kind: 'riddle' as const, c: x, i }))];
+    const done = c.challenges.every((x) => this.s.solved.includes(x.id));
+    if (done) out.push({ kind: 'next' });
+    return out;
+  }
+
+  goPage(n: number, dir = 0): void {
+    const pages = this.pages(this.view);
+    const k = Math.max(0, Math.min(pages.length - 1, n));
+    if (k === this.page && !dir) return;
+    this.page = k;
+    this.slide = dir;
+    this.render();
+    $('main').scrollTop = 0;
+  }
+
+  goChapter(i: number): void {
+    if (i > this.s.chapter) return;
+    this.view = i;
+    this.freshChapter = this.freshChapter === i ? -1 : this.freshChapter;
+    this.page = 0;
+    this.slide = 0;
+    this.render();
+  }
+
+  private bindSwipe(): void {
+    const main = $('main');
+    let sx = 0;
+    let sy = 0;
+    let on = false;
+    main.addEventListener('pointerdown', (e) => {
+      sx = e.clientX;
+      sy = e.clientY;
+      on = true;
+    });
+    main.addEventListener('pointerup', (e) => {
+      if (!on) return;
+      on = false;
+      const dx = e.clientX - sx;
+      const dy = e.clientY - sy;
+      if (Math.abs(dx) > 60 && Math.abs(dy) < 50 && $('sheet').hidden) this.goPage(this.page + (dx < 0 ? 1 : -1), dx < 0 ? 1 : -1);
+    });
+    main.addEventListener('pointercancel', () => (on = false));
+    $('prevBtn').onclick = () => this.goPage(this.page - 1, -1);
+    $('nextBtn').onclick = () => this.goPage(this.page + 1, 1);
+    $('dots').onclick = (e) => {
+      const r = $('dots').getBoundingClientRect();
+      const n = this.pages(this.view).length;
+      const k = Math.floor(((e.clientX - r.left) / r.width) * n);
+      this.goPage(k, k > this.page ? 1 : -1);
+    };
+  }
 
   render(): void {
     const s = this.s;
-    const p = progress(s);
-    $('langName').textContent = s.lang.name + (this.daily ? ' · daily' : '');
-    $('words').textContent = `${p.confirmed}/${p.total}`;
-    const nav = $('chapters');
+    const pr = progress(s);
+    $('langName').textContent = s.lang.name + (this.daily ? ' · today' : '');
+    $('words').textContent = `${pr.confirmed} of ${pr.total} glyphs read`;
+    ($('wordsBar').firstElementChild as HTMLElement).style.width = `${(100 * pr.confirmed) / pr.total}%`;
+
+    // Places.
+    const nav = $('places');
     nav.innerHTML = '';
     s.world.chapters.forEach((ch, i) => {
       const b = el('button');
-      b.textContent = String(i + 1);
+      const done = ch.challenges.every((c) => s.solved.includes(c.id));
+      b.innerHTML = `${i > s.chapter ? '<span class="lock">◦</span>' : done ? '<span class="tick">✓</span>' : ''}${PLACE[ch.backdrop]}`;
       b.disabled = i > s.chapter;
       if (i === this.view) b.classList.add('on');
-      if (ch.challenges.every((c) => s.solved.includes(c.id))) b.classList.add('done');
       if (i === this.freshChapter) b.classList.add('new');
-      b.onclick = () => {
-        this.view = i;
-        this.freshChapter = -1;
-        this.render();
-        $('main').scrollTop = 0;
-      };
+      b.onclick = () => this.goChapter(i);
       nav.appendChild(b);
     });
+    (nav.children[this.view] as HTMLElement | undefined)?.scrollIntoView?.({ inline: 'nearest', block: 'nearest' });
 
-    const main = $('main');
-    const keep = main.scrollTop;
-    main.innerHTML = '';
+    // The page.
     const w = this.sceneWidth();
     if (Math.abs(w - this.cacheWidth) > 4 || this.cachedView !== this.view) {
       this.sceneCache.clear();
       this.cacheWidth = w;
       this.cachedView = this.view;
     }
+    const pages = this.pages(this.view);
+    this.page = Math.max(0, Math.min(pages.length - 1, this.page));
+    const page = pages[this.page];
+    const box = $('page');
+    box.innerHTML = '';
+    box.className = this.slide > 0 ? 'in-right' : this.slide < 0 ? 'in-left' : '';
+    this.slide = 0;
     const ch = s.world.chapters[this.view];
-    main.appendChild(el('h1', 'chapter-title', ch.title));
-    main.appendChild(el('p', 'journal', ch.intro));
-    for (const panel of ch.panels) main.appendChild(this.panelCard(panel, w, ch.backdrop));
-    ch.challenges.forEach((c, i) => main.appendChild(this.challengeCard(c, i, w, ch.backdrop)));
-    const done = ch.challenges.every((c) => s.solved.includes(c.id));
-    if (done && this.view < s.world.chapters.length - 1) {
-      const next = el('div', 'pcard next-card');
-      const b = el('button', 'primary');
-      b.textContent = `On to ${s.world.chapters[this.view + 1].title} →`;
-      b.onclick = () => {
-        this.view++;
-        this.freshChapter = -1;
-        this.render();
-        $('main').scrollTop = 0;
-      };
-      next.appendChild(b);
-      main.appendChild(next);
-    } else if (done && s.over) {
-      const next = el('div', 'pcard next-card');
-      const b = el('button', 'primary');
+    if (page.kind === 'intro') this.introPage(box);
+    else if (page.kind === 'panel') this.panelPage(box, page.p, w, ch.backdrop);
+    else if (page.kind === 'riddle') this.riddlePage(box, page.c, page.i, w, ch.backdrop);
+    else this.nextPage(box);
+
+    // Pager.
+    const dots = $('dots');
+    dots.innerHTML = '';
+    pages.forEach((pg, i) => {
+      const d = el('i');
+      d.className = pg.kind;
+      if (pg.kind === 'panel' && s.understood.includes(pg.p.id)) d.classList.add('done');
+      if (pg.kind === 'riddle' && s.solved.includes(pg.c.id)) d.classList.add('done');
+      if (i === this.page) d.classList.add('at');
+      dots.appendChild(d);
+    });
+    ($('prevBtn') as HTMLButtonElement).disabled = this.page === 0;
+    ($('nextBtn') as HTMLButtonElement).disabled = this.page === pages.length - 1;
+    $('nextBtn').classList.toggle('pulse', page.kind === 'panel' && s.understood.includes(page.p.id) && this.page < pages.length - 1);
+  }
+
+  private kicker(text: string): HTMLElement {
+    return el('div', 'kicker', text);
+  }
+
+  private introPage(box: HTMLElement): void {
+    const s = this.s;
+    const ch = s.world.chapters[this.view];
+    box.appendChild(this.kicker(`Place ${this.view + 1} of ${s.world.chapters.length}`));
+    box.appendChild(el('h1', 'chapter-title', ch.title));
+    box.appendChild(el('p', 'journal', ch.intro));
+    const clear = ch.panels.filter((p) => s.understood.includes(p.id)).length;
+    const solved = ch.challenges.filter((c) => s.solved.includes(c.id)).length;
+    box.appendChild(
+      el(
+        'div',
+        'tally',
+        `<div><b>${clear}/${ch.panels.length}</b><span>scenes clear</span></div><div><b>${solved}/${ch.challenges.length}</b><span>riddles solved</span></div>`,
+      ),
+    );
+    if (this.view === 0 && Object.keys(s.notebook).length === 0 && s.confirmed.length === 0)
+      box.appendChild(el('p', 'tip', 'Each scene has a sign. Tap a glyph on the sign to study it and write down what you think it means.'));
+    const go = el('button', 'primary wide');
+    go.textContent = clear === 0 && solved === 0 ? 'Begin reading' : 'Continue';
+    go.onclick = () => this.goPage(this.firstOpenPage(), 1);
+    box.appendChild(go);
+  }
+
+  /** The first scene not yet clear, else the first unsolved riddle, else the end. */
+  private firstOpenPage(): number {
+    const pages = this.pages(this.view);
+    const i = pages.findIndex(
+      (p, k) => k > 0 && ((p.kind === 'panel' && !this.s.understood.includes(p.p.id)) || (p.kind === 'riddle' && !this.s.solved.includes(p.c.id)) || p.kind === 'next'),
+    );
+    return i < 0 ? 1 : i;
+  }
+
+  private panelPage(box: HTMLElement, p: Panel, w: number, backdrop: Backdrop): void {
+    const s = this.s;
+    const ch = s.world.chapters[this.view];
+    const n = ch.panels.indexOf(p) + 1;
+    const clear = s.understood.includes(p.id);
+    box.appendChild(this.kicker(`${ch.title} · scene ${n} of ${ch.panels.length}${clear ? ' · <b class="ok">clear ✓</b>' : ''}`));
+    const frame = el('div', 'frame');
+    if (clear) frame.classList.add('clear');
+    if (this.justCleared.has(p.id)) frame.classList.add('clearing');
+    const sc = this.scene(p.id, p.frame, w, Math.round(w * 0.64), backdrop);
+    sc.className = 'scene';
+    frame.appendChild(sc);
+    box.appendChild(frame);
+    box.appendChild(this.caption(p.tokens, 60));
+    if (!clear && n <= 2 && this.view === 0 && s.confirmed.length < 3) box.appendChild(el('p', 'tip', 'Tap a glyph to see every scene it appears in.'));
+  }
+
+  private nextPage(box: HTMLElement): void {
+    const s = this.s;
+    if (s.over && this.view === s.world.chapters.length - 1) {
+      box.appendChild(this.kicker('The end of the path'));
+      box.appendChild(el('h1', 'chapter-title', 'You answered the elder'));
+      box.appendChild(el('p', 'journal', 'The village has told you all it will. Read back what you understood.'));
+      const b = el('button', 'primary wide');
       b.textContent = 'What you understood';
       b.onclick = () => this.showEnding();
-      next.appendChild(b);
-      main.appendChild(next);
-    } else if (!done) {
-      main.appendChild(el('p', 'locked-note', 'Solve the riddles above to go on.'));
+      box.appendChild(b);
+      return;
     }
-    main.scrollTop = keep;
+    const next = s.world.chapters[this.view + 1];
+    box.appendChild(this.kicker('Onward'));
+    box.appendChild(el('h1', 'chapter-title', next.title));
+    box.appendChild(el('p', 'journal', next.intro.split('. ')[0] + '.'));
+    const b = el('button', 'primary wide');
+    b.textContent = `Go to ${PLACE[next.backdrop]}`;
+    b.onclick = () => this.goChapter(this.view + 1);
+    box.appendChild(b);
   }
 
-  private panelCard(p: Panel, w: number, backdrop: State['world']['chapters'][number]['backdrop']): HTMLElement {
-    const card = el('div', 'pcard');
-    card.id = p.id;
-    const understood = this.s.understood.includes(p.id);
-    if (understood) {
-      card.classList.add('understood');
-      card.appendChild(el('span', 'badge', '✓ understood'));
-    }
-    const sc = this.scene(p.id, p.frame, w, Math.round(w * 0.62), backdrop);
-    sc.className = 'scene';
-    card.appendChild(sc);
-    card.appendChild(this.caption(p.tokens));
-    return card;
-  }
-
-  private challengeCard(c: Challenge, i: number, w: number, backdrop: State['world']['chapters'][number]['backdrop']): HTMLElement {
+  private riddlePage(box: HTMLElement, c: Challenge, i: number, w: number, backdrop: Backdrop): void {
     const s = this.s;
-    const card = el('div', 'pcard challenge');
     const solved = s.solved.includes(c.id);
-    if (solved) card.classList.add('solved');
-    const title = c.question ? 'The elder asks you' : c.kind === 'pick' ? 'Riddle: which scene is this?' : 'Riddle: write what you see';
-    card.appendChild(el('h3', '', `${title}<span>${solved ? '✓ solved' : `${i + 1}/${s.world.chapters[c.ch].challenges.length}`}</span>`));
+    const total = s.world.chapters[c.ch].challenges.length;
+    box.appendChild(this.kicker(`Riddle ${i + 1} of ${total}${solved ? ' · <b class="ok">solved ✓</b>' : ''}`));
+    box.appendChild(el('h2', 'riddle-title', c.question ? 'The elder asks you something' : c.kind === 'pick' ? 'Which scene does this sign describe?' : 'Write the sign for this scene'));
 
     if (c.kind === 'pick') {
-      card.appendChild(this.caption(c.tokens));
+      box.appendChild(this.caption(c.tokens, 54));
       const picks = el('div', 'picks');
-      const tw = Math.floor((w - 16) / 3);
-      const th = Math.round(tw * 0.72);
+      // Three wide scenes, stacked: big enough to compare details at a glance.
+      const tw = w;
+      const th = Math.round(w * 0.36);
       const wrong = this.pickWrong.get(c.id) ?? new Set<number>();
       c.options.forEach((f, k) => {
         const b = el('button');
+        b.appendChild(el('span', 'letter', 'ABC'[k]));
         b.appendChild(this.scene(`${c.id}.o${k}`, f, tw, th, backdrop));
         if (wrong.has(k)) b.classList.add('wrong');
         if (solved && k === c.answer) b.classList.add('right');
@@ -330,33 +454,35 @@ export class Game {
         b.onclick = () => this.answerPick(c, k, b);
         picks.appendChild(b);
       });
-      card.appendChild(picks);
-      return card;
+      box.appendChild(picks);
+      if (!solved) box.appendChild(el('p', 'tip', wrong.size ? 'Not that one. Look at what differs between the scenes.' : 'The three scenes differ in just one thing.'));
+      return;
     }
 
-    // Compose (and the elder's question).
     if (c.question) {
       const q = el('div', 'speech');
-      q.appendChild(el('b', '', 'Elder:'));
+      q.appendChild(el('b', '', 'The elder:'));
       const cap = this.caption(c.question, 40);
-      cap.style.margin = '0';
+      cap.classList.add('compact');
       q.appendChild(cap);
-      card.appendChild(q);
-      card.appendChild(el('p', 'hint', 'Answer with what the murals told you.'));
+      box.appendChild(q);
+      box.appendChild(el('p', 'tip', 'Answer with what the murals told you.'));
     } else {
-      const sc = this.scene(c.id, c.frame, w, Math.round(w * 0.62), backdrop);
+      const frame = el('div', 'frame');
+      const sc = this.scene(c.id, c.frame, w, Math.round(w * 0.56), backdrop);
       sc.className = 'scene';
-      card.appendChild(sc);
+      frame.appendChild(sc);
+      box.appendChild(frame);
     }
     if (solved) {
-      card.appendChild(this.caption(c.tokens));
-      return card;
+      box.appendChild(this.caption(c.tokens, 50));
+      return;
     }
     const chosen = this.compose.get(c.id) ?? [];
     const marks = this.composeMarks.get(c.id) ?? null;
     const slots = el('div', 'slots');
     chosen.forEach((ti, pos) => {
-      const b = this.tokenButton(c.tiles[ti], 42, () => {
+      const b = this.tokenButton(c.tiles[ti], 44, () => {
         chosen.splice(pos, 1);
         this.compose.set(c.id, chosen);
         this.composeMarks.set(c.id, null);
@@ -366,10 +492,10 @@ export class Game {
       if (marks) b.classList.add(marks[pos] ? 'ok' : 'no');
       slots.appendChild(b);
     });
-    card.appendChild(slots);
+    box.appendChild(slots);
     const tiles = el('div', 'tiles');
     c.tiles.forEach((t, ti) => {
-      const b = this.tokenButton(t, 42, () => {
+      const b = this.tokenButton(t, 44, () => {
         if (chosen.includes(ti)) return;
         chosen.push(ti);
         this.compose.set(c.id, chosen);
@@ -380,10 +506,11 @@ export class Game {
       if (chosen.includes(ti)) b.classList.add('used');
       tiles.appendChild(b);
     });
-    card.appendChild(tiles);
+    box.appendChild(tiles);
     const row = el('div', 'row-btns');
     const clear = el('button', 'secondary');
     clear.textContent = 'Clear';
+    clear.disabled = chosen.length === 0;
     clear.onclick = () => {
       this.compose.set(c.id, []);
       this.composeMarks.set(c.id, null);
@@ -392,10 +519,9 @@ export class Game {
     const go = el('button', 'primary');
     go.textContent = c.question ? 'Answer' : 'Write it';
     go.disabled = chosen.length === 0;
-    go.onclick = () => this.answerCompose(c, card);
+    go.onclick = () => this.answerCompose(c, box);
     row.append(clear, go);
-    card.appendChild(row);
-    return card;
+    box.appendChild(row);
   }
 
   // ---------------------------------------------------------------- answers
@@ -444,8 +570,17 @@ export class Game {
     this.render();
     if (r.over) {
       this.recordEnd();
-      setTimeout(() => this.showEnding(), 900);
+      setTimeout(() => {
+        this.goPage(this.pages(this.view).length - 1, 1);
+        this.showEnding();
+      }, 900);
+      return;
     }
+    // Move on to the next riddle (or the way onward) after a beat.
+    const at = this.page;
+    setTimeout(() => {
+      if (this.page === at && $('sheet').hidden && $('overlay').hidden) this.goPage(this.firstOpenPage(), 1);
+    }, 900);
   }
 
   // ---------------------------------------------------------------- glyph sheet
@@ -456,6 +591,7 @@ export class Game {
     const sheet = $('sheet');
     sheet.innerHTML = '';
     const inner = el('div', 'inner');
+    inner.appendChild(el('div', 'grab'));
     const top = el('div', 'top');
     top.appendChild(glyphCanvas(lang, id, 84));
     const info = el('div');
@@ -468,7 +604,7 @@ export class Game {
           ? `Your guess: ${short(s.notebook[id])}`
           : st === 'doubt'
             ? '✗ A solved riddle showed your guess was wrong'
-            : 'Not read yet';
+            : 'Not read yet. What could it be?';
     info.appendChild(el('div', `status ${st}`, statusText));
     top.appendChild(info);
     inner.appendChild(top);
@@ -476,7 +612,7 @@ export class Game {
     // Marks on this word can be read separately.
     const others = token ? [token.m, ...token.marks].filter((m) => m !== id) : [];
     if (others.length) {
-      const row = el('div', 'marks', token && token.m === id ? 'Also on this word:' : 'This mark sits on:');
+      const row = el('div', 'marks', token && token.m === id ? 'A mark on this word:' : 'Part of the word:');
       for (const m of others) {
         const b = el('button');
         b.appendChild(glyphCanvas(lang, m, 32));
@@ -488,12 +624,15 @@ export class Game {
     }
 
     // Where it appears.
-    const ctxs = contexts(s.world, s.chapter).get(id) ?? [];
+    // The scene you're looking at comes first.
+    const here = this.pages(this.view)[this.page];
+    const hereId = here?.kind === 'panel' ? here.p.id : '';
+    const ctxs = [...(contexts(s.world, s.chapter).get(id) ?? [])].sort((a, b) => Number(b.id === hereId) - Number(a.id === hereId));
     if (ctxs.length) {
       inner.appendChild(el('h4', '', `Seen in ${ctxs.length} scene${ctxs.length > 1 ? 's' : ''}`));
       const box = el('div', 'ctx');
       for (const p of ctxs.slice(0, 8)) {
-        const row = el('div', 'row');
+        const row = el('div', 'row' + (p.id === hereId ? ' here' : ''));
         const th = this.scene(p.id, p.frame, 96, 60, s.world.chapters[p.ch].backdrop).cloneNode(true) as HTMLCanvasElement;
         th.getContext('2d')!.drawImage(this.scene(p.id, p.frame, 96, 60, s.world.chapters[p.ch].backdrop), 0, 0);
         th.className = 'thumb';
@@ -542,17 +681,19 @@ export class Game {
       inner.appendChild(tabs);
       inner.appendChild(chips);
       showTab();
-      if (guess) {
-        const clr = el('button', 'secondary');
-        clr.textContent = 'Clear my guess';
-        clr.onclick = () => this.guess(id, null);
-        inner.appendChild(clr);
-      }
+    }
+    const actions = el('div', 'actions');
+    if (st !== 'known' && s.notebook[id]) {
+      const clr = el('button', 'secondary');
+      clr.textContent = 'Clear guess';
+      clr.onclick = () => this.guess(id, null);
+      actions.appendChild(clr);
     }
     const close = el('button', 'secondary');
-    close.textContent = 'Close';
+    close.textContent = 'Done';
     close.onclick = () => this.closeSheet();
-    inner.appendChild(close);
+    actions.appendChild(close);
+    inner.appendChild(actions);
     sheet.appendChild(inner);
     sheet.hidden = false;
   }
@@ -569,7 +710,11 @@ export class Game {
     this.sfx.pickup();
     if (r.understood.length) {
       this.sfx.levelUp();
-      toast(r.understood.length > 1 ? `${r.understood.length} scenes come clear!` : 'A scene comes clear!');
+      for (const id of r.understood) this.justCleared.add(id);
+      const here = this.pages(this.view)[this.page];
+      const elsewhere = r.understood.filter((id) => !(here.kind === 'panel' && here.p.id === id)).length;
+      if (elsewhere) toast(elsewhere > 1 ? `${elsewhere} other scenes came clear too!` : 'Another scene came clear too!');
+      setTimeout(() => this.justCleared.clear(), 1200);
     }
     this.render();
   }
@@ -580,7 +725,10 @@ export class Game {
     const s = this.s;
     const seen = new Set<string>();
     for (const ch of s.world.chapters.slice(0, s.chapter + 1)) for (const p of ch.panels) for (const m of morphemes(p.tokens)) seen.add(m);
-    showCard(`<h2>Notebook</h2><p>${seen.size} glyphs seen · ${s.confirmed.length} proven. Tap one to revise it.</p><div class="nb-grid" id="nbGrid"></div>`, [
+    const guessed = [...seen].filter((m) => s.notebook[m] && !s.confirmed.includes(m)).length;
+    showCard(
+      `<h2>Notebook</h2><div class="nb-legend"><span><b>${seen.size}</b> seen</span><span class="g"><b>${guessed}</b> guessed</span><span class="k"><b>${s.confirmed.filter((m) => seen.has(m)).length}</b> proven</span></div><div class="nb-grid" id="nbGrid"></div>`,
+      [
       { label: 'Close', primary: true, onClick: closeOverlay },
     ]);
     const grid = $('nbGrid');
