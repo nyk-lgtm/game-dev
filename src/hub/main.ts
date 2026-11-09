@@ -23,8 +23,24 @@ const delve = makeStore('delve.');
 const nightline = makeStore('nightline.');
 const glyph = makeStore('glyph.');
 const rewild = makeStore('rewild.');
+const unspoken = makeStore('unspoken.');
 
 const GAMES: GameCard[] = [
+  {
+    path: './unspoken/',
+    title: 'Unspoken',
+    tag: 'Language puzzle',
+    pitch: 'A village whose language no one has written down for you, invented fresh each time. Learn it from its pictures, then answer the elder.',
+    accent: '#c8643c',
+    best: () => {
+      const p = unspoken.load<{ finished?: number; best?: number } | null>('profile', null);
+      if (!p?.finished) return null;
+      return `Best: ${p.best}% understood · ${p.finished} language${p.finished > 1 ? 's' : ''} learned`;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#efe6d2"/>
+      <rect x="10" y="10" width="56" height="34" rx="5" fill="#e3d3b0"/><circle cx="24" cy="24" r="6" fill="#c8643c"/><path d="M14 40l14-12 10 8 8-6 14 10z" fill="#9c8a62"/>
+      <g stroke="#2b2118" stroke-width="2.6" fill="none" stroke-linecap="round"><path d="M14 54h10M19 54v10"/><path d="M33 52c6 0 6 12 0 12"/><rect x="45" y="51" width="16" height="14" rx="4"/><path d="M49 56l8 4"/></g></svg>`,
+  },
   {
     path: './rewild/',
     title: 'Rewild',
@@ -187,6 +203,7 @@ const DAILY = [
   { path: './glyph/?daily', title: 'Glyphwright', store: glyph, accent: '#b08cff' },
   { path: './delve/?daily', title: 'Delve', store: delve, accent: '#ffb347' },
   { path: './nightline/?daily', title: 'Nightline', store: nightline, accent: '#ff2a6d' },
+  { path: './unspoken/?daily', title: 'Unspoken', store: unspoken, accent: '#c8643c' },
 ];
 const daily = document.getElementById('daily')!;
 daily.innerHTML = `<h3>Daily challenges <span>${prettyDay()}</span></h3><p>The same run for everyone today. A new one at midnight.</p>`;

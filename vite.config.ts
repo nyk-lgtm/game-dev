@@ -35,6 +35,7 @@ export default defineConfig({
         nightline: resolve(__dirname, 'nightline/index.html'),
         glyph: resolve(__dirname, 'glyph/index.html'),
         rewild: resolve(__dirname, 'rewild/index.html'),
+        unspoken: resolve(__dirname, 'unspoken/index.html'),
       },
     },
   },

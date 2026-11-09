@@ -175,8 +175,8 @@ const CHAPTERS: ChapterDef[] = [
       t('see', 'bird', 'moon', undefined, { neg: true }),
       t('find', 'tor', 'stone', undefined, { t: 'past' }),
       t('see', 'elder', 'moon', undefined, { t: 'fut' }),
-      t('sleep', 'sef', undefined, undefined, { t: 'fut' }),
-      t('see', 'sun', 'tree'),
+      t('see', 'elder', 'sun'),
+      t('see', 'bird', 'tree'),
       t('go', 'child', undefined, 'Q'),
       t('go', 'child', undefined, 'tree'),
     ],
@@ -397,7 +397,7 @@ export function makeWorld(lang: Language): World {
         tiles: rng.shuffle([...tokens, ...decoys.slice(0, 3)]),
         question: realize(lang, question),
       });
-      story.push(answerFrame, { v: 'go', s: { n: 'elder' }, d: { n: 'mountain' }, tense: 'fut' });
+      story.push({ v: 'go', s: { n: 'elder' }, d: { n: 'mountain' }, tense: 'fut' });
     }
 
     chapters.push({ title: def.title, backdrop: def.backdrop, intro: def.intro, panels, challenges });

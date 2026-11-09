@@ -4,7 +4,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 (`index.html` + `src/hub/`), one folder per game: `telegraph/`, `grove/`, `lantern/`,
 `afterglow/` (survivor-like), `delve/` (first-person ASCII crawler), `nightline/`
 (pseudo-3D ASCII racer), `glyph/` (Glyphwright, spell-crafting autobattler), `rewild/`
-(ecosystem builder on a hex island).
+(ecosystem builder on a hex island), `unspoken/` (learn a procedurally invented language from pictures).
 
 - The owner plays and tests only on an Android phone (Chrome, portrait). Every UI
   change must work by touch at ~390 CSS px wide; tap targets ≥ 44px.
@@ -37,7 +37,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   with batched `fillText` runs; art lives in each game's `art.ts`.
 - Daily challenges (src/shared/daily.ts): `<game>/?daily` plays today's seed (`dailySeed(game, day)`,
   local date); each game keeps its in-progress daily under `dailyRun` and today's best under `daily`.
-  Wired for Afterglow, Rewild, Glyphwright, Delve and Nightline; the hub's Daily section links them.
+  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline and Unspoken; the hub's Daily section links them.
 - Afterglow extras: Nights 1-5 (`NIGHTS` in content.ts, unlocked by `profile.nightsWon`), arenas
   (`ARENAS`/pillars in core/arena.ts, hashed from the seed), unions (`union` on a WeaponDef: two
   maxed weapons merge in a chest), and player damage is attributed (`w.taken`, `w.killedBy`).
@@ -47,6 +47,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 - Rewild runs are a seed + actions (`P<card>.<cell>` place, `R` new hand, `E` end season). The
   season sim (src/rewild/core/sim.ts) visits cells in index order with one Rng per season, so
   the UI's forecasts (clone + end season) are exact.
+- Unspoken: `makeLanguage(seed)` (core/lang.ts) invents grammar, sounds and glyphs; `makeWorld` builds
+  5 chapters of authored scenes (every word in 2+ scenes; tests enforce it) plus generated riddles; state
+  actions are `G<glyph>=<guess>` and `A<challenge>~p<n>` / `~<tile.tile…>`. Scene art: render/scene.ts.
+  `npx vite-node scripts/unspoken/inspect.ts <seed>` prints a language and its world.
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)
   plus a shape in render/draw.ts and a color in palette.ts; tests in
   tests/telegraph/enemies.test.ts. Telegraphed attacks set `aim` and resolve via
