@@ -1,0 +1,46 @@
+# Game Lab backlog
+
+Claude works through this list on its own, a chunk at a time (a scheduled check-in
+resumes the work every couple of hours). The owner can add, reorder or strike items
+at any time; their word beats this list.
+
+## How each work session goes
+1. Read this file and CLAUDE.md. Pick the top unfinished item (or finish one in progress).
+2. Do one meaningful, shippable chunk. Big items are split into milestones below.
+3. `npm test && npm run build`, check it on a Pixel 7 screenshot, push the work branch,
+   deploy to `main` only when it's finished and verified live.
+4. Update this file: tick what's done, add what you learned or found, note the next step.
+5. Tell the owner in a few lines what changed and what to try. Only ask a question if
+   it truly needs their decision.
+
+Ground rules: never break saves without bumping RULES_VERSION; never leave main red;
+keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
+
+## Now
+- [ ] **Unspoken blind playtest.** A helper agent with no code access plays from the live
+      link like a first-time player and reports where it gets stuck, misreads, or
+      lights up. Fix what it finds (clarity first, then difficulty curve).
+
+## Next
+- [ ] **Hexhold** (hex maze tower defense). Milestones:
+  - [ ] Core: hex board, pathing around towers (never fully blocked), waves, 6 towers
+        with neighbor auras, enemies incl. flyers/tunnelers, deterministic sim, replay.
+  - [ ] Render + UI: build/upgrade/sell by touch, wave preview, speed controls.
+  - [ ] Balance bot, tests, hub card, daily map.
+- [ ] **Blind playtests** for Rewild, Glyphwright, Telegraph (one agent each), then fix.
+- [ ] **Procedural logic puzzles**: a new puzzle type with generated, uniquely solvable
+      boards, a daily puzzle, hint system. (Design a fresh rule set, not a clone.)
+- [ ] **Text adventure**: tap-driven interactive fiction with a small handcrafted world
+      and systemic bits (inventory, NPC memory).
+
+## Ideas (unscheduled)
+- Unspoken: more story templates so the village tale varies; spoken pronunciation via
+  speech synthesis; a harder "second village" with case markers or verb agreement.
+- Hub: one shared settings panel (sound, vibration, reduced effects) used by every game.
+- Afterglow: owner is happy with it — leave alone unless they report something.
+
+## Done (recent)
+- Unspoken shipped, then the journal-style UI refresh.
+- Polish passes on Rewild, Glyphwright, Delve, Nightline, Telegraph, Grove, Lantern.
+- Afterglow: death recap, Nights 1-5, weapon unions, Monoliths arena, mines/spitters fixes.
+- Daily challenges for six games on the hub.

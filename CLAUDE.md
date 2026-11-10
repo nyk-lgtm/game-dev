@@ -61,3 +61,4 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   reproduce with that game's `replay(seed, a)` or `<game>/?seed=…&a=…`.
 - The live site deploys only from `main` (CI pushes `dist/` to `gh-pages`);
   other branches just build and test.
+- Autonomous work: read BACKLOG.md first; it holds the queue, the per-session routine and what's done.
