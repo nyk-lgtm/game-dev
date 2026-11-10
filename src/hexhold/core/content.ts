@@ -1,0 +1,90 @@
+// Hexhold content: towers (each with a gift to its six neighbors), enemies,
+// and the shape of the 30 waves.
+
+export type TowerId = 'bolt' | 'mortar' | 'frost' | 'tesla' | 'flame' | 'beacon';
+export type EnemyId = 'runner' | 'grunt' | 'brute' | 'swarm' | 'flyer' | 'healer' | 'splitter' | 'boss';
+
+export interface TowerDef {
+  id: TowerId;
+  name: string;
+  cost: number;
+  /** Range in cells (hex steps). */
+  range: number;
+  /** Seconds between shots (0 = continuous aura). */
+  rate: number;
+  dmg: number;
+  /** Can it hit flying enemies on its own? */
+  air: boolean;
+  /** What it does, and what it gives the towers next to it. */
+  text: string;
+  aura: string;
+  color: string;
+}
+
+export const TOWERS: Record<TowerId, TowerDef> = {
+  bolt: { id: 'bolt', name: 'Bolt', cost: 50, range: 2.6, rate: 0.7, dmg: 11, air: true, color: '#7ad7ff',
+    text: 'Fast shots at one enemy. Hits flyers.', aura: 'Neighbors can hit flyers too.' },
+  mortar: { id: 'mortar', name: 'Mortar', cost: 90, range: 3.6, rate: 2.2, dmg: 26, air: false, color: '#ffb35c',
+    text: 'Slow shells that burst on a group. Ground only.', aura: 'Neighbors reach half a cell further.' },
+  frost: { id: 'frost', name: 'Frost', cost: 70, range: 1.8, rate: 0, dmg: 2, air: true, color: '#b9e6ff',
+    text: 'Chills everything nearby: 40% slower.', aura: 'Neighbors deal +30% to chilled enemies.' },
+  tesla: { id: 'tesla', name: 'Tesla', cost: 110, range: 2.3, rate: 1.4, dmg: 15, air: true, color: '#c9a2ff',
+    text: 'Lightning that leaps to 3 enemies.', aura: "Every neighbor's 4th hit stuns for half a second." },
+  flame: { id: 'flame', name: 'Flame', cost: 80, range: 1.3, rate: 0, dmg: 20, air: false, color: '#ff6b3d',
+    text: 'Burns everything close by, every moment. Ground only.', aura: 'Neighbors set enemies alight (burn).' },
+  beacon: { id: 'beacon', name: 'Beacon', cost: 100, range: 0, rate: 0, dmg: 0, air: false, color: '#ffe27a',
+    text: 'Does not attack.', aura: 'Neighbors deal +25% damage.' },
+};
+export const TOWER_IDS = Object.keys(TOWERS) as TowerId[];
+export const MAX_LEVEL = 3;
+/** Upgrade cost from level L to L+1, as a share of the build cost. */
+export const upgradeCost = (id: TowerId, level: number) => Math.round(TOWERS[id].cost * (level === 1 ? 0.8 : 1.3));
+/** Damage and range multipliers per level. */
+export const LEVEL_DMG = [0, 1, 1.6, 2.5];
+export const LEVEL_RANGE = [0, 1, 1.1, 1.2];
+export const SELL_BACK = 0.7;
+
+export interface EnemyDef {
+  id: EnemyId;
+  name: string;
+  hp: number;
+  /** Cells per second. */
+  speed: number;
+  /** Flat damage taken off every hit. */
+  armor: number;
+  bounty: number;
+  /** Lives lost if it reaches the core. */
+  leak: number;
+  fly?: boolean;
+  /** Heals others within 1.5 cells, per second. */
+  heal?: number;
+  /** Splits into this many runners when it dies. */
+  split?: number;
+  /** First wave it can appear in. */
+  from: number;
+  text: string;
+  color: string;
+}
+
+export const ENEMIES: Record<EnemyId, EnemyDef> = {
+  runner: { id: 'runner', name: 'Runner', hp: 26, speed: 1.7, armor: 0, bounty: 3, leak: 1, from: 1, color: '#ff8a8a', text: 'Quick and frail.' },
+  grunt: { id: 'grunt', name: 'Grunt', hp: 60, speed: 1.0, armor: 0, bounty: 4, leak: 1, from: 1, color: '#e0a060', text: 'Steady.' },
+  swarm: { id: 'swarm', name: 'Mite', hp: 12, speed: 1.4, armor: 0, bounty: 1, leak: 1, from: 3, color: '#ffd166', text: 'Comes in swarms. Splash damage shreds them.' },
+  brute: { id: 'brute', name: 'Brute', hp: 210, speed: 0.65, armor: 4, bounty: 11, leak: 2, from: 4, color: '#b07850', text: 'Armored: each hit loses 4 damage. Big hits work best.' },
+  flyer: { id: 'flyer', name: 'Wisp', hp: 44, speed: 1.2, armor: 0, bounty: 5, leak: 1, fly: true, from: 5, color: '#9ef0d8', text: 'Flies straight over your maze. Only some towers hit it.' },
+  healer: { id: 'healer', name: 'Mender', hp: 80, speed: 0.9, armor: 1, bounty: 8, leak: 1, heal: 7, from: 8, color: '#7cff9a', text: 'Heals nearby enemies. Kill it first.' },
+  splitter: { id: 'splitter', name: 'Splitter', hp: 95, speed: 0.95, armor: 0, bounty: 6, leak: 1, split: 3, from: 10, color: '#d88cff', text: 'Bursts into three runners.' },
+  boss: { id: 'boss', name: 'Colossus', hp: 1050, speed: 0.45, armor: 7, bounty: 120, leak: 6, from: 10, color: '#ff5a5a', text: 'Every tenth wave.' },
+};
+export const ENEMY_IDS = Object.keys(ENEMIES) as EnemyId[];
+
+export const WAVES = 30;
+export const START_GOLD = 160;
+export const START_LIVES = 20;
+/** Enemy health grows this much per wave (compounding). */
+export const HP_GROWTH = 0.105;
+/** Status effects. */
+export const CHILL = 0.6;
+export const BURN_DPS = 6;
+export const BURN_TIME = 3;
+export const STUN_TIME = 0.5;

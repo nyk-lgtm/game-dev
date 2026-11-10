@@ -18,8 +18,12 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 
 ## Now
 - [ ] **Hexhold** (hex maze tower defense). Milestones:
-  - [ ] Core: hex board, pathing around towers (never fully blocked), waves, 6 towers
-        with neighbor auras, enemies incl. flyers/tunnelers, deterministic sim, replay.
+  - [x] Core (src/hexhold/core): 9x11 hex board, flow-field pathing (never sealed), 30
+        seeded waves with themes, 6 towers each gifting its neighbors, 8 enemies (flyers,
+        armored brutes, menders, splitters, Colossus every 10th), replay, bot + 10 tests.
+        Bot (scripts/hexhold/balance.ts) wins ~20/32 maps; losses are single-wave collapses
+        to brute/flyer/splitter themes a human would see coming in the wave preview.
+        Not done yet: tunnelers, tower specializations at level 3.
   - [ ] Render + UI: build/upgrade/sell by touch, wave preview, speed controls.
   - [ ] Balance bot, tests, hub card, daily map.
 - [ ] **Blind playtests** for Rewild, Glyphwright, Telegraph (one agent each), then fix.
