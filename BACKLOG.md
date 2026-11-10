@@ -24,8 +24,11 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         Bot (scripts/hexhold/balance.ts) wins ~20/32 maps; losses are single-wave collapses
         to brute/flyer/splitter themes a human would see coming in the wave preview.
         Not done yet: tunnelers, tower specializations at level 3.
-  - [ ] Render + UI: build/upgrade/sell by touch, wave preview, speed controls.
-  - [ ] Balance bot, tests, hub card, daily map.
+  - [x] Render + UI: build with a path preview, upgrade/sell, wave preview with the notable
+        threat explained, 1-3x speed, saves mid-wave, results with damage by tower.
+  - [x] Hub card, daily map, CLAUDE.md notes. Shipped.
+  - [ ] Next: blind playtest; tower specializations at level 3; tunnelers; a second map
+        shape (two portals).
 - [ ] **Blind playtests** for Rewild, Glyphwright, Telegraph (one agent each), then fix.
 - [ ] **Unspoken art follow-ups** from its blind playtest: objects drawn over people in two
       riddle scenes (fire/bird over the elder); "river" acting reads as a sea wave.
@@ -41,6 +44,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Afterglow: owner is happy with it — leave alone unless they report something.
 
 ## Done (recent)
+- Hexhold shipped: maze tower defense with neighbor gifts, 30 waves, daily map.
 - Unspoken blind playtest (agent finished all 5 places: language "clicked" in ~2 minutes) and
   fixes: toast was a giant blank pill blocking taps (shell CSS order), category tabs crushed
   in busy sheets, new language on every reload, "one reading is off" hint, mural backdrop

@@ -24,8 +24,25 @@ const nightline = makeStore('nightline.');
 const glyph = makeStore('glyph.');
 const rewild = makeStore('rewild.');
 const unspoken = makeStore('unspoken.');
+const hexhold = makeStore('hexhold.');
 
 const GAMES: GameCard[] = [
+  {
+    path: './hexhold/',
+    title: 'Hexhold',
+    tag: 'Maze tower defense',
+    pitch: 'Your towers are the walls. Bend the path into a long maze, cluster towers so they boost each other, and hold for 30 waves.',
+    accent: '#ffd77a',
+    best: () => {
+      const p = hexhold.load<{ best?: number; wins?: number } | null>('profile', null);
+      if (!p?.best) return null;
+      return p.wins ? `Held ${p.wins} time${p.wins > 1 ? 's' : ''}` : `Best: wave ${p.best}`;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#0e1424"/>
+      <g fill="#1c2539" stroke="#2a3550"><path d="M20 14l9 5v10l-9 5-9-5V19z"/><path d="M38 24l9 5v10l-9 5-9-5V29z"/><path d="M56 14l9 5v10l-9 5-9-5V19z"/><path d="M20 44l9 5v10l-9 5-9-5V49z"/><path d="M56 44l9 5v10l-9 5-9-5V49z"/></g>
+      <path d="M38 6 C 38 20 20 26 20 38 S 56 46 56 58 S 38 66 38 72" fill="none" stroke="#ffd77a" stroke-width="2" stroke-dasharray="3 4" opacity="0.6"/>
+      <circle cx="38" cy="34" r="6" fill="#ffb35c"/><path d="M14 46l12 8M50 16l12 8" stroke="#7ad7ff" stroke-width="3" stroke-linecap="round"/><circle cx="56" cy="54" r="3" fill="#ff8a8a"/></svg>`,
+  },
   {
     path: './unspoken/',
     title: 'Unspoken',
@@ -204,6 +221,7 @@ const DAILY = [
   { path: './delve/?daily', title: 'Delve', store: delve, accent: '#ffb347' },
   { path: './nightline/?daily', title: 'Nightline', store: nightline, accent: '#ff2a6d' },
   { path: './unspoken/?daily', title: 'Unspoken', store: unspoken, accent: '#c8643c' },
+  { path: './hexhold/?daily', title: 'Hexhold', store: hexhold, accent: '#ffd77a' },
 ];
 const daily = document.getElementById('daily')!;
 daily.innerHTML = `<h3>Daily challenges <span>${prettyDay()}</span></h3><p>The same run for everyone today. A new one at midnight.</p>`;

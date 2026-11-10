@@ -36,6 +36,7 @@ export default defineConfig({
         glyph: resolve(__dirname, 'glyph/index.html'),
         rewild: resolve(__dirname, 'rewild/index.html'),
         unspoken: resolve(__dirname, 'unspoken/index.html'),
+        hexhold: resolve(__dirname, 'hexhold/index.html'),
       },
     },
   },

@@ -1,0 +1,62 @@
+/* Hexhold: ink-blue night, brass and lamplight. */
+body {
+  --bg: #0e1424;
+  --panel: #151d31;
+  --line: #2a3550;
+  --text: #eef1f8;
+  --muted: #8f9bb8;
+  --accent: #ffd77a;
+  --brass: #c9a25c;
+  --bad: #ff6b5e;
+  --good: #7ee08a;
+  background: var(--bg);
+}
+html { background: #0e1424; }
+body #hud { gap: 14px; background: var(--panel); }
+#hud .spacer { flex: 1; }
+#hud .value.gold { color: var(--accent); }
+#hud .value.low { color: var(--bad); }
+body .icon-btn { background: var(--bg); border-color: var(--line); color: var(--text); font-weight: 700; font-size: 16px; }
+#stage { flex: 1; position: relative; min-height: 0; }
+#board { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+#banner {
+  position: absolute; left: 50%; top: 12px; transform: translate(-50%, -6px); opacity: 0;
+  padding: 8px 16px; border-radius: 999px; background: rgba(14, 20, 36, 0.9); border: 1px solid var(--line);
+  font-weight: 800; color: var(--accent); white-space: nowrap; transition: opacity 0.25s, transform 0.25s; pointer-events: none;
+}
+#banner.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* body-prefixed: the shared shell styles #panel too, and may load after this file. */
+body #panel {
+  height: auto; min-height: 196px; padding: 10px 12px calc(env(safe-area-inset-bottom) + 12px);
+  background: var(--panel); border-top: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 8px; align-items: stretch;
+}
+#panel .title { font-size: 16px; font-weight: 800; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+#panel .title span { font-size: 13px; font-weight: 600; color: var(--muted); }
+#panel .text { font-size: 13.5px; color: var(--muted); line-height: 1.35; }
+#panel .text b { color: var(--text); }
+#panel .gift { color: var(--accent); }
+#panel .warn { color: var(--bad); font-weight: 700; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); font-size: 13px; font-weight: 600; }
+.chip i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.palette { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.palette button {
+  min-height: 58px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  display: flex; align-items: center; gap: 6px; padding: 4px 6px; font-weight: 700; font-size: 13px; text-align: left;
+}
+.palette button canvas { flex: none; }
+.palette button small { display: block; font-size: 12px; color: var(--accent); font-weight: 700; }
+.palette button.on { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255, 215, 122, 0.35); }
+.palette button.poor small { color: var(--bad); }
+.row { display: flex; gap: 8px; }
+.row > button { flex: 1; }
+button.primary { background: var(--accent); color: #1b1406; }
+button.secondary { background: transparent; color: var(--text); border-color: var(--line); }
+button:disabled { opacity: 0.45; }
+.progress { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.progress i { display: block; height: 100%; background: var(--accent); }
+.dmg { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.dmg .bar { flex: 1; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.dmg .bar i { display: block; height: 100%; }
