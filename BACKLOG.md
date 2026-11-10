@@ -17,17 +17,14 @@ Ground rules: never break saves without bumping RULES_VERSION; never leave main 
 keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 
 ## Now
-- [ ] **Unspoken blind playtest.** A helper agent with no code access plays from the live
-      link like a first-time player and reports where it gets stuck, misreads, or
-      lights up. Fix what it finds (clarity first, then difficulty curve).
-
-## Next
 - [ ] **Hexhold** (hex maze tower defense). Milestones:
   - [ ] Core: hex board, pathing around towers (never fully blocked), waves, 6 towers
         with neighbor auras, enemies incl. flyers/tunnelers, deterministic sim, replay.
   - [ ] Render + UI: build/upgrade/sell by touch, wave preview, speed controls.
   - [ ] Balance bot, tests, hub card, daily map.
 - [ ] **Blind playtests** for Rewild, Glyphwright, Telegraph (one agent each), then fix.
+- [ ] **Unspoken art follow-ups** from its blind playtest: objects drawn over people in two
+      riddle scenes (fire/bird over the elder); "river" acting reads as a sea wave.
 - [ ] **Procedural logic puzzles**: a new puzzle type with generated, uniquely solvable
       boards, a daily puzzle, hint system. (Design a fresh rule set, not a clone.)
 - [ ] **Text adventure**: tap-driven interactive fiction with a small handcrafted world
@@ -40,6 +37,10 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Afterglow: owner is happy with it — leave alone unless they report something.
 
 ## Done (recent)
+- Unspoken blind playtest (agent finished all 5 places: language "clicked" in ~2 minutes) and
+  fixes: toast was a giant blank pill blocking taps (shell CSS order), category tabs crushed
+  in busy sheets, new language on every reload, "one reading is off" hint, mural backdrop
+  only for past scenes, riddles only use adjectives the art can show. RULES_VERSION 2.
 - Unspoken shipped, then the journal-style UI refresh.
 - Polish passes on Rewild, Glyphwright, Delve, Nightline, Telegraph, Grove, Lantern.
 - Afterglow: death recap, Nights 1-5, weapon unions, Monoliths arena, mines/spitters fixes.

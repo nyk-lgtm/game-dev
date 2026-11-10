@@ -24,7 +24,7 @@ button { font-family: inherit; }
 #words { font-size: 12px; color: var(--muted); font-weight: 600; }
 #wordsBar { display: block; height: 3px; width: 100%; max-width: 180px; border-radius: 2px; background: var(--line); overflow: hidden; }
 #wordsBar b { display: block; height: 100%; width: 0; background: var(--good); transition: width 0.6s; }
-.icon-btn { background: transparent; border-color: var(--line); color: var(--text); font-size: 19px; }
+body .icon-btn { background: transparent; border-color: var(--line); color: var(--text); font-size: 19px; }
 
 /* ---------- places ---------- */
 #places {
@@ -47,7 +47,7 @@ button { font-family: inherit; }
 /* ---------- page ---------- */
 #main { flex: 1; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; display: flex; flex-direction: column; }
 /* Pages sit in the middle of the space; long ones simply grow and scroll. */
-#page { flex: 1 0 auto; padding: 14px 16px 24px; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+#page { flex: 1 0 auto; padding: 14px 16px 40px; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
 #page.in-right { animation: inR 0.22s ease-out; }
 #page.in-left { animation: inL 0.22s ease-out; }
 @keyframes inR { from { opacity: 0; transform: translateX(24px); } }
@@ -58,6 +58,7 @@ button { font-family: inherit; }
 .journal { margin: 0; font: italic 17px/1.55 var(--serif); color: #5d4e3c; }
 .riddle-title { margin: 0; font: 700 21px/1.25 var(--serif); }
 .tip { margin: 0; padding: 2px 0 2px 10px; border-left: 3px solid var(--line); font-size: 14px; color: var(--muted); }
+.tip.warn { border-left-color: var(--accent); color: #8a4a2c; }
 .tally { display: flex; gap: 10px; }
 .tally div { flex: 1; padding: 10px 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); display: flex; flex-direction: column; }
 .tally b { font: 700 22px/1.1 var(--serif); }
@@ -134,8 +135,8 @@ button { font-family: inherit; }
 #pager .pg:disabled { opacity: 0.3; }
 #pager .pg.pulse { background: var(--good); border-color: var(--good); color: #fff; animation: nudge 1.6s ease-in-out infinite; }
 @keyframes nudge { 50% { transform: translateX(3px); } }
-#dots { flex: 1; min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 5px; flex-wrap: wrap; }
-#dots i { display: block; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--faint); }
+#dots { flex: 1; min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 7px; flex-wrap: wrap; }
+#dots i { display: block; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--faint); }
 #dots i.intro { border-radius: 2px; width: 10px; height: 4px; background: var(--faint); border: 0; }
 #dots i.riddle { border-radius: 1px; transform: rotate(45deg); width: 8px; height: 8px; border-color: var(--accent); }
 #dots i.next { border: 0; width: 0; height: 0; border-left: 7px solid var(--faint); border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-radius: 0; }
@@ -168,11 +169,15 @@ button { font-family: inherit; }
 #sheet .ctx .row canvas.thumb { flex: none; border-radius: 8px; }
 #sheet .ctx .row .caption { margin: 0; justify-content: flex-start; gap: 2px; }
 #sheet .ctx .row .tok { min-width: 34px; min-height: 36px; padding: 0; }
-#sheet .tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+/* Nothing in the sheet may shrink; the sheet scrolls instead. */
+#sheet .inner > * { flex-shrink: 0; }
+/* All eight categories visible at once, in two rows. */
+#sheet .tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 #sheet .tabs::-webkit-scrollbar { display: none; }
-#sheet .tabs button { flex: none; min-height: 40px; padding: 0 13px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--text); font-weight: 600; font-size: 14px; }
+#sheet .tabs button { min-height: 44px; padding: 0 4px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--text); font-weight: 600; font-size: 14px; }
 #sheet .tabs button.on { background: var(--text); color: var(--panel); border-color: var(--text); }
-#sheet .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Tall enough for the biggest category, so the sheet doesn't jump when switching. */
+#sheet .chips { display: flex; flex-wrap: wrap; gap: 6px; align-content: flex-start; min-height: 150px; }
 #sheet .chips button { min-height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font-size: 15px; font-weight: 600; }
 #sheet .chips button.on { background: var(--accent); color: #fff7ea; border-color: var(--accent); }
 #sheet .chips button.taken { color: var(--muted); }
@@ -201,4 +206,9 @@ button { font-family: inherit; }
 #overlay .card p, #overlay .card li { color: var(--muted); }
 #overlay .card b { color: var(--text); }
 #overlay .card .meta { color: var(--faint); }
-.toast { background: var(--text); border-color: var(--text); color: var(--panel); top: auto; bottom: calc(env(safe-area-inset-bottom) + 84px); }
+/* The shared shell positions toasts at the top; the bundle may load it after this file, so be specific. */
+body .toast {
+  top: auto; bottom: calc(env(safe-area-inset-bottom) + 84px); height: auto; max-width: calc(100vw - 32px);
+  background: var(--text); border-color: var(--text); color: #fbf5e8; font-weight: 600; text-align: center;
+  pointer-events: none; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+}

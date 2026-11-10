@@ -136,6 +136,7 @@ export class Game {
     this.pickWrong.clear();
     this.view = this.s.chapter;
     this.page = 0;
+    if (!fromLink) this.persist();
     this.render();
     $('main').scrollTop = 0;
     if (this.s.over) setTimeout(() => this.showEnding(), 300);
@@ -186,6 +187,8 @@ export class Game {
   }
 
   private scene(key: string, frame: Frame, w: number, h: number, backdrop: State['world']['chapters'][number]['backdrop']): HTMLCanvasElement {
+    // Murals are memories: only past scenes are painted on the wall.
+    if (backdrop === 'murals' && frame.tense !== 'past') backdrop = 'houses';
     const k = `${key}@${Math.round(w)}x${Math.round(h)}`;
     let c = this.sceneCache.get(k);
     if (!c) {
@@ -405,6 +408,11 @@ export class Game {
     frame.appendChild(sc);
     box.appendChild(frame);
     box.appendChild(this.caption(p.tokens, 60));
+    const ms = morphemes(p.tokens);
+    if (!clear && ms.every((m) => s.notebook[m])) {
+      const off = ms.filter((m) => s.notebook[m] !== m).length;
+      box.appendChild(el('p', 'tip warn', off === 1 ? 'Every glyph has a reading, but one of them is off.' : 'Every glyph has a reading, but some of them are off.'));
+    }
     if (!clear && n <= 2 && this.view === 0 && s.confirmed.length < 3) box.appendChild(el('p', 'tip', 'Tap a glyph to see every scene it appears in.'));
   }
 
@@ -493,6 +501,7 @@ export class Game {
       slots.appendChild(b);
     });
     box.appendChild(slots);
+    if (chosen.length) box.appendChild(el('p', 'tip', 'Tap a placed glyph to take it back.'));
     const tiles = el('div', 'tiles');
     c.tiles.forEach((t, ti) => {
       const b = this.tokenButton(t, 44, () => {

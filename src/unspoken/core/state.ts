@@ -6,7 +6,7 @@ import { makeLanguage, type Language } from './lang';
 import { makeWorld, type World } from './world';
 import { morphemes, sameTokens, tokenKey, type Token } from './sentence';
 
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 2;
 
 export interface State {
   seed: number;

@@ -233,14 +233,25 @@ function randomFrame(rng: Rng, known: Set<string>, focus: ChapterDef['focus']): 
     const nps = [f.s, f.o, f.d].filter((x): x is NP => !!x);
     for (const p of nps) {
       if (known.has('PL') && COUNTABLE.has(p.n) && rng.next() < want('PL') / 1.5) p.pl = true;
-      if (adjs.length && catOf(p.n) !== 'name' && rng.next() < want('ADJ') / 1.5) p.adj = rng.pick(adjs);
+      const fits = adjs.filter((a) => adjVisible(p.n, a));
+      if (fits.length && rng.next() < want('ADJ') / 1.5) p.adj = rng.pick(fits);
     }
     if (known.has('NEG') && rng.next() < want('NEG')) f.neg = true;
+    const darkHere = nps.some((p) => p.adj === 'dark');
     if (known.has('PAST') && rng.next() < want('PAST')) f.tense = 'past';
-    else if (known.has('FUT') && rng.next() < want('FUT')) f.tense = 'fut';
+    else if (known.has('FUT') && !darkHere && rng.next() < want('FUT')) f.tense = 'fut';
     return f;
   }
   return null;
+}
+
+/** Adjectives the pictures can show clearly on this noun. */
+function adjVisible(n: string, a: string): boolean {
+  const cat = catOf(n);
+  if (cat === 'thing') return true;
+  if (cat === 'animal') return a === 'big' || a === 'small';
+  if (n === 'house') return a !== 'big' && a !== 'small';
+  return false;
 }
 
 /** Variations of a frame that change exactly one thing, for wrong answers. */
@@ -303,7 +314,7 @@ function mutations(rng: Rng, f: Frame, known: Set<string>): Frame[] {
   for (const slot of ['s', 'o'] as const) {
     const p = f[slot];
     if (p?.adj) {
-      const other = adjs.filter((a) => a !== p.adj);
+      const other = adjs.filter((a) => a !== p.adj && adjVisible(p.n, a));
       if (other.length) {
         const m = clone();
         m[slot]!.adj = rng.pick(other);
