@@ -47,6 +47,7 @@ export function makeBoard(radius: number): Board {
 export interface Puzzle {
   seed: number;
   radius: number;
+  level?: Level;
   /** The unique answer. */
   solution: Element[];
   /** Pre-filled cells (-1 = blank). */
@@ -111,7 +112,7 @@ export function clueSupport(b: Board, clue: number[], dom: number[], c: number):
  * Applies single-clue deductions until nothing changes. Mutates `dom`.
  * Returns false on a contradiction. `steps` collects every narrowing in order.
  */
-export function propagate(b: Board, clue: number[], dom: number[], steps?: Step[]): boolean {
+export function propagate(b: Board, clue: number[], dom: number[], steps?: Step[], fail?: { clue: number }): boolean {
   const clues = clue.map((n, i) => (n >= 0 ? i : -1)).filter((i) => i >= 0);
   for (let changed = true; changed; ) {
     changed = false;
@@ -119,7 +120,10 @@ export function propagate(b: Board, clue: number[], dom: number[], steps?: Step[
       for (const [j, sup] of clueSupport(b, clue, dom, c)) {
         const nd = dom[j] & sup;
         if (nd === dom[j]) continue;
-        if (nd === 0) return false;
+        if (nd === 0) {
+          if (fail) fail.clue = c;
+          return false;
+        }
         dom[j] = nd;
         changed = true;
         steps?.push({ clue: c, cell: j, left: nd });
@@ -131,11 +135,51 @@ export function propagate(b: Board, clue: number[], dom: number[], steps?: Step[
 
 export const initialDomains = (p: { given: number[] }): number[] => p.given.map((g) => (g >= 0 ? bit(g) : ALL));
 
-/** Solvable by deductions alone (and therefore unique)? */
-export function deducible(b: Board, clue: number[], given: number[]): boolean {
-  const dom = initialDomains({ given });
-  return propagate(b, clue, dom) && dom.every((d) => single(d) >= 0);
+/** A "what if" deduction: assuming `not` in `cell` makes the clue at `clue` impossible. */
+export interface Trial {
+  cell: number;
+  not: number;
+  clue: number;
 }
+
+/**
+ * Single-clue deductions plus "what if" trials: a value is ruled out when
+ * assuming it lets single-clue deductions break some clue. Mutates `dom`.
+ */
+export function propagateDeep(b: Board, clue: number[], dom: number[], trials?: Trial[]): boolean {
+  if (!propagate(b, clue, dom)) return false;
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (let i = 0; i < dom.length; i++) {
+      for (let v = 0; v < 3; v++) {
+        if (single(dom[i]) >= 0 || !(dom[i] & bit(v))) continue;
+        const t = dom.slice();
+        t[i] = bit(v);
+        const fail = { clue: -1 };
+        if (propagate(b, clue, t, undefined, fail)) continue;
+        // Ruled out: apply it and the single-clue deductions it unlocks, then keep scanning.
+        dom[i] &= ~bit(v);
+        trials?.push({ cell: i, not: v, clue: fail.clue });
+        if (!propagate(b, clue, dom)) return false;
+        changed = true;
+      }
+    }
+  }
+  return true;
+}
+
+/** Solvable by deductions alone (and therefore unique)? `deep` allows "what if" trials. */
+export function deducible(b: Board, clue: number[], given: number[], deep = false): boolean {
+  const dom = initialDomains({ given });
+  return (deep ? propagateDeep(b, clue, dom) : propagate(b, clue, dom)) && dom.every((d) => single(d) >= 0);
+}
+
+export type Level = 'easy' | 'normal' | 'hard';
+export const LEVELS: Record<Level, { name: string; text: string }> = {
+  easy: { name: 'Easy', text: 'More numbers to go on.' },
+  normal: { name: 'Normal', text: 'Every step follows from one number.' },
+  hard: { name: 'Hard', text: 'Fewer numbers; some steps need a "what if".' },
+};
 
 export type Size = 'small' | 'medium' | 'large';
 export const SIZES: Record<Size, { radius: number; name: string }> = {
@@ -144,8 +188,14 @@ export const SIZES: Record<Size, { radius: number; name: string }> = {
   large: { radius: 4, name: 'Large' },
 };
 
-/** A puzzle for (seed, radius): random answer, then strip clues while it stays deducible. */
-export function generate(seed: number, radius: number): Puzzle {
+/**
+ * A puzzle for (seed, radius, level): random answer, then strip clues while it
+ * stays deducible. Easy keeps at least 60% of the hexes numbered; Hard may need
+ * "what if" trials. (Normal is the original generator, unchanged.)
+ */
+export function generate(seed: number, radius: number, level: Level = 'normal'): Puzzle {
+  const deep = false;
+  const minClues = level === 'easy' ? 0.8 : 0;
   const b = makeBoard(radius);
   const N = b.cells.length;
   const rng = new Rng(mixSeed(seed, 4000 + radius));
@@ -160,22 +210,49 @@ export function generate(seed: number, radius: number): Puzzle {
     const order = rng.shuffle([...Array(N).keys()]);
     for (const i of order) {
       given[i] = solution[i];
-      if (deducible(b, clue, given)) break;
+      if (deducible(b, clue, given, deep)) break;
     }
-    if (!deducible(b, clue, given)) continue;
+    if (!deducible(b, clue, given, deep)) continue;
     // Strip clues, then spare givens, while deductions still finish the board.
     for (const i of rng.shuffle([...Array(N).keys()])) {
+      if (clue.filter((c) => c >= 0).length <= minClues * N) continue;
       const keep = clue[i];
       clue[i] = -1;
-      if (!deducible(b, clue, given)) clue[i] = keep;
+      if (!deducible(b, clue, given, deep)) clue[i] = keep;
     }
     for (const i of rng.shuffle([...Array(N).keys()])) {
-      if (given[i] < 0 || given.filter((g) => g >= 0).length <= 1) continue;
+      // Easy keeps its givens.
+      if (level === 'easy' || given[i] < 0 || given.filter((g) => g >= 0).length <= 1) continue;
       const keep = given[i];
       given[i] = -1;
-      if (!deducible(b, clue, given)) given[i] = keep;
+      if (!deducible(b, clue, given, deep)) given[i] = keep;
     }
-    return { seed, radius, solution, given, clue };
+    if (level === 'hard') {
+      // Hard: from the normal puzzle, strip more while a few "what if" steps still finish it.
+      const cap = 2 + 2 * radius;
+      const ok = () => {
+        const dom = initialDomains({ given });
+        const trials: Trial[] = [];
+        return propagateDeep(b, clue, dom, trials) && dom.every((d) => single(d) >= 0) && trials.length <= cap;
+      };
+      for (const i of rng.shuffle([...Array(N).keys()])) {
+        if (clue[i] < 0) continue;
+        const keep = clue[i];
+        clue[i] = -1;
+        if (!ok()) clue[i] = keep;
+      }
+      for (const i of rng.shuffle([...Array(N).keys()])) {
+        if (given[i] < 0 || given.filter((g) => g >= 0).length <= 1) continue;
+        const keep = given[i];
+        given[i] = -1;
+        if (!ok()) given[i] = keep;
+      }
+      // A Hard puzzle should actually need a "what if" or two; otherwise try another answer.
+      const trials: Trial[] = [];
+      propagateDeep(b, clue, initialDomains({ given }), trials);
+      if (trials.length < (radius > 2 ? 2 : 1) && attempt < 30) continue;
+    }
+    return level === 'normal' ? { seed, radius, solution, given, clue } : { seed, radius, level, solution, given, clue };
   }
   throw new Error(`triad: no puzzle for seed ${seed}`);
 }

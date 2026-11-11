@@ -60,7 +60,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 - Triad (src/triad/core/puzzle.ts): `generate(seed, radius)` fills a random answer, adds givens until
   single-clue deductions (`propagate`, exact per clue via `clueSupport`) finish it, then strips clues and
   givens while they still do; so every puzzle is unique and guess-free, and `nextHint` replays those
-  deductions. `npx vite-node scripts/triad/stats.ts 30` shows clue/given counts per size.
+  deductions. Levels: Easy keeps more numbers; Hard strips further while `propagateDeep` ("what if" trials,
+  capped at 2+2·radius) still finishes it. `npx vite-node scripts/triad/stats.ts 30` shows counts per size/level.
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)
   plus a shape in render/draw.ts and a color in palette.ts; tests in
   tests/telegraph/enemies.test.ts. Telegraphed attacks set `aim` and resolve via

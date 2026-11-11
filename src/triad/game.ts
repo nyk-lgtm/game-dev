@@ -10,6 +10,7 @@ import { makeStore } from '../shared/storage';
 import {
   ELEMENT_NAMES,
   RULES_VERSION,
+  LEVELS,
   SIZES,
   brokenClues,
   generate,
@@ -17,6 +18,7 @@ import {
   nextHint,
   solved,
   type Puzzle,
+  type Level,
   type Size,
 } from './core';
 import { COLOR, drawBoard, iconSvg, layout, type View } from './render/draw';
@@ -36,11 +38,13 @@ interface SavedRun {
   hints: number;
   done: boolean;
   day?: string | null;
+  level?: Level;
 }
 
 interface Profile {
   solved: number;
-  best: Partial<Record<Size, number>>;
+  /** Best time per size (normal) or `size-level`. */
+  best: Partial<Record<string, number>>;
 }
 
 const fmt = (ms: number) => {
@@ -51,6 +55,7 @@ const fmt = (ms: number) => {
 export class Game {
   p!: Puzzle;
   size: Size = 'medium';
+  level: Level = 'normal';
   seed = 0;
   vals: number[] = [];
   notes: number[] = [];
@@ -88,7 +93,8 @@ export class Game {
     this.seed = seed;
     this.size = size;
     this.daily = daily;
-    this.p = generate(seed, SIZES[size].radius);
+    this.level = daily ? 'normal' : (saved?.level ?? this.level);
+    this.p = generate(seed, SIZES[size].radius, this.level);
     const N = this.p.solution.length;
     this.vals = saved ? [...saved.vals].map((c) => CODE.indexOf(c) - 1) : new Array(N).fill(-1);
     this.notes = saved ? [...saved.notes].map(Number) : new Array(N).fill(0);
@@ -109,10 +115,17 @@ export class Game {
     if (this.done) setTimeout(() => this.showWin(false), 300);
   }
 
-  newPuzzle(size: Size = this.size): void {
+  newPuzzle(size: Size = this.size, level: Level = this.level): void {
     closeOverlay();
     leaveDaily();
+    this.level = level;
+    store.save('level', level);
     this.start((Math.random() * 0xffffffff) >>> 0, size);
+  }
+
+  /** Key for best times: plain size for Normal (older saves), else size-level. */
+  private bestKey(size = this.size, level = this.level): string {
+    return level === 'normal' ? size : `${size}-${level}`;
   }
 
   playDaily(): void {
@@ -147,6 +160,7 @@ export class Game {
       hints: this.hints,
       done: this.done,
       day: this.daily,
+      level: this.level,
     };
     store.save(this.daily ? 'dailyRun' : 'run', run);
   }
@@ -236,13 +250,18 @@ export class Game {
 
   private giveHint(): void {
     if (this.done) return;
-    const h = nextHint(this.p, this.vals);
+    const h = nextHint(this.p, this.vals, this.notes);
     if (h.kind === 'done') return;
     this.hints++;
     if (h.kind === 'wrong') {
       this.selected = h.cell;
       this.hint = { clue: h.cell, cell: h.cell };
       this.info(`<b>This one is wrong.</b> Clear it (or change it) and look again.`);
+    } else if (h.kind === 'not') {
+      this.notes[h.cell] = (this.notes[h.cell] || 7) & ~(1 << h.not);
+      this.selected = h.cell;
+      this.hint = { clue: h.clue, cell: h.cell };
+      this.info(h.text);
     } else {
       this.selected = h.cell;
       this.hint = { clue: h.clue, cell: h.cell, clues: h.clues };
@@ -261,24 +280,24 @@ export class Game {
     this.save(true);
     const prof = store.load<Profile>('profile', { solved: 0, best: {} });
     prof.solved++;
-    const prev = prof.best[this.size];
+    const prev = prof.best[this.bestKey()];
     const score = this.total();
     const newBest = prev === undefined || score < prev;
-    if (newBest) prof.best[this.size] = score;
+    if (newBest) prof.best[this.bestKey()] = score;
     store.save('profile', prof);
     if (this.daily) recordDaily(store, 1e7 - Math.round(score / 1000), fmt(score), this.daily);
     setTimeout(() => this.showWin(newBest && prev !== undefined), 1400);
   }
 
   private showWin(newBest: boolean): void {
-    const best = store.load<Profile>('profile', { solved: 0, best: {} }).best[this.size];
+    const best = store.load<Profile>('profile', { solved: 0, best: {} }).best[this.bestKey()];
     const d = this.daily ? loadDaily(store, this.daily) : null;
     showCard(
       `<h2>Solved</h2>
-       <p>${SIZES[this.size].name} puzzle in <b>${fmt(this.total())}</b>${this.hints ? ` (${fmt(this.ms)} + ${this.hints * 30}s for ${this.hints} hint${this.hints > 1 ? 's' : ''})` : ', no hints'}.${newBest ? ' <b style="color:var(--gold)">New best!</b>' : best !== undefined ? ` Best ${fmt(best)}.` : ''}</p>
+       <p>${this.title()} puzzle in <b>${fmt(this.total())}</b>${this.hints ? ` (${fmt(this.ms)} + ${this.hints * 30}s for ${this.hints} hint${this.hints > 1 ? 's' : ''})` : ', no hints'}.${newBest ? ' <b style="color:var(--gold)">New best!</b>' : best !== undefined ? ` Best ${fmt(best)}.` : ''}</p>
        ${this.daily ? `<p><b style="color:var(--gold)">Daily puzzle · ${prettyDay(this.daily)}</b>${d ? `<br>Today's best: ${d.label}` : ''}</p>` : ''}`,
       [
-        { label: `New ${SIZES[this.size].name.toLowerCase()} puzzle`, primary: true, onClick: () => this.newPuzzle(this.size) },
+        { label: `Another ${this.title().toLowerCase()} puzzle`, primary: true, onClick: () => this.newPuzzle(this.size) },
         { label: 'Other sizes', onClick: () => this.showNew() },
         { label: 'Look at the board', onClick: closeOverlay },
         { label: 'All games', onClick: () => (location.href = '../') },
@@ -306,6 +325,7 @@ export class Game {
   refresh(): void {
     if (!this.p) return;
     $('size').textContent = this.daily ? 'Daily' : SIZES[this.size].name;
+    $('levelLabel').textContent = this.daily ? 'Puzzle' : LEVELS[this.level].name;
     this.showClock();
     $('notesBtn').classList.toggle('on', this.notesMode);
     $('pad').classList.toggle('notes', this.notesMode);
@@ -379,6 +399,7 @@ export class Game {
         <li>Hexes with a ring are given. Every puzzle has exactly one answer, and you never need to guess.</li>
         <li>Tap a hex, then an element. Tapping the same hex again cycles it.</li>
         <li><b>Notes</b> let you pencil in what a hex might be. A number turns <span style="color:#ff5d7a">red</span> when its neighbors can no longer add up.</li>
+        <li>Pick <b>Easy</b>, <b>Normal</b> or <b>Hard</b> with ＋. Hard puzzles sometimes need a "what if": suppose a hex is fire and see a number break.</li>
         <li><b>Hint</b> shows the next hex you can work out, or a wrong one (each adds 30 seconds to your time).</li>
         <li>A number fades once all its neighbors are filled and it adds up.</li>
       </ul>`,
@@ -386,23 +407,42 @@ export class Game {
     );
   }
 
+  private title(): string {
+    return `${this.level === 'normal' ? '' : `${LEVELS[this.level].name} `}${SIZES[this.size].name.toLowerCase()}`.replace(/^./, (c) => c.toUpperCase());
+  }
+
   showNew(): void {
     const prof = store.load<Profile>('profile', { solved: 0, best: {} });
+    let lv: Level = this.level;
+    const levels = (Object.keys(LEVELS) as Level[])
+      .map((l) => `<button data-lv="${l}" class="${l === lv ? 'on' : ''}">${LEVELS[l].name}</button>`)
+      .join('');
+    const label = (s: Size) => {
+      const b = prof.best[this.bestKey(s, lv)];
+      return `${SIZES[s].name} · ${makeBoard(SIZES[s].radius).cells.length} hexes${b !== undefined ? ` · best ${fmt(b)}` : ''}`;
+    };
+    const sizes = Object.keys(SIZES) as Size[];
     showCard(
-      `<h2>New puzzle</h2><p>${prof.solved ? `${prof.solved} solved so far.` : 'Pick a size.'}</p>`,
-      (Object.keys(SIZES) as Size[]).map((s) => ({
-        label: `${SIZES[s].name} · ${makeBoard(SIZES[s].radius).cells.length} hexes${prof.best[s] !== undefined ? ` · best ${fmt(prof.best[s]!)}` : ''}`,
-        primary: s === this.size,
-        onClick: () => this.newPuzzle(s),
-      })),
+      `<h2>New puzzle</h2><div class="levels">${levels}</div><p class="lvtext">${LEVELS[lv].text}${prof.solved ? ` ${prof.solved} solved so far.` : ''}</p>`,
+      sizes.map((s) => ({ label: label(s), primary: s === this.size, onClick: () => this.newPuzzle(s, lv) })),
     );
+    const card = document.querySelector('#overlay .card')!;
+    const sizeBtns = [...card.querySelectorAll<HTMLButtonElement>(':scope > button')];
+    card.querySelectorAll<HTMLButtonElement>('.levels button').forEach((b) => {
+      b.onclick = () => {
+        lv = b.dataset.lv as Level;
+        card.querySelectorAll('.levels button').forEach((x) => x.classList.toggle('on', x === b));
+        card.querySelector('.lvtext')!.textContent = LEVELS[lv].text;
+        sizeBtns.forEach((sb, k) => (sb.textContent = label(sizes[k])));
+      };
+    });
   }
 
   showMenu(): void {
     const day = todayKey();
     const d = loadDaily(store, day);
     showCard(
-      `<h2>Triad</h2><p>${this.daily ? `Daily puzzle · ${prettyDay(this.daily)}` : `${SIZES[this.size].name} puzzle`} · ${fmt(this.ms)}</p>`,
+      `<h2>Triad</h2><p>${this.daily ? `Daily puzzle · ${prettyDay(this.daily)}` : `${this.title()} puzzle`} · ${fmt(this.total())}</p>`,
       [
         { label: 'Resume', primary: true, onClick: closeOverlay },
         { label: 'New puzzle', onClick: () => this.showNew() },

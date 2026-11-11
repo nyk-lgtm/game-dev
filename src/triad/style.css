@@ -38,3 +38,9 @@ body #info { min-height: 38px; height: 38px; overflow-y: auto; font-size: 13.5px
 #pad .tool span { font-size: 12px; }
 #notesBtn.on { background: #3a3220; border-color: var(--accent); color: var(--accent); }
 #controls button:active { transform: scale(0.97); }
+#overlay .levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+#overlay .levels button {
+  min-height: 44px; border-radius: 10px; border: 1px solid var(--line);
+  background: #1e2333; color: var(--muted); font-size: 15px; font-weight: 700;
+}
+#overlay .levels button.on { border-color: var(--accent); color: var(--accent); background: #3a3220; }

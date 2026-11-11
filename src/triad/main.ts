@@ -7,6 +7,7 @@ import { Game, store } from './game';
 installErrorOverlay();
 
 const game = new Game();
+game.level = store.load('level', 'normal');
 document.getElementById('menuBtn')!.onclick = () => game.showMenu();
 document.getElementById('newBtn')!.onclick = () => game.showNew();
 

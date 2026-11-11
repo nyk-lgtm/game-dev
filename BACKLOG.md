@@ -63,7 +63,10 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         ("genuinely good"). Fixes: hints name every clue that forces the hex, moves save at once,
         the clock includes hint penalties, filled numbered hexes keep a visible icon, finished
         numbers fade.
-  - [ ] Next ideas: difficulty tiers
+  - [x] Levels: Easy (80%+ numbered, keeps givens), Normal (unchanged), Hard (a normal puzzle
+        stripped further while a few "what if" trials finish it: 1-6 small, 2-8 medium, 2-10 large).
+        Hints explain what-ifs and write them into notes; hints honour notes that allow the answer.
+  - [ ] Next ideas (old list follows): difficulty tiers
         (keep more clues for easy, allow two-clue deductions for hard), a short interactive
         tutorial puzzle, a second clue type (e.g. "beaten by" counts or edge marks).
 - [ ] **Text adventure**: tap-driven interactive fiction with a small handcrafted world
@@ -76,6 +79,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Afterglow: owner is happy with it — leave alone unless they report something.
 
 ## Done (recent)
+- Triad difficulty levels (Easy/Normal/Hard with what-if hints).
 - Unspoken art fixes (held objects, flooding river).
 - Glyphwright Empower + rising reroll cost; Rewild goals mark.
 - Triad shipped (new logic puzzle game with daily).
