@@ -7,7 +7,9 @@
 import {
   BENCH_SIZE,
   ENEMIES,
-  REROLL_COST,
+  empower,
+  empowerCost,
+  rerollCost,
   RUNES,
   WAVES,
   buy,
@@ -59,6 +61,8 @@ export interface SmartOptions {
   favorMult?: number;
   /** Interest gold kept once the loom is filled (0..15). */
   reserve?: number;
+  /** Never empower (to compare with the old economy). */
+  noEmpower?: boolean;
   /** Rerolls allowed per build phase. */
   maxRerolls?: number;
   /** Minimum relative loom gain per gold to buy freely / to dip into the reserve. */
@@ -333,6 +337,8 @@ interface Plan {
   score: number;
   sellFirst: number | null;
   i: number;
+  /** Empower this slot instead of buying. */
+  emp?: Slot;
 }
 
 export function smartPlayer(opts: SmartOptions = {}): Player {
@@ -419,13 +425,36 @@ export function smartPlayer(opts: SmartOptions = {}): Player {
             if (!best || score > best.score) best = { score, sellFirst: sf, i };
           }
         }
+        // Empowering a loom rune in place, scored like a purchase.
+        if (!opts.noEmpower)
+          for (let row = 0; row < 3; row++)
+            for (let col = 0; col < 4; col++) {
+              const r = s.loom[row][col];
+              if (!r || r.tier >= 3) continue;
+              const cost = empowerCost(r);
+              if (cost > s.gold) continue;
+              const at: Slot = { area: 'loom', row, col };
+              const t = clone(s);
+              if (!empower(t, at)) continue;
+              optimize(t, ev);
+              const gain = (ev.loom(t.loom) - base) / base;
+              const free = s.gold - cost >= keep;
+              const score = gain / cost;
+              if (score < (free ? tauFree : tauReserve)) continue;
+              if (!best || score > best.score) best = { score, sellFirst: null, i: -1, emp: at };
+            }
+        if (best?.emp) {
+          act({ t: 'empower', at: best.emp });
+          doOpt();
+          continue;
+        }
         if (best) {
           if (best.sellFirst !== null) act({ t: 'sell', at: { area: 'bench', i: best.sellFirst } });
           act({ t: 'buy', i: best.i });
           doOpt();
           continue;
         }
-        if (rerolls < maxRerolls && s.gold - REROLL_COST >= keep + 2) {
+        if (rerolls < maxRerolls && s.gold - rerollCost(s) >= keep + 2) {
           if (act({ t: 'reroll' })) {
             rerolls++;
             continue;

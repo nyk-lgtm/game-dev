@@ -107,6 +107,7 @@ export const naivePlayer: Player = {
 export const PLAYERS: Record<string, Player> = {
   naive: naivePlayer,
   smart: smartPlayer(),
+  oldsmart: smartPlayer({ noEmpower: true }),
 };
 
 export function play(seed: number, who = 'smart'): RunResult {

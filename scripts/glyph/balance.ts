@@ -1,7 +1,8 @@
 // Glyphwright balance probe. Run: npx vite-node scripts/glyph/balance.ts [runs] [bots]
 //   bots: comma list of naive, smart, favor (smart bot pushed toward each caster),
 //   favor:mods (toward each modifier), favor:beam+fire (toward the given runes)
-// Last result (200 seeds): smart 36% wins, median wave 15, deaths spread 9-15
+// Rules v2 (Empower, rising rerolls), 60 seeds: smart 32%, oldsmart (never empowers) 35%.
+// Last result before v2 (200 seeds): smart 36% wins, median wave 15, deaths spread 9-15
 // (lich 41, colossus 10); naive median 7, all deaths on waves 4-10.
 // Favor runs (60 seeds): casters 20-42% wins, modifiers 22-52%.
 // Related tools: probe.ts (ground-truth build ranking), fit.ts (bot model

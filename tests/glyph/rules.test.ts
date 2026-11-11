@@ -3,6 +3,9 @@ import {
   BENCH_SIZE,
   MOD,
   REROLL_COST,
+  empower,
+  empowerCost,
+  rerollCost,
   TIER_MULT,
   buy,
   casterBase,
@@ -313,6 +316,38 @@ describe('economy', () => {
     expect(reroll(a)).toBe(false);
     reroll(b);
     expect(b.shop).toEqual(a.shop);
+  });
+
+  it('rerolls get dearer within a wave: 1, 1, 2, 2, 3', () => {
+    const s = newGame(3);
+    s.gold = 100;
+    const paid: number[] = [];
+    for (let k = 0; k < 5; k++) {
+      paid.push(rerollCost(s));
+      reroll(s);
+    }
+    expect(paid).toEqual([1, 1, 2, 2, 3]);
+    expect(s.gold).toBe(91);
+  });
+
+  it('empowers a rune one tier for gold, and the result can merge', () => {
+    const s = newGame(5);
+    s.gold = 100;
+    const at = { area: 'loom', row: 0, col: 0 } as const;
+    const cost = empowerCost(s.loom[0][0]!);
+    expect(empower(s, at)).toBe(true);
+    expect(s.loom[0][0]).toEqual({ id: 'bolt', tier: 2 });
+    expect(s.gold).toBe(100 - cost);
+    expect(empowerCost(s.loom[0][0]!)).toBeGreaterThan(cost);
+    s.gold = 0;
+    expect(empower(s, at)).toBe(false);
+    // Two Bolt II on the bench plus an empowered one make a Bolt III.
+    s.gold = 100;
+    s.loom[0][0] = { id: 'bolt', tier: 1 };
+    s.bench[0] = { id: 'bolt', tier: 2 };
+    s.bench[1] = { id: 'bolt', tier: 2 };
+    expect(empower(s, at)).toBe(true);
+    expect([...s.loom.flat(), ...s.bench].filter((r) => r?.id === 'bolt')).toEqual([{ id: 'bolt', tier: 3 }]);
   });
 
   it('pays income with interest (+1 per 5 banked, up to +3) and kill gold', () => {

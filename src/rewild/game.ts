@@ -431,7 +431,7 @@ export class Game {
     const wb = $('weatherBtn');
     wb.innerHTML = `<span class="dot" style="background:${WEATHER_COLOR[s.weather]}"></span>${WEATHER_NAME[s.weather]}`;
     const done = s.goals.filter((g) => g.done).length;
-    $('goalsCount').textContent = `★${done}/${s.goals.length}`;
+    $('goalsCount').textContent = `⚑${done}/${s.goals.length}`;
     $('goalsBtn').classList.toggle('done', done === s.goals.length);
     this.renderHand();
     this.renderInfo();

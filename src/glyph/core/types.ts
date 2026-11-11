@@ -112,6 +112,8 @@ export interface GameState {
   bench: (Rune | null)[];
   shop: Offer[];
   rerolls: number;
+  /** Rerolls this build phase (each pair costs 1 more). */
+  waveRerolls: number;
   /** Shop rolls so far (seeds each roll). */
   rolls: number;
   phase: 'build' | 'battle' | 'over' | 'won';

@@ -14,7 +14,8 @@ import {
   MOD,
   MODS,
   SLOW_TIME,
-  REROLL_COST,
+  empowerCost,
+  rerollCost,
   RULES_VERSION,
   RUNES,
   WAVES,
@@ -405,7 +406,9 @@ export class Game {
         (el.querySelector('.cd') as HTMLElement).style.width = '0';
       }
     const reroll = $('rerollBtn') as HTMLButtonElement;
-    reroll.disabled = s.gold < REROLL_COST || battle;
+    const rc = rerollCost(s);
+    reroll.disabled = s.gold < rc || battle;
+    reroll.textContent = `Reroll ${rc}●`;
     $('freezeBtn').classList.toggle('on', s.frozen);
     $('freezeBtn').textContent = s.frozen ? 'Frozen ❄' : 'Freeze';
     this.renderTip();
@@ -462,7 +465,25 @@ export class Game {
         if (this.act({ t: 'sell', at })) this.sel = null;
         this.render();
       };
-      tip.replaceChildren(div, b);
+      const btns: HTMLElement[] = [b];
+      if (r.tier < 3) {
+        // Empower: raise it a tier in place, for gold.
+        const e = document.createElement('button');
+        e.className = 'primary emp';
+        const cost = empowerCost(r);
+        e.innerHTML = `${ROMAN[r.tier + 1]} ↑<small>${cost}●</small>`;
+        e.disabled = cost > s.gold;
+        e.setAttribute('aria-label', `Empower to ${ROMAN[r.tier + 1]} for ${cost} gold`);
+        e.onclick = () => {
+          if (this.act({ t: 'empower', at })) {
+            this.sfx.evolve();
+            this.banner(`${def.name} ${ROMAN[r.tier + 1]}!`, `empowered for ${cost}●`);
+          }
+          this.render();
+        };
+        btns.unshift(e);
+      }
+      tip.replaceChildren(div, ...btns);
     }
   }
 
@@ -747,7 +768,8 @@ export class Game {
         <li>Modifiers apply <b>left to right</b>. <b>Echo</b> repeats the spell as built so far, so what sits after it isn't echoed.</li>
         <li>Buy runes in the shop, drag them around, or tap one and then tap where it goes. Drop on the bar above the bench to sell.</li>
         <li><b>Three identical runes merge</b> into the next tier (I → II → III). The ★ in the shop marks a rune that completes a set.</li>
-        <li>Between waves you earn 5 gold, more in later waves, plus <b>interest</b>: +1 per 5 gold banked (max +3). <b>Freeze</b> keeps the shop for next wave.</li>
+        <li>Or <b>empower</b> one: tap a rune you own and press <b>II ↑</b> / <b>III ↑</b> to raise it a tier for gold (pricier than finding copies, but sure).</li>
+        <li>Between waves you earn 5 gold, more in later waves, plus <b>interest</b>: +1 per 5 gold banked (max +3). <b>Freeze</b> keeps the shop for next wave. Rerolls get dearer the more you use them in one wave.</li>
         <li>Armor eats a flat amount of every hit, so big hits beat many small ones. Some foes resist elements. Tap the wave preview to see them.</li>
         <li><b>Tap a spell</b> (the text beside its row) for a rune-by-rune breakdown and how it hits the next wave. <b style="color:#ffb86b">⚠</b> marks foes it struggles with.</li>
        </ul>`,

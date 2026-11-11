@@ -118,7 +118,8 @@ describe('replay encoding', () => {
     }
     expect(() => decode('X')).toThrow();
     expect(() => decode('ML00')).toThrow();
-    expect(RULES_VERSION).toBe(1);
+    expect(RULES_VERSION).toBe(2);
+    expect(decode('EL01')).toEqual({ t: 'empower', at: { area: 'loom', row: 0, col: 1 } });
   });
 
   it('replay throws on an illegal action', () => {

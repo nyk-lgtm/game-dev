@@ -9,6 +9,8 @@ import type { GameState, Rune, Slot } from './types';
 export const SHOP_SIZE = 5;
 export const BENCH_SIZE = 6;
 export const REROLL_COST = 1;
+/** Rerolls get dearer within a build phase: 1, 1, 2, 2, 3, ... (back to 1 each wave). */
+export const rerollCost = (s: GameState): number => REROLL_COST + Math.floor(s.waveRerolls / 2);
 export const START_GOLD = 9;
 
 export function newGame(seed: number): GameState {
@@ -26,6 +28,7 @@ export function newGame(seed: number): GameState {
     bench: new Array(BENCH_SIZE).fill(null),
     shop: [],
     rerolls: 0,
+    waveRerolls: 0,
     rolls: 0,
     phase: 'build',
     battle: null,
@@ -162,10 +165,27 @@ export function sell(s: GameState, at: Slot): boolean {
 }
 
 export function reroll(s: GameState): boolean {
-  if (s.phase !== 'build' || s.gold < REROLL_COST) return false;
-  s.gold -= REROLL_COST;
+  const cost = rerollCost(s);
+  if (s.phase !== 'build' || s.gold < cost) return false;
+  s.gold -= cost;
   s.rerolls++;
+  s.waveRerolls++;
   rollShop(s);
+  return true;
+}
+
+/** Gold to raise a rune one tier in place (dearer than finding the copies). */
+export function empowerCost(r: Rune): number {
+  return RUNES[r.id].cost * (r.tier === 1 ? 4 : 10);
+}
+
+/** Empower: pay to raise a loom or bench rune one tier. */
+export function empower(s: GameState, at: Slot): boolean {
+  const r = get(s, at);
+  if (!r || at.area === 'shop' || s.phase !== 'build' || r.tier >= 3 || s.gold < empowerCost(r)) return false;
+  s.gold -= empowerCost(r);
+  set(s, at, { id: r.id, tier: (r.tier + 1) as 2 | 3 });
+  mergeAll(s);
   return true;
 }
 
@@ -206,6 +226,7 @@ export function tick(s: GameState): void {
   }
   s.gold += income(s, b.goldEarned);
   s.wave++;
+  s.waveRerolls = 0;
   s.phase = 'build';
   if (!s.frozen) rollShop(s);
   s.frozen = false;
