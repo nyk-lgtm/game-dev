@@ -1,0 +1,64 @@
+// Checking a player's board and finding the next hint. Pure.
+
+import { ELEMENT_NAMES, bit, initialDomains, makeBoard, prey, propagate, single, type Puzzle, type Step } from './puzzle';
+
+/** Clue cells that can no longer be met, given what's filled in (only counts filled cells). */
+export function brokenClues(p: Puzzle, vals: number[]): number[] {
+  const b = makeBoard(p.radius);
+  const out: number[] = [];
+  for (let i = 0; i < vals.length; i++) {
+    const n = p.clue[i];
+    if (n < 0 || vals[i] < 0) continue;
+    const pr = prey(vals[i]);
+    let beat = 0;
+    let open = 0;
+    for (const j of b.adj[i]) {
+      if (vals[j] < 0) open++;
+      else if (vals[j] === pr) beat++;
+    }
+    if (beat > n || beat + open < n) out.push(i);
+  }
+  return out;
+}
+
+/** Every cell filled and every clue met (the answer is unique, so this is the answer). */
+export function solved(p: Puzzle, vals: number[]): boolean {
+  return vals.every((v, i) => p.given[i] >= 0 || v === p.solution[i]);
+}
+
+export type Hint =
+  | { kind: 'wrong'; cell: number }
+  | { kind: 'step'; clue: number; cell: number; value: number; text: string; notes: boolean }
+  | { kind: 'done' };
+
+/**
+ * The next thing to fill in. A wrong entry comes first; otherwise the first
+ * cell that single-clue deductions pin down, from the player's correct entries.
+ */
+export function nextHint(p: Puzzle, vals: number[]): Hint {
+  const wrong = vals.findIndex((v, i) => v >= 0 && v !== p.solution[i]);
+  if (wrong >= 0) return { kind: 'wrong', cell: wrong };
+  if (solved(p, vals)) return { kind: 'done' };
+  const b = makeBoard(p.radius);
+  const dom = initialDomains(p).map((d, i) => (vals[i] >= 0 ? bit(vals[i]) : d));
+  const steps: Step[] = [];
+  propagate(b, p.clue, dom, steps);
+  let partial = false;
+  for (const s of steps) {
+    const v = single(s.left);
+    if (v < 0 || vals[s.cell] >= 0 || p.given[s.cell] >= 0) {
+      if (v < 0) partial = true;
+      continue;
+    }
+    const n = p.clue[s.clue];
+    const name = ELEMENT_NAMES[v];
+    const text =
+      s.clue === s.cell
+        ? `Its own <b>${n}</b> only works if it is <b>${name}</b>.`
+        : `The <b>${n}</b> next to it only works if this is <b>${name}</b>.`;
+    return { kind: 'step', clue: s.clue, cell: s.cell, value: v, text, notes: partial };
+  }
+  // Deductions always finish a generated puzzle; this is only a fallback.
+  const cell = vals.findIndex((v) => v < 0);
+  return { kind: 'step', clue: cell, cell, value: p.solution[cell], text: `This one is <b>${ELEMENT_NAMES[p.solution[cell]]}</b>.`, notes: false };
+}

@@ -4,7 +4,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 (`index.html` + `src/hub/`), one folder per game: `telegraph/`, `grove/`, `lantern/`,
 `afterglow/` (survivor-like), `delve/` (first-person ASCII crawler), `nightline/`
 (pseudo-3D ASCII racer), `glyph/` (Glyphwright, spell-crafting autobattler), `rewild/`
-(ecosystem builder on a hex island), `unspoken/` (learn a procedurally invented language from pictures), `hexhold/` (hex maze tower defense).
+(ecosystem builder on a hex island), `unspoken/` (learn a procedurally invented language from pictures), `hexhold/` (hex maze tower defense),
+`triad/` (hex logic puzzle: fire/water/leaf, numbers count beaten neighbors).
 
 - The owner plays and tests only on an Android phone (Chrome, portrait). Every UI
   change must work by touch at ~390 CSS px wide; tap targets ≥ 44px.
@@ -39,7 +40,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   with batched `fillText` runs; art lives in each game's `art.ts`.
 - Daily challenges (src/shared/daily.ts): `<game>/?daily` plays today's seed (`dailySeed(game, day)`,
   local date); each game keeps its in-progress daily under `dailyRun` and today's best under `daily`.
-  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken and Hexhold; the hub's Daily section links them.
+  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold and Triad; the hub's Daily section links them.
 - Afterglow extras: Nights 1-5 (`NIGHTS` in content.ts, unlocked by `profile.nightsWon`), arenas
   (`ARENAS`/pillars in core/arena.ts, hashed from the seed), unions (`union` on a WeaponDef: two
   maxed weapons merge in a chest), and player damage is attributed (`w.taken`, `w.killedBy`).
@@ -56,6 +57,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 - Hexhold runs are a seed + tick-stamped actions (`<tick>:B<cell>.<tower>`, `U`, `S`, `W`); enemies follow a
   flow field (src/hexhold/core/board.ts) rebuilt on every build/sell; `buildError` forbids sealing any portal. Flyers use `FLY_DIST`, burrowers
   `s.dig` (the tower-less field); `distFor` picks. ~1/3 of maps have two portals (`s.portals`).
+- Triad (src/triad/core/puzzle.ts): `generate(seed, radius)` fills a random answer, adds givens until
+  single-clue deductions (`propagate`, exact per clue via `clueSupport`) finish it, then strips clues and
+  givens while they still do; so every puzzle is unique and guess-free, and `nextHint` replays those
+  deductions. `npx vite-node scripts/triad/stats.ts 30` shows clue/given counts per size.
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)
   plus a shape in render/draw.ts and a color in palette.ts; tests in
   tests/telegraph/enemies.test.ts. Telegraphed attacks set `aim` and resolve via

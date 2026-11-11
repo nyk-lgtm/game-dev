@@ -25,8 +25,25 @@ const glyph = makeStore('glyph.');
 const rewild = makeStore('rewild.');
 const unspoken = makeStore('unspoken.');
 const hexhold = makeStore('hexhold.');
+const triad = makeStore('triad.');
 
 const GAMES: GameCard[] = [
+  {
+    path: './triad/',
+    title: 'Triad',
+    tag: 'Logic puzzle',
+    pitch: 'Fire burns leaf, leaf drinks water, water douses fire. Fill the hexes so every number counts the neighbors it beats. Fresh puzzles, one answer each, no guessing.',
+    accent: '#ff8a3d',
+    best: () => {
+      const p = triad.load<{ solved?: number } | null>('profile', null);
+      return p?.solved ? `${p.solved} solved` : null;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#11141d"/>
+      <path d="M38 8l13 7.5v15L38 38l-13-7.5v-15z" fill="#5a2a14" stroke="#ff8a3d" stroke-width="1.5"/>
+      <path d="M24 32l13 7.5v15L24 62l-13-7.5v-15z" fill="#1f4a22" stroke="#6fd36f" stroke-width="1.5"/>
+      <path d="M52 32l13 7.5v15L52 62l-13-7.5v-15z" fill="#143a5c" stroke="#4fb3ff" stroke-width="1.5"/>
+      <g font-family="system-ui" font-weight="800" font-size="13" fill="#f4f1ea" text-anchor="middle"><text x="38" y="28">1</text><text x="24" y="52">1</text><text x="52" y="52">1</text></g></svg>`,
+  },
   {
     path: './hexhold/',
     title: 'Hexhold',
@@ -222,6 +239,7 @@ const DAILY = [
   { path: './nightline/?daily', title: 'Nightline', store: nightline, accent: '#ff2a6d' },
   { path: './unspoken/?daily', title: 'Unspoken', store: unspoken, accent: '#c8643c' },
   { path: './hexhold/?daily', title: 'Hexhold', store: hexhold, accent: '#ffd77a' },
+  { path: './triad/?daily', title: 'Triad', store: triad, accent: '#ff8a3d' },
 ];
 const daily = document.getElementById('daily')!;
 daily.innerHTML = `<h3>Daily challenges <span>${prettyDay()}</span></h3><p>The same run for everyone today. A new one at midnight.</p>`;

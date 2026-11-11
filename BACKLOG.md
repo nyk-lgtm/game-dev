@@ -52,8 +52,14 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
     the end screen's stars are score stars — use different marks. Winter plants look alike.
 - [ ] **Unspoken art follow-ups** from its blind playtest: objects drawn over people in two
       riddle scenes (fire/bird over the elder); "river" acting reads as a sea wave.
-- [ ] **Procedural logic puzzles**: a new puzzle type with generated, uniquely solvable
-      boards, a daily puzzle, hint system. (Design a fresh rule set, not a clone.)
+- [ ] **Triad** (procedural logic puzzle). Fire burns leaf, leaf drinks water, water douses
+      fire; a number counts the neighbors a hex beats. Milestones:
+  - [x] Core: generator (unique, guess-free via single-clue deductions), hints from the same
+        deductions, broken-clue check, 8 tests, `scripts/triad/stats.ts`.
+  - [x] UI: hex board, element pad, notes, undo, hints (+30 s), timer, 3 sizes, daily, hub card.
+  - [ ] Blind playtest (is it fun and humanly solvable?), then fixes. Ideas: difficulty tiers
+        (keep more clues for easy, allow two-clue deductions for hard), a short interactive
+        tutorial puzzle, a second clue type (e.g. "beaten by" counts or edge marks).
 - [ ] **Text adventure**: tap-driven interactive fiction with a small handcrafted world
       and systemic bits (inventory, NPC memory).
 
@@ -64,6 +70,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Afterglow: owner is happy with it — leave alone unless they report something.
 
 ## Done (recent)
+- Triad shipped (new logic puzzle game with daily).
 - Blind playtest fixes: Telegraph (abandon confirm, hurting moves need the red button,
   auto-walk on cleared floors, stacked labels), Glyphwright (Reroll redraw bug, stale battle bar,
   false merge banner, merge warnings, what leaked), Rewild (saves on deal and after the end,

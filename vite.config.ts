@@ -37,6 +37,7 @@ export default defineConfig({
         rewild: resolve(__dirname, 'rewild/index.html'),
         unspoken: resolve(__dirname, 'unspoken/index.html'),
         hexhold: resolve(__dirname, 'hexhold/index.html'),
+        triad: resolve(__dirname, 'triad/index.html'),
       },
     },
   },
