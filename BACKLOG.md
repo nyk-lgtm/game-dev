@@ -46,8 +46,9 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
     base cost, dearer than merging), rerolls cost 1,1,2,2,3… within a wave. Smart bot uses
     Empower; win rate unchanged (~32-35%). Still open: dps figure counts every pierce/arc
     target as always there; long spell names cut off in the row summary.
-  - Telegraph: depths 1-3 are very easy (lunge one-shots 2-HP brutes); bomb badge sits on the
-    player's hex when standing on a bomb.
+  - [x] Telegraph: depths 2-3 get +2 enemy budget (depth 1 stays the tutorial; rules v4). Greedy bot
+    median depth 8 → 7 (back on target), more of its runs end on depth 3. Still open: bomb badge
+    tucked onto the player's hex reads like a status effect.
   - Rewild: years 4-5 become upkeep (re-placing deer after wolves); losing a species costs
     little; beaver ponds and songbirds goals feel out of reach. Winter plants look alike.
     (Done: goals show ⚑ in the header, stars are only score stars.)

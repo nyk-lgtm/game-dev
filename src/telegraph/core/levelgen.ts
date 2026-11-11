@@ -84,7 +84,8 @@ function tryFloor(rng: Rng, depth: number): Floor | null {
     cells.filter((h) => tiles[key(h)] === 'floor' && distance(h, START) >= 4),
   );
   const enemies: Omit<Enemy, 'id'>[] = [];
-  let budget = Math.max(4, 3 * depth);
+  // Depth 1 is the tutorial floor; from depth 2 there is a little more to fight.
+  let budget = depth <= 1 ? 4 : 3 * depth + (depth <= 3 ? 2 : 0);
   const squad = pickSquad(rng, depth);
   const count = (k: EnemyKind) => enemies.filter((e) => e.kind === k).length;
   const canAdd = (k: EnemyKind) => ENEMIES[k].cost <= budget && count(k) < (ENEMIES[k].max ?? MAX_ENEMIES);

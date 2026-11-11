@@ -22,7 +22,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   differently.
 - Before pushing: `npm test && npm run build`. Balance probes:
   - Telegraph: `npx vite-node scripts/telegraph/balance.ts 150` (greedy bot median
-    depth ≈ 7; it can't plan bash/lunge combos). `scripts/telegraph/damage.ts`
+    depth ≈ 7, ~15% of runs end on depth 3; it can't plan bash/lunge combos). `scripts/telegraph/damage.ts`
     shows what hurts the player.
   - Grove: `npx vite-node scripts/grove/balance.ts 60` (score, game length, best tier).
   - Lantern: `npx vite-node scripts/lantern/balance.ts 50` (completion bot: ~98% finish,
