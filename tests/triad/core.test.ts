@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SIZES, beatsCount, propagateDeep, bit, brokenClues, deducible, generate, initialDomains, makeBoard, nextHint, predator, prey, propagate, solved,
+  SIZES, TUTORIAL, TUTORIAL_STEPS, beatsCount, propagateDeep, bit, brokenClues, deducible, generate, initialDomains, makeBoard, nextHint, predator, prey, propagate, solved,
 } from '../../src/triad/core';
 
 describe('board and rules', () => {
@@ -111,4 +111,17 @@ describe('levels', () => {
         expect(solved(p, vals)).toBe(true);
       }
     });
+});
+
+describe('tutorial', () => {
+  it('is consistent, unique by single clues, and its steps cover every blank exactly once', () => {
+    const p = TUTORIAL;
+    const b = makeBoard(1);
+    p.clue.forEach((n, i) => n >= 0 && expect(beatsCount(b, p.solution, i)).toBe(n));
+    expect(deducible(b, p.clue, p.given)).toBe(true);
+    const cells = TUTORIAL_STEPS.flatMap((st) => st.cells).sort();
+    expect(cells).toEqual(p.given.map((g, i) => (g < 0 ? i : -1)).filter((i) => i >= 0));
+    // Each step's numbered hex really is adjacent to (or is) the hexes it teaches.
+    for (const st of TUTORIAL_STEPS) for (const c of st.cells) expect(c === st.focus || b.adj[st.focus].includes(c) || st.focus === 6).toBe(true);
+  });
 });

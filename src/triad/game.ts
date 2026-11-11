@@ -12,6 +12,8 @@ import {
   RULES_VERSION,
   LEVELS,
   SIZES,
+  TUTORIAL,
+  TUTORIAL_STEPS,
   brokenClues,
   generate,
   makeBoard,
@@ -89,7 +91,37 @@ export class Game {
 
   // ---------------------------------------------------------------- lifecycle
 
+  /** Guided tutorial: the step being taught, or null when playing normally. */
+  tut: number | null = null;
+
+  /** The seven-hex guided puzzle (not saved; your own puzzle waits). */
+  startTutorial(): void {
+    closeOverlay();
+    store.save('seenHelp', true);
+    this.tut = 0;
+    this.daily = null;
+    this.p = TUTORIAL;
+    this.vals = new Array(7).fill(-1);
+    this.notes = new Array(7).fill(0);
+    this.ms = 0;
+    this.hints = 0;
+    this.done = false;
+    this.selected = -1;
+    this.undoStack = [];
+    this.winT = -1;
+    this.resize();
+    this.refresh();
+  }
+
+  /** Advance the tutorial past steps whose hexes are all filled correctly. */
+  private tutorialProgress(): void {
+    while (this.tut !== null && this.tut < TUTORIAL_STEPS.length && TUTORIAL_STEPS[this.tut].cells.every((c) => this.vals[c] === this.p.solution[c])) this.tut++;
+    const st = this.tut !== null ? TUTORIAL_STEPS[this.tut] : undefined;
+    this.hint = st ? { clue: st.focus, cell: st.cells.find((c) => this.vals[c] < 0) ?? st.cells[0], clues: [st.focus] } : null;
+  }
+
   start(seed: number, size: Size, saved?: SavedRun | null, daily: string | null = null): void {
+    this.tut = null;
     this.seed = seed;
     this.size = size;
     this.daily = daily;
@@ -146,7 +178,7 @@ export class Game {
   }
 
   save(now = false): void {
-    if (!this.p) return;
+    if (!this.p || this.tut !== null) return;
     const t = performance.now();
     if (!now && t - this.lastSave < 3000) return;
     this.lastSave = t;
@@ -235,6 +267,8 @@ export class Game {
     if (solved(this.p, this.vals)) this.win();
     this.refresh();
     this.save(true);
+    if (this.tut !== null && v >= 0 && v !== this.p.solution[i] && TUTORIAL_STEPS[this.tut]?.cells.includes(i))
+      this.info(`Not quite: that one is <b>${ELEMENT_NAMES[this.p.solution[i]]}</b>. ${TUTORIAL_STEPS[this.tut].text}`);
   }
 
   private undo(): void {
@@ -250,6 +284,11 @@ export class Game {
 
   private giveHint(): void {
     if (this.done) return;
+    if (this.tut !== null) {
+      // The tutorial already shows the step; hints are free here.
+      this.refresh();
+      return;
+    }
     const h = nextHint(this.p, this.vals, this.notes);
     if (h.kind === 'done') return;
     this.hints++;
@@ -277,6 +316,21 @@ export class Game {
     this.done = true;
     this.selected = -1;
     this.winT = 0;
+    if (this.tut !== null) {
+      this.tut = TUTORIAL_STEPS.length;
+      setTimeout(
+        () =>
+          showCard(
+            `<h2>That's the whole game</h2><p>Every puzzle is solved like that: find a number whose neighbors leave only one way to add up, fill it in, and look again. Bigger boards just chain more of them.</p><p>Notes help when a hex is down to two options, and Hint always shows the next step.</p>`,
+            [
+              { label: 'Play a Small puzzle', primary: true, onClick: () => this.newPuzzle('small', 'normal') },
+              { label: 'Try the tutorial again', onClick: () => this.startTutorial() },
+            ],
+          ),
+        1300,
+      );
+      return;
+    }
     this.save(true);
     const prof = store.load<Profile>('profile', { solved: 0, best: {} });
     prof.solved++;
@@ -333,6 +387,14 @@ export class Game {
     const filled = this.vals.filter((v, k) => v >= 0 || this.p.given[k] >= 0).length;
     const total = this.vals.length;
     for (let e = 0; e < 3; e++) $(`el${e}`).classList.toggle('cur', i >= 0 && this.vals[i] === e);
+    if (this.tut !== null) {
+      this.tutorialProgress();
+      $('size').textContent = 'Tutorial';
+      $('levelLabel').textContent = 'Learn';
+      this.info(this.tut < TUTORIAL_STEPS.length ? `<b>${this.tut + 1}/${TUTORIAL_STEPS.length}</b> ${TUTORIAL_STEPS[this.tut].text}` : '<b>Solved!</b> That’s the whole game.');
+      this.draw();
+      return;
+    }
     if (this.done) this.info(`<b>Solved!</b> ${fmt(this.total())}${this.hints ? ` · ${this.hints} hint${this.hints > 1 ? 's' : ''}` : ''}`);
     else if (i < 0)
       this.info(
@@ -403,7 +465,10 @@ export class Game {
         <li><b>Hint</b> shows the next hex you can work out, or a wrong one (each adds 30 seconds to your time).</li>
         <li>A number fades once all its neighbors are filled and it adds up.</li>
       </ul>`,
-      [{ label: 'Play', primary: true, onClick: closeOverlay }],
+      [
+        { label: 'Show me (60-second tutorial)', primary: true, onClick: () => this.startTutorial() },
+        { label: 'Just play', onClick: closeOverlay },
+      ],
     );
   }
 
@@ -470,6 +535,7 @@ export class Game {
             ]),
         },
         { label: 'How to play', onClick: () => this.showHelp() },
+        { label: 'Tutorial', onClick: () => this.startTutorial() },
         { label: 'Copy bug report', onClick: () => this.copyReport() },
         { label: 'All games', onClick: () => (location.href = '../') },
       ],

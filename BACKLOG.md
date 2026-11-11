@@ -69,6 +69,8 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   - [x] Levels: Easy (80%+ numbered, keeps givens), Normal (unchanged), Hard (a normal puzzle
         stripped further while a few "what if" trials finish it: 1-6 small, 2-8 medium, 2-10 large).
         Hints explain what-ifs and write them into notes; hints honour notes that allow the answer.
+  - [x] Guided tutorial: a hand-made 7-hex puzzle taught in 3 steps (TUTORIAL / TUTORIAL_STEPS in
+        core/puzzle.ts); offered from the first help card, the menu, and after it a Small puzzle.
   - [ ] Next ideas (old list follows): difficulty tiers
         (keep more clues for easy, allow two-clue deductions for hard), a short interactive
         tutorial puzzle, a second clue type (e.g. "beaten by" counts or edge marks).
@@ -92,6 +94,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Afterglow: owner is happy with it — leave alone unless they report something.
 
 ## Done (recent)
+- Triad guided tutorial.
 - Rewild settled-species bonus; Telegraph depths 2-3 harder.
 - Last Light shipped (interactive story, three endings-stars).
 - Triad difficulty levels (Easy/Normal/Hard with what-if hints).

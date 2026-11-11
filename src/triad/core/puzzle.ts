@@ -277,3 +277,41 @@ export function depth(p: Puzzle): number {
   }
   return rounds - 1;
 }
+
+/**
+ * The guided first puzzle: seven hexes, solved in three taught steps. Cells in
+ * reading order: 0 1 / 2 3 4 / 5 6 (3 is the middle).
+ */
+export const TUTORIAL: Puzzle = {
+  seed: 0,
+  radius: 1,
+  solution: [LEAF, FIRE, WATER, LEAF, LEAF, WATER, FIRE],
+  given: [-1, FIRE, -1, -1, -1, -1, -1],
+  clue: [-1, 3, -1, 2, -1, -1, 2],
+};
+
+export interface TutorialStep {
+  /** The number being read. */
+  focus: number;
+  /** The hexes this step fills. */
+  cells: number[];
+  text: string;
+}
+
+export const TUTORIAL_STEPS: TutorialStep[] = [
+  {
+    focus: 1,
+    cells: [0, 3, 4],
+    text: 'The ringed <b>Fire</b> is given. Its <b>3</b> means it beats 3 of its neighbors. It only <i>has</i> 3 neighbors, and fire beats leaf, so all three are <b>Leaf</b>. Fill them in: tap a hex, then Leaf.',
+  },
+  {
+    focus: 6,
+    cells: [6],
+    text: 'The bottom <b>2</b> touches two Leaves. Which element beats exactly 2 of its neighbors here? Water beats fire and leaf beats water, so neither can make 2. Only <b>Fire</b> (burning both Leaves).',
+  },
+  {
+    focus: 3,
+    cells: [2, 5],
+    text: 'The middle hex is a Leaf that beats <b>2</b>. Leaf drinks water, and none of its filled neighbors is water, so its two empty neighbors must both be <b>Water</b>.',
+  },
+];
