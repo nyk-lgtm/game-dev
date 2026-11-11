@@ -453,7 +453,7 @@ export function drawBoard(g: CanvasRenderingContext2D, v: View, s: State, o: Dra
   }
 
   if (o.hurt > 0) {
-    g.fillStyle = `rgba(255, 60, 60, ${o.hurt * 0.25})`;
+    g.fillStyle = `rgba(255, 60, 60, ${o.hurt * 0.12})`;
     g.fillRect(0, 0, v.w, v.h);
   }
 }

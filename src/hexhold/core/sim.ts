@@ -9,6 +9,7 @@ import {
   CHILL,
   ENEMIES,
   HP_GROWTH,
+  LATE_GROWTH,
   LEVEL_DMG,
   LEVEL_RANGE,
   MAX_LEVEL,
@@ -39,6 +40,8 @@ export interface Tower {
   hits: number;
   /** Specialization chosen at level 3 (index into SPECS), or -1. */
   spec: number;
+  /** Damage this tower has dealt. */
+  dealt: number;
 }
 
 export interface Enemy {
@@ -164,7 +167,7 @@ function sendWave(s: State) {
 
 function spawn(s: State, id: EnemyId, cell = PORTAL, t = 0, hpScale = 1): Enemy {
   const def = ENEMIES[id];
-  const hp = def.hp * Math.pow(1 + HP_GROWTH, Math.max(0, s.wave - 1)) * hpScale;
+  const hp = def.hp * Math.pow(1 + HP_GROWTH, Math.max(0, s.wave - 1)) * (1 + Math.max(0, s.wave - 14) * LATE_GROWTH) * hpScale;
   const dist = def.fly ? FLY_DIST : s.field.dist;
   const next = nextCell(dist, cell);
   const e: Enemy = { uid: s.nextUid++, id, hp, maxHp: hp, cell, next: next < 0 ? cell : next, t, x: POS[cell].x, y: POS[cell].y, chill: 0, deep: 0, stun: 0, burn: 0, burnDps: 0, healed: 0, alive: true };
@@ -193,6 +196,9 @@ export interface TowerStats {
   pierce: boolean;
 }
 
+/** A beacon's boost to its neighbors by level. */
+export const BEACON_BOOST = [1, 1.2, 1.3, 1.4];
+
 export const specOf = (t: Tower): SpecDef | null => (t.spec >= 0 ? SPECS[t.id][t.spec] : null);
 
 /** A tower's effective stats, including its level, ley line and neighbors' gifts. */
@@ -210,7 +216,7 @@ export function towerStats(s: State, t: Tower): TowerStats {
   for (const n of neighbors(s, t.cell)) {
     if (n.id !== 'beacon') continue;
     const ns = specOf(n);
-    boost = Math.max(boost, ns?.boost ?? 1.25);
+    boost = Math.max(boost, ns?.boost ?? BEACON_BOOST[n.level]);
     reach = Math.max(reach, ns?.reach ?? 0);
   }
   dmg *= boost;
@@ -238,7 +244,7 @@ function inRange(e: Enemy, x: number, y: number, r: number) {
   return (e.x - x) ** 2 + (e.y - y) ** 2 <= r * r;
 }
 
-function damage(s: State, e: Enemy, raw: number, src: TowerId, st: TowerStats | null, perSecond = false) {
+function damage(s: State, e: Enemy, raw: number, src: TowerId, st: TowerStats | null, perSecond = false, tw?: Tower) {
   if (!e.alive) return;
   let d = raw;
   if (st?.shatter && e.chill > 0) d *= 1.3;
@@ -246,6 +252,7 @@ function damage(s: State, e: Enemy, raw: number, src: TowerId, st: TowerStats | 
   d = Math.max(d * 0.2, d - armor);
   e.hp -= d;
   s.stats.dealt[src] = (s.stats.dealt[src] ?? 0) + d;
+  if (tw) tw.dealt += d;
   if (st?.ignite && (!perSecond || src === 'flame')) {
     e.burn = BURN_TIME;
     // Per-second sources (napalm flame) pass damage per tick; burn is per second.
@@ -277,7 +284,7 @@ function fire(s: State, t: Tower) {
         e.chill = Math.max(e.chill, 0.3);
         if (specOf(t)?.deep) e.deep = Math.max(e.deep, 0.3);
       }
-      damage(s, e, st.dmg * TICK, t.id, st, true);
+      damage(s, e, st.dmg * TICK, t.id, st, true, t);
     }
     return;
   }
@@ -290,7 +297,7 @@ function fire(s: State, t: Tower) {
     t.hits++;
     if (specOf(t)?.stunAll) e.stun = Math.max(e.stun, STUN_TIME * 0.6);
     else if (st.stun && t.hits % 4 === 0) e.stun = STUN_TIME;
-    damage(s, e, dmg, t.id, st);
+    damage(s, e, dmg, t.id, st, false, t);
   };
   if (def.id === 'bolt') {
     s.fx.push({ type: 'shot', from: t.cell, x: target.x, y: target.y, tower: t.id });
@@ -374,7 +381,7 @@ export function act(s: State, a: Action): boolean {
       if (buildError(s, a.cell, a.tower)) return false;
       const cost = TOWERS[a.tower].cost;
       s.gold -= cost;
-      s.towers[a.cell] = { cell: a.cell, id: a.tower, level: 1, cd: 0, spent: cost, hits: 0, spec: -1 };
+      s.towers[a.cell] = { cell: a.cell, id: a.tower, level: 1, cd: 0, spent: cost, hits: 0, spec: -1, dealt: 0 };
       reroute(s);
       return true;
     }

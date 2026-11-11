@@ -29,7 +29,12 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   - [x] Hub card, daily map, CLAUDE.md notes. Shipped.
   - [x] Level-3 specializations: each tower picks one of two forms (Longbow/Repeater,
         Siege/Cluster, Glacier/Hail, Storm/Overload, Inferno/Napalm, Banner/Lighthouse).
-  - [ ] Blind playtest (running) and its fixes; tunnelers; a second map shape (two portals).
+  - [x] Blind playtest and its fixes (rules v2): board no longer resizes under panels, tap
+        guard after building, close buttons, warning when a build makes the path slip past
+        towers, per-tower damage, Beacon/Frost stats, lives cost on wave chips, Colossus
+        warning, gentler early waves + late-game hp growth, beacon levels matter, saves at
+        wave end, softer hurt tint. Bot now median wave 27-28, ~1/4 wins.
+  - [ ] Tunnelers; a second map shape (two portals).
 - [ ] **Blind playtests** for Rewild, Glyphwright, Telegraph (one agent each), then fix.
 - [ ] **Unspoken art follow-ups** from its blind playtest: objects drawn over people in two
       riddle scenes (fire/bird over the elder); "river" acting reads as a sea wave.
@@ -45,6 +50,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Afterglow: owner is happy with it — leave alone unless they report something.
 
 ## Done (recent)
+- Hexhold blind playtest fixes (see above).
 - Hexhold shipped: maze tower defense with neighbor gifts, 30 waves, daily map.
 - Unspoken blind playtest (agent finished all 5 places: language "clicked" in ~2 minutes) and
   fixes: toast was a giant blank pill blocking taps (shell CSS order), category tabs crushed

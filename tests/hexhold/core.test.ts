@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ADJ, CORE, N, PORTAL, TOWERS, WAVES, act, buildError, decode, encode, flowField, makeMap, newGame, replay, step, towerStats, wavePlan,
+  ADJ, CORE, N, PORTAL, START_GOLD, TOWERS, WAVES, act, buildError, decode, encode, flowField, makeMap, newGame, replay, step, towerStats, wavePlan,
   type State,
 } from '../../src/hexhold/core';
 import { runGame } from '../../scripts/hexhold/bot';
@@ -38,10 +38,10 @@ describe('building', () => {
     const before = s.field.dist[PORTAL];
     const cell = open(s).find((c) => !buildError(s, c, 'bolt') && flowField(s.ground, new Set([c])).dist[PORTAL] > before)!;
     expect(act(s, { t: 'build', cell, tower: 'bolt' })).toBe(true);
-    expect(s.gold).toBe(160 - TOWERS.bolt.cost);
+    expect(s.gold).toBe(START_GOLD - TOWERS.bolt.cost);
     expect(s.field.dist[PORTAL]).toBeGreaterThan(before);
     expect(act(s, { t: 'sell', cell })).toBe(true);
-    expect(s.gold).toBe(160 - 50 + 35);
+    expect(s.gold).toBe(START_GOLD - 50 + 35);
     expect(s.field.dist[PORTAL]).toBe(before);
   });
 
@@ -57,7 +57,7 @@ describe('building', () => {
 });
 
 describe('neighbors', () => {
-  it('a beacon next door adds 25% damage; a bolt next door lets a mortar hit flyers', () => {
+  it('a beacon next door adds 20% damage; a bolt next door lets a mortar hit flyers', () => {
     const s = newGame(6);
     s.gold = 1e9;
     const cell = open(s).find((c) => ADJ[c].filter((j) => s.ground[j] === 'open').length >= 2 && s.ground[c] === 'open')!;
@@ -67,7 +67,7 @@ describe('neighbors', () => {
     expect(plain.air).toBe(false);
     const [a, b] = ADJ[cell].filter((j) => s.ground[j] === 'open' && !buildError(s, j, 'beacon'));
     act(s, { t: 'build', cell: a, tower: 'beacon' });
-    expect(towerStats(s, m).dmg).toBeCloseTo(plain.dmg * 1.25);
+    expect(towerStats(s, m).dmg).toBeCloseTo(plain.dmg * 1.2);
     if (b !== undefined && !buildError(s, b, 'bolt')) {
       act(s, { t: 'build', cell: b, tower: 'bolt' });
       expect(towerStats(s, m).air).toBe(true);
@@ -136,7 +136,7 @@ describe('specializations', () => {
     expect(act(s, { t: 'spec', cell, pick: 1 })).toBe(false);
   });
 
-  it('a Banner beacon gives neighbors +50% instead of +25%', () => {
+  it('beacon levels raise the boost, and a Banner gives +60%', () => {
     const s = newGame(9);
     s.gold = 1e9;
     const cell = open(s).find((c) => s.ground[c] === 'open' && ADJ[c].some((j) => s.ground[j] === 'open') && !buildError(s, c, 'bolt'))!;
@@ -144,10 +144,11 @@ describe('specializations', () => {
     const base = towerStats(s, s.towers[cell]!).dmg;
     const b = ADJ[cell].find((j) => !buildError(s, j, 'beacon'))!;
     act(s, { t: 'build', cell: b, tower: 'beacon' });
-    expect(towerStats(s, s.towers[cell]!).dmg).toBeCloseTo(base * 1.25);
+    expect(towerStats(s, s.towers[cell]!).dmg).toBeCloseTo(base * 1.2);
     act(s, { t: 'up', cell: b });
     act(s, { t: 'up', cell: b });
+    expect(towerStats(s, s.towers[cell]!).dmg).toBeCloseTo(base * 1.4);
     act(s, { t: 'spec', cell: b, pick: 0 });
-    expect(towerStats(s, s.towers[cell]!).dmg).toBeCloseTo(base * 1.5);
+    expect(towerStats(s, s.towers[cell]!).dmg).toBeCloseTo(base * 1.6);
   });
 });

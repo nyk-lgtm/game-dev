@@ -33,7 +33,7 @@ export const TOWERS: Record<TowerId, TowerDef> = {
   flame: { id: 'flame', name: 'Flame', cost: 80, range: 1.3, rate: 0, dmg: 20, air: false, color: '#ff6b3d',
     text: 'Burns everything close by, every moment. Ground only.', aura: 'Neighbors set enemies alight (burn).' },
   beacon: { id: 'beacon', name: 'Beacon', cost: 100, range: 0, rate: 0, dmg: 0, air: false, color: '#ffe27a',
-    text: 'Does not attack.', aura: 'Neighbors deal +25% damage.' },
+    text: 'Does not attack. Each level boosts its neighbors more (+20/30/40%).', aura: 'Neighbors deal +20% damage (more per level).' },
 };
 export const TOWER_IDS = Object.keys(TOWERS) as TowerId[];
 export const MAX_LEVEL = 3;
@@ -85,8 +85,8 @@ export const SPECS: Record<TowerId, [SpecDef, SpecDef]> = {
     { name: 'Napalm', text: 'Its fire clings: enemies keep burning after they pass.', napalm: true, dmg: 1.15 },
   ],
   beacon: [
-    { name: 'Banner', text: 'Neighbors deal +50% damage instead of +25%.', boost: 1.5 },
-    { name: 'Lighthouse', text: 'Neighbors also reach a whole cell further.', boost: 1.25, reach: 1 },
+    { name: 'Banner', text: 'Neighbors deal +60% damage.', boost: 1.6 },
+    { name: 'Lighthouse', text: 'Neighbors deal +40% and reach a whole cell further.', boost: 1.4, reach: 1 },
   ],
 };
 export const specCost = (id: TowerId) => Math.round(TOWERS[id].cost * 1.8);
@@ -122,18 +122,20 @@ export interface EnemyDef {
 export const ENEMIES: Record<EnemyId, EnemyDef> = {
   runner: { id: 'runner', name: 'Runner', hp: 26, speed: 1.7, armor: 0, bounty: 3, leak: 1, from: 1, color: '#ff8a8a', text: 'Quick and frail.' },
   grunt: { id: 'grunt', name: 'Grunt', hp: 60, speed: 1.0, armor: 0, bounty: 4, leak: 1, from: 1, color: '#e0a060', text: 'Steady.' },
-  swarm: { id: 'swarm', name: 'Mite', hp: 12, speed: 1.4, armor: 0, bounty: 1, leak: 1, from: 3, color: '#ffd166', text: 'Comes in swarms. Splash damage shreds them.' },
-  brute: { id: 'brute', name: 'Brute', hp: 210, speed: 0.65, armor: 4, bounty: 11, leak: 2, from: 4, color: '#b07850', text: 'Armored: each hit loses 4 damage. Big hits work best.' },
+  swarm: { id: 'swarm', name: 'Mite', hp: 12, speed: 1.4, armor: 0, bounty: 1, leak: 1, from: 4, color: '#ffd166', text: 'Comes in swarms. Splash damage shreds them.' },
+  brute: { id: 'brute', name: 'Brute', hp: 210, speed: 0.65, armor: 4, bounty: 11, leak: 2, from: 6, color: '#b07850', text: 'Armored: each hit loses 4 damage. Big hits work best.' },
   flyer: { id: 'flyer', name: 'Wisp', hp: 44, speed: 1.2, armor: 0, bounty: 5, leak: 1, fly: true, from: 5, color: '#9ef0d8', text: 'Flies straight over your maze. Only some towers hit it.' },
   healer: { id: 'healer', name: 'Mender', hp: 80, speed: 0.9, armor: 1, bounty: 8, leak: 1, heal: 7, from: 8, color: '#7cff9a', text: 'Heals nearby enemies. Kill it first.' },
   splitter: { id: 'splitter', name: 'Splitter', hp: 95, speed: 0.95, armor: 0, bounty: 6, leak: 1, split: 3, from: 10, color: '#d88cff', text: 'Bursts into three runners.' },
-  boss: { id: 'boss', name: 'Colossus', hp: 1050, speed: 0.45, armor: 7, bounty: 120, leak: 6, from: 10, color: '#ff5a5a', text: 'Every tenth wave.' },
+  boss: { id: 'boss', name: 'Colossus', hp: 1050, speed: 0.45, armor: 7, bounty: 120, leak: 6, from: 10, color: '#ff5a5a', text: 'A giant that comes every tenth wave. Armored, slow, and it costs 6 lives if it reaches your core. Have big hits ready.' },
 };
 export const ENEMY_IDS = Object.keys(ENEMIES) as EnemyId[];
 
 export const WAVES = 30;
-export const START_GOLD = 160;
+export const START_GOLD = 190;
 export const START_LIVES = 20;
+/** Extra health per wave past wave 14, so the late game keeps biting. */
+export const LATE_GROWTH = 0.035;
 /** Enemy health grows this much per wave (compounding). */
 export const HP_GROWTH = 0.105;
 /** Status effects. */

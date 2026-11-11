@@ -10,6 +10,7 @@ import { pxToHex } from '../shared/hexlayout';
 import { makeStore } from '../shared/storage';
 import {
   ADJ,
+  BEACON_BOOST,
   ENEMIES,
   HEXES,
   LEVEL_DMG,
@@ -90,6 +91,8 @@ export class Game {
   private last = 0;
   private panelKey = '';
   private lastSave = 0;
+  /** Ignore panel taps briefly after a build, so a double tap can't also upgrade. */
+  private guardUntil = 0;
   private ended = false;
 
   constructor() {
@@ -214,6 +217,7 @@ export class Game {
       return;
     }
     this.doAct({ t: 'build', cell: this.selected, tower: this.ghost });
+    this.guardUntil = performance.now() + 500;
     this.sfx.pickup();
     this.ghost = null;
     this.ghostPath = null;
@@ -297,6 +301,7 @@ export class Game {
           navigator.vibrate?.(30);
           break;
         case 'wave':
+          this.persist(true);
           this.banner(`Wave ${f.wave} held · +${f.bonus} gold`);
           this.sfx.levelUp();
           this.panelKey = '';
@@ -329,7 +334,7 @@ export class Game {
     const s = this.s;
     const t = this.selected >= 0 ? s.towers[this.selected] : null;
     // Rebuild only when something the panel shows has changed.
-    const key = [this.selected, this.ghost, s.gold, s.wave, s.active, s.status, t?.level ?? 0, t?.spec ?? -1, s.enemies.length + s.queue.length, s.towers.filter(Boolean).length].join('|');
+    const key = [this.selected, this.ghost, s.gold, s.wave, s.active, s.status, t?.level ?? 0, t?.spec ?? -1, Math.floor((t?.dealt ?? 0) / 25), s.enemies.length + s.queue.length, s.towers.filter(Boolean).length].join('|');
     if (key === this.panelKey) return;
     this.panelKey = key;
     const p = $('panel');
@@ -345,6 +350,16 @@ export class Game {
     if (t) return this.towerPanel(p);
     if (this.selected >= 0 && s.ground[this.selected] !== 'rock') return this.buildPanel(p);
     this.wavePanel(p);
+  }
+
+  /** A title row with a close button that returns to the wave panel. */
+  private titleRow(html: string): HTMLElement {
+    const row = el('div', 'title', html);
+    const x = el('button', 'close', '✕');
+    x.setAttribute('aria-label', 'Close');
+    x.onclick = () => this.tapCell(-1);
+    row.appendChild(x);
+    return row;
   }
 
   private wavePanel(p: HTMLElement): void {
@@ -363,7 +378,7 @@ export class Game {
     for (const id of plan) counts.set(id, (counts.get(id) ?? 0) + 1);
     p.appendChild(el('div', 'title', `Next: wave ${next} of ${WAVES} <span>${plan.length} enemies</span>`));
     const chips = el('div', 'chips');
-    for (const [id, n] of counts) chips.appendChild(el('span', 'chip', `<i style="background:${ENEMIES[id].color}"></i>${ENEMIES[id].name} ×${n}`));
+    for (const [id, n] of counts) chips.appendChild(el('span', 'chip', `<i style="background:${ENEMIES[id].color}"></i>${ENEMIES[id].name} ×${n}${ENEMIES[id].leak > 1 ? ` <em>−${ENEMIES[id].leak}♥</em>` : ''}`));
     p.appendChild(chips);
     // The most notable threat, in a sentence.
     const notable = (['boss', 'flyer', 'brute', 'healer', 'splitter', 'swarm'] as EnemyId[]).find((id) => counts.has(id));
@@ -385,7 +400,7 @@ export class Game {
     const cell = this.selected;
     const ley = s.ground[cell] === 'ley' ? ' · ley line: +25% damage' : '';
     if (!this.ghost) {
-      p.appendChild(el('div', 'title', `Build here <span>${s.gold} gold${ley}</span>`));
+      p.appendChild(this.titleRow(`<span class="t">Build here</span><span>${s.gold} gold${ley}</span>`));
       const pal = el('div', 'palette');
       for (const id of TOWER_IDS) {
         const b = el('button');
@@ -399,12 +414,16 @@ export class Game {
       return;
     }
     const def = TOWERS[this.ghost];
-    p.appendChild(el('div', 'title', `${def.name} <span>${def.cost} gold${ley}</span>`));
+    p.appendChild(this.titleRow(`<span class="t">${def.name}</span><span>${def.cost} gold${ley}</span>`));
     p.appendChild(el('div', 'text', `${def.text}<br><span class="gift">Next to it: ${def.aura}</span>`));
     const err = buildError(s, cell, this.ghost);
     const gain = this.ghostPath ? this.ghostPath.length - pathCells(s.field.dist).length : 0;
     if (err) p.appendChild(el('div', 'text warn', err));
-    else if (gain !== 0) p.appendChild(el('div', 'text', `Path ${gain > 0 ? `+${gain} hexes longer` : `${gain} hexes`} (blue dashes).`));
+    else {
+      if (gain !== 0) p.appendChild(el('div', 'text', `Path ${gain > 0 ? `+${gain} hexes longer` : `${gain} hexes`} (blue dashes).`));
+      const lost = this.ghostPath ? this.coverage(pathCells(s.field.dist)) - this.coverage(this.ghostPath) : 0;
+      if (lost > 0) p.appendChild(el('div', 'text warn', `⚠ The new path would slip past ${lost} of your tower${lost > 1 ? 's' : ''}.`));
+    }
     const row = el('div', 'row');
     const back = el('button', 'secondary');
     back.textContent = 'Back';
@@ -417,24 +436,39 @@ export class Game {
     p.appendChild(row);
   }
 
+  /** How many attacking towers reach at least one cell of this path. */
+  private coverage(path: number[]): number {
+    const s = this.s;
+    let n = 0;
+    for (const t of s.towers) {
+      if (!t || TOWERS[t.id].range === 0) continue;
+      const r = towerStats(s, t).range;
+      if (path.some((c) => (POS[c].x - POS[t.cell].x) ** 2 + (POS[c].y - POS[t.cell].y) ** 2 <= r * r)) n++;
+    }
+    return n;
+  }
+
   private towerPanel(p: HTMLElement): void {
     const s = this.s;
     const t = s.towers[this.selected]!;
     const def = TOWERS[t.id];
     const st = towerStats(s, t);
     const sp = specOf(t);
-    p.appendChild(el('div', 'title', `${sp ? sp.name : `${def.name} · level ${t.level}`} <span>${Math.round(s.stats.dealt[t.id] ?? 0).toLocaleString()} dmg by all ${def.name}s</span>`));
+    p.appendChild(this.titleRow(`<span class="t">${sp ? sp.name : `${def.name} · level ${t.level}`}</span><span>${t.id === 'beacon' ? '' : `${Math.round(t.dealt).toLocaleString()} damage dealt`}</span>`));
     const gifts = ADJ[t.cell].map((j) => s.towers[j]).filter((x): x is NonNullable<typeof x> => !!x);
     const got = [...new Set(gifts.map((x) => TOWERS[x.id].aura))];
     const stats =
       t.id === 'beacon'
-        ? 'Boosts every neighbor by 25%.'
-        : `Damage <b>${Math.round(st.dmg * (def.rate === 0 ? 1 : 1))}</b>${def.rate === 0 ? '/s' : ` every ${+st.rate.toFixed(2)}s`} · range <b>${(st.range / Math.sqrt(3)).toFixed(1)}</b>${st.air ? ' · hits flyers' : ''}`;
+        ? `Neighbors deal <b>+${Math.round(((sp?.boost ?? BEACON_BOOST[t.level]) - 1) * 100)}%</b> damage${sp?.reach ? ' and reach a cell further' : ''}.`
+        : t.id === 'frost'
+          ? `Chills everything within <b>${(st.range / Math.sqrt(3)).toFixed(1)}</b> (${sp?.deep ? '60' : '40'}% slower) · <b>${Math.round(st.dmg)}</b> damage/s`
+          : `Damage <b>${Math.round(st.dmg * (def.rate === 0 ? 1 : 1))}</b>${def.rate === 0 ? '/s' : ` every ${+st.rate.toFixed(2)}s`} · range <b>${(st.range / Math.sqrt(3)).toFixed(1)}</b>${st.air ? ' · hits flyers' : ''}`;
     p.appendChild(el('div', 'text', `${stats}<br><span class="gift">Gives neighbors: ${def.aura}</span>${got.length ? `<br>Gets: ${got.join(' ')}` : '<br>No neighbors yet.'}`));
     const row = el('div', 'row');
     const sell = el('button', 'secondary');
     sell.textContent = `Sell +${Math.floor(t.spent * SELL_BACK)}`;
     sell.onclick = () => {
+      if (performance.now() < this.guardUntil) return;
       if (this.doAct({ t: 'sell', cell: t.cell })) {
         this.sfx.click();
         this.selected = -1;
@@ -451,6 +485,7 @@ export class Game {
         b.innerHTML = `<b>${sd.name}</b><small>${sd.text}</small><em>${cost} gold</em>`;
         b.disabled = s.gold < cost;
         b.onclick = () => {
+          if (performance.now() < this.guardUntil) return;
           if (this.doAct({ t: 'spec', cell: t.cell, pick: k })) {
             this.sfx.evolve();
             this.banner(`${def.name} becomes ${sd.name}`);
@@ -472,6 +507,7 @@ export class Game {
       up.textContent = `Upgrade ${cost}${def.rate === 0 && t.id === 'beacon' ? '' : ` → ×${LEVEL_DMG[t.level + 1]}`}`;
       up.disabled = s.gold < cost;
       up.onclick = () => {
+        if (performance.now() < this.guardUntil) return;
         if (this.doAct({ t: 'up', cell: t.cell })) {
           this.sfx.evolve();
           this.panelKey = '';
