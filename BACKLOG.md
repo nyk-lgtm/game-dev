@@ -40,7 +40,16 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         `scripts/hexhold/probe.ts` shows where the bot dies by map shape.
   - [ ] Next ideas: a second blind playtest once owner feedback comes in; bot never builds Frost
         (2% damage) — check if Frost is weak or just unused by the bot.
-- [ ] **Blind playtests** for Rewild, Glyphwright, Telegraph (one agent each), then fix.
+- [x] **Blind playtests** for Rewild, Glyphwright, Telegraph, and their bug/UX fixes (shipped).
+- [ ] **Design follow-ups from those playtests** (balance; need care, not quick fixes):
+  - Glyphwright: gold piles up late (80 unspent; interest caps at +3), so late shops are reroll
+    fishing; a sink (4th row? slot upgrades?) or tighter late income. The dps figure counts
+    every pierce/arc target as always there. Long spell names are cut off in the row summary.
+  - Telegraph: depths 1-3 are very easy (lunge one-shots 2-HP brutes); bomb badge sits on the
+    player's hex when standing on a bomb.
+  - Rewild: years 4-5 become upkeep (re-placing deer after wolves); losing a species costs
+    little; beaver ponds and songbirds goals feel out of reach. The header's ★ counts goals while
+    the end screen's stars are score stars — use different marks. Winter plants look alike.
 - [ ] **Unspoken art follow-ups** from its blind playtest: objects drawn over people in two
       riddle scenes (fire/bird over the elder); "river" acting reads as a sea wave.
 - [ ] **Procedural logic puzzles**: a new puzzle type with generated, uniquely solvable
@@ -55,6 +64,10 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Afterglow: owner is happy with it — leave alone unless they report something.
 
 ## Done (recent)
+- Blind playtest fixes: Telegraph (abandon confirm, hurting moves need the red button,
+  auto-walk on cleared floors, stacked labels), Glyphwright (Reroll redraw bug, stale battle bar,
+  false merge banner, merge warnings, what leaked), Rewild (saves on deal and after the end,
+  species ± fixed, header and info panel room). Shared cards show a scroll hint.
 - Hexhold: burrowers and two-portal maps.
 - Hexhold blind playtest fixes (see above).
 - Hexhold shipped: maze tower defense with neighbor gifts, 30 waves, daily map.
