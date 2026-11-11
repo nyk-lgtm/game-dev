@@ -76,7 +76,11 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         1-3 stars (light, Ada, Tomas). Best route lights it at 11:42. 6 tests incl. random play.
   - [x] UI: story log, grouped choices (people, here, carrying, go), sky strip with the ship
         approaching and the beam, saves/replays, ending card, hub card.
-  - [ ] Blind playtest; then maybe a second night (a different story on the same engine).
+  - [x] Blind playtest (agent: 0 stars night 1, stranded by the tide; 3 stars night 2) and fixes:
+        tide warning 24 min ahead on cliff/shore/boathouse, flooded exits hidden, "Wait out the night"
+        when stranded, stale texts fixed, Tomas hints he's frozen (tea), "Damp matches", make tea from
+        the stove, endings say where everyone is, story scrolls fully.
+  - [ ] Maybe a second night (a different story on the same engine).
 
 ## Ideas (unscheduled)
 - Unspoken: more story templates so the village tale varies; spoken pronunciation via

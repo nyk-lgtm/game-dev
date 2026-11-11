@@ -26,8 +26,14 @@ describe('Last Light', () => {
     expect(clock(s)).toBe('10:00 pm');
     s.t = TIDE_T;
     s.room = 'cliff';
-    expect(act(s, 'go:shore')).toContain('The steps are under churning water. There’s no way through until the tide turns, long after midnight.');
+    expect(choices(s).some((c) => c.id === 'go:shore')).toBe(false);
+    expect(act(s, 'go:shore')).toBeNull();
     expect(s.room).toBe('cliff');
+    // Stranded below, you can wait out the night.
+    const b = newGame();
+    b.room = 'boathouse';
+    b.t = TIDE_T;
+    expect(choices(b).map((c) => c.id)).toContain('watch');
     s.t = END_T - 1;
     act(s, 'go:yard');
     expect(s.over).not.toBeNull();

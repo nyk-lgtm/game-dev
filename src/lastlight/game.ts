@@ -87,8 +87,12 @@ export class Game {
     navigator.vibrate?.(6);
     const story = $('story');
     requestAnimationFrame(() => {
+      // Show the whole new beat: scroll to the bottom, unless it's taller than the view.
       const last = story.lastElementChild as HTMLElement | null;
-      if (last) story.scrollTo({ top: last.offsetTop - 8, behavior: 'smooth' });
+      if (!last) return;
+      const top = last.offsetTop - story.offsetTop - 8;
+      const bottom = story.scrollHeight - story.clientHeight;
+      story.scrollTo({ top: last.offsetHeight + 16 > story.clientHeight ? top : bottom, behavior: 'smooth' });
     });
     if (this.s.over) {
       this.render(false);
@@ -111,6 +115,7 @@ export class Game {
       $('endBtn').onclick = () => this.showEnd();
       return;
     }
+    wetNow = s.wet;
     const cs = choices(s);
     const go = cs.filter((c) => c.about === 'go');
     const rest = cs.filter((c) => c.about !== 'go');
@@ -199,7 +204,7 @@ export class Game {
        <p>A short story you play by tapping. A ship is running for the rocks and the lighthouse is dark.</p>
        <ul>
          <li>Tap a place under <b>Go</b> to move, and people or things to see what you can do with them.</li>
-         <li>Every action spends three minutes. The ship reaches the rocks at <b>midnight</b>.</li>
+         <li>Most actions take three minutes (carrying something heavy is slower; looking and reading are free). The ship reaches the rocks at <b>midnight</b>.</li>
          <li>The weather, the tide and the people remember what you do. There are several endings.</li>
        </ul>`,
       [{ label: 'Begin', primary: true, onClick: closeOverlay }],
@@ -263,7 +268,10 @@ const ROOMS_TITLE = (s: State) =>
     boathouse: 'Boathouse',
   })[s.room];
 
+let wetNow = false;
 function subjectName(k: string): string {
+  if (k === 'matches' && wetNow) return 'Damp matches';
+  if (k === 'tide') return 'The tide';
   if (k in NPC_NAMES) return NPC_NAMES[k as keyof typeof NPC_NAMES];
   if (k in ITEM_NAMES) return cap(ITEM_NAMES[k as Item]);
   return cap(k);

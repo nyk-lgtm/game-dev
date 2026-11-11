@@ -10,7 +10,7 @@ export type Item = 'coat' | 'matches' | 'kettle' | 'tea' | 'logbook' | 'stone' |
 export type Npc = 'tomas' | 'ada';
 
 export const ROOM_NAMES: Record<Room, string> = {
-  cottage: "Keeper's cottage",
+  cottage: 'Keeper’s cottage',
   yard: 'The yard',
   base: 'Lighthouse, ground floor',
   lamp: 'The lamp room',
@@ -77,6 +77,7 @@ export interface State {
     sawShip: boolean;
     foundAda: boolean;
     read: boolean;
+    heavy: boolean;
   };
   tomas: { trust: number; room: Room; follows: boolean; told: string[] };
   ada: { freed: boolean; room: Room; told: string[]; left: boolean };
@@ -106,7 +107,7 @@ export function newGame(): State {
     },
     wearing: false,
     wet: false,
-    f: { drawer: false, door: false, window: false, hatch: false, box: false, oil: false, wick: false, lit: false, wound: false, sawShip: false, foundAda: false, read: false },
+    f: { drawer: false, door: false, window: false, hatch: false, box: false, oil: false, wick: false, lit: false, wound: false, sawShip: false, foundAda: false, read: false, heavy: false },
     tomas: { trust: 0, room: 'boathouse', follows: false, told: [] },
     ada: { freed: false, room: 'road', told: [], left: false },
     over: null,
@@ -170,7 +171,14 @@ export function describe(s: State): string[] {
     case 'cliff':
       out.push('The path runs along the cliff edge. The wind is strong enough to lean on.');
       out.push(shipLine(s));
-      out.push(tideIn(s) ? 'Below, the tide has covered the steps down to the shore.' : 'Steps cut in the rock lead down to the shore. The tide is rising.');
+      out.push(
+        tideIn(s)
+          ? 'Below, the tide has covered the steps down to the shore.'
+          : s.t >= TIDE_T - 8
+            ? 'The sea is nearly at the top of the steps down to the shore. Whoever goes down now may not come back up.'
+            : 'Steps cut in the rock lead down to the shore. The tide is rising.',
+      );
+      if (!s.f.foundAda) out.push('Up the village road, you think you hear someone calling.');
       break;
     case 'road':
       out.push('The road to the village dips between gorse banks. A pine has come down across it.');
@@ -179,16 +187,24 @@ export function describe(s: State): string[] {
       break;
     case 'shore':
       out.push('Black water climbs the shingle with every wave. The boathouse huddles against the cliff.');
-      if (s.t >= TIDE_T - 6) out.push('The tide is nearly at the foot of the steps. You won’t be able to come back this way much longer.');
+      if (tideIn(s)) out.push('The steps up the cliff are under the sea. You’re cut off here until the tide turns, long after midnight.');
+      else if (s.t >= TIDE_T - 8) out.push('The tide is nearly at the foot of the steps. Go back up soon, or not at all.');
       break;
     case 'boathouse':
       out.push('It smells of tar and fish. Rain drums on the tin roof.');
+      if (tideIn(s)) out.push('Water slops under the door. The steps are gone; nobody is leaving before morning.');
+      else if (s.t >= TIDE_T - 8) out.push('Water is creeping under the door. The tide is nearly at the steps.');
       if (here(s, 'oil')) out.push('A full can of lamp oil stands by the door.');
       break;
   }
   if (tomasHere(s)) {
     if (s.tomas.follows) out.push('Tomas is beside you, collar up.');
-    else if (s.room === 'boathouse') out.push('Tomas the fisherman sits on an upturned boat, holding his lantern close, not looking at the door.');
+    else if (s.room === 'boathouse')
+      out.push(
+        s.tomas.trust >= 1
+          ? 'Tomas is pacing the boathouse, blowing on his hands, glancing at the door and away again.'
+          : 'Tomas the fisherman sits on an upturned boat, holding his lantern close, not looking at the door. He’s shivering.',
+      );
     else if (s.room === 'cottage') out.push('Tomas is steaming gently by the stove.');
     else out.push('Tomas is here.');
   }
@@ -213,9 +229,10 @@ export function choices(s: State): Choice[] {
   if (s.over) return [];
   const out: Choice[] = [];
   const add = (id: string, label: string, about: string) => out.push({ id, label, about });
-  // Exits.
+  // Exits (the steps are gone once the tide is in).
   for (const r of EXITS[s.room]) {
     if (r === 'base' && s.room === 'yard' && !s.f.door && !s.f.window) continue;
+    if (tideIn(s) && ((s.room === 'cliff' && r === 'shore') || (s.room === 'shore' && r === 'cliff'))) continue;
     add(`go:${r}`, ROOM_NAMES[r], 'go');
   }
   // Things here.
@@ -223,9 +240,11 @@ export function choices(s: State): Choice[] {
   for (const i of takeable) if (here(s, i)) add(`take:${i}`, `Take ${the(i)}`, i);
   if (s.room === 'cottage') {
     if (!s.f.drawer) add('open:drawer', 'Open the drawer', 'drawer');
+    if (here(s, 'kettle')) add('brew', 'Make a pot of tea', 'kettle');
     if (here(s, 'logbook') || has(s, 'logbook')) add('read:logbook', 'Read the logbook', 'logbook');
   }
   if (s.room === 'yard' && !s.f.door && !s.f.window) add('look:door', 'Try the door', 'door');
+  if (tideIn(s) && (s.room === 'shore' || s.room === 'boathouse')) add('watch', 'Wait out the night', 'tide');
   if (s.room === 'lamp') {
     if (!s.f.box) add('look:box', 'Try the brass box', 'brass box');
     if (s.f.window && !s.f.hatch) add('shut:hatch', 'Shut the trapdoor', 'trapdoor');
@@ -309,7 +328,8 @@ export function act(s: State, id: string): string[] | null {
       }
       if (has(s, 'oil')) {
         cost = 2;
-        out.push('The oil can drags at your arm; it’s slow going.');
+        if (!s.f.heavy) out.push('The oil can drags at your arm. Every step takes twice as long.');
+        s.f.heavy = true;
       }
       if (OUTDOORS.has(to) && !s.wearing && has(s, 'matches') && !s.wet) {
         s.wet = true;
@@ -376,7 +396,7 @@ export function act(s: State, id: string): string[] | null {
       s.f.read = true;
       cost = 0;
       out.push(
-        'Ada’s last entry, in her square hand: “Wick burned through at dusk. Spare wicks in the brass box — key’s on my ring. Oil low. Full can down in the boathouse; Tomas can help carry it. Gone down to the village for the doctor’s girl. Back by ten.”',
+        'Ada’s last entry, in her square hand: “Wick burned through at dusk. Spare wicks in the brass box — key’s on my ring. Oil low. Full can down in the boathouse; Tomas can help carry it. Gone down the village road for the doctor’s girl. Back by ten.”',
         'It is past ten.',
       );
       break;
@@ -427,13 +447,18 @@ export function act(s: State, id: string): string[] | null {
       s.at.oil = 'nowhere';
       out.push('Tomas sets the can on his knee and fills the reservoir to the brim, not spilling a drop. “There.”');
       break;
+    case 'brew':
+      s.at.kettle = 'nowhere';
+      s.at.tea = 'inv';
+      out.push('The kettle sings. You make a strong, sweet pot of tea and wrap the kettle in a cloth to carry.');
+      break;
     case 'wind':
       s.f.wound = true;
       out.push('You crank until your arms burn. The weights rise, the clockwork catches, and the great lens begins to turn. The beam swings out across the black water.');
       break;
     case 'watch':
       s.t = END_T;
-      out.push('You keep watch as the beam sweeps round and round.');
+      out.push(a === undefined && s.f.wound ? 'You keep watch as the beam sweeps round and round.' : 'You sit out the long hours while the sea rises and falls.');
       return finish(s, out, 0);
   }
   return finish(s, out, cost);
@@ -470,7 +495,7 @@ function useItem(s: State, i: Item, target: string, out: string[]): number {
   }
   if (i === 'stone' && target === 'window') {
     s.f.window = true;
-    out.push('The glass bursts inward. You knock out the shards and climb through. The wind follows you in.');
+    out.push('The glass bursts inward. You knock out the shards; the way in is open, and the wind goes in ahead of you.');
     return 1;
   }
   if (i === 'stone' && target === 'box') {
@@ -549,7 +574,12 @@ function talk(s: State, n: Npc, topic: string, out: string[]) {
         if (T.trust >= 2) {
           T.follows = true;
           out.push('He stands, buttons his coat, and picks up his lantern. “Right. Where to?”');
-        } else out.push('He shakes his head. “Not out in that. Not for nothing.” He’s frightened, and cold through.');
+        } else
+          out.push(
+            T.trust >= 1
+              ? '“I want to. I do.” He holds up his hands; they’re shaking. “But I’m frozen to the bone. I’d be no use to you like this.”'
+              : 'He shakes his head. “Not out in that. Not for nothing.” He’s frightened, and cold through.',
+          );
         break;
       case 'stay':
         T.follows = false;
@@ -583,8 +613,11 @@ function talk(s: State, n: Npc, topic: string, out: string[]) {
 
 function finish(s: State, out: string[], cost: number): string[] {
   s.t += cost;
+  const at = s.room === 'shore' || s.room === 'boathouse';
+  if (s.t >= TIDE_T - 8 && s.t - cost < TIDE_T - 8 && (at || s.room === 'cliff'))
+    out.push('The sea is climbing the steps to the shore. Soon there will be no way up or down.');
   if (s.t >= TIDE_T && s.t - cost < TIDE_T) {
-    out.push('Somewhere below, the sea closes over the steps to the shore.');
+    out.push(at ? 'Behind you the sea closes over the steps. You’re cut off until morning.' : 'Somewhere below, the sea closes over the steps to the shore.');
   }
   if (s.t >= END_T) s.over = ending(s);
   return out;
@@ -599,12 +632,13 @@ export function ending(s: State): Ending {
   if (light) {
     stars++;
     text.push('Midnight. The beam sweeps round, and round. Out beyond the Teeth, the ship’s lantern swings, hesitates, and turns for open water.');
-    if (s.tomas.told.includes('ship') && s.f.sawShip) text.push('At first light a boat puts in at the harbour. Tomas runs down the slip shouting his brother’s name.');
   } else if (s.f.lit) {
     text.push('Midnight. The lamp burns, but the lens stands still. From the sea it looks like nothing more than a cottage window. You hear the ship strike the Teeth.');
   } else {
     text.push('Midnight. The tower is dark. Over the wind you hear timber break on the Teeth.');
   }
+  if (tideIn(s) && (s.room === 'shore' || s.room === 'boathouse'))
+    text.push(s.tomas.room === s.room ? 'You and Tomas wait out the tide in the boathouse, saying nothing, listening.' : 'You wait out the tide alone in the boathouse.');
   if (s.ada.freed) {
     stars++;
     text.push(
@@ -621,8 +655,16 @@ export function ending(s: State): Ending {
   }
   if (s.tomas.trust >= 2) {
     stars++;
-    text.push(s.tomas.follows || s.ada.freed ? 'Tomas sits up with you until the storm blows out.' : 'Tomas comes up from the boathouse at low tide and shakes your hand without a word.');
+    text.push(
+      s.ada.freed
+        ? 'Tomas sits up with Ada by the stove until the storm blows out, feeding the fire, telling her lies about fish.'
+        : s.tomas.follows
+          ? 'Tomas stays at your side until the storm blows out.'
+          : 'Tomas comes up from the boathouse at low tide and shakes your hand without a word.',
+    );
   }
+  if (light && s.tomas.told.includes('ship') && s.f.sawShip)
+    text.push('At first light a boat puts in at the harbour, and Tomas runs down the slip shouting his brother’s name.');
   const title = light ? (stars === 3 ? 'The Last Light' : 'The Light Turns') : 'The Dark Tower';
   return { title, text, stars };
 }
