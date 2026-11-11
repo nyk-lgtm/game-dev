@@ -112,4 +112,42 @@ describe('replay', () => {
     expect(s.gold).toBe(r.s.gold);
     expect(s.status).toBe(r.s.status);
   });
+
+  it('encodes specializations', () => {
+    expect(decode(encode(77, { t: 'spec', cell: 12, pick: 1 }))).toEqual({ tick: 77, a: { t: 'spec', cell: 12, pick: 1 } });
+  });
+});
+
+describe('specializations', () => {
+  it('only a level-3 tower can specialize, once, and it changes its stats', () => {
+    const s = newGame(8);
+    s.gold = 1e9;
+    const cell = open(s).find((c) => !buildError(s, c, 'bolt'))!;
+    act(s, { t: 'build', cell, tower: 'bolt' });
+    expect(act(s, { t: 'spec', cell, pick: 0 })).toBe(false);
+    act(s, { t: 'up', cell });
+    act(s, { t: 'up', cell });
+    const before = towerStats(s, s.towers[cell]!);
+    expect(act(s, { t: 'spec', cell, pick: 0 })).toBe(true);
+    const after = towerStats(s, s.towers[cell]!);
+    expect(after.dmg).toBeCloseTo(before.dmg * 2.4);
+    expect(after.range).toBeCloseTo(before.range * 1.5);
+    expect(after.rate).toBeGreaterThan(before.rate);
+    expect(act(s, { t: 'spec', cell, pick: 1 })).toBe(false);
+  });
+
+  it('a Banner beacon gives neighbors +50% instead of +25%', () => {
+    const s = newGame(9);
+    s.gold = 1e9;
+    const cell = open(s).find((c) => s.ground[c] === 'open' && ADJ[c].some((j) => s.ground[j] === 'open') && !buildError(s, c, 'bolt'))!;
+    act(s, { t: 'build', cell, tower: 'bolt' });
+    const base = towerStats(s, s.towers[cell]!).dmg;
+    const b = ADJ[cell].find((j) => !buildError(s, j, 'beacon'))!;
+    act(s, { t: 'build', cell: b, tower: 'beacon' });
+    expect(towerStats(s, s.towers[cell]!).dmg).toBeCloseTo(base * 1.25);
+    act(s, { t: 'up', cell: b });
+    act(s, { t: 'up', cell: b });
+    act(s, { t: 'spec', cell: b, pick: 0 });
+    expect(towerStats(s, s.towers[cell]!).dmg).toBeCloseTo(base * 1.5);
+  });
 });

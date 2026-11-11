@@ -17,6 +17,7 @@ import {
   POS,
   RULES_VERSION,
   SELL_BACK,
+  SPECS,
   TICK,
   TOWERS,
   TOWER_IDS,
@@ -28,6 +29,8 @@ import {
   flowField,
   newGame,
   replay,
+  specCost,
+  specOf,
   step,
   towerStats,
   upgradeCost,
@@ -326,7 +329,7 @@ export class Game {
     const s = this.s;
     const t = this.selected >= 0 ? s.towers[this.selected] : null;
     // Rebuild only when something the panel shows has changed.
-    const key = [this.selected, this.ghost, s.gold, s.wave, s.active, s.status, t?.level ?? 0, s.enemies.length + s.queue.length, s.towers.filter(Boolean).length].join('|');
+    const key = [this.selected, this.ghost, s.gold, s.wave, s.active, s.status, t?.level ?? 0, t?.spec ?? -1, s.enemies.length + s.queue.length, s.towers.filter(Boolean).length].join('|');
     if (key === this.panelKey) return;
     this.panelKey = key;
     const p = $('panel');
@@ -419,13 +422,14 @@ export class Game {
     const t = s.towers[this.selected]!;
     const def = TOWERS[t.id];
     const st = towerStats(s, t);
-    p.appendChild(el('div', 'title', `${def.name} · level ${t.level} <span>${Math.round(s.stats.dealt[t.id] ?? 0).toLocaleString()} dmg by all ${def.name}s</span>`));
+    const sp = specOf(t);
+    p.appendChild(el('div', 'title', `${sp ? sp.name : `${def.name} · level ${t.level}`} <span>${Math.round(s.stats.dealt[t.id] ?? 0).toLocaleString()} dmg by all ${def.name}s</span>`));
     const gifts = ADJ[t.cell].map((j) => s.towers[j]).filter((x): x is NonNullable<typeof x> => !!x);
     const got = [...new Set(gifts.map((x) => TOWERS[x.id].aura))];
     const stats =
       t.id === 'beacon'
         ? 'Boosts every neighbor by 25%.'
-        : `Damage <b>${Math.round(st.dmg * (def.rate === 0 ? 1 : 1))}</b>${def.rate === 0 ? '/s' : ` every ${def.rate}s`} · range <b>${(st.range / Math.sqrt(3)).toFixed(1)}</b>${st.air ? ' · hits flyers' : ''}`;
+        : `Damage <b>${Math.round(st.dmg * (def.rate === 0 ? 1 : 1))}</b>${def.rate === 0 ? '/s' : ` every ${+st.rate.toFixed(2)}s`} · range <b>${(st.range / Math.sqrt(3)).toFixed(1)}</b>${st.air ? ' · hits flyers' : ''}`;
     p.appendChild(el('div', 'text', `${stats}<br><span class="gift">Gives neighbors: ${def.aura}</span>${got.length ? `<br>Gets: ${got.join(' ')}` : '<br>No neighbors yet.'}`));
     const row = el('div', 'row');
     const sell = el('button', 'secondary');
@@ -438,8 +442,30 @@ export class Game {
       } else toast("Can't sell that now");
     };
     const up = el('button', 'primary');
+    if (t.level >= MAX_LEVEL && t.spec < 0) {
+      // Choose a specialization: two forms, side by side.
+      const cost = specCost(t.id);
+      const pick = el('div', 'specs');
+      SPECS[t.id].forEach((sd, k) => {
+        const b = el('button', 'spec');
+        b.innerHTML = `<b>${sd.name}</b><small>${sd.text}</small><em>${cost} gold</em>`;
+        b.disabled = s.gold < cost;
+        b.onclick = () => {
+          if (this.doAct({ t: 'spec', cell: t.cell, pick: k })) {
+            this.sfx.evolve();
+            this.banner(`${def.name} becomes ${sd.name}`);
+            this.panelKey = '';
+          }
+        };
+        pick.appendChild(b);
+      });
+      p.appendChild(pick);
+      row.append(sell);
+      p.appendChild(row);
+      return;
+    }
     if (t.level >= MAX_LEVEL) {
-      up.textContent = 'Max level';
+      up.textContent = sp ? sp.name : 'Max level';
       up.disabled = true;
     } else {
       const cost = upgradeCost(t.id, t.level);
@@ -544,7 +570,7 @@ export class Game {
 
   showTowers(): void {
     showCard(
-      `<h2>Towers</h2>${TOWER_IDS.map((id) => `<p><b style="color:${TOWERS[id].color}">${TOWERS[id].name}</b> · ${TOWERS[id].cost} gold<br>${TOWERS[id].text}<br><i>Neighbors: ${TOWERS[id].aura}</i></p>`).join('')}`,
+      `<h2>Towers</h2><p>At level 3 each tower can specialize into one of two forms.</p>${TOWER_IDS.map((id) => `<p><b style="color:${TOWERS[id].color}">${TOWERS[id].name}</b> · ${TOWERS[id].cost} gold<br>${TOWERS[id].text}<br><i>Neighbors: ${TOWERS[id].aura}</i><br>Becomes <b>${SPECS[id][0].name}</b> or <b>${SPECS[id][1].name}</b>.</p>`).join('')}`,
       [{ label: 'Close', primary: true, onClick: closeOverlay }],
     );
   }

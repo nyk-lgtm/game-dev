@@ -19,7 +19,10 @@ import {
   TOWERS,
   WAVES,
   upgradeCost,
+  SPECS,
+  specCost,
   type EnemyId,
+  type SpecDef,
   type TowerId,
 } from './content';
 
@@ -34,6 +37,8 @@ export interface Tower {
   spent: number;
   /** Hits landed (every 4th stuns when next to a tesla). */
   hits: number;
+  /** Specialization chosen at level 3 (index into SPECS), or -1. */
+  spec: number;
 }
 
 export interface Enemy {
@@ -48,6 +53,8 @@ export interface Enemy {
   x: number;
   y: number;
   chill: number;
+  /** Deep chill from a Glacier (stronger slow). */
+  deep: number;
   stun: number;
   burn: number;
   burnDps: number;
@@ -160,7 +167,7 @@ function spawn(s: State, id: EnemyId, cell = PORTAL, t = 0, hpScale = 1): Enemy 
   const hp = def.hp * Math.pow(1 + HP_GROWTH, Math.max(0, s.wave - 1)) * hpScale;
   const dist = def.fly ? FLY_DIST : s.field.dist;
   const next = nextCell(dist, cell);
-  const e: Enemy = { uid: s.nextUid++, id, hp, maxHp: hp, cell, next: next < 0 ? cell : next, t, x: POS[cell].x, y: POS[cell].y, chill: 0, stun: 0, burn: 0, burnDps: 0, healed: 0, alive: true };
+  const e: Enemy = { uid: s.nextUid++, id, hp, maxHp: hp, cell, next: next < 0 ? cell : next, t, x: POS[cell].x, y: POS[cell].y, chill: 0, deep: 0, stun: 0, burn: 0, burnDps: 0, healed: 0, alive: true };
   s.enemies.push(e);
   return e;
 }
@@ -181,7 +188,12 @@ export interface TowerStats {
   shatter: boolean;
   ignite: boolean;
   stun: boolean;
+  /** Seconds between shots (after specialization). */
+  rate: number;
+  pierce: boolean;
 }
+
+export const specOf = (t: Tower): SpecDef | null => (t.spec >= 0 ? SPECS[t.id][t.spec] : null);
 
 /** A tower's effective stats, including its level, ley line and neighbors' gifts. */
 export function towerStats(s: State, t: Tower): TowerStats {
@@ -190,10 +202,30 @@ export function towerStats(s: State, t: Tower): TowerStats {
   const has = (id: TowerId) => nb.includes(id);
   let dmg = def.dmg * LEVEL_DMG[t.level];
   if (s.ground[t.cell] === 'ley') dmg *= 1.25;
-  if (has('beacon')) dmg *= 1.25;
-  let range = def.range * LEVEL_RANGE[t.level];
-  if (has('mortar') && range > 0) range += 0.5;
-  return { dmg, range: range * CELL, air: def.air || has('bolt'), shatter: has('frost'), ignite: has('flame'), stun: has('tesla') };
+  const sp = specOf(t);
+  if (sp?.dmg) dmg *= sp.dmg;
+  // The best beacon next door counts (they don't stack).
+  let boost = 1;
+  let reach = 0;
+  for (const n of neighbors(s, t.cell)) {
+    if (n.id !== 'beacon') continue;
+    const ns = specOf(n);
+    boost = Math.max(boost, ns?.boost ?? 1.25);
+    reach = Math.max(reach, ns?.reach ?? 0);
+  }
+  dmg *= boost;
+  let range = def.range * LEVEL_RANGE[t.level] * (sp?.range ?? 1);
+  if (range > 0) range += (has('mortar') ? 0.5 : 0) + reach;
+  return {
+    dmg,
+    range: range * CELL,
+    air: def.air || has('bolt'),
+    shatter: has('frost'),
+    ignite: has('flame') || !!sp?.napalm,
+    stun: has('tesla'),
+    rate: def.rate * (sp?.rate ?? 1),
+    pierce: !!sp?.pierce,
+  };
 }
 
 /** How far an enemy still has to go (smaller = more dangerous). */
@@ -210,13 +242,14 @@ function damage(s: State, e: Enemy, raw: number, src: TowerId, st: TowerStats | 
   if (!e.alive) return;
   let d = raw;
   if (st?.shatter && e.chill > 0) d *= 1.3;
-  const armor = ENEMIES[e.id].armor * (perSecond ? TICK : 1);
+  const armor = st?.pierce ? 0 : ENEMIES[e.id].armor * (perSecond ? TICK : 1);
   d = Math.max(d * 0.2, d - armor);
   e.hp -= d;
   s.stats.dealt[src] = (s.stats.dealt[src] ?? 0) + d;
-  if (st?.ignite && !perSecond) {
+  if (st?.ignite && (!perSecond || src === 'flame')) {
     e.burn = BURN_TIME;
-    e.burnDps = Math.max(e.burnDps, raw * 0.3);
+    // Per-second sources (napalm flame) pass damage per tick; burn is per second.
+    e.burnDps = Math.max(e.burnDps, (perSecond ? raw / TICK : raw) * 0.3);
   }
   if (e.hp <= 0) kill(s, e);
 }
@@ -240,26 +273,30 @@ function fire(s: State, t: Tower) {
   // Auras act every tick.
   if (def.rate === 0) {
     for (const e of targets) {
-      if (def.id === 'frost') e.chill = Math.max(e.chill, 0.3);
+      if (def.id === 'frost') {
+        e.chill = Math.max(e.chill, 0.3);
+        if (specOf(t)?.deep) e.deep = Math.max(e.deep, 0.3);
+      }
       damage(s, e, st.dmg * TICK, t.id, st, true);
     }
     return;
   }
   t.cd -= TICK;
   if (t.cd > 0 || !targets.length) return;
-  t.cd = def.rate;
+  t.cd = st.rate;
   let target = targets[0];
   for (const e of targets) if (remaining(s, e) < remaining(s, target)) target = e;
   const hit = (e: Enemy, dmg: number) => {
     t.hits++;
-    if (st.stun && t.hits % 4 === 0) e.stun = STUN_TIME;
+    if (specOf(t)?.stunAll) e.stun = Math.max(e.stun, STUN_TIME * 0.6);
+    else if (st.stun && t.hits % 4 === 0) e.stun = STUN_TIME;
     damage(s, e, dmg, t.id, st);
   };
   if (def.id === 'bolt') {
     s.fx.push({ type: 'shot', from: t.cell, x: target.x, y: target.y, tower: t.id });
     hit(target, st.dmg);
   } else if (def.id === 'mortar') {
-    const r = 0.9 * CELL;
+    const r = 0.9 * CELL * (specOf(t)?.splash ?? 1);
     s.fx.push({ type: 'burst', x: target.x, y: target.y, r });
     const tx = target.x;
     const ty = target.y;
@@ -269,7 +306,7 @@ function fire(s: State, t: Tower) {
     const seen = new Set([target.uid]);
     let cur = target;
     hit(cur, st.dmg);
-    for (let k = 0; k < 2; k++) {
+    for (let k = 0; k < 2 + (specOf(t)?.chain ?? 0); k++) {
       let best: Enemy | null = null;
       for (const e of s.enemies) {
         if (!e.alive || seen.has(e.uid) || (!st.air && ENEMIES[e.id].fly) || !inRange(e, cur.x, cur.y, 1.6 * CELL)) continue;
@@ -322,7 +359,12 @@ function reroute(s: State) {
   }
 }
 
-export type Action = { t: 'build'; cell: number; tower: TowerId } | { t: 'up'; cell: number } | { t: 'sell'; cell: number } | { t: 'wave' };
+export type Action =
+  | { t: 'build'; cell: number; tower: TowerId }
+  | { t: 'up'; cell: number }
+  | { t: 'spec'; cell: number; pick: number }
+  | { t: 'sell'; cell: number }
+  | { t: 'wave' };
 
 /** Applies a player action at the current tick. Returns false if illegal. */
 export function act(s: State, a: Action): boolean {
@@ -332,7 +374,7 @@ export function act(s: State, a: Action): boolean {
       if (buildError(s, a.cell, a.tower)) return false;
       const cost = TOWERS[a.tower].cost;
       s.gold -= cost;
-      s.towers[a.cell] = { cell: a.cell, id: a.tower, level: 1, cd: 0, spent: cost, hits: 0 };
+      s.towers[a.cell] = { cell: a.cell, id: a.tower, level: 1, cd: 0, spent: cost, hits: 0, spec: -1 };
       reroute(s);
       return true;
     }
@@ -344,6 +386,16 @@ export function act(s: State, a: Action): boolean {
       s.gold -= cost;
       t.spent += cost;
       t.level++;
+      return true;
+    }
+    case 'spec': {
+      const t = s.towers[a.cell];
+      if (!t || t.level < MAX_LEVEL || t.spec >= 0 || (a.pick !== 0 && a.pick !== 1)) return false;
+      const cost = specCost(t.id);
+      if (s.gold < cost) return false;
+      s.gold -= cost;
+      t.spent += cost;
+      t.spec = a.pick;
       return true;
     }
     case 'sell': {
@@ -403,8 +455,9 @@ export function step(s: State): void {
       e.stun -= TICK;
       continue;
     }
-    const speed = def.speed * (e.chill > 0 ? CHILL : 1);
+    const speed = def.speed * (e.deep > 0 ? 0.4 : e.chill > 0 ? CHILL : 1);
     if (e.chill > 0) e.chill -= TICK;
+    if (e.deep > 0) e.deep -= TICK;
     e.t += speed * TICK;
     while (e.t >= 1 && e.alive) {
       e.t -= 1;

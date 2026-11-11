@@ -17,6 +17,8 @@ export function encode(tick: number, a: Action): string {
       return `${tick}:B${a.cell}.${TOWER_IDS.indexOf(a.tower)}`;
     case 'up':
       return `${tick}:U${a.cell}`;
+    case 'spec':
+      return `${tick}:X${a.cell}.${a.pick}`;
     case 'sell':
       return `${tick}:S${a.cell}`;
     case 'wave':
@@ -25,6 +27,8 @@ export function encode(tick: number, a: Action): string {
 }
 
 export function decode(tok: string): Stamped | null {
+  const x = /^(\d+):X(\d+)\.([01])$/.exec(tok);
+  if (x) return { tick: +x[1], a: { t: 'spec', cell: +x[2], pick: +x[3] } };
   const m = /^(\d+):(?:B(\d+)\.(\d)|U(\d+)|S(\d+)|(W))$/.exec(tok);
   if (!m) return null;
   const tick = +m[1];

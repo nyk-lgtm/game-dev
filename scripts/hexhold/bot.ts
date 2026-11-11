@@ -3,7 +3,7 @@
 // tower; then it sends the wave and watches. A rough stand-in for a decent player.
 import {
   ADJ, CELL, CORE, N, PORTAL, POS, TOWERS, WAVES, act, buildError, encode, flowField, blockedSet, nextCell, newGame, step,
-  upgradeCost, type Action, type State, type TowerId,
+  specCost, upgradeCost, type Action, type State, type TowerId,
 } from '../../src/hexhold/core';
 
 export interface Run { s: State; actions: string; reached: number }
@@ -18,6 +18,8 @@ function path(dist: number[]): number[] {
   }
   return out;
 }
+
+const SPEC_PICK: Record<TowerId, number> = { bolt: 0, mortar: 0, frost: 0, tesla: 0, flame: 1, beacon: 0 };
 
 const PLAN: TowerId[] = ['bolt', 'bolt', 'mortar', 'frost', 'bolt', 'tesla', 'flame', 'beacon', 'mortar', 'tesla'];
 
@@ -60,6 +62,12 @@ export function runGame(seed: number, skill = 1): Run {
       const p = path(s.field.dist);
       towers.sort((a, b) => coverage(b.cell, TOWERS[b.id].range, p) - coverage(a.cell, TOWERS[a.id].range, p));
       const up = towers.find((t) => s.gold >= upgradeCost(t.id, t.level));
+      // Specialize maxed towers when there's nothing better to do.
+      const maxed = s.towers.find((t) => t && t.level === 3 && t.spec < 0 && s.gold >= specCost(t.id));
+      if (!pick && !up && maxed && built >= 8) {
+        doAct({ t: 'spec', cell: maxed.cell, pick: SPEC_PICK[maxed.id] });
+        continue;
+      }
       if (pick && (pick.score > 4 * skill || !up)) {
         doAct({ t: 'build', cell: pick.cell, tower: id });
         built++;

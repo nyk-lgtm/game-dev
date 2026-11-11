@@ -27,8 +27,9 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   - [x] Render + UI: build with a path preview, upgrade/sell, wave preview with the notable
         threat explained, 1-3x speed, saves mid-wave, results with damage by tower.
   - [x] Hub card, daily map, CLAUDE.md notes. Shipped.
-  - [ ] Next: blind playtest; tower specializations at level 3; tunnelers; a second map
-        shape (two portals).
+  - [x] Level-3 specializations: each tower picks one of two forms (Longbow/Repeater,
+        Siege/Cluster, Glacier/Hail, Storm/Overload, Inferno/Napalm, Banner/Lighthouse).
+  - [ ] Blind playtest (running) and its fixes; tunnelers; a second map shape (two portals).
 - [ ] **Blind playtests** for Rewild, Glyphwright, Telegraph (one agent each), then fix.
 - [ ] **Unspoken art follow-ups** from its blind playtest: objects drawn over people in two
       riddle scenes (fire/bird over the elder); "river" acting reads as a sea wave.

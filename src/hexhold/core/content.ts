@@ -37,6 +37,59 @@ export const TOWERS: Record<TowerId, TowerDef> = {
 };
 export const TOWER_IDS = Object.keys(TOWERS) as TowerId[];
 export const MAX_LEVEL = 3;
+
+/** At level 3 a tower can specialize into one of two forms. */
+export interface SpecDef {
+  name: string;
+  text: string;
+  dmg?: number;
+  /** Multiplier on seconds between shots. */
+  rate?: number;
+  range?: number;
+  /** Mortar: wider bursts. */
+  splash?: number;
+  /** Ignores armor. */
+  pierce?: boolean;
+  /** Tesla: extra jumps. */
+  chain?: number;
+  /** Tesla: every hit stuns. */
+  stunAll?: boolean;
+  /** Frost: deep chill (enemies 60% slower instead of 40%). */
+  deep?: boolean;
+  /** Flame: its own fire sets enemies alight. */
+  napalm?: boolean;
+  /** Beacon: neighbors' damage bonus, and extra reach in cells. */
+  boost?: number;
+  reach?: number;
+}
+
+export const SPECS: Record<TowerId, [SpecDef, SpecDef]> = {
+  bolt: [
+    { name: 'Longbow', text: 'Heavy shots from far away: ×2.4 damage, +50% range, slower.', dmg: 2.4, rate: 1.8, range: 1.5 },
+    { name: 'Repeater', text: 'A stream of quick bolts: three times the rate, lighter hits.', dmg: 0.55, rate: 0.33 },
+  ],
+  mortar: [
+    { name: 'Siege', text: 'Shells punch through armor and hit twice as hard.', dmg: 2.0, pierce: true },
+    { name: 'Cluster', text: 'Much wider bursts that shred swarms.', dmg: 1.2, splash: 1.7 },
+  ],
+  frost: [
+    { name: 'Glacier', text: 'Deep chill: enemies crawl at 40% speed, wider aura.', deep: true, range: 1.25 },
+    { name: 'Hail', text: 'A storm of ice that really hurts (×6 damage).', dmg: 6 },
+  ],
+  tesla: [
+    { name: 'Storm', text: 'Lightning leaps to 6 enemies.', chain: 3, dmg: 1.2 },
+    { name: 'Overload', text: 'Every strike stuns, and hits harder.', stunAll: true, dmg: 1.5 },
+  ],
+  flame: [
+    { name: 'Inferno', text: 'A bigger, hotter blaze.', dmg: 1.5, range: 1.5 },
+    { name: 'Napalm', text: 'Its fire clings: enemies keep burning after they pass.', napalm: true, dmg: 1.15 },
+  ],
+  beacon: [
+    { name: 'Banner', text: 'Neighbors deal +50% damage instead of +25%.', boost: 1.5 },
+    { name: 'Lighthouse', text: 'Neighbors also reach a whole cell further.', boost: 1.25, reach: 1 },
+  ],
+};
+export const specCost = (id: TowerId) => Math.round(TOWERS[id].cost * 1.8);
 /** Upgrade cost from level L to L+1, as a share of the build cost. */
 export const upgradeCost = (id: TowerId, level: number) => Math.round(TOWERS[id].cost * (level === 1 ? 0.8 : 1.3));
 /** Damage and range multipliers per level. */

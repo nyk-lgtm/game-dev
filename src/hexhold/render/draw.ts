@@ -382,7 +382,16 @@ export function drawBoard(g: CanvasRenderingContext2D, v: View, s: State, o: Dra
   // Towers.
   for (let i = 0; i < N; i++) {
     const t = s.towers[i];
-    if (t) drawTowerIcon(g, t.id, sx(v, i), sy(v, i), size * 0.92, t.level);
+    if (!t) continue;
+    if (t.spec >= 0) {
+      // Specialized: a brass halo.
+      g.beginPath();
+      g.arc(sx(v, i), sy(v, i), size * 0.95, 0, Math.PI * 2);
+      g.strokeStyle = `rgba(255, 215, 122, ${0.55 + 0.2 * Math.sin(o.time * 2.5 + i)})`;
+      g.lineWidth = 2.5;
+      g.stroke();
+    }
+    drawTowerIcon(g, t.id, sx(v, i), sy(v, i), size * 0.92, t.level);
   }
   if (o.ghost && o.selected >= 0 && !s.towers[o.selected]) drawTowerIcon(g, o.ghost, sx(v, o.selected), sy(v, o.selected), size * 0.92, 1, 0.55);
 
