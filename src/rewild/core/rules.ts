@@ -41,7 +41,11 @@ export const GOALS: GoalDef[] = [
 ];
 
 /** Final-score thresholds for one, two and three stars. */
-export const STARS = [700, 1300, 1850];
+export const STARS = [900, 1700, 2400];
+
+/** A species alive at the end of this many seasons in a row is settled, and earns SETTLED_BONUS each season after. */
+export const SETTLE_AFTER = 4;
+export const SETTLED_BONUS = 3;
 export const starsFor = (score: number) => STARS.filter((t) => score >= t).length;
 
 export function newGame(seed: number): GameState {
@@ -64,7 +68,7 @@ export function newGame(seed: number): GameState {
     rerolls: START_REROLLS,
     deals: 0,
     tier: 1,
-    stats: { soilMade: 0, pondsMade: 0, burnt: 0, wolfDeer: 0, maxSpecies: 0 },
+    stats: { soilMade: 0, pondsMade: 0, burnt: 0, wolfDeer: 0, maxSpecies: 0, streak: {} },
     over: false,
   };
   deal(s);
@@ -78,7 +82,7 @@ export function clone(s: GameState): GameState {
     hand: [...s.hand],
     goals: s.goals.map((g) => ({ ...g })),
     log: s.log.map((l) => ({ ...l, notes: [...l.notes] })),
-    stats: { ...s.stats },
+    stats: { ...s.stats, streak: { ...s.stats.streak } },
   };
 }
 
@@ -156,7 +160,12 @@ function endSeason(s: GameState): SimEvent[] {
   const { species, life } = census(s.cells);
   if (species.has('wolf') && species.has('deer')) s.stats.wolfDeer++;
   s.stats.maxSpecies = Math.max(s.stats.maxSpecies, species.size);
-  const points = seasonPoints(s.cells);
+  // Streaks: a species that dies out starts again from nothing.
+  const streak: Partial<Record<SpeciesId, number>> = {};
+  for (const id of species) streak[id] = (s.stats.streak[id] ?? 0) + 1;
+  s.stats.streak = streak;
+  const settled = Object.values(streak).filter((n) => n! >= SETTLE_AFTER).length;
+  const points = seasonPoints(s.cells) + settled * SETTLED_BONUS;
   s.score += points;
   const notes: string[] = [];
   for (const g of s.goals) {
@@ -170,7 +179,7 @@ function endSeason(s: GameState): SimEvent[] {
       notes.push(`Goal reached: ${g.text} (+${g.reward})`);
     }
   }
-  s.log.push({ season: s.season, species: species.size, life, points, weather: s.weather, notes });
+  s.log.push({ season: s.season, species: species.size, life, points, settled, weather: s.weather, notes });
   s.season++;
   if (s.season >= SEASONS) {
     s.over = true;

@@ -2,6 +2,7 @@
 // who spread or had young, who suffered and why, and how the land changed.
 // Pure: built from the season's events and the states before and after.
 
+import { SETTLE_AFTER, SETTLED_BONUS } from './rules';
 import { census } from './sim';
 import { isPlant } from './species';
 import type { AnimalId, Cause, GameState, SimEvent, SpeciesId } from './types';
@@ -18,6 +19,11 @@ export interface SeasonReport {
   /** Season that was just played. */
   season: number;
   points: number;
+  /** Settled species this season and the bonus they paid. */
+  settled: number;
+  settledBonus: number;
+  /** Settled species that died out (their streak starts over). */
+  lostSettled: SpeciesId[];
   species: number;
   /** Change in the number of species alive. */
   delta: number;
@@ -53,6 +59,9 @@ export function seasonReport(before: GameState, ev: SimEvent[], after: GameState
   const r: SeasonReport = {
     season: before.season,
     points: log?.points ?? 0,
+    settled: log?.settled ?? 0,
+    settledBonus: (log?.settled ?? 0) * SETTLED_BONUS,
+    lostSettled: [],
     species: now.size,
     delta: now.size - (startSpecies ?? was.size),
     lost: [],
@@ -108,6 +117,7 @@ export function seasonReport(before: GameState, ev: SimEvent[], after: GameState
     if (now.has(id)) continue;
     const why = most(r.died.filter((d) => d.id === id))[0];
     r.lost.push(why ? { ...why } : { id, n: 0 });
+    if ((before.stats.streak[id] ?? 0) >= SETTLE_AFTER) r.lostSettled.push(id);
   }
   r.spread = most(r.spread);
   r.born = most(r.born);

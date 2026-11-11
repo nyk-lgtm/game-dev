@@ -138,7 +138,11 @@ export function reportHtml(r: SeasonReport, risk: SeasonReport | null): string {
   const out: string[] = [];
   const d = r.delta > 0 ? `+${r.delta}` : r.delta < 0 ? `${r.delta}` : '±0';
   out.push(`<h2>${SEASON_NAMES[seasonOf(r.season)]}, year ${yearOf(r.season)}</h2>`);
-  out.push(`<p><b style="color:var(--gold)">+${r.points} points</b> · ${r.species} species (${d})</p>`);
+  out.push(
+    `<p><b style="color:var(--gold)">+${r.points} points</b> · ${r.species} species (${d})${r.settled ? ` · <b style="color:var(--accent)">${r.settled} settled</b> (+${r.settledBonus})` : ''}</p>`,
+  );
+  if (r.lostSettled.length)
+    out.push(`<p class="warn"><b>${r.lostSettled.map(name).join(', ')}</b> had settled here. ${r.lostSettled.length > 1 ? 'Their' : 'Its'} streak starts over.</p>`);
   if (r.goals.length) out.push(`<p>${r.goals.map((g) => `<b style="color:var(--gold)">★ Goal reached:</b> ${g}`).join('<br>')}</p>`);
   if (r.lost.length) out.push(`<h3 class="warn">Died out</h3><ul>${r.lost.map((t) => `<li>${name(t.id)} ${causePast(t)}. Every species alive scores each season; its card can turn up again.</li>`).join('')}</ul>`);
   const grew: string[] = [];

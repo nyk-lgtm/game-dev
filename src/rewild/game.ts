@@ -19,6 +19,8 @@ import {
   SPECIES,
   STARS,
   UNLOCK,
+  SETTLE_AFTER,
+  SETTLED_BONUS,
   WEATHER_TEXT,
   apply,
   census,
@@ -695,6 +697,7 @@ export class Game {
         <li>Then <b>end the season</b>. Plants grow, spread and change the land; animals eat, breed, move or starve.</li>
         <li>Life changes the land: <b>lichen</b> turns rock into soil, <b>grass</b> and <b>fungi</b> enrich it, <b>reeds</b> silt shallows into marsh, <b>beavers</b> dam ponds. Shrubs and oaks can be planted into grass once the soil is rich enough.</li>
         <li>Every season scores <b>species²/2 + life/5</b>: variety matters most. Grazers crop plants short so they can't spread; hunters keep grazers in check.</li>
+        <li>A species alive at the end of <b>${SETTLE_AFTER} seasons in a row</b> is <b>settled</b> and earns <b>+${SETTLED_BONUS}</b> every season after. If it dies out, its streak starts over, so keep the balance rather than replanting.</li>
         <li>Watch the weather: droughts dry the land, lightning starts wildfires in dry meadows, harsh winters starve animals.</li>
         <li>Tap any cell to see what lives there and what will happen to it next season. After each season, <b>Report</b> shows what grew, what died and why.</li>
       </ul>`,
@@ -714,7 +717,9 @@ export class Game {
       const t = document.createElement('div');
       const u = UNLOCK[d.tier - 2];
       const unlock = d.tier > this.s.tier ? ` <i>(arrives once ${u?.species} species live here, or by ${SEASON_NAMES[seasonOf(u?.season ?? 0)].toLowerCase()} of year ${yearOf(u?.season ?? 0)})</i>` : '';
-      t.innerHTML = `<b>${d.name} <span style="color:var(--muted);font-weight:400">· ${d.kind}</span></b>${needsText(id)}. ${d.text}${unlock}`;
+      const run = this.s.stats.streak[id] ?? 0;
+      const settled = run >= SETTLE_AFTER ? ` <span style="color:var(--accent);font-weight:700">· settled</span>` : run > 0 ? ` <span style="color:var(--muted)">· ${run}/${SETTLE_AFTER} seasons</span>` : '';
+      t.innerHTML = `<b>${d.name} <span style="color:var(--muted);font-weight:400">· ${d.kind}</span>${settled}</b>${needsText(id)}. ${d.text}${unlock}`;
       row.appendChild(t);
       list.appendChild(row);
       list.appendChild(document.createElement('div')).style.height = '10px';

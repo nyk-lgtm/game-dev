@@ -52,6 +52,8 @@ export interface Stats {
   wolfDeer: number;
   /** Most species alive at once. */
   maxSpecies: number;
+  /** Seasons in a row each species has been alive at season's end. */
+  streak: Partial<Record<SpeciesId, number>>;
 }
 
 export interface SeasonLog {
@@ -59,6 +61,8 @@ export interface SeasonLog {
   species: number;
   life: number;
   points: number;
+  /** Settled species this season (alive SETTLE_AFTER seasons in a row) and their bonus. */
+  settled: number;
   weather: Weather;
   /** Notable things that happened, for the season report. */
   notes: string[];

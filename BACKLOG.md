@@ -49,8 +49,10 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   - [x] Telegraph: depths 2-3 get +2 enemy budget (depth 1 stays the tutorial; rules v4). Greedy bot
     median depth 8 → 7 (back on target), more of its runs end on depth 3. Still open: bomb badge
     tucked onto the player's hex reads like a status effect.
-  - Rewild: years 4-5 become upkeep (re-placing deer after wolves); losing a species costs
-    little; beaver ponds and songbirds goals feel out of reach. Winter plants look alike.
+  - [x] Rewild (rules v3): species alive 4 seasons in a row are **settled** and pay +3 each season;
+    dying out restarts the streak, so keeping wolves and deer balanced beats replanting. Stars
+    rescaled to 900/1700/2400 (greedy bot 0/0/13/3 vs 0/2/11/3 before). Report and species list show
+    it. Still open: ponds/songbird goals feel out of reach; winter plants look alike.
     (Done: goals show ⚑ in the header, stars are only score stars.)
 - [x] **Unspoken art follow-ups**: held things (take/give/carry) sit beside the holder instead of
       over their body; an acting river is drawn as the river flooding its banks, not a sea wave.
@@ -90,6 +92,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Afterglow: owner is happy with it — leave alone unless they report something.
 
 ## Done (recent)
+- Rewild settled-species bonus; Telegraph depths 2-3 harder.
 - Last Light shipped (interactive story, three endings-stars).
 - Triad difficulty levels (Easy/Normal/Hard with what-if hints).
 - Unspoken art fixes (held objects, flooding river).

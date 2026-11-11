@@ -35,7 +35,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   - Hexhold: `npx vite-node scripts/hexhold/balance.ts 32` (heuristic bot: median wave ~27, ~8/32 wins);
     `scripts/hexhold/probe.ts 32` lists each loss with its wave and map shape (one or two portals).
   - Rewild: `npx vite-node scripts/rewild/balance.ts 16 greedy 1` (score, species, stars; compare
-    with `random`), `scripts/rewild/probe.ts` (plays and causes of death), `trace.ts <seed>`.
+    with `random`; greedy median ~2100 with the settled bonus, stars at 900/1700/2400),
+    `scripts/rewild/upto.ts <seed> <n>` (a bot game's actions to season n, for `?seed=&a=`), `scripts/rewild/probe.ts` (plays and causes of death), `trace.ts <seed>`.
 - ASCII games (Delve, Nightline) draw into a character `Grid` (src/shared/ascii.ts) painted
   with batched `fillText` runs; art lives in each game's `art.ts`.
 - Daily challenges (src/shared/daily.ts): `<game>/?daily` plays today's seed (`dailySeed(game, day)`,
