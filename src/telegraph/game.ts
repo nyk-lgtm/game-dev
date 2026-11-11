@@ -5,6 +5,10 @@ import {
   RULES_VERSION,
   applyAction,
   bashTargets,
+  distanceField,
+  key,
+  playerWalkable,
+  tileAt,
   encodeAction,
   enemyAt,
   eq,
@@ -129,6 +133,11 @@ export class Game {
     }
     if (legalMoves(this.state).some((m) => eq(m, h))) {
       if (this.selected && eq(this.selected, h)) {
+        // A move that hurts only goes through the red button.
+        if (this.outcome && this.outcome.damageTaken > 0) {
+          toast('That move hurts: press the red button if you mean it');
+          return;
+        }
         this.commit({ type: 'move', to: h });
         return;
       }
@@ -148,8 +157,47 @@ export class Game {
       this.clearSelection();
       const e = enemyAt(this.state, h);
       this.inspect = e ? e.id : null;
+      if (!e && playerWalkable(tileAt(this.state, h))) {
+        if (this.floorClear()) {
+          this.walkTo = h;
+          this.walkStep();
+          return;
+        }
+        toast('One hex per turn: tap a hex next to you');
+      }
     }
     this.refreshUi();
+  }
+
+  /** Nothing left that can hurt you on this floor. */
+  private floorClear(): boolean {
+    return this.state.enemies.length === 0 && this.state.bombs.length === 0;
+  }
+
+  /** Auto-walk on a cleared floor: one step toward `walkTo`, then the next after it animates. */
+  private walkTo: Hex | null = null;
+  private walkStep(): void {
+    const s = this.state;
+    const goal = this.walkTo;
+    if (!goal || s.status !== 'playing' || !this.floorClear() || eq(s.player.pos, goal)) {
+      this.walkTo = null;
+      this.refreshUi();
+      return;
+    }
+    const field = distanceField(s, goal, playerWalkable);
+    let best: Hex | null = null;
+    for (const m of legalMoves(s)) {
+      const d = field.get(key(m));
+      if (d !== undefined && (best === null || d < field.get(key(best))!)) best = m;
+    }
+    const here = field.get(key(s.player.pos));
+    if (!best || here === undefined || field.get(key(best))! >= here) {
+      this.walkTo = null;
+      toast("Can't reach that");
+      this.refreshUi();
+      return;
+    }
+    this.commit({ type: 'move', to: best });
   }
 
   private clearSelection(): void {
@@ -167,7 +215,13 @@ export class Game {
     this.clearSelection();
     this.persist();
     renderPanel('', null);
+    const depth = prev.depth;
     this.animator.play(this.scene, events, state, () => {
+      if (this.walkTo && state.depth === depth) {
+        this.walkStep();
+        return;
+      }
+      this.walkTo = null;
       this.refreshUi();
       if (events.some((e) => e.type === 'descend')) this.introduceEnemies();
       if (state.status === 'dead')
@@ -205,11 +259,13 @@ export class Game {
           : null;
       const body = target
         ? `${ENEMIES[target.kind].name} ${target.hp}/${target.maxHp} HP: ${ENEMIES[target.kind].blurb}`
-        : 'Tap again or press Move.';
+        : o.damageTaken > 0
+          ? 'This move hurts. Press the red button if you mean it.'
+          : 'Tap again or press Move.';
       renderPanel(
         `<div class="title">${parts.join(' · ')}</div>${body}`,
         {
-          label: bashing ? 'Bash' : 'Move',
+          label: bashing ? 'Bash' : o.damageTaken > 0 ? `Move (−${o.damageTaken} ♥)` : 'Move',
           danger: o.damageTaken > 0,
           onClick: () => act && this.commit(act),
         },
@@ -270,7 +326,11 @@ export class Game {
         { label: 'All games', onClick: () => (location.href = '../') },
         {
           label: 'Abandon run & start new',
-          onClick: () => this.newRun(),
+          onClick: () =>
+            showCard(`<h2>Abandon this run?</h2><p>You're on depth ${this.state.depth}. The run will be lost.</p>`, [
+              { label: 'Keep playing', primary: true, onClick: closeOverlay },
+              { label: 'Abandon it', onClick: () => this.newRun() },
+            ]),
         },
       ],
     );

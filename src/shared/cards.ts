@@ -35,5 +35,15 @@ export function showCard(html: string, buttons: CardButton[], dismissable = true
   card.appendChild(meta);
   o.appendChild(card);
   o.hidden = false;
+  // Long cards get a "more below" hint pinned to the bottom until you scroll there.
+  if (card.scrollHeight > card.clientHeight + 8) {
+    const more = document.createElement('div');
+    more.className = 'more';
+    more.textContent = '▼ scroll for more';
+    card.appendChild(more);
+    card.addEventListener('scroll', () => {
+      more.style.opacity = card.scrollTop + card.clientHeight >= card.scrollHeight - 24 ? '0' : '1';
+    });
+  }
   o.onclick = dismissable ? (e) => e.target === o && closeOverlay() : null;
 }

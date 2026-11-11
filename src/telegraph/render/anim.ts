@@ -35,8 +35,11 @@ export class Animator {
   /** Queue animations for `events`; `scene` must currently show the pre-action state. */
   play(scene: { current: Scene }, events: GameEvent[], next: GameState, onDone: () => void): void {
     const unit = (id: number): VisUnit | undefined => scene.current.units.get(id);
-    const floater = (text: string, color: string, at: Hex | VisUnit) =>
-      scene.current.floaters.push({ text, color, q: at.q, r: at.r, age: 0, life: 900 });
+    // Labels landing on the same spot stack upward instead of overprinting.
+    const floater = (text: string, color: string, at: Hex | VisUnit) => {
+      const near = scene.current.floaters.filter((f) => f.age < 500 && Math.abs(f.q - at.q) < 0.6 && Math.abs(f.r - at.r) < 0.9).length;
+      scene.current.floaters.push({ text, color, q: at.q, r: at.r - near * 0.38, age: 0, life: 900 });
+    };
     const steps: Step[] = [];
 
     for (let i = 0; i < events.length; i++) {
