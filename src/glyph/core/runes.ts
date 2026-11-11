@@ -143,9 +143,17 @@ export function compileRow(row: (Rune | null)[]): Spell | null {
 }
 
 /** Rough damage per second for the row preview. */
-export function spellDps(s: Spell): number {
-  const hits = s.caster === 'rain' ? s.count : s.caster === 'bolt' || s.caster === 'orb' ? s.count * Math.min(s.pierce, 3) : 3;
-  const per = s.dmg * hits + s.dmg * s.count * s.chain * MOD.stormDmg + s.burn * 3 * hits;
+/**
+ * A rough damage-per-second for comparing builds. `crowd`: in a typical wave
+ * (extra targets count half: pierce, arcs, beams and blasts rarely hit a full
+ * line of foes); otherwise against a single foe.
+ */
+export function spellDps(s: Spell, crowd = true): number {
+  const extra = (n: number) => (crowd ? 1 + 0.5 * Math.max(0, n - 1) : 1);
+  const hits =
+    s.caster === 'rain' ? s.count : s.caster === 'bolt' || s.caster === 'orb' ? s.count * extra(Math.min(s.pierce, 3)) : extra(3);
+  const arcs = crowd ? s.count * s.chain * MOD.stormDmg * 0.5 : 0;
+  const per = s.dmg * (hits + arcs) + s.burn * 3 * hits;
   return (per * (1 + s.echoes.length * 0.8)) / s.cooldown;
 }
 

@@ -812,7 +812,7 @@ export class Game {
     const dur = sp.cooldown.toFixed(2);
     showCard(
       `<h2>${spellName(sp)}</h2>
-       <p><b>${r0(sp.dmg)}</b> dmg${sp.caster === 'nova' ? ' to every foe in the blast' : sp.count > 1 ? ` × ${sp.count} ${UNIT[sp.caster]}` : ''} · every <b>${dur}s</b>${sp.echoes.length ? ` · then ${sp.echoes.length} echo${sp.echoes.length > 1 ? 'es' : ''}` : ''} · ~<b>${Math.round(spellDps(sp))}</b> dps</p>
+       <p><b>${r0(sp.dmg)}</b> dmg${sp.caster === 'nova' ? ' to every foe in the blast' : sp.count > 1 ? ` × ${sp.count} ${UNIT[sp.caster]}` : ''} · every <b>${dur}s</b>${sp.echoes.length ? ` · then ${sp.echoes.length} echo${sp.echoes.length > 1 ? 'es' : ''}` : ''} · ~<b>${Math.round(spellDps(sp))}</b> dps in a crowd, ~${Math.round(spellDps(sp, false))} on a single foe</p>
        <div class="scroll">
        <div class="steps">${steps.join('')}</div>
        <p class="sub">Against wave ${this.s.wave}</p>
@@ -895,7 +895,8 @@ function rowSummary(sp: Spell | null, extra = ''): string {
   if (sp.echoes.length) tags.push(`echo ×${sp.echoes.length}`);
   if (sp.slow) tags.push('slows');
   if (sp.burn) tags.push('burns');
-  return `<b>${spellName(sp)}${tags.length ? ` <span style="font-weight:500;color:var(--muted)">${tags.join(' · ')}</span>` : ''}</b><div><span class="dps">${Math.round(spellDps(sp))} dps</span> · ${sp.cooldown.toFixed(1)}s</div>${extra}`;
+  // The name gets its own line; tags ride after the dps so nothing important is cut off.
+  return `<b>${spellName(sp)}</b><div class="dl"><span class="dps">${Math.round(spellDps(sp))} dps</span> · ${sp.cooldown.toFixed(1)}s${tags.length ? ` · ${tags.join(' · ')}` : ''}</div>${extra}`;
 }
 
 const r0 = (x: number) => String(Math.round(x));

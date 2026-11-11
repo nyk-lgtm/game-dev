@@ -44,8 +44,9 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - [ ] **Design follow-ups from those playtests** (balance; need care, not quick fixes):
   - [x] Glyphwright gold sink (rules v2): **Empower** raises a rune a tier for gold (4×/10× its
     base cost, dearer than merging), rerolls cost 1,1,2,2,3… within a wave. Smart bot uses
-    Empower; win rate unchanged (~32-35%). Still open: dps figure counts every pierce/arc
-    target as always there; long spell names cut off in the row summary.
+    Empower; win rate unchanged (~32-35%). Then: the dps estimate counts extra targets at half
+    (a crowd), the spell card also shows dps on a single foe, and row names never truncate (tags
+    moved to the dps line).
   - [x] Telegraph: depths 2-3 get +2 enemy budget (depth 1 stays the tutorial; rules v4). Greedy bot
     median depth 8 → 7 (back on target), more of its runs end on depth 3. Still open: bomb badge
     tucked onto the player's hex reads like a status effect.
@@ -94,6 +95,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Afterglow: owner is happy with it — leave alone unless they report something.
 
 ## Done (recent)
+- Glyphwright honest dps figures and untruncated spell names.
 - Triad guided tutorial.
 - Rewild settled-species bonus; Telegraph depths 2-3 harder.
 - Last Light shipped (interactive story, three endings-stars).
