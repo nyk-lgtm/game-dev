@@ -61,7 +61,7 @@ export class Game {
   done = false;
   daily: string | null = null;
   private undoStack: { cell: number; val: number; notes: number }[] = [];
-  private hint: { clue: number; cell: number } | null = null;
+  private hint: { clue: number; cell: number; clues?: number[] } | null = null;
   private canvas = $('board') as HTMLCanvasElement;
   private ctx = this.canvas.getContext('2d')!;
   private view!: View;
@@ -78,6 +78,7 @@ export class Game {
     });
     new ResizeObserver(() => this.resize()).observe(this.canvas);
     document.addEventListener('visibilitychange', () => this.save(true));
+    addEventListener('pagehide', () => this.save(true));
     requestAnimationFrame((t) => this.frame(t));
   }
 
@@ -204,7 +205,7 @@ export class Game {
       this.undoStack.push({ cell: i, val: this.vals[i], notes: this.notes[i] });
       this.notes[i] ^= 1 << e;
       this.refresh();
-      this.save();
+      this.save(true);
       return;
     }
     this.set(i, e);
@@ -219,7 +220,7 @@ export class Game {
     navigator.vibrate?.(8);
     if (solved(this.p, this.vals)) this.win();
     this.refresh();
-    this.save();
+    this.save(true);
   }
 
   private undo(): void {
@@ -230,7 +231,7 @@ export class Game {
     this.selected = u.cell;
     this.hint = null;
     this.refresh();
-    this.save();
+    this.save(true);
   }
 
   private giveHint(): void {
@@ -244,7 +245,7 @@ export class Game {
       this.info(`<b>This one is wrong.</b> Clear it (or change it) and look again.`);
     } else {
       this.selected = h.cell;
-      this.hint = { clue: h.clue, cell: h.cell };
+      this.hint = { clue: h.clue, cell: h.cell, clues: h.clues };
       this.info(`${h.text}${h.notes ? ' <i>(Use notes to track what nearby hexes can still be.)</i>' : ''}`);
     }
     this.save(true);
@@ -261,11 +262,11 @@ export class Game {
     const prof = store.load<Profile>('profile', { solved: 0, best: {} });
     prof.solved++;
     const prev = prof.best[this.size];
-    const score = this.ms + this.hints * 30000;
+    const score = this.total();
     const newBest = prev === undefined || score < prev;
     if (newBest) prof.best[this.size] = score;
     store.save('profile', prof);
-    if (this.daily) recordDaily(store, 1e7 - Math.round(score / 1000), `${fmt(this.ms)}${this.hints ? ` +${this.hints}💡` : ''}`, this.daily);
+    if (this.daily) recordDaily(store, 1e7 - Math.round(score / 1000), fmt(score), this.daily);
     setTimeout(() => this.showWin(newBest && prev !== undefined), 1400);
   }
 
@@ -274,7 +275,7 @@ export class Game {
     const d = this.daily ? loadDaily(store, this.daily) : null;
     showCard(
       `<h2>Solved</h2>
-       <p>${SIZES[this.size].name} puzzle in <b>${fmt(this.ms)}</b>${this.hints ? ` with ${this.hints} hint${this.hints > 1 ? 's' : ''} (+30s each)` : ', no hints'}.${newBest ? ' <b style="color:var(--gold)">New best!</b>' : best !== undefined ? ` Best ${fmt(best)}.` : ''}</p>
+       <p>${SIZES[this.size].name} puzzle in <b>${fmt(this.total())}</b>${this.hints ? ` (${fmt(this.ms)} + ${this.hints * 30}s for ${this.hints} hint${this.hints > 1 ? 's' : ''})` : ', no hints'}.${newBest ? ' <b style="color:var(--gold)">New best!</b>' : best !== undefined ? ` Best ${fmt(best)}.` : ''}</p>
        ${this.daily ? `<p><b style="color:var(--gold)">Daily puzzle · ${prettyDay(this.daily)}</b>${d ? `<br>Today's best: ${d.label}` : ''}</p>` : ''}`,
       [
         { label: `New ${SIZES[this.size].name.toLowerCase()} puzzle`, primary: true, onClick: () => this.newPuzzle(this.size) },
@@ -287,6 +288,17 @@ export class Game {
 
   // ---------------------------------------------------------------- UI
 
+  /** Time on the clock, hint penalties included. */
+  private total(): number {
+    return this.ms + this.hints * 30000;
+  }
+
+  private showClock(): void {
+    const s = fmt(this.total());
+    if ($('clock').textContent !== s) $('clock').textContent = s;
+    $('clock').classList.toggle('pen', this.hints > 0);
+  }
+
   private info(html: string): void {
     $('info').innerHTML = html;
   }
@@ -294,13 +306,14 @@ export class Game {
   refresh(): void {
     if (!this.p) return;
     $('size').textContent = this.daily ? 'Daily' : SIZES[this.size].name;
+    this.showClock();
     $('notesBtn').classList.toggle('on', this.notesMode);
     $('pad').classList.toggle('notes', this.notesMode);
     const i = this.selected;
     const filled = this.vals.filter((v, k) => v >= 0 || this.p.given[k] >= 0).length;
     const total = this.vals.length;
     for (let e = 0; e < 3; e++) $(`el${e}`).classList.toggle('cur', i >= 0 && this.vals[i] === e);
-    if (this.done) this.info(`<b>Solved!</b> ${fmt(this.ms)}${this.hints ? ` · ${this.hints} hint${this.hints > 1 ? 's' : ''}` : ''}`);
+    if (this.done) this.info(`<b>Solved!</b> ${fmt(this.total())}${this.hints ? ` · ${this.hints} hint${this.hints > 1 ? 's' : ''}` : ''}`);
     else if (i < 0)
       this.info(
         filled === this.p.given.filter((g) => g >= 0).length
@@ -343,8 +356,7 @@ export class Game {
     this.time += dt;
     if (this.p && !this.done && document.visibilityState === 'visible' && $('overlay').hidden) {
       this.ms += dt * 1000;
-      const s = fmt(this.ms);
-      if ($('clock').textContent !== s) $('clock').textContent = s;
+      this.showClock();
       this.save();
     }
     if (this.winT >= 0) {
@@ -367,7 +379,8 @@ export class Game {
         <li>Hexes with a ring are given. Every puzzle has exactly one answer, and you never need to guess.</li>
         <li>Tap a hex, then an element. Tapping the same hex again cycles it.</li>
         <li><b>Notes</b> let you pencil in what a hex might be. A number turns <span style="color:#ff5d7a">red</span> when its neighbors can no longer add up.</li>
-        <li><b>Hint</b> shows the next hex you can work out (each costs 30 seconds on your time).</li>
+        <li><b>Hint</b> shows the next hex you can work out, or a wrong one (each adds 30 seconds to your time).</li>
+        <li>A number fades once all its neighbors are filled and it adds up.</li>
       </ul>`,
       [{ label: 'Play', primary: true, onClick: closeOverlay }],
     );

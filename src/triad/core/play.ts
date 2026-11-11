@@ -28,7 +28,7 @@ export function solved(p: Puzzle, vals: number[]): boolean {
 
 export type Hint =
   | { kind: 'wrong'; cell: number }
-  | { kind: 'step'; clue: number; cell: number; value: number; text: string; notes: boolean }
+  | { kind: 'step'; clue: number; cell: number; value: number; text: string; notes: boolean; clues?: number[] }
   | { kind: 'done' };
 
 /**
@@ -50,13 +50,14 @@ export function nextHint(p: Puzzle, vals: number[]): Hint {
       if (v < 0) partial = true;
       continue;
     }
-    const n = p.clue[s.clue];
+    // Every clue that narrowed this cell, not just the last one.
+    const by = [...new Set(steps.slice(0, steps.indexOf(s) + 1).filter((t) => t.cell === s.cell).map((t) => t.clue))];
+    const own = by.includes(s.cell);
+    const others = by.filter((c) => c !== s.cell).map((c) => `<b>${p.clue[c]}</b>`);
     const name = ELEMENT_NAMES[v];
-    const text =
-      s.clue === s.cell
-        ? `Its own <b>${n}</b> only works if it is <b>${name}</b>.`
-        : `The <b>${n}</b> next to it only works if this is <b>${name}</b>.`;
-    return { kind: 'step', clue: s.clue, cell: s.cell, value: v, text, notes: partial };
+    const who = [own ? `its own <b>${p.clue[s.cell]}</b>` : '', others.length ? `the ${others.join(' and ')} next to it` : ''].filter(Boolean).join(' and ');
+    const text = `${who[0].toUpperCase()}${who.slice(1)} only work${by.length > 1 ? '' : 's'} if this is <b>${name}</b>.`;
+    return { kind: 'step', clue: s.clue, cell: s.cell, value: v, text, notes: partial, clues: by };
   }
   // Deductions always finish a generated puzzle; this is only a fallback.
   const cell = vals.findIndex((v) => v < 0);

@@ -9,6 +9,7 @@ body {
 }
 #hud .spacer { flex: 1; }
 #clock { font-variant-numeric: tabular-nums; min-width: 52px; }
+#clock.pen { color: var(--gold); }
 #rule {
   display: flex; align-items: center; justify-content: center; gap: 6px;
   padding: 6px 12px; font-size: 13px; color: var(--muted);

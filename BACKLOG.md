@@ -57,7 +57,11 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   - [x] Core: generator (unique, guess-free via single-clue deductions), hints from the same
         deductions, broken-clue check, 8 tests, `scripts/triad/stats.ts`.
   - [x] UI: hex board, element pad, notes, undo, hints (+30 s), timer, 3 sizes, daily, hub card.
-  - [ ] Blind playtest (is it fun and humanly solvable?), then fixes. Ideas: difficulty tiers
+  - [x] Blind playtest: an agent solved Small and Medium by reasoning alone, no hints needed
+        ("genuinely good"). Fixes: hints name every clue that forces the hex, moves save at once,
+        the clock includes hint penalties, filled numbered hexes keep a visible icon, finished
+        numbers fade.
+  - [ ] Next ideas: difficulty tiers
         (keep more clues for easy, allow two-clue deductions for hard), a short interactive
         tutorial puzzle, a second clue type (e.g. "beaten by" counts or edge marks).
 - [ ] **Text adventure**: tap-driven interactive fiction with a small handcrafted world

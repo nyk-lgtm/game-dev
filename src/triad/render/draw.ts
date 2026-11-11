@@ -46,7 +46,7 @@ export interface DrawOpts {
   selected: number;
   broken: Set<number>;
   /** Hint highlight: the clue cell and the cell it decides. */
-  hint: { clue: number; cell: number } | null;
+  hint: { clue: number; cell: number; clues?: number[] } | null;
   /** 0..1 win wave, or -1. */
   win: number;
   time: number;
@@ -56,7 +56,8 @@ export function drawBoard(g: CanvasRenderingContext2D, v: View, p: Puzzle, o: Dr
   const b = makeBoard(p.radius);
   const size = v.L.size;
   g.clearRect(0, 0, v.w, v.h);
-  const hintRing = o.hint ? new Set([o.hint.clue, ...b.adj[o.hint.clue]]) : null;
+  const hintClues = o.hint ? (o.hint.clues?.length ? o.hint.clues : [o.hint.clue]) : [];
+  const hintRing = o.hint ? new Set([o.hint.cell, ...hintClues.flatMap((c) => [c, ...b.adj[c]])]) : null;
   b.cells.forEach((c, i) => {
     const { x, y } = hexToPx(v.L, c.q, c.r);
     const val = p.given[i] >= 0 ? p.given[i] : o.vals[i];
@@ -80,22 +81,28 @@ export function drawBoard(g: CanvasRenderingContext2D, v: View, p: Puzzle, o: Dr
       g.stroke();
     }
     const clue = p.clue[i];
-    if (val >= 0) drawIcon(g, val, x, y + (clue >= 0 ? size * 0.12 : 0), size * (clue >= 0 ? 0.95 : 1.05), clue >= 0 ? 0.55 : 1);
+    // Filled numbered hexes keep a small, full-strength icon above the number.
+    if (val >= 0) clue >= 0 ? drawIcon(g, val, x, y - size * 0.5, size * 0.42) : drawIcon(g, val, x, y, size * 1.05);
     else if (o.notes[i]) {
       for (let e = 0; e < 3; e++)
         if (o.notes[i] & (1 << e)) drawIcon(g, e, x + (e - 1) * size * 0.42, y + size * (clue >= 0 ? 0.5 : 0), size * 0.36);
     }
     if (clue >= 0) {
       const bad = o.broken.has(i);
-      g.font = `800 ${Math.round(size * (val >= 0 ? 0.72 : 0.8))}px system-ui, sans-serif`;
+      // Done: it and all its neighbors are filled and it adds up.
+      const full = (k: number) => (p.given[k] >= 0 ? p.given[k] : o.vals[k]) >= 0;
+      const settled = !bad && full(i) && b.adj[i].every(full);
+      g.globalAlpha = settled ? 0.4 : 1;
+      g.font = `800 ${Math.round(size * (val >= 0 ? 0.62 : 0.8))}px system-ui, sans-serif`;
       g.textAlign = 'center';
       g.textBaseline = 'middle';
-      const ty = y - (val < 0 && o.notes[i] ? size * 0.12 : 0);
+      const ty = y + (val >= 0 ? size * 0.16 : val < 0 && o.notes[i] ? -size * 0.12 : 0);
       g.lineWidth = 4;
       g.strokeStyle = 'rgba(8, 10, 16, 0.85)';
       g.strokeText(String(clue), x, ty);
       g.fillStyle = bad ? '#ff5d7a' : '#f4f1ea';
       g.fillText(String(clue), x, ty);
+      g.globalAlpha = 1;
       if (bad) {
         hexPath(g, x, y, size * 0.88);
         g.strokeStyle = '#ff5d7a';
@@ -114,7 +121,7 @@ export function drawBoard(g: CanvasRenderingContext2D, v: View, p: Puzzle, o: Dr
     g.stroke();
   };
   if (o.hint) {
-    outline(o.hint.clue, '#ffd77a', 3);
+    for (const c of hintClues) outline(c, '#ffd77a', 3);
     if (o.hint.cell !== o.hint.clue) outline(o.hint.cell, `rgba(255, 255, 255, ${0.6 + 0.4 * Math.sin(o.time * 6)})`, 3);
   }
   if (o.selected >= 0) outline(o.selected, '#ffffff', 3.5);
