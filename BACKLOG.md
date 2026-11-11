@@ -51,8 +51,9 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   - Rewild: years 4-5 become upkeep (re-placing deer after wolves); losing a species costs
     little; beaver ponds and songbirds goals feel out of reach. Winter plants look alike.
     (Done: goals show ⚑ in the header, stars are only score stars.)
-- [ ] **Unspoken art follow-ups** from its blind playtest: objects drawn over people in two
-      riddle scenes (fire/bird over the elder); "river" acting reads as a sea wave.
+- [x] **Unspoken art follow-ups**: held things (take/give/carry) sit beside the holder instead of
+      over their body; an acting river is drawn as the river flooding its banks, not a sea wave.
+      `.shots/us-gal.cjs '<frames json>' name` renders any frames side by side (needs `npx vite --port 5174`).
 - [ ] **Triad** (procedural logic puzzle). Fire burns leaf, leaf drinks water, water douses
       fire; a number counts the neighbors a hex beats. Milestones:
   - [x] Core: generator (unique, guess-free via single-clue deductions), hints from the same
@@ -75,6 +76,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Afterglow: owner is happy with it — leave alone unless they report something.
 
 ## Done (recent)
+- Unspoken art fixes (held objects, flooding river).
 - Glyphwright Empower + rising reroll cost; Rewild goals mark.
 - Triad shipped (new logic puzzle game with daily).
 - Blind playtest fixes: Telegraph (abandon confirm, hurting moves need the red button,

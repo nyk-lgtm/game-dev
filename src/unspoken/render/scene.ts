@@ -709,16 +709,41 @@ function spikes(r: R, g: Got) {
   }
   strokes(r, segs, '#d0502e', 1.3);
 }
-function waveForce(r: R, x0: number, toX: number, flip = false) {
+/** The river in flood: the same winding band as the calm river, coming from the distance and
+ *  spilling over its banks toward toX, with a foaming front. (Not a sea wave.) */
+function riverSurge(r: R, x0: number, toX: number, flip = false) {
   const c = r.c, gy = r.gy;
   if (flip) {
-    c.save(); c.translate(r.W, 0); c.scale(-1, 1); waveForce(r, x0, r.W - toX); c.restore(); return;
+    c.save(); c.translate(r.W, 0); c.scale(-1, 1); riverSurge(r, x0, r.W - toX); c.restore(); return;
   }
-  c.beginPath(); c.moveTo(x0 - 20, r.H + 5); c.lineTo(x0 - 20, gy - 40); c.bezierCurveTo(x0 + 4, gy - 88, x0 + 56, gy - 96, x0 + 70, gy - 66);
-  c.quadraticCurveTo(x0 + 74, gy - 50, x0 + 58, gy - 50); c.quadraticCurveTo(x0 + 66, gy - 24, toX, gy - 8); c.lineTo(toX + 10, gy + 8);
-  c.lineTo(toX, r.H + 5); c.closePath(); paint(r, '#5f97c8'); if (r.ghost) return;
-  for (let i = 0; i < 4; i++) bumpy(r, x0 + 22 + i * 13, gy - 80 + i * 4 + (i === 3 ? 8 : 0), 7, 4.5, 5, 0.5, '#f4f8fa');
-  strokes(r, [[x0, gy - 30, x0 + 30, gy - 34], [x0 + 6, gy - 16, x0 + 50, gy - 22], [x0 + 70, gy - 6, toX - 10, gy - 6]], '#d8ecf8', 1.4);
+  const F: Pt = [x0 + 40, gy - 50], E: Pt = [toX - 10, gy + 2];
+  const at = (t: number): Pt => [F[0] + (E[0] - F[0]) * t * t - Math.sin(t * Math.PI) * 26, F[1] + (E[1] - F[1]) * Math.sqrt(t)];
+  const hw = (t: number) => 3 + 19 * t * t;
+  const L: number[] = [], Rr: number[] = [];
+  for (let i = 0; i <= 14; i++) {
+    const t = i / 14, [x, y] = at(t), [x2, y2] = at(Math.min(1, t + 0.02)), [x1, y1] = at(Math.max(0, t - 0.02));
+    const dx = x2 - x1, dy = y2 - y1, d = Math.hypot(dx, dy) || 1, nx = -dy / d, ny = dx / d, w = hw(t);
+    L.push(x + nx * w, y + ny * w); Rr.unshift(x - nx * w, y - ny * w);
+  }
+  // The flood front: a rounded lobe pushing on along the ground.
+  const [ex, ey] = at(1), w1 = hw(1);
+  const front: number[] = [];
+  for (let k = 0; k <= 8; k++) {
+    const a = Math.PI / 2 - (k / 8) * Math.PI; front.push(ex + Math.cos(a) * w1 * 1.25, ey + Math.sin(a) * w1 * 0.75);
+  }
+  poly(r, [...L, ...front, ...Rr], '#4f8cc4'); if (r.ghost) return;
+  // Ripples like the calm river's, and foam where it spills.
+  for (let i = 0; i < 5; i++) {
+    const t = 0.25 + i * 0.16, [cx, cy] = at(t), w = hw(t) * 0.5, o = Math.sin(r.t * 3 + i) * 2;
+    line(r, [cx - w + o, cy, cx - w * 0.5 + o, cy - 3, cx + o, cy, cx + w * 0.5 + o, cy - 3, cx + w + o, cy], '#e6f3fb', 1.6 + t);
+  }
+  for (let k = 1; k < 8; k += 1.5) {
+    const a = -Math.PI / 2 + (k / 8) * Math.PI;
+    bumpy(r, ex + Math.cos(a) * w1 * 1.2, ey + Math.sin(a) * w1 * 0.72, 5, 3.5, 5, 0.5, '#f4f8fa');
+  }
+  for (const t of [0.55, 0.75, 0.9]) {
+    const [cx, cy] = at(t); bumpy(r, cx, cy - hw(t) * 0.95, 3 + t * 3, 2 + t * 2, 5, 0.5, '#f4f8fa');
+  }
 }
 
 // ---------------------------------------------------------------- composition
@@ -747,6 +772,10 @@ function dest(r: R, np: NP, x: number): Got {
   return place(r, np, x, natY(r, np.n), { layout: 'pile', scale: np.n === 'mountain' ? 0.72 : 1 });
 }
 const single = (np: NP): NP => ({ ...np, pl: false });
+/** Centre x for a held thing of width ow so it sits beside the holder's body, not over it. */
+const besideBody = (g: Got, x: number, ow: number) => Math.max(x, g.cx + 18 + ow / 2);
+/** Where the hand goes to grip a thing centred at (x, y). */
+const gripAt = (x: number, y: number, ow: number, oh: number): Pt => [x - ow / 2 + 4, y + oh * 0.25];
 /** Draw something held at hand height (a plural thing becomes a little pile). */
 function heldThing(r: R, np: NP, cx: number, cy: number, o: PO = {}) {
   const [, oh] = sizeOf(np); const isSky = SKY.has(np.n);
@@ -782,13 +811,15 @@ function compose(r: R, f: Frame): Pt {
     case 'give': {
       const sx = W * 0.2; const pose = neg ? 'hold' : 'give'; const g = subj(r, s, sx, pose, { dry: true });
       const Rc = f.d ? place(r, f.d, W * 0.8, gy, { pose: neg ? 'stand' : 'receive', dir: -1, layout: 'trail', q: [32, 64] }) : null;
-      const oc: Pt = neg ? [g.hand[0] + 2, g.hand[1] - 2] : [g.hand[0] + ow * 0.32, g.hand[1] - 3];
-      subj(r, s, sx, pose, { held: () => heldThing(r, o, oc[0], oc[1]) }); const a: Pt = [oc[0] + ow * 0.5 + 4, oc[1] - oh * 0.5 - 6];
+      const oc0: Pt = neg ? [g.hand[0] + 2, g.hand[1] - 2] : [g.hand[0] + ow * 0.32, g.hand[1] - 3];
+      const oc: Pt = isAgent(s.n) ? [besideBody(g, oc0[0], ow), oc0[1]] : oc0;
+      const grip = isAgent(s.n) && oc[0] !== oc0[0] ? { handAt: gripAt(oc[0], oc[1], ow, oh) } : {};
+      subj(r, s, sx, pose, { ...grip, held: () => heldThing(r, o, oc[0], oc[1]) }); const a: Pt = [oc[0] + ow * 0.5 + 4, oc[1] - oh * 0.5 - 6];
       const b: Pt = Rc ? [Rc.hand[0] + 2, Rc.hand[1] - 10] : [W - 20, oc[1]]; return arrow(r, a, b, -18, ARROW, [], 1.8);
     }
     case 'take': {
       if (s.n === 'river' || s.n === 'rain') {
-        if (s.n === 'river') waveForce(r, 4, W * 0.3); else subj(r, s, W * 0.3, 'stand'); const ox = W * (neg ? 0.72 : 0.56);
+        if (s.n === 'river') riverSurge(r, 4, W * (neg ? 0.5 : 0.42)); else subj(r, s, W * 0.3, 'stand'); const ox = W * (neg ? 0.72 : 0.56);
         const O = obj(r, o, ox, neg ? {} : { rot: -0.3, scale: 0.9 }); if (!neg) speed(r, O.x1 + 4, O.y0, O.y1, 14, 1);
         return arrow(r, [O.x1 + 6, gy + 8], [W * 0.25, gy + 8], 8, ARROW, [], 1.8);
       }
@@ -800,7 +831,9 @@ function compose(r: R, f: Frame): Pt {
       if (animal) {
         O = heldThing(r, o, oc[0], oc[1], { dir: -1 }); subj(r, s, sx, 'take');
       } else {
-        O = place(r, o, 0, 0, { dry: true }); subj(r, s, sx, 'take', { held: () => (O = heldThing(r, o, oc[0], oc[1])) });
+        oc[0] = besideBody(g, oc[0], ow);
+        O = place(r, o, 0, 0, { dry: true });
+        subj(r, s, sx, 'take', { handAt: gripAt(oc[0], oc[1], ow, oh), held: () => (O = heldThing(r, o, oc[0], oc[1])) });
       }
       speed(r, O.x1 + 5, O.y0, O.y1, 16, 1); return arrow(r, [O.x1 + 16, O.y1 + 12], [g.x1 - 4, O.y1 + 12], 6, ARROW, [], 1.8);
     }
@@ -808,7 +841,9 @@ function compose(r: R, f: Frame): Pt {
       const sx = W * (f.d ? (s.pl ? 0.36 : 0.3) : 0.46); const g = subj(r, s, sx, neg ? 'stand' : 'carry', { dry: true }); let end: Pt;
       if (!neg) {
         footsteps(r, g.x0 - 6, 4); const both = !!o.pl && !!s.pl;
-        const S = subj(r, s, sx, 'carry', { heldAll: both, held: (m) => heldThing(r, both ? single(o) : o, m.hand[0] + ow * (o.pl && !both ? 0.1 : 0.22), m.hand[1] - 2) });
+        const hx = isAgent(s.n) && !s.pl ? besideBody(g, g.hand[0] + ow * (o.pl && !both ? 0.1 : 0.22), ow) : 0;
+        const grip = hx ? { handAt: gripAt(hx, g.hand[1] - 2, ow, oh) } : {};
+        const S = subj(r, s, sx, 'carry', { ...grip, heldAll: both, held: (m) => heldThing(r, both ? single(o) : o, hx || m.hand[0] + ow * (o.pl && !both ? 0.1 : 0.22), m.hand[1] - 2) });
         end = [S.x1 + ow * 0.4 + 8, gy - 6];
       } else {
         // Left on the ground behind them.
@@ -850,8 +885,8 @@ function compose(r: R, f: Frame): Pt {
     case 'fear': {
       let O: Got;
       if (o.n === 'river' && !neg) {
-        // A feared river rears up as a wave, as it does when it acts.
-        waveForce(r, 4, W * 0.5, true); O = { ...obj(r, o, W * 0.8, { dry: true }), x0: W * 0.62, cy: r.gy - 50 };
+        // A feared river floods toward them, as it does when it acts.
+        riverSurge(r, 4, W * 0.5, true); O = { ...obj(r, o, W * 0.8, { dry: true }), x0: W * 0.5, cy: r.gy - 20 };
       } else {
         const O0 = obj(r, o, W * 0.7, { scale: neg ? 1 : 1.18, dir: -1, dry: true }); if (!neg) spikes(r, O0);
         O = obj(r, o, W * 0.7, { scale: neg ? 1 : 1.18, dir: -1, fierce: !neg });
@@ -878,7 +913,7 @@ function compose(r: R, f: Frame): Pt {
     case 'break': {
       const ox = W * 0.64; const O0 = obj(r, o, ox, { dry: true });
       if (s.n === 'rain' || s.n === 'river') {
-        if (s.n === 'river') waveForce(r, 4, O0.x0 + 4); const O = obj(r, o, ox, { broken: !neg });
+        if (s.n === 'river') riverSurge(r, 4, O0.x0 + (neg ? -14 : 12)); const O = obj(r, o, ox, { broken: !neg });
         if (s.n === 'rain') {
           const cy = Math.max(22, O.y0 - 48); place(r, s, O.cx - 10, cy, { fierce: true });
         }
