@@ -26,8 +26,26 @@ const rewild = makeStore('rewild.');
 const unspoken = makeStore('unspoken.');
 const hexhold = makeStore('hexhold.');
 const triad = makeStore('triad.');
+const lastlight = makeStore('lastlight.');
 
 const GAMES: GameCard[] = [
+  {
+    path: './lastlight/',
+    title: 'Last Light',
+    tag: 'Interactive story',
+    pitch: 'A storm, a dark lighthouse, and a ship running for the rocks at midnight. Every tap costs three minutes. The tide, the rain and the people remember what you do.',
+    accent: '#ffd77a',
+    best: () => {
+      const p = lastlight.load<{ plays?: number; best?: number; endings?: string[] } | null>('profile', null);
+      if (!p?.plays) return null;
+      return `Best ${'★'.repeat(p.best ?? 0) || 'no stars'} · ${p.endings?.length ?? 0} ending${p.endings?.length === 1 ? '' : 's'} found`;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#0a0f1c"/>
+      <path d="M0 56 Q19 52 38 56 T76 56 V76 H0z" fill="#0c1626"/><path d="M48 76 L52 52 L76 46 V76z" fill="#05080f"/>
+      <path d="M56 50 L58 22 H64 L66 50z" fill="#1d2638"/><rect x="57" y="16" width="8" height="6" fill="#ffd77a"/>
+      <path d="M58 19 L4 8 L4 30z" fill="#ffd77a" opacity="0.28"/><circle cx="14" cy="55" r="2" fill="#ffcf7a"/>
+      <g stroke="#9fb4d2" stroke-opacity="0.35"><path d="M10 10l-3 7M24 20l-3 7M38 6l-3 7M30 34l-3 7M8 36l-3 7"/></g></svg>`,
+  },
   {
     path: './triad/',
     title: 'Triad',

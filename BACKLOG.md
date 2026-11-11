@@ -69,8 +69,14 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   - [ ] Next ideas (old list follows): difficulty tiers
         (keep more clues for easy, allow two-clue deductions for hard), a short interactive
         tutorial puzzle, a second clue type (e.g. "beaten by" counts or edge marks).
-- [ ] **Text adventure**: tap-driven interactive fiction with a small handcrafted world
-      and systemic bits (inventory, NPC memory).
+- [ ] **Last Light** (tap-driven interactive fiction). Milestones:
+  - [x] Core (src/lastlight/core/story.ts): 8 places, 9 items, Tomas (trust, follows, carries) and
+        Ada (keys, rescue, remembers being left), clock (3 min/action, midnight = 40), tide closes the
+        shore at 25, rain soaks matches without the coat, a broken window's draught. Endings with
+        1-3 stars (light, Ada, Tomas). Best route lights it at 11:42. 6 tests incl. random play.
+  - [x] UI: story log, grouped choices (people, here, carrying, go), sky strip with the ship
+        approaching and the beam, saves/replays, ending card, hub card.
+  - [ ] Blind playtest; then maybe a second night (a different story on the same engine).
 
 ## Ideas (unscheduled)
 - Unspoken: more story templates so the village tale varies; spoken pronunciation via
@@ -79,6 +85,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Afterglow: owner is happy with it — leave alone unless they report something.
 
 ## Done (recent)
+- Last Light shipped (interactive story, three endings-stars).
 - Triad difficulty levels (Easy/Normal/Hard with what-if hints).
 - Unspoken art fixes (held objects, flooding river).
 - Glyphwright Empower + rising reroll cost; Rewild goals mark.

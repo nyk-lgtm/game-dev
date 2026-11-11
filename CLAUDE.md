@@ -5,7 +5,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 `afterglow/` (survivor-like), `delve/` (first-person ASCII crawler), `nightline/`
 (pseudo-3D ASCII racer), `glyph/` (Glyphwright, spell-crafting autobattler), `rewild/`
 (ecosystem builder on a hex island), `unspoken/` (learn a procedurally invented language from pictures), `hexhold/` (hex maze tower defense),
-`triad/` (hex logic puzzle: fire/water/leaf, numbers count beaten neighbors).
+`triad/` (hex logic puzzle: fire/water/leaf, numbers count beaten neighbors), `lastlight/` (tap-driven interactive story).
 
 - The owner plays and tests only on an Android phone (Chrome, portrait). Every UI
   change must work by touch at ~390 CSS px wide; tap targets ≥ 44px.
@@ -62,6 +62,9 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   givens while they still do; so every puzzle is unique and guess-free, and `nextHint` replays those
   deductions. Levels: Easy keeps more numbers; Hard strips further while `propagateDeep` ("what if" trials,
   capped at 2+2·radius) still finishes it. `npx vite-node scripts/triad/stats.ts 30` shows counts per size/level.
+- Last Light (src/lastlight/core/story.ts): `choices(s)` lists legal action ids (`go:<room>`, `take:<item>`,
+  `use:<item>:<target>`, `give:`, `say:<npc>:<topic>`, …); `act(s, id)` returns the text. A run is the list of
+  ids (saved; `?a=` replays). tests/lastlight has the best route — update it when the story changes.
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)
   plus a shape in render/draw.ts and a color in palette.ts; tests in
   tests/telegraph/enemies.test.ts. Telegraphed attacks set `aim` and resolve via

@@ -1,0 +1,48 @@
+/* Last Light: a storm at night, lamp-gold for what matters. */
+body {
+  --bg: #0b111d;
+  --panel: #111a2a;
+  --line: #22304a;
+  --text: #e9e4d8;
+  --muted: #8f9ab0;
+  --accent: #ffd77a;
+}
+#hud .spacer { flex: 1; }
+#placeName { text-transform: none; letter-spacing: 0.02em; font-size: 12px; }
+#clock { font-variant-numeric: tabular-nums; }
+#clock.late { color: #ff8a6a; }
+#sky { display: block; width: 100%; height: 96px; flex: none; }
+#story {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 8px 18px 24px;
+  font: 17px/1.55 Georgia, 'Times New Roman', serif; color: var(--muted);
+  -webkit-user-select: text; user-select: text;
+}
+#story .beat { margin: 0 0 14px; }
+#story .beat p { margin: 0 0 8px; }
+#story .beat.new { color: var(--text); animation: fadein 0.5s ease; }
+#story .beat.intro { color: var(--text); font-style: italic; }
+#story h3 {
+  margin: 14px 0 6px; font: 700 12px/1.2 system-ui, sans-serif; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--accent);
+}
+@keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+#acts {
+  flex: none; max-height: 46%; overflow-y: auto; padding: 8px 12px max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; gap: 8px;
+}
+#acts .row { display: flex; flex-direction: column; gap: 4px; }
+#acts .lab { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+#acts .list { display: flex; flex-wrap: wrap; gap: 6px; }
+#acts button {
+  min-height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line);
+  background: #182338; color: var(--text); font-size: 15px; font-weight: 600; text-align: left;
+}
+#acts button.chip { border-radius: 999px; }
+#acts button.chip.on { border-color: var(--accent); color: var(--accent); background: #2c2a22; }
+#acts button.sub { background: #22304a; border-color: #34466a; }
+#acts button.go { background: #13203a; border-color: #2a4170; color: #cfe0ff; }
+#acts button.wide { width: 100%; text-align: center; }
+#acts button:active { transform: scale(0.98); }
+.card .stars { font-size: 30px; color: var(--accent); letter-spacing: 4px; }
+.card .stars .off { color: #2a3448; }
+.card .meta2 { font-size: 13px; color: var(--muted); }

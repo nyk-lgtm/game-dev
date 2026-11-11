@@ -38,6 +38,7 @@ export default defineConfig({
         unspoken: resolve(__dirname, 'unspoken/index.html'),
         hexhold: resolve(__dirname, 'hexhold/index.html'),
         triad: resolve(__dirname, 'triad/index.html'),
+        lastlight: resolve(__dirname, 'lastlight/index.html'),
       },
     },
   },
