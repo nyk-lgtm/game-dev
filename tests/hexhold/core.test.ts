@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ADJ, CORE, N, PORTAL, START_GOLD, TOWERS, WAVES, act, buildError, decode, encode, flowField, makeMap, newGame, replay, step, towerStats, wavePlan,
+  ADJ, CORE, ENEMIES, N, PORTAL, START_GOLD, TWIN_GOLD, TWIN_PORTALS, buried, portalsOf, TOWERS, WAVES, act, buildError, decode, encode, flowField, makeMap, newGame, replay, step, towerStats, wavePlan,
   type State,
 } from '../../src/hexhold/core';
 import { runGame } from '../../scripts/hexhold/bot';
@@ -12,8 +12,9 @@ describe('board', () => {
     for (let seed = 0; seed < 40; seed++) {
       const g = makeMap(seed);
       expect(makeMap(seed)).toEqual(g);
-      expect(flowField(g, new Set()).dist[PORTAL]).toBeLessThan(Infinity);
-      expect(g[PORTAL]).toBe('portal');
+      const portals = portalsOf(g);
+      expect(portals).toEqual(portals.length > 1 ? TWIN_PORTALS : [PORTAL]);
+      for (const p of portals) expect(flowField(g, new Set()).dist[p]).toBeLessThan(Infinity);
       expect(g[CORE]).toBe('core');
     }
   });
@@ -150,5 +151,59 @@ describe('specializations', () => {
     expect(towerStats(s, s.towers[cell]!).dmg).toBeCloseTo(base * 1.4);
     act(s, { t: 'spec', cell: b, pick: 0 });
     expect(towerStats(s, s.towers[cell]!).dmg).toBeCloseTo(base * 1.6);
+  });
+});
+
+describe('two portals and burrowers', () => {
+  const twinSeed = [...Array(100).keys()].find((k) => portalsOf(makeMap(k)).length > 1)!;
+
+  it('some maps have two portals; you can never seal either one off', () => {
+    const n = [...Array(100).keys()].filter((k) => portalsOf(makeMap(k)).length > 1).length;
+    expect(n).toBeGreaterThan(20);
+    expect(n).toBeLessThan(50);
+    const s = newGame(twinSeed);
+    expect(s.gold).toBe(START_GOLD + TWIN_GOLD);
+    s.gold = 1e9;
+    // Try to build on every cell: whatever gets through, both portals stay open.
+    for (const c of open(s)) act(s, { t: 'build', cell: c, tower: 'bolt' });
+    for (const p of s.portals) expect(s.field.dist[p]).toBeLessThan(Infinity);
+  });
+
+  it('waves come out of both portals', () => {
+    const s = newGame(twinSeed);
+    act(s, { t: 'wave' });
+    expect(new Set(s.queue.map((q) => q.cell))).toEqual(new Set(TWIN_PORTALS));
+  });
+
+  it('burrowers dig the straight way under towers and cannot be hit there', () => {
+    const s = newGame(4);
+    s.gold = 1e9;
+    const straight = s.dig.slice();
+    // Build a wall of towers wherever the rules allow.
+    for (const c of open(s)) if (s.dig[c] % 3 === 1) act(s, { t: 'build', cell: c, tower: 'bolt' });
+    expect(s.dig).toEqual(straight);
+    expect(s.field.dist[PORTAL]).toBeGreaterThan(straight[PORTAL]);
+    s.wave = 15;
+    s.active = true;
+    s.queue.push({ id: 'digger', at: s.tick + 1, cell: PORTAL });
+    let wasBuried = false;
+    let steps = 0;
+    while (s.enemies.length + s.queue.length && steps++ < 3000) {
+      step(s);
+      const e = s.enemies.find((x) => x.id === 'digger');
+      if (e && buried(s, e)) {
+        wasBuried = true;
+        const hp = e.hp;
+        step(s);
+        if (e.alive && buried(s, e) && !e.burn) expect(e.hp).toBe(hp);
+      }
+    }
+    expect(wasBuried).toBe(true);
+    expect(ENEMIES.digger.dig).toBe(true);
+  });
+
+  it('a wave has only a few burrowers', () => {
+    for (let seed = 0; seed < 20; seed++)
+      for (let w = 12; w <= 30; w++) expect(wavePlan(seed, w).filter((id) => id === 'digger').length).toBeLessThanOrEqual(3 + Math.floor(w / 5));
   });
 });

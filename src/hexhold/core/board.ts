@@ -32,12 +32,17 @@ export const cellDistance = (a: number, b: number) => distance(HEXES[a], HEXES[b
 
 export const PORTAL = idx(4, 0);
 export const CORE = idx(4, ROWS - 1);
+/** Some maps have two portals, in the top corners, instead of one in the middle. */
+export const TWIN_PORTALS = [idx(1, 0), idx(7, 0)];
+export const portalsOf = (g: Ground[]): number[] => g.flatMap((x, i) => (x === 'portal' ? [i] : []));
 
 export function makeMap(seed: number): Ground[] {
   const rng = new Rng(mixSeed(seed, 311));
+  const portals = new Rng(mixSeed(seed, 313)).next() < 0.35 ? TWIN_PORTALS : [PORTAL];
+  const nearPortal = (i: number) => portals.some((p) => cellDistance(i, p) <= 1);
   for (let attempt = 0; attempt < 50; attempt++) {
     const g: Ground[] = new Array(N).fill('open');
-    g[PORTAL] = 'portal';
+    for (const p of portals) g[p] = 'portal';
     g[CORE] = 'core';
     // Rocks: a few clusters, never next to the portal or the core.
     const clusters = rng.int(3, 5);
@@ -45,7 +50,7 @@ export function makeMap(seed: number): Ground[] {
       let at = rng.int(0, N - 1);
       const size = rng.int(1, 3);
       for (let k = 0; k < size; k++) {
-        if (g[at] === 'open' && cellDistance(at, PORTAL) > 1 && cellDistance(at, CORE) > 1) g[at] = 'rock';
+        if (g[at] === 'open' && !nearPortal(at) && cellDistance(at, CORE) > 1) g[at] = 'rock';
         at = rng.pick(ADJ[at]);
       }
     }
@@ -58,10 +63,11 @@ export function makeMap(seed: number): Ground[] {
         ley++;
       }
     }
-    if (flowField(g, new Set()).dist[PORTAL] < Infinity) return g;
+    const f = flowField(g, new Set());
+    if (portals.every((p) => f.dist[p] < Infinity)) return g;
   }
   const g: Ground[] = new Array(N).fill('open');
-  g[PORTAL] = 'portal';
+  for (const p of portals) g[p] = 'portal';
   g[CORE] = 'core';
   return g;
 }
@@ -89,6 +95,18 @@ export function flowField(ground: Ground[], blocked: Set<number>): Field {
 
 /** Flyers ignore the maze: plain hex distance to the core. */
 export const FLY_DIST = HEXES.map((_, i) => cellDistance(i, CORE));
+
+/** Cells from a portal to the core along a distance field. */
+export function pathFrom(dist: number[], from: number): number[] {
+  const out = [from];
+  let c = from;
+  for (let k = 0; k < 200 && c !== CORE; k++) {
+    c = nextCell(dist, c);
+    if (c < 0) break;
+    out.push(c);
+  }
+  return out;
+}
 
 /** The next cell on the way to the core (lowest distance; ties by DIRS order). */
 export function nextCell(dist: number[], i: number): number {

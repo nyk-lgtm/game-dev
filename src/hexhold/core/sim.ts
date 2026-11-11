@@ -3,7 +3,7 @@
 // maze you build. Pure and deterministic: (seed, actions at ticks) -> state.
 
 import { Rng, mixSeed } from '../../shared/rng';
-import { ADJ, CELL, CORE, FLY_DIST, N, PORTAL, POS, flowField, makeMap, nextCell, type Field, type Ground } from './board';
+import { ADJ, CELL, CORE, FLY_DIST, N, PORTAL, POS, flowField, makeMap, nextCell, portalsOf, type Field, type Ground } from './board';
 import {
   BURN_TIME,
   CHILL,
@@ -15,6 +15,7 @@ import {
   MAX_LEVEL,
   SELL_BACK,
   START_GOLD,
+  TWIN_GOLD,
   START_LIVES,
   STUN_TIME,
   TOWERS,
@@ -78,11 +79,17 @@ export interface Spawn {
   id: EnemyId;
   /** Tick at which it enters. */
   at: number;
+  /** The portal it comes out of. */
+  cell: number;
 }
 
 export interface State {
   seed: number;
   ground: Ground[];
+  /** Where enemies come from (one or two cells). */
+  portals: number[];
+  /** Burrowers' field: distance to the core ignoring towers. */
+  dig: number[];
   towers: (Tower | null)[];
   field: Field;
   enemies: Enemy[];
@@ -102,14 +109,18 @@ export interface State {
 
 export function newGame(seed: number): State {
   const ground = makeMap(seed);
+  const open = flowField(ground, new Set());
   return {
     seed,
     ground,
+    portals: portalsOf(ground),
+    dig: open.dist,
     towers: new Array(N).fill(null),
-    field: flowField(ground, new Set()),
+    field: open,
     enemies: [],
     nextUid: 1,
-    gold: START_GOLD,
+    // Two portals mean two fronts to cover: a little extra to start.
+    gold: START_GOLD + (portalsOf(ground).length > 1 ? TWIN_GOLD : 0),
     lives: START_LIVES,
     wave: 0,
     active: false,
@@ -123,9 +134,9 @@ export function newGame(seed: number): State {
 
 // ---------------------------------------------------------------- waves
 
-const GAP: Record<EnemyId, number> = { runner: 0.5, grunt: 0.75, swarm: 0.22, brute: 1.5, flyer: 0.85, healer: 1.1, splitter: 1.1, boss: 2 };
+const GAP: Record<EnemyId, number> = { runner: 0.5, grunt: 0.75, swarm: 0.22, brute: 1.5, flyer: 0.85, healer: 1.1, splitter: 1.1, digger: 1.0, boss: 2 };
 // What each enemy is worth in a wave's budget (splitters carry three runners inside).
-const COST: Record<EnemyId, number> = { runner: 3, grunt: 4, swarm: 1.2, brute: 14, flyer: 7, healer: 9, splitter: 14, boss: 80 };
+const COST: Record<EnemyId, number> = { runner: 3, grunt: 4, swarm: 1.2, brute: 14, flyer: 7, healer: 9, splitter: 14, digger: 11, boss: 80 };
 
 /** The enemies of wave w (1-based), in order. Depends only on the seed. */
 export function wavePlan(seed: number, w: number): EnemyId[] {
@@ -137,17 +148,20 @@ export function wavePlan(seed: number, w: number): EnemyId[] {
     budget -= COST.boss;
   }
   const pool = (Object.keys(ENEMIES) as EnemyId[]).filter((id) => id !== 'boss' && ENEMIES[id].from <= w);
-  // Waves have a theme: one or two kinds dominate. Menders support, never lead,
-  // and a wave has only a few of them.
-  const leads = pool.filter((id) => id !== 'healer');
+  // Waves have a theme: one or two kinds dominate. Menders and burrowers are a
+  // twist, never the theme, and a wave has only a few of them.
+  const leads = pool.filter((id) => id !== 'healer' && id !== 'digger');
   const lead = rng.pick(leads);
   const second = rng.pick(leads);
   let menders = 0;
+  let diggers = 0;
   const maxMenders = 2 + Math.floor(w / 8);
+  const maxDiggers = 2 + Math.floor(w / 5);
   while (budget > 0) {
     const r = rng.next();
     let id = r < 0.5 ? lead : r < 0.8 ? second : rng.pick(pool);
     if (id === 'healer' && menders++ >= maxMenders) id = lead;
+    if (id === 'digger' && diggers++ >= maxDiggers) id = lead;
     const n = id === 'swarm' ? 5 : 1;
     for (let k = 0; k < n; k++) out.push(id);
     budget -= COST[id] * n;
@@ -159,8 +173,18 @@ function sendWave(s: State) {
   s.wave++;
   s.active = true;
   let at = s.tick + 15;
+  // With two portals, enemies take turns in small groups (a swarm stays together).
+  let side = 0;
+  let run = 0;
+  let prev: EnemyId | null = null;
   for (const id of wavePlan(s.seed, s.wave)) {
-    s.queue.push({ id, at });
+    if (prev && (id !== prev || run >= (id === 'swarm' ? 5 : 3))) {
+      side = (side + 1) % s.portals.length;
+      run = 0;
+    }
+    run++;
+    prev = id;
+    s.queue.push({ id, at, cell: s.portals[side] });
     at += Math.round(GAP[id] / TICK);
   }
 }
@@ -168,14 +192,27 @@ function sendWave(s: State) {
 function spawn(s: State, id: EnemyId, cell = PORTAL, t = 0, hpScale = 1): Enemy {
   const def = ENEMIES[id];
   const hp = def.hp * Math.pow(1 + HP_GROWTH, Math.max(0, s.wave - 1)) * (1 + Math.max(0, s.wave - 14) * LATE_GROWTH) * hpScale;
-  const dist = def.fly ? FLY_DIST : s.field.dist;
-  const next = nextCell(dist, cell);
+  const next = nextCell(distFor(s, id), cell);
   const e: Enemy = { uid: s.nextUid++, id, hp, maxHp: hp, cell, next: next < 0 ? cell : next, t, x: POS[cell].x, y: POS[cell].y, chill: 0, deep: 0, stun: 0, burn: 0, burnDps: 0, healed: 0, alive: true };
   s.enemies.push(e);
   return e;
 }
 
 // ---------------------------------------------------------------- towers
+
+/** The distance field an enemy kind follows. */
+export function distFor(s: State, id: EnemyId): number[] {
+  const def = ENEMIES[id];
+  return def.fly ? FLY_DIST : def.dig ? s.dig : s.field.dist;
+}
+
+/** A burrower under a tower can't be hit. */
+export function buried(s: State, e: Enemy): boolean {
+  return !!ENEMIES[e.id].dig && !!s.towers[e.t < 0.5 ? e.cell : e.next];
+}
+
+/** Whether a tower (air = can hit flyers) can hit this enemy at all. */
+const hittable = (s: State, e: Enemy, air: boolean) => e.alive && (air || !ENEMIES[e.id].fly) && !buried(s, e);
 
 function neighbors(s: State, cell: number): Tower[] {
   const out: Tower[] = [];
@@ -236,8 +273,7 @@ export function towerStats(s: State, t: Tower): TowerStats {
 
 /** How far an enemy still has to go (smaller = more dangerous). */
 function remaining(s: State, e: Enemy): number {
-  const dist = ENEMIES[e.id].fly ? FLY_DIST : s.field.dist;
-  return dist[e.cell] - e.t;
+  return distFor(s, e.id)[e.cell] - e.t;
 }
 
 function inRange(e: Enemy, x: number, y: number, r: number) {
@@ -275,7 +311,7 @@ function fire(s: State, t: Tower) {
   if (def.id === 'beacon') return;
   const st = towerStats(s, t);
   const { x, y } = POS[t.cell];
-  const targets = s.enemies.filter((e) => e.alive && (st.air || !ENEMIES[e.id].fly) && inRange(e, x, y, st.range));
+  const targets = s.enemies.filter((e) => hittable(s, e, st.air) && inRange(e, x, y, st.range));
 
   // Auras act every tick.
   if (def.rate === 0) {
@@ -307,7 +343,7 @@ function fire(s: State, t: Tower) {
     s.fx.push({ type: 'burst', x: target.x, y: target.y, r });
     const tx = target.x;
     const ty = target.y;
-    for (const e of s.enemies) if (e.alive && !ENEMIES[e.id].fly && inRange(e, tx, ty, r)) hit(e, st.dmg);
+    for (const e of s.enemies) if (hittable(s, e, false) && inRange(e, tx, ty, r)) hit(e, st.dmg);
   } else if (def.id === 'tesla') {
     const pts = [target.x, target.y];
     const seen = new Set([target.uid]);
@@ -316,7 +352,7 @@ function fire(s: State, t: Tower) {
     for (let k = 0; k < 2 + (specOf(t)?.chain ?? 0); k++) {
       let best: Enemy | null = null;
       for (const e of s.enemies) {
-        if (!e.alive || seen.has(e.uid) || (!st.air && ENEMIES[e.id].fly) || !inRange(e, cur.x, cur.y, 1.6 * CELL)) continue;
+        if (seen.has(e.uid) || !hittable(s, e, st.air) || !inRange(e, cur.x, cur.y, 1.6 * CELL)) continue;
         if (!best || remaining(s, e) < remaining(s, best)) best = e;
       }
       if (!best) break;
@@ -346,17 +382,18 @@ export function buildError(s: State, cell: number, id: TowerId): string | null {
   if (g === 'portal' || g === 'core') return 'Keep this clear';
   if (s.towers[cell]) return 'Already built';
   if (s.gold < TOWERS[id].cost) return 'Not enough gold';
-  if (s.enemies.some((e) => e.alive && !ENEMIES[e.id].fly && (e.cell === cell || e.next === cell))) return 'An enemy is in the way';
+  const walkers = s.enemies.filter((e) => e.alive && !ENEMIES[e.id].fly && !ENEMIES[e.id].dig);
+  if (walkers.some((e) => e.cell === cell || e.next === cell)) return 'An enemy is in the way';
   const f = flowField(s.ground, blockedSet(s, cell));
-  if (f.dist[PORTAL] === Infinity) return 'That would seal the path';
-  if (s.enemies.some((e) => e.alive && !ENEMIES[e.id].fly && f.dist[e.cell] === Infinity)) return 'That would trap an enemy';
+  if (s.portals.some((p) => f.dist[p] === Infinity)) return s.portals.length > 1 ? 'That would seal a portal off' : 'That would seal the path';
+  if (walkers.some((e) => f.dist[e.cell] === Infinity)) return 'That would trap an enemy';
   return null;
 }
 
 function reroute(s: State) {
   s.field = flowField(s.ground, blockedSet(s));
   for (const e of s.enemies) {
-    if (!e.alive || ENEMIES[e.id].fly) continue;
+    if (!e.alive || ENEMIES[e.id].fly || ENEMIES[e.id].dig) continue;
     const n = nextCell(s.field.dist, e.cell);
     // Enemies that haven't committed to their step turn toward the new path.
     if (e.t < 0.5 && n >= 0 && n !== e.next) {
@@ -428,7 +465,10 @@ export function step(s: State): void {
   s.tick++;
 
   // Arrivals.
-  while (s.queue.length && s.queue[0].at <= s.tick) spawn(s, s.queue.shift()!.id);
+  while (s.queue.length && s.queue[0].at <= s.tick) {
+    const q = s.queue.shift()!;
+    spawn(s, q.id, q.cell);
+  }
 
   // Towers.
   for (const t of s.towers) if (t) fire(s, t);
@@ -476,7 +516,7 @@ export function step(s: State): void {
         s.fx.push({ type: 'leak', lives: def.leak });
         break;
       }
-      const n = nextCell(def.fly ? FLY_DIST : s.field.dist, e.cell);
+      const n = nextCell(distFor(s, e.id), e.cell);
       e.next = n < 0 ? CORE : n;
     }
     const a = POS[e.cell];

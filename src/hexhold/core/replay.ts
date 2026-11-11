@@ -4,7 +4,7 @@
 import { TOWER_IDS } from './content';
 import { act, newGame, step, type Action, type State } from './sim';
 
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 
 export interface Stamped {
   tick: number;

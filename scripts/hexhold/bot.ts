@@ -2,21 +2,16 @@
 // the path and covers it best (with neighbor bonuses), or upgrades its busiest
 // tower; then it sends the wave and watches. A rough stand-in for a decent player.
 import {
-  ADJ, CELL, CORE, N, PORTAL, POS, TOWERS, WAVES, act, buildError, encode, flowField, blockedSet, nextCell, newGame, step,
+  ADJ, CELL, N, POS, TOWERS, WAVES, act, buildError, encode, flowField, blockedSet, newGame, pathFrom, step,
   specCost, upgradeCost, type Action, type State, type TowerId,
 } from '../../src/hexhold/core';
 
 export interface Run { s: State; actions: string; reached: number }
 
+/** Every portal's path, end to end (so length = total walking, cells may repeat). */
+let PORTALS: number[] = [];
 function path(dist: number[]): number[] {
-  const out = [PORTAL];
-  let c = PORTAL;
-  for (let k = 0; k < 200 && c !== CORE; k++) {
-    c = nextCell(dist, c);
-    if (c < 0) break;
-    out.push(c);
-  }
-  return out;
+  return PORTALS.flatMap((p) => pathFrom(dist, p));
 }
 
 const SPEC_PICK: Record<TowerId, number> = { bolt: 0, mortar: 0, frost: 0, tesla: 0, flame: 1, beacon: 0 };
@@ -37,7 +32,7 @@ export function bestBuild(s: State, id: TowerId): { cell: number; score: number 
     if (buildError(s, cell, id)) continue;
     const f = flowField(s.ground, blockedSet(s, cell));
     const p = path(f.dist);
-    const gain = p.length - base;
+    const gain = (p.length - base) / PORTALS.length;
     const cov = TOWERS[id].range > 0 ? coverage(cell, TOWERS[id].range, p) : 0;
     const friends = ADJ[cell].filter((j) => s.towers[j]).length;
     const score = gain * 2.5 + cov + friends * (id === 'beacon' || id === 'frost' ? 3 : 1) + (s.ground[cell] === 'ley' ? 2 : 0);
@@ -48,6 +43,7 @@ export function bestBuild(s: State, id: TowerId): { cell: number; score: number 
 
 export function runGame(seed: number, skill = 1): Run {
   const s = newGame(seed);
+  PORTALS = s.portals;
   const toks: string[] = [];
   const doAct = (a: Action) => {
     if (act(s, a)) toks.push(encode(s.tick, a));

@@ -34,7 +34,12 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         towers, per-tower damage, Beacon/Frost stats, lives cost on wave chips, Colossus
         warning, gentler early waves + late-game hp growth, beacon levels matter, saves at
         wave end, softer hurt tint. Bot now median wave 27-28, ~1/4 wins.
-  - [ ] Tunnelers; a second map shape (two portals).
+  - [x] Burrowers (from wave 12, a few per wave: dig the straight route under towers, can't be
+        hit while under one; their route shows as brown dots) and two-portal maps (~1/3 of seeds,
+        +60 start gold, enemies alternate portals in small groups). Rules v3.
+        `scripts/hexhold/probe.ts` shows where the bot dies by map shape.
+  - [ ] Next ideas: a second blind playtest once owner feedback comes in; bot never builds Frost
+        (2% damage) — check if Frost is weak or just unused by the bot.
 - [ ] **Blind playtests** for Rewild, Glyphwright, Telegraph (one agent each), then fix.
 - [ ] **Unspoken art follow-ups** from its blind playtest: objects drawn over people in two
       riddle scenes (fire/bird over the elder); "river" acting reads as a sea wave.
@@ -50,6 +55,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Afterglow: owner is happy with it — leave alone unless they report something.
 
 ## Done (recent)
+- Hexhold: burrowers and two-portal maps.
 - Hexhold blind playtest fixes (see above).
 - Hexhold shipped: maze tower defense with neighbor gifts, 30 waves, daily map.
 - Unspoken blind playtest (agent finished all 5 places: language "clicked" in ~2 minutes) and

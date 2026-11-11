@@ -6,15 +6,14 @@ import { fitHexes, hexPath, type HexLayout } from '../../shared/hexlayout';
 import {
   ADJ,
   CELL,
-  CORE,
   ENEMIES,
   HEXES,
   LEVEL_RANGE,
   N,
-  PORTAL,
   POS,
   TOWERS,
-  nextCell,
+  buried,
+  pathFrom,
   towerStats,
   type Enemy,
   type EnemyId,
@@ -37,16 +36,9 @@ export const sy = (v: View, i: number) => POS[i].y * v.L.size + v.L.oy;
 const wx = (v: View, x: number) => x * v.L.size + v.L.ox;
 const wy = (v: View, y: number) => y * v.L.size + v.L.oy;
 
-/** Path from the portal to the core following a distance field. */
-export function pathCells(dist: number[]): number[] {
-  const out = [PORTAL];
-  let c = PORTAL;
-  for (let k = 0; k < 200 && c !== CORE; k++) {
-    c = nextCell(dist, c);
-    if (c < 0) break;
-    out.push(c);
-  }
-  return out;
+/** Paths from each portal to the core following a distance field. */
+export function pathCells(dist: number[], portals: number[]): number[][] {
+  return portals.map((p) => pathFrom(dist, p));
 }
 
 // ---------------------------------------------------------------- tower icons
@@ -154,6 +146,7 @@ const SHAPE: Record<EnemyId, 'circle' | 'tri' | 'square' | 'diamond' | 'wing' | 
   flyer: 'wing',
   healer: 'cross',
   splitter: 'hex',
+  digger: 'diamond',
   boss: 'boss',
 };
 
@@ -208,6 +201,13 @@ function drawEnemy(g: CanvasRenderingContext2D, v: View, e: Enemy, time: number)
       break;
     case 'hex':
       hexPath(g, x, cy, base * 1.05);
+      break;
+    case 'diamond':
+      g.moveTo(x, cy - base * 1.2);
+      g.lineTo(x + base, cy);
+      g.lineTo(x, cy + base * 1.2);
+      g.lineTo(x - base, cy);
+      g.closePath();
       break;
     case 'boss':
       for (let k = 0; k < 10; k++) {
@@ -267,8 +267,10 @@ export interface DrawOpts {
   selected: number;
   /** A tower being considered for the selected cell. */
   ghost: TowerId | null;
-  /** The path as it would be with the ghost built. */
-  ghostPath: number[] | null;
+  /** The paths as they would be with the ghost built. */
+  ghostPath: number[][] | null;
+  /** Burrowers are coming: show their straight route. */
+  showDig: boolean;
   effects: Effect[];
   /** 0..1 red flash after a leak. */
   hurt: number;
@@ -336,8 +338,9 @@ export function drawBoard(g: CanvasRenderingContext2D, v: View, s: State, o: Dra
     g.stroke();
     g.restore();
   };
-  drawPath(pathCells(s.field.dist), 'rgba(255, 210, 120, 0.28)', [4, 8]);
-  if (o.ghostPath) drawPath(o.ghostPath, 'rgba(140, 230, 255, 0.75)', [6, 6]);
+  if (o.showDig) for (const p of pathCells(s.dig, s.portals)) drawPath(p, 'rgba(200, 140, 90, 0.55)', [2, 10]);
+  for (const p of pathCells(s.field.dist, s.portals)) drawPath(p, 'rgba(255, 210, 120, 0.28)', [4, 8]);
+  if (o.ghostPath) for (const p of o.ghostPath) drawPath(p, 'rgba(140, 230, 255, 0.75)', [6, 6]);
 
   // Links between towers that help each other.
   g.save();
@@ -396,8 +399,23 @@ export function drawBoard(g: CanvasRenderingContext2D, v: View, s: State, o: Dra
   if (o.ghost && o.selected >= 0 && !s.towers[o.selected]) drawTowerIcon(g, o.ghost, sx(v, o.selected), sy(v, o.selected), size * 0.92, 1, 0.55);
 
   // Enemies: ground first, flyers on top.
-  for (const e of s.enemies) if (!ENEMIES[e.id].fly) drawEnemy(g, v, e, o.time);
+  for (const e of s.enemies) if (!ENEMIES[e.id].fly && !buried(s, e)) drawEnemy(g, v, e, o.time);
   for (const e of s.enemies) if (ENEMIES[e.id].fly) drawEnemy(g, v, e, o.time);
+  // Burrowers under a tower: just a ring of churned earth.
+  for (const e of s.enemies) {
+    if (!buried(s, e)) continue;
+    const x = wx(v, e.x);
+    const y = wy(v, e.y);
+    g.save();
+    g.setLineDash([3, 4]);
+    g.lineDashOffset = -o.time * 20;
+    g.strokeStyle = 'rgba(200, 150, 100, 0.9)';
+    g.lineWidth = 2.5;
+    g.beginPath();
+    g.ellipse(x, y + size * 0.15, size * 0.42, size * 0.24, 0, 0, Math.PI * 2);
+    g.stroke();
+    g.restore();
+  }
 
   // Effects.
   for (const f of o.effects) {

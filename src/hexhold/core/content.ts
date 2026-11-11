@@ -2,7 +2,7 @@
 // and the shape of the 30 waves.
 
 export type TowerId = 'bolt' | 'mortar' | 'frost' | 'tesla' | 'flame' | 'beacon';
-export type EnemyId = 'runner' | 'grunt' | 'brute' | 'swarm' | 'flyer' | 'healer' | 'splitter' | 'boss';
+export type EnemyId = 'runner' | 'grunt' | 'brute' | 'swarm' | 'flyer' | 'healer' | 'splitter' | 'digger' | 'boss';
 
 export interface TowerDef {
   id: TowerId;
@@ -109,6 +109,8 @@ export interface EnemyDef {
   /** Lives lost if it reaches the core. */
   leak: number;
   fly?: boolean;
+  /** Digs the shortest way under towers (rock still stops it); can't be hit while under one. */
+  dig?: boolean;
   /** Heals others within 1.5 cells, per second. */
   heal?: number;
   /** Splits into this many runners when it dies. */
@@ -127,12 +129,15 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
   flyer: { id: 'flyer', name: 'Wisp', hp: 44, speed: 1.2, armor: 0, bounty: 5, leak: 1, fly: true, from: 5, color: '#9ef0d8', text: 'Flies straight over your maze. Only some towers hit it.' },
   healer: { id: 'healer', name: 'Mender', hp: 80, speed: 0.9, armor: 1, bounty: 8, leak: 1, heal: 7, from: 8, color: '#7cff9a', text: 'Heals nearby enemies. Kill it first.' },
   splitter: { id: 'splitter', name: 'Splitter', hp: 95, speed: 0.95, armor: 0, bounty: 6, leak: 1, split: 3, from: 10, color: '#d88cff', text: 'Bursts into three runners.' },
+  digger: { id: 'digger', name: 'Burrower', hp: 125, speed: 0.8, armor: 2, bounty: 8, leak: 2, dig: true, from: 12, color: '#8fa8ff', text: "Ignores your maze: it digs the straight way (brown dots) and can't be hit while under a tower. Cover its line with open ground." },
   boss: { id: 'boss', name: 'Colossus', hp: 1050, speed: 0.45, armor: 7, bounty: 120, leak: 6, from: 10, color: '#ff5a5a', text: 'A giant that comes every tenth wave. Armored, slow, and it costs 6 lives if it reaches your core. Have big hits ready.' },
 };
 export const ENEMY_IDS = Object.keys(ENEMIES) as EnemyId[];
 
 export const WAVES = 30;
 export const START_GOLD = 190;
+/** Extra starting gold on two-portal maps. */
+export const TWIN_GOLD = 60;
 export const START_LIVES = 20;
 /** Extra health per wave past wave 14, so the late game keeps biting. */
 export const LATE_GROWTH = 0.035;

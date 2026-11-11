@@ -31,8 +31,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   - Afterglow: `npx vite-node scripts/afterglow/balance.ts` (bot survival per character).
   - Delve: `npx vite-node scripts/delve/balance.ts`; Nightline: `npx vite-node scripts/nightline/balance.ts`.
   - Glyphwright: `npx vite-node scripts/glyph/balance.ts` (smart bot win rate, deaths per wave).
-  - Hexhold: `npx vite-node scripts/hexhold/balance.ts 32` (heuristic bot wins ~20/32 maps; losses are
-    single-wave collapses to brute/flyer/splitter themes).
+  - Hexhold: `npx vite-node scripts/hexhold/balance.ts 32` (heuristic bot: median wave ~27, ~8/32 wins);
+    `scripts/hexhold/probe.ts 32` lists each loss with its wave and map shape (one or two portals).
   - Rewild: `npx vite-node scripts/rewild/balance.ts 16 greedy 1` (score, species, stars; compare
     with `random`), `scripts/rewild/probe.ts` (plays and causes of death), `trace.ts <seed>`.
 - ASCII games (Delve, Nightline) draw into a character `Grid` (src/shared/ascii.ts) painted
@@ -54,7 +54,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   actions are `G<glyph>=<guess>` and `A<challenge>~p<n>` / `~<tile.tile…>`. Scene art: render/scene.ts.
   `npx vite-node scripts/unspoken/inspect.ts <seed>` prints a language and its world.
 - Hexhold runs are a seed + tick-stamped actions (`<tick>:B<cell>.<tower>`, `U`, `S`, `W`); enemies follow a
-  flow field (src/hexhold/core/board.ts) rebuilt on every build/sell; `buildError` forbids sealing the path.
+  flow field (src/hexhold/core/board.ts) rebuilt on every build/sell; `buildError` forbids sealing any portal. Flyers use `FLY_DIST`, burrowers
+  `s.dig` (the tower-less field); `distFor` picks. ~1/3 of maps have two portals (`s.portals`).
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)
   plus a shape in render/draw.ts and a color in palette.ts; tests in
   tests/telegraph/enemies.test.ts. Telegraphed attacks set `aim` and resolve via

@@ -83,7 +83,10 @@ export class Game {
   private dpr = 1;
   private selected = -1;
   private ghost: TowerId | null = null;
-  private ghostPath: number[] | null = null;
+  private ghostPath: number[][] | null = null;
+  /** Cached: does the current or next wave bring burrowers? (key = wave*2+active) */
+  private digKey = -1;
+  private digShow = false;
   private effects: Effect[] = [];
   private hurt = 0;
   private speed = 1;
@@ -204,7 +207,7 @@ export class Game {
 
   private pickGhost(id: TowerId): void {
     this.ghost = this.ghost === id ? null : id;
-    this.ghostPath = this.ghost ? pathCells(flowField(this.s.ground, blockedSet(this.s, this.selected)).dist) : null;
+    this.ghostPath = this.ghost ? pathCells(flowField(this.s.ground, blockedSet(this.s, this.selected)).dist, this.s.portals) : null;
     this.sfx.click();
     this.panelKey = '';
   }
@@ -269,7 +272,7 @@ export class Game {
     this.effects = this.effects.filter((f) => time - f.t0 < f.life);
     const g = this.ctx;
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    drawBoard(g, this.view, s, { time, selected: this.selected, ghost: this.ghost, ghostPath: this.ghostPath, effects: this.effects, hurt: this.hurt });
+    drawBoard(g, this.view, s, { time, selected: this.selected, ghost: this.ghost, ghostPath: this.ghostPath, showDig: this.showDig(), effects: this.effects, hurt: this.hurt });
     this.hud();
     this.panel();
   }
@@ -381,12 +384,12 @@ export class Game {
     for (const [id, n] of counts) chips.appendChild(el('span', 'chip', `<i style="background:${ENEMIES[id].color}"></i>${ENEMIES[id].name} ×${n}${ENEMIES[id].leak > 1 ? ` <em>−${ENEMIES[id].leak}♥</em>` : ''}`));
     p.appendChild(chips);
     // The most notable threat, in a sentence.
-    const notable = (['boss', 'flyer', 'brute', 'healer', 'splitter', 'swarm'] as EnemyId[]).find((id) => counts.has(id));
+    const notable = (['boss', 'digger', 'flyer', 'brute', 'healer', 'splitter', 'swarm'] as EnemyId[]).find((id) => counts.has(id));
     p.appendChild(
       el(
         'div',
         'text',
-        notable ? `<b>${ENEMIES[notable].name}:</b> ${ENEMIES[notable].text}` : s.wave === 0 ? 'Tap an empty hex to build a tower. Towers are walls: make the path long.' : 'Build, upgrade, then send it.',
+        notable ? `<b>${ENEMIES[notable].name}:</b> ${ENEMIES[notable].text}` : s.wave === 0 ? (s.portals.length > 1 ? 'Two portals on this map: enemies take turns. Towers are walls: make both paths long.' : 'Tap an empty hex to build a tower. Towers are walls: make the path long.') : 'Build, upgrade, then send it.',
       ),
     );
     const b = el('button', 'primary');
@@ -417,11 +420,12 @@ export class Game {
     p.appendChild(this.titleRow(`<span class="t">${def.name}</span><span>${def.cost} gold${ley}</span>`));
     p.appendChild(el('div', 'text', `${def.text}<br><span class="gift">Next to it: ${def.aura}</span>`));
     const err = buildError(s, cell, this.ghost);
-    const gain = this.ghostPath ? this.ghostPath.length - pathCells(s.field.dist).length : 0;
+    const len = (ps: number[][]) => ps.reduce((a, p) => a + p.length, 0) / ps.length;
+    const gain = this.ghostPath ? Math.round(len(this.ghostPath) - len(pathCells(s.field.dist, s.portals))) : 0;
     if (err) p.appendChild(el('div', 'text warn', err));
     else {
       if (gain !== 0) p.appendChild(el('div', 'text', `Path ${gain > 0 ? `+${gain} hexes longer` : `${gain} hexes`} (blue dashes).`));
-      const lost = this.ghostPath ? this.coverage(pathCells(s.field.dist)) - this.coverage(this.ghostPath) : 0;
+      const lost = this.ghostPath ? this.coverage(pathCells(s.field.dist, s.portals).flat()) - this.coverage(this.ghostPath.flat()) : 0;
       if (lost > 0) p.appendChild(el('div', 'text warn', `⚠ The new path would slip past ${lost} of your tower${lost > 1 ? 's' : ''}.`));
     }
     const row = el('div', 'row');
@@ -434,6 +438,17 @@ export class Game {
     go.onclick = () => this.build();
     row.append(back, go);
     p.appendChild(row);
+  }
+
+  private showDig(): boolean {
+    const s = this.s;
+    const key = s.wave * 2 + (s.active ? 1 : 0);
+    if (key !== this.digKey) {
+      this.digKey = key;
+      const plan = s.active ? wavePlan(s.seed, s.wave) : s.wave < WAVES ? wavePlan(s.seed, s.wave + 1) : [];
+      this.digShow = plan.includes('digger');
+    }
+    return this.digShow || s.enemies.some((e) => e.id === 'digger');
   }
 
   /** How many attacking towers reach at least one cell of this path. */
@@ -592,12 +607,12 @@ export class Game {
     store.save('seenHelp', true);
     showCard(
       `<h2>Hexhold</h2>
-      <p>Enemies pour out of the portal and walk the shortest open path to your core. Hold for ${WAVES} waves.</p>
+      <p>Enemies pour out of the portal (some maps have two) and walk the shortest open path to your core. Hold for ${WAVES} waves.</p>
       <ul>
         <li><b>Towers are walls.</b> Tap an empty hex, pick a tower, and see the new path (blue dashes) before you build. Make them walk the long way round. You can never fully seal the path.</li>
         <li><b>Neighbors matter.</b> Every tower gives something to the six hexes around it: Bolts let neighbors hit flyers, Frost makes neighbors hit chilled enemies harder, Beacons boost everything next to them. Clusters are strong.</li>
         <li><b>Glowing hexes</b> are ley lines: towers built on them hit 25% harder.</li>
-        <li>Check the next wave before sending it: Wisps fly over the maze, Brutes shrug off small hits, Menders heal their friends.</li>
+        <li>Check the next wave before sending it: Wisps fly over the maze, Brutes shrug off small hits, Menders heal their friends, Burrowers dig straight under your maze.</li>
         <li>Tap a tower to upgrade or sell it. Use the speed button when things are under control.</li>
       </ul>`,
       [{ label: 'Hold the line', primary: true, onClick: closeOverlay }],
