@@ -565,7 +565,8 @@ export class Game {
       `<h2>${won ? 'The hold stands' : 'The core has fallen'}</h2>
       <p>${won ? `All ${WAVES} waves held with ${s.lives} lives to spare.` : `Fell on wave ${s.wave} of ${WAVES}.`} ${s.stats.kills} enem${s.stats.kills === 1 ? 'y' : 'ies'} stopped.${best.best ? ` Best: ${best.wins ? `${best.wins} win${best.wins > 1 ? 's' : ''}` : `wave ${best.best}`}.` : ''}</p>
       ${this.daily ? `<p><b>Today's map · ${prettyDay(this.daily)}</b>: best ${loadDaily(store, this.daily)?.label ?? '—'}</p>` : ''}
-      ${bars}`,
+      ${bars}
+      ${s.stats.chilled > 1 ? `<p style="font-size:13px">Frost kept enemies slowed for ${Math.round(s.stats.chilled)} enemy-seconds; its share above includes the extra damage chilled enemies took from its neighbors.</p>` : ''}`,
       [
         { label: 'New map', primary: true, onClick: () => this.newGame() },
         ...(this.daily ? [{ label: 'Retry today’s map', onClick: () => this.playDaily(true) }] : []),

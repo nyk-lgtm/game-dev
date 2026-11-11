@@ -104,7 +104,9 @@ export interface State {
   status: 'playing' | 'won' | 'lost';
   fx: Fx[];
   /** Damage dealt per tower kind, kills, leaks. */
-  stats: { dealt: Partial<Record<TowerId, number>>; kills: number; leaked: number };
+  /** Damage per tower kind (Frost is credited with the extra its chill lets neighbors deal), kills,
+   *  leaks, and enemy-seconds spent chilled by Frost. */
+  stats: { dealt: Partial<Record<TowerId, number>>; kills: number; leaked: number; chilled: number };
 }
 
 export function newGame(seed: number): State {
@@ -128,7 +130,7 @@ export function newGame(seed: number): State {
     tick: 0,
     status: 'playing',
     fx: [],
-    stats: { dealt: {}, kills: 0, leaked: 0 },
+    stats: { dealt: {}, kills: 0, leaked: 0, chilled: 0 },
   };
 }
 
@@ -287,7 +289,10 @@ function damage(s: State, e: Enemy, raw: number, src: TowerId, st: TowerStats | 
   const armor = st?.pierce ? 0 : ENEMIES[e.id].armor * (perSecond ? TICK : 1);
   d = Math.max(d * 0.2, d - armor);
   e.hp -= d;
-  s.stats.dealt[src] = (s.stats.dealt[src] ?? 0) + d;
+  // The shatter bonus (+30% on chilled foes) is Frost's doing: credit it there.
+  const bonus = st?.shatter && e.chill > 0 && src !== 'frost' ? d * (0.3 / 1.3) : 0;
+  s.stats.dealt[src] = (s.stats.dealt[src] ?? 0) + d - bonus;
+  if (bonus) s.stats.dealt.frost = (s.stats.dealt.frost ?? 0) + bonus;
   if (tw) tw.dealt += d;
   if (st?.ignite && (!perSecond || src === 'flame')) {
     e.burn = BURN_TIME;
@@ -317,6 +322,7 @@ function fire(s: State, t: Tower) {
   if (def.rate === 0) {
     for (const e of targets) {
       if (def.id === 'frost') {
+        s.stats.chilled += TICK;
         e.chill = Math.max(e.chill, 0.3);
         if (specOf(t)?.deep) e.deep = Math.max(e.deep, 0.3);
       }

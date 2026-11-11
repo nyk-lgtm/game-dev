@@ -38,8 +38,10 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         hit while under one; their route shows as brown dots) and two-portal maps (~1/3 of seeds,
         +60 start gold, enemies alternate portals in small groups). Rules v3.
         `scripts/hexhold/probe.ts` shows where the bot dies by map shape.
-  - [ ] Next ideas: a second blind playtest once owner feedback comes in; bot never builds Frost
-        (2% damage) — check if Frost is weak or just unused by the bot.
+  - [x] Frost checked: not weak (bot without Frost: median wave 20, 0 wins; with one: 27, 8 wins).
+        It looked useless only because its value is the slow and the +30% shatter its neighbors get;
+        stats now credit that bonus to Frost (11% share) and the results show enemy-seconds chilled.
+  - [ ] Next ideas: a second blind playtest once owner feedback comes in.
 - [x] **Blind playtests** for Rewild, Glyphwright, Telegraph, and their bug/UX fixes (shipped).
 - [ ] **Design follow-ups from those playtests** (balance; need care, not quick fixes):
   - [x] Glyphwright gold sink (rules v2): **Empower** raises a rune a tier for gold (4×/10× its
@@ -95,6 +97,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Afterglow: owner is happy with it — leave alone unless they report something.
 
 ## Done (recent)
+- Hexhold credits Frost; CI stuck-queue workaround noted in CLAUDE.md.
 - Glyphwright honest dps figures and untruncated spell names.
 - Triad guided tutorial.
 - Rewild settled-species bonus; Telegraph depths 2-3 harder.
