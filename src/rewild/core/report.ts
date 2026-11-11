@@ -45,7 +45,8 @@ function bump(list: Tally[], id: SpeciesId, why?: Cause, by?: AnimalId) {
 
 const most = (list: Tally[]) => [...list].sort((a, b) => b.n - a.n);
 
-export function seasonReport(before: GameState, ev: SimEvent[], after: GameState): SeasonReport {
+/** `startSpecies`: species alive when the season began (before this season's cards), for the ± count. */
+export function seasonReport(before: GameState, ev: SimEvent[], after: GameState, startSpecies?: number): SeasonReport {
   const was = census(before.cells).species;
   const now = census(after.cells).species;
   const log = after.log[after.log.length - 1];
@@ -53,7 +54,7 @@ export function seasonReport(before: GameState, ev: SimEvent[], after: GameState
     season: before.season,
     points: log?.points ?? 0,
     species: now.size,
-    delta: now.size - was.size,
+    delta: now.size - (startSpecies ?? was.size),
     lost: [],
     spread: [],
     born: [],

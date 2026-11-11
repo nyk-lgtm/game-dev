@@ -11,9 +11,10 @@ body {
   --warn: #f0a24a;
 }
 
-#hud { gap: 14px; }
+#hud { gap: 10px; }
+#hud .stat { min-width: 0; }
 #hud .spacer { flex: 1; }
-#when { font-size: 17px; white-space: nowrap; }
+#when { font-size: 15px; white-space: nowrap; }
 .chip {
   min-height: 44px; padding: 0 12px;
   border-radius: 999px; border: 1px solid var(--line);
@@ -35,7 +36,7 @@ body {
 }
 #banner.show { opacity: 1; transform: translate(-50%, 0); }
 
-#panel { height: 124px; padding: 6px 14px 8px; gap: 10px; }
+#panel { height: 140px; padding: 6px 14px 8px; gap: 10px; }
 #info { font-size: 13px; }
 #info .title { font-size: 15px; }
 #info .row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }

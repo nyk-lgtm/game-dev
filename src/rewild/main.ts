@@ -18,7 +18,10 @@ if (p.has('seed') && Number.isFinite(Number(p.get('seed')))) {
   history.replaceState(null, '', location.pathname);
 } else if (wantsDaily()) game.playDaily();
 else if (saved && saved.v === RULES_VERSION) game.start(saved.seed, saved.a);
-else game.start(randomSeed());
+else {
+  game.start(randomSeed());
+  game.save();
+}
 
 if (!store.load('seenHelp', false)) game.showHelp();
 

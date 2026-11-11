@@ -196,6 +196,13 @@ export class Game {
     if (this.s.over) setTimeout(() => this.showEnd(), 300);
   }
 
+  /** Species alive at the start of the season that the first `n` actions are in. */
+  private speciesAtSeasonStart(n: number): number {
+    let k = n - 1;
+    while (k >= 0 && this.actions[k].type !== 'end') k--;
+    return census(replay(this.seed, this.actions.slice(0, k + 1)).cells).species.size;
+  }
+
   /** Rebuilds the report of the last season played (after a reload). */
   private lastReport(): SeasonReport | null {
     let k = this.actions.length - 1;
@@ -205,16 +212,21 @@ export class Game {
       const s = replay(this.seed, this.actions.slice(0, k));
       const before = clone(s);
       const ev = apply(s, { type: 'end' });
-      return ev ? seasonReport(before, ev, s) : null;
+      return ev ? seasonReport(before, ev, s, this.speciesAtSeasonStart(k)) : null;
     } catch {
       return null;
     }
   }
 
+  /** Saves the island now (so a fresh one survives a reload). */
+  save() {
+    this.persist();
+  }
+
   private persist() {
     if (this.replayOnly) return;
-    const run = this.s.over ? null : { v: RULES_VERSION, seed: this.seed, a: this.actions.map(encode).join(','), day: this.daily };
-    store.save(this.daily ? 'dailyRun' : 'run', run);
+    // Finished islands stay saved too, so a reload shows the results instead of a new island.
+    store.save(this.daily ? 'dailyRun' : 'run', { v: RULES_VERSION, seed: this.seed, a: this.actions.map(encode).join(','), day: this.daily });
   }
 
   private act(a: Action): SimEvent[] | null {
@@ -319,9 +331,10 @@ export class Game {
     if (this.busy() || this.s.over) return;
     const before = this.s.season;
     const prev = clone(this.s);
+    const startSpecies = this.speciesAtSeasonStart(this.actions.length);
     const ev = this.act({ type: 'end' });
     if (!ev) return;
-    this.report = seasonReport(prev, ev, this.s);
+    this.report = seasonReport(prev, ev, this.s, startSpecies);
     this.sfx.click();
     this.card = -1;
     // Clear the selection so the panel shows what the season did.
@@ -678,6 +691,7 @@ export class Game {
       <p>A bare island. Five years to bring it back to life.</p>
       <ul>
         <li>Each season you get <b>4 species cards</b> and may play <b>2</b>. Pick a card, then a glowing cell: <b style="color:#9effb4">green</b> cells are where it will thrive, <b style="color:#ffc46e">amber</b> where it will struggle.</li>
+        <li>One animal per cell (plants can share with it). Cards marked <b>◆</b> and <b>◆◆</b> are later species: they join the deck once enough life is on the island.</li>
         <li>Then <b>end the season</b>. Plants grow, spread and change the land; animals eat, breed, move or starve.</li>
         <li>Life changes the land: <b>lichen</b> turns rock into soil, <b>grass</b> and <b>fungi</b> enrich it, <b>reeds</b> silt shallows into marsh, <b>beavers</b> dam ponds. Shrubs and oaks can be planted into grass once the soil is rich enough.</li>
         <li>Every season scores <b>species²/2 + life/5</b>: variety matters most. Grazers crop plants short so they can't spread; hunters keep grazers in check.</li>
@@ -784,7 +798,10 @@ export class Game {
     leaveDaily();
     const saved = store.load<{ v: number; seed: number; a: string } | null>('run', null);
     if (saved && saved.v === RULES_VERSION) this.start(saved.seed, saved.a);
-    else this.start((Math.random() * 0xffffffff) >>> 0);
+    else {
+      this.start((Math.random() * 0xffffffff) >>> 0);
+      this.persist();
+    }
   }
 
   /** Start today's daily island over from the beginning. */
