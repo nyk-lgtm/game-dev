@@ -90,6 +90,8 @@ export interface Battle {
   goldEarned: number;
   kills: number;
   leaked: number;
+  /** Which foes got through (for the end-of-wave note). */
+  leakedBy: Partial<Record<EnemyKind, number>>;
   fx: BattleFx[];
   over: boolean;
 }

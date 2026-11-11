@@ -91,8 +91,14 @@ export class Game {
     this.buildDom();
     this.sfx.setMuted(store.load('muted', false));
     addEventListener('pointerdown', () => this.sfx.unlock(), { capture: true });
-    $('rerollBtn').onclick = () => this.act({ t: 'reroll' });
-    $('freezeBtn').onclick = () => this.act({ t: 'freeze' });
+    $('rerollBtn').onclick = () => {
+      if (this.act({ t: 'reroll' })) this.sel = null;
+      this.render();
+    };
+    $('freezeBtn').onclick = () => {
+      this.act({ t: 'freeze' });
+      this.render();
+    };
     $('fightBtn').onclick = () => this.fight();
     $('speedBtn').onclick = () => {
       this.speedIdx = (this.speedIdx + 1) % SPEEDS.length;
@@ -197,7 +203,8 @@ export class Game {
     const gained = s.gold - this.goldBefore;
     const interest = Math.min(3, Math.floor(this.goldBefore / 5));
     const parts = [`${gained - interest - b.goldEarned} pay`, interest ? `${interest} interest` : '', b.goldEarned ? `${b.goldEarned} bounty` : ''].filter(Boolean);
-    this.banner(`Wave ${s.wave - 1} cleared`, `+${gained}● (${parts.join(' + ')})${b.leaked ? ` · −${b.leaked} tower` : ''}`);
+    const through = Object.entries(b.leakedBy).map(([k, n]) => `${ENEMIES[k as keyof typeof ENEMIES].name}${n! > 1 ? ` ×${n}` : ''}`).join(', ');
+    this.banner(`Wave ${s.wave - 1} cleared`, `+${gained}● (${parts.join(' + ')})${b.leaked ? ` · −${b.leaked} tower: ${through} got through` : ''}`);
     this.sfx.levelUp();
     this.render();
   }
@@ -240,7 +247,7 @@ export class Game {
         }
       }
       if (n >= 20) this.acc = 0;
-      this.renderBattleHud();
+      if (this.s.phase === 'battle') this.renderBattleHud();
     }
     for (let r = 0; r < 3; r++) this.castGlow[r] = Math.max(0, this.castGlow[r] - dt * 3);
     this.lane.update(dt);
@@ -391,6 +398,12 @@ export class Game {
       el.querySelector('.sum')!.innerHTML = rowSummary(sp, extra);
       el.classList.toggle('pv', !!pv);
     }
+    if (!battle)
+      for (let row = 0; row < 3; row++) {
+        const el = $(`row${row}`);
+        el.classList.remove('cast');
+        (el.querySelector('.cd') as HTMLElement).style.width = '0';
+      }
     const reroll = $('rerollBtn') as HTMLButtonElement;
     reroll.disabled = s.gold < REROLL_COST || battle;
     $('freezeBtn').classList.toggle('on', s.frozen);
@@ -425,7 +438,10 @@ export class Game {
     const div = document.createElement('div');
     div.className = 'txt';
     if (this.sel.area === 'shop') {
-      const merge = r.tier < 3 && this.owned(r) >= 2 ? ` <span class="star">★ merges with yours (${this.where(r).slice(0, 2).join(', ')}) → ${ROMAN[r.tier + 1]}</span>` : '';
+      // The merged rune lands where the first copy is; a second copy in another row leaves it.
+      const spots = this.where(r).slice(0, 2);
+      const loses = spots[1] && spots[1] !== 'bench' && spots[1] !== spots[0] ? ` <span class="bad">⚠ ${spots[1]} loses its ${def.name}</span>` : '';
+      const merge = r.tier < 3 && this.owned(r) >= 2 ? ` <span class="star">★ merges with yours (${spots.join(', ')}) → ${ROMAN[r.tier + 1]}</span>${loses}` : '';
       div.innerHTML = `${name} · ${price(r)}●${merge}<br>${def.text(r.tier)}`;
       const b = document.createElement('button');
       b.className = 'primary';
@@ -654,12 +670,13 @@ export class Game {
   }
 
   private buyAt(i: number, to?: Slot): boolean {
-    const before = this.tiers();
+    const before = this.owns().length;
     const had = this.owns();
     const ok = this.act({ t: 'buy', i, to });
     if (ok) {
       this.sfx.pickup();
-      if (this.tiers() > before) {
+      // A merge happened only if we now own fewer runes than before + the one bought.
+      if (this.owns().length < before + 1) {
         // The merged rune(s): owned now, not before; the highest tier last.
         const made = this.owns().filter((k) => {
           const i = had.indexOf(k);
@@ -677,9 +694,6 @@ export class Game {
     return [...this.s.loom.flat(), ...this.s.bench].filter((r): r is Rune => !!r).map((r) => `${r.id}:${r.tier}`);
   }
 
-  private tiers(): number {
-    return [...this.s.loom.flat(), ...this.s.bench].reduce((n, r) => n + (r && r.tier > 1 ? r.tier : 0), 0);
-  }
 
   private merged(made: Rune[]): void {
     this.sfx.evolve();

@@ -109,6 +109,7 @@ export function newBattle(s: GameState): Battle {
     goldEarned: 0,
     kills: 0,
     leaked: 0,
+    leakedBy: {},
     fx: [],
     over: false,
   };
@@ -342,6 +343,7 @@ export function stepBattle(s: GameState, b: Battle): void {
     if (e.y >= 1) {
       e.alive = false;
       b.leaked += d.leak;
+      b.leakedBy[e.kind] = (b.leakedBy[e.kind] ?? 0) + 1;
       s.hp -= d.leak;
       b.fx.push({ type: 'leak', dmg: d.leak });
     }

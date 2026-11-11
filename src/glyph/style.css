@@ -66,11 +66,13 @@
 .slot.dragging { opacity: 0.3; }
 
 #tip {
-  min-height: 40px; padding: 4px 12px; display: flex; align-items: center; gap: 10px;
+  /* Fixed height: selecting a rune must not shift the loom under your finger. */
+  height: 72px; overflow: hidden; padding: 4px 12px; display: flex; align-items: center; gap: 10px;
   font-size: 12.5px; line-height: 1.3; color: var(--muted);
   background: var(--panel); border-bottom: 1px solid var(--line);
 }
-#tip .txt { flex: 1; min-width: 0; }
+#tip .txt { flex: 1; min-width: 0; max-height: 66px; overflow-y: auto; }
+#tip .bad { color: var(--danger); font-weight: 700; }
 #tip b { color: var(--text); }
 #tip .star { color: var(--gold); font-weight: 700; }
 #tip button { min-height: 40px; min-width: 76px; font-size: 14px; padding: 0 10px; }
@@ -98,7 +100,7 @@
 
 /* During battle the bench and shop give way to the lane. */
 body.battle #bench, body.battle #shop { display: none; }
-body.battle #tip { min-height: 44px; }
+
 
 #ghost {
   position: fixed; width: 60px; height: 60px; pointer-events: none; z-index: 50;

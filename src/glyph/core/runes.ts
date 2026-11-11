@@ -56,7 +56,7 @@ const caster = (id: CasterId, name: string, hue: number, text: (dmg: number, cd:
   kind: 'caster',
   cost: 3,
   hue,
-  text: (t) => text(Math.round(BASE[id].dmg * TIER_MULT[t]), BASE[id].cooldown),
+  text: (t) => `${text(Math.round(BASE[id].dmg * TIER_MULT[t]), BASE[id].cooldown)} Arcane unless a Fire, Frost or Storm rune follows.`,
 });
 const mod = (id: ModId, name: string, hue: number, text: (t: number) => string): RuneDef => ({ id, name, kind: 'mod', cost: 2, hue, text });
 
