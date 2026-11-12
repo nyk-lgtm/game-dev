@@ -5,7 +5,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 `afterglow/` (survivor-like), `delve/` (first-person ASCII crawler), `nightline/`
 (pseudo-3D ASCII racer), `glyph/` (Glyphwright, spell-crafting autobattler), `rewild/`
 (ecosystem builder on a hex island), `unspoken/` (learn a procedurally invented language from pictures), `hexhold/` (hex maze tower defense),
-`triad/` (hex logic puzzle: fire/water/leaf, numbers count beaten neighbors), `lastlight/` (tap-driven interactive story),
+`triad/` (hex logic puzzle: fire/water/leaf, numbers count beaten neighbors), `lastlight/` (tap-driven interactive story, two nights),
 `ninefold/` (seeded mini-golf).
 
 - The owner plays and tests only on an Android phone (Chrome, portrait). Every UI
@@ -66,9 +66,13 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   givens while they still do; so every puzzle is unique and guess-free, and `nextHint` replays those
   deductions. Levels: Easy keeps more numbers; Hard strips further while `propagateDeep` ("what if" trials,
   capped at 2+2·radius) still finishes it. `npx vite-node scripts/triad/stats.ts 30` shows counts per size/level.
-- Last Light (src/lastlight/core/story.ts): `choices(s)` lists legal action ids (`go:<room>`, `take:<item>`,
-  `use:<item>:<target>`, `give:`, `say:<npc>:<topic>`, …); `act(s, id)` returns the text. A run is the list of
-  ids (saved; `?a=` replays). tests/lastlight has the best route — update it when the story changes.
+- Last Light: one pure module per night, night 1 (storm) src/lastlight/core/story.ts, night 2 (fog) core/night2.ts;
+  core/nights.ts wraps each as a `Story` (core/types.ts) that game.ts drives. `choices(s)` lists legal action ids
+  (`go:<room>`, `take:<item>`, `use:<item>:<target>`, `give:`, `say:<npc>:<topic>`, …); `act(s, id)` returns the text.
+  A run is the list of ids, saved per night ('run', 'run2'); `?n=2&a=` replays (reports: `LASTLIGHT v…`,
+  `LASTLIGHT2 v…`). Profile: night 1 at the top level, night 2 under `n2`. Never change night 1's ids or
+  RULES_VERSION. `npx vite-node scripts/lastlight/walk.ts <night> <ids>` prints a run. tests/lastlight has each
+  night's best route — update it when a story changes.
 - Ninefold (src/ninefold/core): `makeHole(seed, n)` grows a corridor of 16-unit cells on a 6×9 grid (a
   self-avoiding walk, never touching itself, plus side pockets), walls = the cells' outer edges, obstacles in
   route cells (never tee/cup). `simulate` is a fixed 240 Hz step; shots are saved as `angle.power` in

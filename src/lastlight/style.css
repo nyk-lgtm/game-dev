@@ -46,3 +46,21 @@ body {
 .card .stars { font-size: 30px; color: var(--accent); letter-spacing: 4px; }
 .card .stars .off { color: #2a3448; }
 .card .meta2 { font-size: 13px; color: var(--muted); }
+/* Night 2: fog greys instead of storm blues. */
+body[data-night='2'] { --bg: #13171e; --panel: #171c25; --line: #2b3341; }
+body[data-night='2'] #acts button { background: #1e2531; }
+body[data-night='2'] #acts button.sub { background: #2a3342; border-color: #3a4558; }
+body[data-night='2'] #acts button.go { background: #1a2230; border-color: #3a4a62; color: #dbe4f0; }
+/* The night picker in the menu. */
+.card .nights { display: flex; gap: 8px; }
+.card .nights button.night {
+  flex: 1; min-height: 64px; position: relative; padding: 8px 12px; border-radius: 12px;
+  border: 1px solid var(--line); background: #182338; color: var(--text);
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px;
+  font-size: 16px; text-align: left;
+}
+.card .nights button.night.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.card .nights small { color: var(--muted); font-size: 13px; }
+.card .nights .new, .card .nights .best { position: absolute; top: 7px; right: 8px; font-size: 11px; font-weight: 800; }
+.card .nights .new { background: var(--accent); color: #1a1408; padding: 1px 7px; border-radius: 999px; }
+.card .nights .best { color: var(--accent); font-size: 12px; letter-spacing: 1px; }
