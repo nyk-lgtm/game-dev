@@ -31,8 +31,24 @@ const triad = makeStore('triad.');
 const lastlight = makeStore('lastlight.');
 const ninefold = makeStore('ninefold.');
 const summit = makeStore('summit.');
+const quarry = makeStore('quarry.');
 
 const GAMES: GameCard[] = [
+  {
+    path: './quarry/',
+    title: 'Quarry',
+    tag: 'Word roguelite',
+    pitch: 'Trace words through a wall of letter stones; long words pay. Hit each depth’s target before your words run out, dodge fuses, break rocks, and pick a perk on the way down.',
+    accent: '#ffc857',
+    best: () => {
+      const p = quarry.load<{ runs?: number; best?: number; bestDepth?: number; wins?: number } | null>('profile', null);
+      if (!p?.runs) return null;
+      return `Best ${(p.best ?? 0).toLocaleString('en-US')} · ${p.wins ? `${p.wins} win${p.wins === 1 ? '' : 's'}` : `depth ${p.bestDepth ?? 1}`}`;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#1f1a25"/>
+      <g font-family="system-ui,sans-serif" font-weight="900" font-size="10" text-anchor="middle" fill="#2a2230"><path d="M-1.4 12.0 3.3 3.9 12.7 3.9 17.4 12.0 12.7 20.1 3.3 20.1z" fill="#ecdcb6"/><text x="8.0" y="15.5">Qu</text><path d="M-1.4 29.3 3.3 21.2 12.7 21.2 17.4 29.3 12.7 37.5 3.3 37.5z" fill="#6a6272"/><path d="M-1.4 46.6 3.3 38.5 12.7 38.5 17.4 46.6 12.7 54.8 3.3 54.8z" fill="#ecdcb6"/><text x="8.0" y="50.1">E</text><path d="M-1.4 64.0 3.3 55.8 12.7 55.8 17.4 64.0 12.7 72.1 3.3 72.1z" fill="#ecdcb6"/><text x="8.0" y="67.5">S</text><path d="M13.6 20.7 18.3 12.5 27.7 12.5 32.4 20.7 27.7 28.8 18.3 28.8z" fill="#9ae8b5"/><text x="23.0" y="24.2">D</text><path d="M13.6 38.0 18.3 29.8 27.7 29.8 32.4 38.0 27.7 46.1 18.3 46.1z" fill="#ecdcb6"/><text x="23.0" y="41.5">O</text><path d="M13.6 55.3 18.3 47.2 27.7 47.2 32.4 55.3 27.7 63.4 18.3 63.4z" fill="#ecdcb6"/><text x="23.0" y="58.8">T</text><path d="M13.6 72.6 18.3 64.5 27.7 64.5 32.4 72.6 27.7 80.8 18.3 80.8z" fill="#ecdcb6"/><text x="23.0" y="76.1">A</text><path d="M28.6 12.0 33.3 3.9 42.7 3.9 47.4 12.0 42.7 20.1 33.3 20.1z" fill="#ecdcb6"/><text x="38.0" y="15.5">R</text><path d="M28.6 29.3 33.3 21.2 42.7 21.2 47.4 29.3 42.7 37.5 33.3 37.5z" fill="#9ae8b5"/><text x="38.0" y="32.8">I</text><path d="M28.6 46.6 33.3 38.5 42.7 38.5 47.4 46.6 42.7 54.8 33.3 54.8z" fill="#ecdcb6"/><text x="38.0" y="50.1">N</text><path d="M28.6 64.0 33.3 55.8 42.7 55.8 47.4 64.0 42.7 72.1 33.3 72.1z" fill="#ecdcb6"/><text x="38.0" y="67.5">L</text><path d="M43.6 20.7 48.3 12.5 57.7 12.5 62.4 20.7 57.7 28.8 48.3 28.8z" fill="#ffd060"/><text x="53.0" y="24.2">A</text><path d="M43.6 38.0 48.3 29.8 57.7 29.8 62.4 38.0 57.7 46.1 48.3 46.1z" fill="#9ae8b5"/><text x="53.0" y="41.5">G</text><path d="M43.6 55.3 48.3 47.2 57.7 47.2 62.4 55.3 57.7 63.4 48.3 63.4z" fill="#ecdcb6"/><text x="53.0" y="58.8">E</text><path d="M43.6 72.6 48.3 64.5 57.7 64.5 62.4 72.6 57.7 80.8 48.3 80.8z" fill="#6a6272"/><path d="M58.6 12.0 63.3 3.9 72.7 3.9 77.4 12.0 72.7 20.1 63.3 20.1z" fill="#ecdcb6"/><text x="68.0" y="15.5">M</text><path d="M58.6 29.3 63.3 21.2 72.7 21.2 77.4 29.3 72.7 37.5 63.3 37.5z" fill="#f6c9b4"/><text x="68.0" y="32.8">U</text><path d="M58.6 46.6 63.3 38.5 72.7 38.5 77.4 46.6 72.7 54.8 63.3 54.8z" fill="#ecdcb6"/><text x="68.0" y="50.1">O</text><path d="M58.6 64.0 63.3 55.8 72.7 55.8 77.4 64.0 72.7 72.1 63.3 72.1z" fill="#ecdcb6"/><text x="68.0" y="67.5">W</text></g>
+      <path d="M23 21 38 29 53 38" fill="none" stroke="#2f9a5a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/><circle cx="73" cy="24" r="3" fill="#d63c2f"/></svg>`,
+  },
   {
     path: './summit/',
     title: 'Summit',
@@ -306,6 +322,7 @@ const DAILY = [
   { path: './triad/?daily', title: 'Triad', store: triad, accent: '#ff8a3d' },
   { path: './ninefold/?daily', title: 'Ninefold', store: ninefold, accent: '#9be15d' },
   { path: './summit/?daily', title: 'Summit', store: summit, accent: '#8fc4ff' },
+  { path: './quarry/?daily', title: 'Quarry', store: quarry, accent: '#ffc857' },
 ];
 const daily = document.getElementById('daily')!;
 daily.innerHTML = `<h3>Daily challenges <span>${prettyDay()}</span></h3><p>The same run for everyone today. A new one at midnight.</p>`;

@@ -41,6 +41,7 @@ export default defineConfig({
         ninefold: resolve(__dirname, 'ninefold/index.html'),
         summit: resolve(__dirname, 'summit/index.html'),
         lastlight: resolve(__dirname, 'lastlight/index.html'),
+        quarry: resolve(__dirname, 'quarry/index.html'),
       },
     },
   },

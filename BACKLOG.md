@@ -18,6 +18,25 @@ Ground rules: never break saves without bumping RULES_VERSION; never leave main 
 keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 
 ## Now
+- [ ] **Quarry** (word roguelite on a hex letter wall). Milestones:
+  - [x] Dictionary: SCOWL sizes 10-50 (npm `wordlist-english`, MIT; SCOWL's own permissive licence), 3-8 letters
+        a-z with a vowel, minus `badwords-list` (MIT), `naughty-words` en (CC-BY-4.0) and a hand list of slurs, with
+        a short allow-list (pawn, escort, balls…). 34,315 words (24,597 common = SCOWL ≤ 35), front-coded into
+        src/quarry/core/words.ts (103 KB, 46 KB gzipped), its own lazy chunk. `scripts/quarry/build-words.ts` rebuilds it.
+  - [x] Core: 6×7 flat-top hex face, gravity per column, seeded bag (vowel balance, rare-letter caps, Qu tile),
+        letter values × (length − 2), gold ×2, rocks/granite that crack beside words, fuses (depth 3+: use within 3
+        words to blast neighbours for points, else they blow and cost a word), free reshuffle if no word is left,
+        1 shake per depth, 8 depths (targets 90…340 in 7,7,6… words), spare words pay, 13 perks one-of-three.
+        Replay from seed + actions, 16 tests.
+  - [x] Bots (scripts/quarry/bot.ts): `human` spots 8% of the common words ≤ 6 letters (a fixed hash per turn):
+        300 runs median depth 6, 28% wins, ~28 words/run (~8-10 minutes for a person); SEEN=0.05 6% wins;
+        `best` (every common word) wins 100% with a median word of 88. Targets are tuned on `human`.
+  - [x] UI: drag trail with live word, score and goal-bar preview, green/amber tiles, miss shake, tiles lift away and
+        fall in (WAAPI), blasts and crumbling rocks, sounds, depth banner, perk card, end card with depth strip and
+        best/longest word, help, menu, bug report, daily (`?daily`), hub card first + Daily link. Pixel 7 checked
+        (touch drag via CDP touch events works).
+  - [ ] Next: owner playtest. Watch: are 7-8 letter words findable on a phone? Is the first depth too easy? Do
+        fuses feel fair? Perk balance is guessed (the bot always takes Overtime/Long Haul/Hot Seam); a hint button?
 - [ ] **Summit** (peaks-solitaire roguelite). Milestones:
   - [x] Core (src/summit/core): 8 floors of hand-drawn peak layouts (3 rows of 16-18 cards, then 4 rows of
         20-24, then 24-27 in 4-5 rows), more face-down cards per floor (0 → 100% of covered cards), a run-wide
