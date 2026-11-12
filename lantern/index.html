@@ -13,18 +13,22 @@
   <body>
     <div id="app">
       <header id="hud">
-        <div class="stat hp"><span class="label">HP <b id="hpText">20/20</b></span><div class="bar"><div id="hpBar"></div></div></div>
+        <div class="stat hp">
+          <span class="label">HP <b id="hpText">20/20</b></span><div class="bar"><div id="hpBar"></div></div>
+          <span class="label">XP <b id="xpText">0/10</b></span><div class="bar xp"><div id="xpBar"></div></div>
+        </div>
         <div class="stat"><span class="label">Lv</span><span id="lvl" class="value">1</span></div>
         <div class="stat"><span class="label">Atk/Def</span><span id="atkdef" class="value">3/0</span></div>
-        <div class="stat"><span class="label">Gold</span><span id="gold" class="value">5</span></div>
+        <div class="stat"><span class="label">Gold</span><span id="gold" class="value">8</span></div>
         <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>
       </header>
       <main id="stage"><canvas id="board"></canvas></main>
       <footer id="dock">
+        <div id="info"></div>
         <div id="log"></div>
         <div id="buttons">
           <button id="waitBtn" class="secondary">Wait</button>
-          <button id="potionBtn" class="secondary">Potion ×1</button>
+          <button id="potionBtn" class="secondary">Potion ×3</button>
           <button id="packBtn" class="secondary">Pack</button>
         </div>
       </footer>

@@ -7,6 +7,8 @@ import {
   WORLD,
   fov,
   markerAt,
+  markerPos,
+  type MapId,
   type GameState,
   type MonsterKind,
   type NpcId,
@@ -33,9 +35,24 @@ export interface Fx {
   y: number;
   age: number;
   life: number;
+  /** Floaters from the same turn on the same cell stack upward. */
+  stack: number;
+  turn: number;
 }
 
-const MONSTER_COLORS: Record<MonsterKind, string> = {
+/** A big line at the top of the board (level up, the Ember). */
+export interface Banner {
+  text: string;
+  sub: string;
+  color: string;
+  age: number;
+  life: number;
+}
+
+/** The exit that leads home from each map (pointed at once you carry the Ember). */
+const HOMEWARD: Partial<Record<MapId, string>> = { forest: 'W', cave1: 'U', cave2: 'V' };
+
+export const MONSTER_COLORS: Record<MonsterKind, string> = {
   rat: '#b9a58a',
   wolf: '#c3c8d3',
   goblin: '#8fd14f',
@@ -121,6 +138,8 @@ export function draw(
   flash: { at: Pos; t: number; color: string } | null,
   path: Pos[],
   time: number,
+  banner: Banner | null = null,
+  walkTarget: Pos | null = null,
 ): void {
   ctx.fillStyle = '#0b0b0e';
   ctx.fillRect(0, 0, w, h);
@@ -190,7 +209,8 @@ export function draw(
 
   // Name tags over people in view (after the terrain so nothing covers them).
   // The Elder carries the quest: while she has something to say she is
-  // flagged with "!", and pinned to the screen edge when out of view.
+  // flagged with "!", and pinned to the screen edge when out of view. With the
+  // Ember in hand, the Lantern and the way home are flagged too.
   ctx.font = `700 ${Math.max(10, Math.round(v.cellH * 0.4))}px ui-monospace, monospace`;
   ctx.lineWidth = 3;
   ctx.strokeStyle = '#0b0b0e';
@@ -202,28 +222,52 @@ export function draw(
     ctx.fillStyle = color;
     ctx.fillText(text, tx, ty);
   };
+  const inView = (x: number, y: number) => x >= v.x0 && y >= v.y0 && x < v.x0 + v.cols && y < v.y0 + v.rows;
+  const edgeArrow = (x: number, y: number) => (x < v.x0 ? '◀ ' : x >= v.x0 + v.cols ? '▶ ' : y < v.y0 ? '▲ ' : '▼ ');
+  // A label sits above its cell, or below it when you stand just above (never over the @).
+  const label = (text: string, x: number, y: number, color: string) => {
+    const { cx, cy } = center(x, y);
+    const below = P.y === y - 1 && Math.abs(P.x - x) <= 1;
+    tag(text, cx, cy + (below ? 0.62 : -0.62) * v.cellH, color);
+  };
+  const beacons: { x: number; y: number; text: string; color: string; pin: boolean }[] = [];
   for (const [i, mk] of m.markers) {
-    if (mk.marker.kind !== 'npc') continue;
     const x = i % m.w;
     const y = Math.floor(i / m.w);
+    if (mk.marker.kind === 'lantern' && s.quest === 'ember') beacons.push({ x, y, text: '! Lantern', color: '#ff9f43', pin: true });
+    if (mk.marker.kind !== 'npc') continue;
     const npc = mk.marker.npc;
     const flagged = npc === 'elder' && (s.quest === 'none' || s.quest === 'ember');
-    const label = flagged ? `! ${NPC_LABELS[npc]}` : NPC_LABELS[npc];
-    const inView = x >= v.x0 && y >= v.y0 && x < v.x0 + v.cols && y < v.y0 + v.rows;
-    const { cx, cy } = center(x, y);
-    if (inView && (!lit || lit.has(i))) tag(label, cx, cy - v.cellH * 0.62, NPC_COLORS[npc]);
-    else if (flagged && !lit) {
-      const arrow = x < v.x0 ? '◀ ' : x >= v.x0 + v.cols ? '▶ ' : y < v.y0 ? '▲ ' : '▼ ';
-      tag(`${arrow}${NPC_LABELS[npc]}`, cx, cy, NPC_COLORS[npc]);
+    // (With the Ember, the Lantern is the one pinned to the screen edge.)
+    beacons.push({ x, y, text: flagged ? `! ${NPC_LABELS[npc]}` : NPC_LABELS[npc], color: NPC_COLORS[npc], pin: s.quest === 'none' && flagged && !lit });
+  }
+  const home = HOMEWARD[id];
+  if (s.quest === 'ember' && home) {
+    const at = markerPos(m, home);
+    if (!lit || seen?.[at.y * m.w + at.x] === '1') beacons.push({ ...at, text: 'Way home', color: '#ff9f43', pin: true });
+  }
+  for (const b of beacons) {
+    const i = b.y * m.w + b.x;
+    const shown = !lit || lit.has(i) || (b.pin && seen?.[i] === '1');
+    if (inView(b.x, b.y) && shown) label(b.text, b.x, b.y, b.color);
+    else if (b.pin && !inView(b.x, b.y)) {
+      const { cx, cy } = center(b.x, b.y);
+      tag(`${edgeArrow(b.x, b.y)}${b.text.replace(/^! /, '')}`, cx, cy, b.color);
     }
   }
   ctx.font = font;
 
-  // Planned walk.
+  // Planned walk, and a ring where it ends.
   ctx.fillStyle = 'rgba(255,209,102,0.35)';
   for (const p of path) {
     const { cx, cy } = center(p.x, p.y);
     ctx.fillRect(cx - 2, cy - 2, 4, 4);
+  }
+  if (walkTarget && inView(walkTarget.x, walkTarget.y)) {
+    const { cx, cy } = center(walkTarget.x, walkTarget.y);
+    ctx.strokeStyle = 'rgba(255,209,102,0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(cx - v.cellW / 2 + 2, cy - v.cellH / 2 + 2, v.cellW - 4, v.cellH - 4);
   }
 
   // Hit flash behind creatures.
@@ -248,10 +292,10 @@ export function draw(
     // Wounded marker: a thin health line under the glyph.
     const max = MONSTERS[mo.kind].hp;
     if (mo.hp < max) {
-      ctx.fillStyle = '#3a1a1e';
-      ctx.fillRect(cx - v.cellW * 0.4, cy + v.cellH * 0.42, v.cellW * 0.8, 2);
+      ctx.fillStyle = '#4a2026';
+      ctx.fillRect(cx - v.cellW * 0.45, cy + v.cellH * 0.38, v.cellW * 0.9, 4);
       ctx.fillStyle = '#ff5c5c';
-      ctx.fillRect(cx - v.cellW * 0.4, cy + v.cellH * 0.42, v.cellW * 0.8 * (mo.hp / max), 2);
+      ctx.fillRect(cx - v.cellW * 0.45, cy + v.cellH * 0.38, v.cellW * 0.9 * (mo.hp / max), 4);
     }
   }
 
@@ -269,15 +313,32 @@ export function draw(
 
   // Floating text.
   ctx.font = `800 ${Math.round(v.cellH * 0.6)}px ui-monospace, monospace`;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#0b0b0e';
   for (const f of fx) {
     const { cx, cy } = center(f.x, f.y);
     const k = f.age / f.life;
+    const ty = cy - v.cellH * (0.6 + 0.8 * k + 0.7 * f.stack);
     ctx.globalAlpha = Math.max(0, 1 - k * k);
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#0b0b0e';
-    ctx.strokeText(f.text, cx, cy - v.cellH * (0.6 + k));
+    ctx.strokeText(f.text, cx, ty);
     ctx.fillStyle = f.color;
-    ctx.fillText(f.text, cx, cy - v.cellH * (0.6 + k));
+    ctx.fillText(f.text, cx, ty);
   }
   ctx.globalAlpha = 1;
+
+  // Banner across the top of the board.
+  if (banner) {
+    const k = banner.age / banner.life;
+    ctx.globalAlpha = Math.min(1, 4 * k, 4 * (1 - k));
+    const y = Math.max(36, v.oy + v.cellH * 1.6);
+    ctx.fillStyle = 'rgba(11,11,14,0.82)';
+    ctx.fillRect(0, y - 30, w, 58);
+    ctx.font = `800 ${Math.round(v.cellH * 0.95)}px ui-monospace, monospace`;
+    ctx.fillStyle = banner.color;
+    ctx.fillText(banner.text, w / 2, y - 8);
+    ctx.font = `600 ${Math.max(11, Math.round(v.cellH * 0.45))}px ui-monospace, monospace`;
+    ctx.fillStyle = '#e8e6df';
+    ctx.fillText(banner.sub, w / 2, y + 16);
+    ctx.globalAlpha = 1;
+  }
 }

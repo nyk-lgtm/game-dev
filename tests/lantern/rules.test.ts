@@ -10,7 +10,12 @@ import {
   WEAPONS,
   WORLD,
   XP_TABLE,
+  CALM_REGEN_EVERY,
+  REGEN_EVERY,
   addPos,
+  damageRange,
+  hitChance,
+  hunted,
   applyAction,
   arrivalPos,
   attackOf,
@@ -286,7 +291,7 @@ describe('combat', () => {
     expect(state.player.level).toBe(2);
     expect(state.player.maxHp).toBe(26);
     expect(state.player.hp).toBe(21);
-    expect(state.player.baseAtk).toBe(4);
+    expect(state.player.baseAtk).toBe(5);
     expect(state.player.baseDef).toBe(1);
     expect(events).toContainEqual({ type: 'levelUp', level: 2 });
     // Level 3 is odd: no defence.
@@ -305,7 +310,7 @@ describe('combat', () => {
     expect(state.player.level).toBe(4);
     expect(events.filter((e) => e.type === 'levelUp')).toEqual([2, 3, 4].map((level) => ({ type: 'levelUp', level })));
     expect(state.player.maxHp).toBe(20 + 18);
-    expect(state.player.baseAtk).toBe(3 + 3);
+    expect(state.player.baseAtk).toBe(4 + 3);
     expect(state.player.baseDef).toBe(2);
     expect(state.player.gold).toBe(s.player.gold + 30);
     expect(state.quest).toBe('ember');
@@ -545,6 +550,15 @@ describe('quest', () => {
     expect(applyAction(lantern, step(0)).events).toEqual([{ type: 'read', text: LANTERN_TEXT.lit }]);
   });
 
+  it('carrying the Ember, bumping the Lantern sets it and wins', () => {
+    const s = setup('village', { x: 16, y: 6 });
+    s.quest = 'ember';
+    const { state, events } = applyAction(s, step(0));
+    expect(state.quest).toBe('won');
+    expect(state.player.pos).toEqual({ x: 16, y: 6 });
+    expect(events).toEqual([{ type: 'read', text: LANTERN_TEXT.ember }, { type: 'win' }]);
+  });
+
   it('the Hermit gives exactly one potion', () => {
     const s = setup('forest', { x: 9, y: 14 });
     const once = applyAction(s, step(6)).state;
@@ -553,6 +567,38 @@ describe('quest', () => {
     const twice = applyAction(once, step(6)).state;
     expect(twice.player.potions).toBe(once.player.potions);
     expect(twice.done.filter((d) => d === 'hermit-gift')).toHaveLength(1);
+  });
+});
+
+describe('healing and odds', () => {
+  const P = { x: 10, y: 4 };
+  const E = { x: 11, y: 4 };
+  it('you heal every 3 turns when no monster can see you, every 10 while one can', () => {
+    const calm = setup('forest', P);
+    calm.player.hp = 5;
+    let t = calm;
+    for (let i = 0; i < 30; i++) t = applyAction(t, WAIT).state;
+    expect(t.player.hp).toBe(5 + 10);
+    expect(hunted(calm)).toBe(false);
+    const watched = setup('forest', P, [['wolf', { x: P.x + 5, y: P.y }]]);
+    watched.player.hp = 5;
+    expect(hunted(watched)).toBe(true);
+    expect(REGEN_EVERY).toBeGreaterThan(CALM_REGEN_EVERY);
+  });
+
+  it('a new game starts with 3 potions and 4 attack', () => {
+    const s = newGame(1);
+    expect(s.player.potions).toBe(3);
+    expect(attackOf(s)).toBe(4);
+  });
+
+  it('your chance to hit is 1 - the monster dodge; misses say so', () => {
+    expect(hitChance('bat')).toBeCloseTo(0.7);
+    expect(hitChance('rat')).toBeCloseTo(0.9);
+    const r = withRoll(setup('forest', P, [['wolf', E]]), step(dirTo(P, E)), (x) => x.events[0]?.type === 'miss');
+    expect(r.state.log.some((l) => /dodges \(85% to hit\)/.test(l))).toBe(true);
+    expect(damageRange(4, 1)).toEqual([2, 4]);
+    expect(damageRange(2, 5)).toEqual([1, 1]);
   });
 });
 

@@ -257,3 +257,16 @@ function unwind(prev: Map<string, { p: Pos; d: number }>, from: Pos, to: Pos): n
   }
   return dirs.reverse();
 }
+
+/**
+ * How a tap walks: straight there when known ground reaches it (`direct`),
+ * otherwise as close as known ground allows. The UI re-plans a non-direct
+ * walk after every step, so a tap into the dark keeps going as the lantern
+ * reveals the way. Null when no step gets any closer.
+ */
+export function planWalk(s: GameState, to: Pos): { dirs: number[]; direct: boolean } | null {
+  const dirs = pathTo(s, to);
+  if (dirs) return { dirs, direct: true };
+  const toward = pathToward(s, to);
+  return toward ? { dirs: toward, direct: false } : null;
+}
