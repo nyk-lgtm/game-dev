@@ -17,6 +17,7 @@ import {
   newRun,
   playable,
   playableSlots,
+  nextDraws,
   rankGap,
   replay,
   shown,
@@ -138,12 +139,12 @@ describe('rules', () => {
     expect(o.cleared).toBe(true);
     expect(r.phase).toBe('charm');
     expect(r.offer.length).toBe(3);
-    expect(r.carry).toBe(d.stock.length);
+    expect(r.carry).toBe(Math.min(TUNE.carry, d.stock.length));
     const pick = r.offer[1];
     act(r, `C${pick}`);
     expect(r.charms).toEqual([pick]);
     expect(r.floor).toBe(1);
-    expect(r.deal.stock.length).toBe(o.unused! + freshDraws(r) + (pick === 'joker' ? 1 : 0));
+    expect(r.deal.stock.length).toBe(Math.min(TUNE.carry, o.unused!) + freshDraws(r) + (pick === 'joker' ? 1 : 0));
   });
   it('running out of plays and draws ends the run', () => {
     const r = newRun(4);
@@ -316,6 +317,102 @@ describe('dead draws', () => {
     expect(a.flush).toBeFalsy();
     act(r, `P${bottom[1]}`);
     expect(act(r, `P${bottom[2]}`)!.refund).toBe(1);
+  });
+});
+
+describe('draws and charms keep their word', () => {
+  /** Plays bot runs that start holding these charms, calling check(run, action) before each action. */
+  function botRuns(charms: Parameters<typeof startAt>[2], seeds: number, check: (r: Run, a: string) => void) {
+    for (let seed = 1; seed <= seeds; seed++) {
+      const r = startAt(seed, 0, charms);
+      for (let guard = 0; r.phase !== 'over' && guard < 3000; guard++) {
+        const a = botAction(r);
+        check(r, a);
+        act(r, a);
+      }
+    }
+  }
+  it('a draw never turns up the rank already on the waste', () => {
+    let draws = 0;
+    botRuns(['joker', 'flags', 'momentum', 'flush', 'blast', 'stride', 'mirror'], 40, (r, a) => {
+      if (a !== 'D') return;
+      const sim = JSON.parse(JSON.stringify(r)) as Run;
+      const before = top(sim.deal);
+      const avoidable = sim.deal.stock.some((c) => c.r !== before.r);
+      act(sim, 'D');
+      if (before.r !== 0 && avoidable) expect(top(sim.deal).r).not.toBe(before.r);
+      draws++;
+    });
+    expect(draws).toBeGreaterThan(500);
+  });
+  it('Spyglass shows exactly the next draws (lucky draws included)', () => {
+    let checked = 0;
+    botRuns(['spyglass', 'joker'], 40, (r) => {
+      if (r.phase !== 'play' || !r.deal.stock.length) return;
+      const peek = nextDraws(r, 3);
+      const sim = JSON.parse(JSON.stringify(r)) as Run;
+      const got = peek.map(() => (act(sim, 'D'), JSON.stringify(top(sim.deal))));
+      expect(got).toEqual(peek.map((c) => JSON.stringify(c)));
+      checked++;
+    });
+    expect(checked).toBeGreaterThan(200);
+  });
+  it('the lucky draw picks a plain card before the Joker', () => {
+    const r = startAt(3, 2, ['joker']);
+    const d = r.deal;
+    d.waste.push({ r: 7, s: 0 });
+    d.slots.forEach((s) => (s.card = { r: 1, s: 1 }));
+    const open = d.slots.findIndex((_, i) => !isCovered(d, i));
+    d.slots[open].card = { r: 3, s: 1 };
+    // Pile (next card last): a fitting 4, the Joker, then dead cards.
+    d.stock = [{ r: 4, s: 2 }, { r: 0, s: -1 }, { r: 10, s: 0 }, { r: 10, s: 1 }, { r: 11, s: 0 }];
+    d.dry = MERCY - 1;
+    const o = act(r, 'D')!;
+    expect(o.lucky).toBe(true);
+    expect(top(d).r).toBe(4);
+    expect(d.stock.some((c) => c.r === 0)).toBe(true);
+  });
+  it('says so when no card in the pile can fit', () => {
+    const r = startAt(3, 2);
+    const d = r.deal;
+    d.waste.push({ r: 7, s: 0 });
+    d.slots.forEach((s) => (s.card = { r: 1, s: 1 }));
+    d.stock = [{ r: 10, s: 0 }, { r: 11, s: 1 }, { r: 10, s: 2 }];
+    d.dry = MERCY - 1;
+    expect(act(r, 'D')!.noLuck).toBe(true);
+  });
+  it('undo never hides a card you have already seen', () => {
+    const r = startAt(9, FLOORS - 1, ['rewind']);
+    const d = r.deal;
+    const i = d.slots.findIndex((s) => s.down && s.coveredBy.length === 2);
+    const [a, b] = d.slots[i].coveredBy;
+    d.blasts = 2;
+    act(r, `B${a}`);
+    act(r, `B${b}`);
+    expect(r.deal.slots[i].down).toBe(false);
+    act(r, 'U');
+    expect(r.deal.slots[b].gone).toBe(false);
+    expect(r.deal.slots[i].down).toBe(false);
+  });
+  it('at most TUNE.carry unused draws carry up', () => {
+    const r = newRun(21);
+    const d = r.deal;
+    d.stock = [...Array(TUNE.carry + 7)].map((_, k) => ({ r: (k % 13) + 1, s: 0 }));
+    for (const s of d.slots) s.gone = true;
+    d.slots[0].gone = false;
+    d.slots[0].card = { r: 2, s: 0 };
+    d.waste.push({ r: 3, s: 1 });
+    expect(act(r, 'P0')!.unused).toBe(TUNE.carry + 7);
+    expect(r.carry).toBe(TUNE.carry);
+  });
+  it('charm texts match the rules', () => {
+    const text = (id: string) => CHARMS.find((c) => c.id === id)!.text;
+    expect(text('flags')).toContain(TUNE.flags === 1 ? 'gives back a draw' : `gives back ${TUNE.flags} draws`);
+    expect(text('mirror')).toContain(['', 'Once', 'Twice', 'Three times'][TUNE.mirrors]);
+    expect(text('stride')).toContain(['', 'Once', 'Twice', 'Three times'][TUNE.strides]);
+    expect(text('wind')).toContain(`${TUNE.wind} fresh draws`);
+    expect(text('pockets')).toContain(`+${TUNE.pockets} draws`);
+    expect(text('lantern')).toContain(`+${TUNE.lantern} draw`);
   });
 });
 
