@@ -6,7 +6,7 @@ import { CELLS, applyAction, newGame } from './rules';
 import type { Action, GameState } from './types';
 
 /** Bump whenever a rules change would make an old game replay differently. */
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 2;
 
 const CELL_CODES = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJK'; // 37 cells
 

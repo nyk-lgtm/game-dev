@@ -39,16 +39,20 @@ export function nameOf(kind: Family, tier: number): string {
   return (kind === 'plant' ? PLANT_NAMES : STONE_NAMES)[tier];
 }
 
+/** Points for each wisp trapped by surrounding it (doubled for two or more at once). */
+export const TRAP_POINTS = 50;
+
 // ---------- the bag ----------
 
 /** The n-th piece of a game's sequence. Deterministic per (seed, n). */
 export function drawPiece(seed: number, n: number): HandPiece {
   const r = new Rng(mixSeed(seed, n + 1)).next();
+  // Fewer crystals and bolts than before, more wisps: the board fills, so runs end sooner.
   if (r < 0.48) return { kind: 'plant', tier: 0 };
   if (r < 0.64) return { kind: 'plant', tier: 1 };
   if (r < 0.69) return { kind: 'plant', tier: 2 };
-  if (r < 0.89) return { kind: 'wisp' };
-  if (r < 0.94) return { kind: 'crystal' };
+  if (r < 0.91) return { kind: 'wisp' };
+  if (r < 0.955) return { kind: 'crystal' };
   return { kind: 'bolt' };
 }
 
@@ -165,6 +169,12 @@ function wispPhase(s: GameState, events: GameEvent[]): void {
   for (const { w, at } of trapped) {
     s.board[key(at)] = { kind: 'stone', tier: 0 };
     events.push({ type: 'wispTrapped', id: w.id, at });
+  }
+  // Trapping pays: TRAP_POINTS each, double when you catch two or more at once.
+  if (trapped.length) {
+    const points = TRAP_POINTS * trapped.length * (trapped.length > 1 ? 2 : 1);
+    s.score += points;
+    events.push({ type: 'score', at: trapped[0].at, points });
   }
   const gone = new Set(trapped.map((t) => t.w.id));
   s.wisps = s.wisps.filter((w) => !gone.has(w.id));

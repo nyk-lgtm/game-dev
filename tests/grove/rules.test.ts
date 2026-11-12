@@ -3,6 +3,7 @@ import {
   CELLS,
   DIRS,
   POINTS,
+  TRAP_POINTS,
   add,
   applyAction,
   cellAt,
@@ -438,7 +439,8 @@ describe('wisps', () => {
     expect(cellAt(r.state, ns[0])).toBeNull();
     expect(cellAt(r.state, ns[1])).toBeNull();
     expect(cellAt(r.state, ns[2])).toEqual(plant(0));
-    expect(r.state.score).toBe(POINTS.plant[0] + POINTS.stone[1]);
+    // + the trap bonus for the one wisp caught.
+    expect(r.state.score).toBe(POINTS.plant[0] + POINTS.stone[1] + TRAP_POINTS);
   });
 
   it('wisps move oldest first; a later wisp re-plans when its planned hex was taken', () => {
@@ -626,7 +628,7 @@ describe('previewAction', () => {
     addWisp(trap, corner, ns[2]);
     const o = expectMatches(trap, place(ns[2]));
     expect(o.trapped).toBe(1);
-    expect(o.points).toBe(5 + 250);
+    expect(o.points).toBe(5 + 250 + TRAP_POINTS);
   });
 
   it('reports a game-ending move', () => {

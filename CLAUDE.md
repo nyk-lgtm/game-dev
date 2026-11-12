@@ -25,7 +25,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   - Telegraph: `npx vite-node scripts/telegraph/balance.ts 150` (greedy bot median
     depth ≈ 7, ~15% of runs end on depth 3; it can't plan bash/lunge combos). `scripts/telegraph/damage.ts`
     shows what hurts the player.
-  - Grove: `npx vite-node scripts/grove/balance.ts 60` (score, game length, best tier).
+  - Grove: `npx vite-node scripts/grove/balance.ts 60` (score, game length, best tier; rules v2:
+    median ~248 turns, Spirit Tree in ~half the games).
   - Lantern: `npx vite-node scripts/lantern/balance.ts 50` (completion bot: ~98% finish,
     level 7 at the king). Maps are hand-drawn strings in src/lantern/core/maps.ts;
     diagonal steps can't squeeze between two blocked cells, so never connect areas

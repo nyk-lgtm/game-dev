@@ -192,6 +192,8 @@ export class Game {
     $('best').textContent = Math.max(load<number>('best', 0), s.score).toLocaleString();
     this.drawSlot('curCanvas', s.current, 64);
     this.drawSlot('stashCanvas', s.stash, 52);
+    $('stashBtn').classList.toggle('empty', !s.stash);
+    ($('stashBtn').querySelector('.label') as HTMLElement).textContent = s.stash ? 'Stash' : 'Stash · empty';
     this.drawSlot('nextCanvas', upcoming(s), 52);
     $('curLabel').textContent = pieceName(s.current);
     this.hints = busy ? [] : mergeSpots(s);
@@ -262,7 +264,7 @@ export class Game {
         <li><b>Tap an empty hex</b> to preview, <b>tap again</b> (or press Place) to place the piece shown in the tray.</li>
         <li><b>3 or more touching identical pieces merge</b> into the next tier, right where the last one landed. Merges can chain. Bigger groups score more.</li>
         <li><span class="c-plant">Seed → Sprout → Bush → Tree → Grove → Spirit Tree</span></li>
-        <li><span class="c-wisp">Wisps</span> wander one hex per turn — the little arrow shows their next step. A wisp with no empty neighbor turns to <span class="c-stone">stone</span>. Stone → Cairn → Monolith, worth a lot.</li>
+        <li><span class="c-wisp">Wisps</span> wander one hex per turn — the little arrow shows their next step. Wisps never merge with each other. A wisp with no empty neighbor turns to <span class="c-stone">stone</span> (+50, or +100 each when you trap two or more at once). Stone → Cairn → Monolith, worth a lot.</li>
         <li><span class="c-crystal">Crystal</span>: becomes whatever makes the best merge where you put it.</li>
         <li><span class="c-bolt">Bolt</span>: clears any piece; zap a wisp to turn it to stone.</li>
         <li><b>Stash</b>: tap it to set the current piece aside, or swap it back later.</li>

@@ -32,3 +32,6 @@
 .c-wisp { color: #c9b8ff; font-weight: 700; }
 .c-crystal { color: #7ee8f5; font-weight: 700; }
 .c-bolt { color: #ffd23f; font-weight: 700; }
+/* Brighter, slightly larger labels than the shell's, and an obviously empty stash. */
+body .label { font-size: 12px; color: #b9bfd2; }
+#stashBtn.empty { border-style: dashed; opacity: 0.7; }
