@@ -1,5 +1,6 @@
 // A synthesized engine note that follows speed, plus a tire screech for
 // off-road. Lives alongside the shared effects/music from Afterglow's Sfx.
+import { soundOn } from '../shared/settings';
 
 export class Engine {
   private ctx: AudioContext | null = null;
@@ -10,6 +11,7 @@ export class Engine {
   muted = false;
 
   unlock(): void {
+    if (!soundOn()) return;
     if (this.ctx) {
       void this.ctx.resume();
       return;

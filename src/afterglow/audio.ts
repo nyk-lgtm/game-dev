@@ -2,6 +2,7 @@
 // (oscillators, a shared noise buffer, filters, envelopes). No assets, nothing
 // persisted. Designed to stay cheap on Android Chrome: per-sound rate limits, a
 // global event budget and a polyphony cap so mass enemy deaths can't stutter.
+import { soundOn } from '../shared/settings';
 
 type Prio = 0 | 1 | 2;
 const LOW: Prio = 0;
@@ -97,6 +98,8 @@ export class Sfx {
   // ---------------------------------------------------------------- lifecycle
 
   unlock(): void {
+    // Sound switched off on the hub: never start audio at all.
+    if (!soundOn()) return;
     if (!this.ctx) {
       const w = window as unknown as { webkitAudioContext?: typeof AudioContext };
       const Ctor = window.AudioContext ?? w.webkitAudioContext;

@@ -1,9 +1,11 @@
 // On-device debugging shared by every game: errors are shown on screen (there
 // are no devtools on a phone), plus clipboard and toast helpers.
+import { applySettings } from './settings';
 
 export const BUILD = `${__BUILD_ID__} · ${__BUILD_TIME__} UTC`;
 
 export function installErrorOverlay(): void {
+  applySettings();
   const box = document.getElementById('errors')!;
   const show = (msg: string) => {
     const el = document.createElement('div');

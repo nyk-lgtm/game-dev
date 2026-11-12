@@ -10,6 +10,7 @@ export interface News {
 }
 
 export const NEWS: News[] = [
+  { day: '2026-11-12', path: './#settings', game: 'Game Lab', text: 'Sound and vibration switches for every game, at the bottom of this page.' },
   { day: '2026-11-12', path: './rewild/', game: 'Rewild', text: 'Fairer goals (ponds, oaks, forest, frogs were rarely reachable; soil and species were too easy), and winter wildflowers look different from grass.' },
   { day: '2026-11-12', path: './', game: 'Game Lab', text: 'This list: what changed since your last visit.' },
   { day: '2026-11-11', path: './hexhold/', game: 'Hexhold', text: 'Frost now gets credit for its slow and the +30% its neighbours deal to chilled enemies.' },

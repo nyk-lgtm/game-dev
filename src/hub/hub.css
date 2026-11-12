@@ -56,3 +56,6 @@ header p { margin: 6px 0 0; color: var(--muted); }
 #news li.new b::after { content: ' ●'; color: #7bd88f; font-size: 10px; vertical-align: 2px; }
 #news li.new span { color: var(--text); }
 #news button { margin-top: 6px; width: 100%; min-height: 44px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 14px; font-weight: 600; }
+#settings { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+#settings button { min-height: 48px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 15px; font-weight: 600; }
+#settings button.off { color: var(--muted); border-style: dashed; }

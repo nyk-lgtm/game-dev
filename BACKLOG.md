@@ -95,7 +95,8 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 ## Ideas (unscheduled)
 - Unspoken: more story templates so the village tale varies; spoken pronunciation via
   speech synthesis; a harder "second village" with case markers or verb agreement.
-- Hub: one shared settings panel (sound, vibration, reduced effects) used by every game.
+- [x] Hub: shared Sound / Vibration switches (src/shared/settings.ts; audio never starts when off,
+  navigator.vibrate becomes a no-op). Reduced effects not done.
 - Afterglow: owner is happy with it — leave alone unless they report something.
 
 ## Done (recent)

@@ -4,6 +4,7 @@ import { BUILD } from '../shared/debug';
 import { makeStore } from '../shared/storage';
 import { loadDaily, prettyDay } from '../shared/daily';
 import { NEWS } from './news';
+import { loadSettings, saveSettings } from '../shared/settings';
 
 interface GameCard {
   path: string;
@@ -292,3 +293,20 @@ const renderNews = (all: boolean) => {
 };
 renderNews(false);
 hubStore.save('seenNews', NEWS[0].day);
+
+// Settings for every game.
+const settingsBox = document.getElementById('settings')!;
+const renderSettings = () => {
+  const st = loadSettings();
+  settingsBox.innerHTML = `<button id="setSound" class="${st.sound ? '' : 'off'}">${st.sound ? '🔊 Sound on' : '🔇 Sound off'}</button><button id="setVib" class="${st.vibrate ? '' : 'off'}">${st.vibrate ? '📳 Vibration on' : '📴 Vibration off'}</button>`;
+  document.getElementById('setSound')!.onclick = () => {
+    saveSettings({ ...st, sound: !st.sound });
+    renderSettings();
+  };
+  document.getElementById('setVib')!.onclick = () => {
+    saveSettings({ ...st, vibrate: !st.vibrate });
+    if (!st.vibrate) navigator.vibrate?.(30);
+    renderSettings();
+  };
+};
+renderSettings();
