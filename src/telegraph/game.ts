@@ -35,6 +35,9 @@ import { sceneFromState, type Scene } from './render/scene';
 import { load, save } from './storage';
 import { HELP_HTML, closeOverlay, enemyIntroHtml, renderHud, renderPanel, showCard } from './ui/dom';
 
+/** In-play hint: a toast over the bottom panel, under menus, clear of the board's top row. */
+const hint = (msg: string) => toast(msg).classList.add('hint');
+
 /** A short note on what an enemy is about to do, for the inspect panel. */
 function statusOf(e: Enemy): string {
   if (e.staggered) return ' · dazed';
@@ -135,7 +138,7 @@ export class Game {
       if (this.selected && eq(this.selected, h)) {
         // A move that hurts only goes through the red button.
         if (this.outcome && this.outcome.damageTaken > 0) {
-          toast('That move hurts: press the red button if you mean it');
+          hint('That move hurts: press the red button if you mean it');
           return;
         }
         this.commit({ type: 'move', to: h });
@@ -163,7 +166,7 @@ export class Game {
           this.walkStep();
           return;
         }
-        toast('One hex per turn: tap a hex next to you');
+        hint('One hex per turn: tap a hex next to you');
       }
     }
     this.refreshUi();
@@ -193,7 +196,7 @@ export class Game {
     const here = field.get(key(s.player.pos));
     if (!best || here === undefined || field.get(key(best))! >= here) {
       this.walkTo = null;
-      toast("Can't reach that");
+      hint("Can't reach that");
       this.refreshUi();
       return;
     }

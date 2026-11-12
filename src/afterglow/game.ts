@@ -1,7 +1,7 @@
 // Afterglow controller: screens, the fixed-step loop, camera, HUD, audio,
 // pausing, and saving meta progress between runs.
 
-import { toast } from '../shared/debug';
+import { copyText, toast } from '../shared/debug';
 import { makeStore } from '../shared/storage';
 import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey, wantsDaily } from '../shared/daily';
 import { Sfx } from './audio';
@@ -357,9 +357,9 @@ export class Game {
     ctx.stroke();
   }
 
-  copyReport(): void {
+  async copyReport(): Promise<void> {
     const w = this.world;
     const text = `AFTERGLOW build=${__BUILD_ID__} seed=${w?.seed} t=${w?.time.toFixed(1)} lvl=${w?.player.level} weapons=${w?.weapons.map((x) => x.id + x.level).join(',')} ua="${navigator.userAgent}"`;
-    navigator.clipboard?.writeText(text).then(() => toast('Report copied'));
+    toast((await copyText(text)) ? 'Bug report copied' : 'Copy failed');
   }
 }

@@ -32,8 +32,14 @@ body .icon-btn { background: transparent; border-color: var(--line); color: var(
   border-bottom: 1px solid var(--line); background: var(--bg);
 }
 #places::-webkit-scrollbar { display: none; }
+#places.more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
+#places.more-left { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent); }
+#places.more-left.more-right {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+}
 #places button {
-  flex: none; min-height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line);
+  flex: none; min-height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line);
   background: transparent; color: var(--text); font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 5px;
 }
 #places button.on { background: var(--text); color: var(--panel); border-color: var(--text); }
@@ -180,7 +186,7 @@ body .icon-btn { background: transparent; border-color: var(--line); color: var(
 #sheet .ctx .row.here { background: rgba(181, 83, 45, 0.08); }
 #sheet .ctx .row canvas.thumb { flex: none; border-radius: 8px; }
 #sheet .ctx .row .caption { margin: 0; justify-content: flex-start; gap: 2px; }
-#sheet .ctx .row .tok { min-width: 34px; min-height: 36px; padding: 0; }
+#sheet .ctx .row .tok { min-width: 44px; min-height: 44px; padding: 0; justify-content: center; }
 /* Nothing in the sheet may shrink; the sheet scrolls instead. */
 #sheet .inner > * { flex-shrink: 0; }
 /* All eight categories visible at once, in two rows. */

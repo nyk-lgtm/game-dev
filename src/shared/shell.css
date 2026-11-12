@@ -101,6 +101,15 @@ button:active { transform: scale(0.97); }
   background: linear-gradient(rgba(0,0,0,0), var(--panel) 55%);
   pointer-events: none; transition: opacity 0.2s;
 }
+/* Short screens (360×640): menus fit without scrolling. */
+@media (max-height: 700px) {
+  #overlay { padding: 10px; }
+  .card { padding: 14px 16px; gap: 6px; }
+  .card h2 { margin: 0 0 2px; font-size: 20px; }
+  .card button.primary { min-height: 48px; }
+  .card button.secondary { min-height: 44px; }
+  .card .more { margin: -6px -16px -14px; bottom: -14px; }
+}
 #errors {
   position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 20;
   display: flex; flex-direction: column; gap: 6px;

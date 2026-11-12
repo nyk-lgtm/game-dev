@@ -315,7 +315,7 @@ for (const g of GAMES) {
 const DAILY = [
   { path: './afterglow/?daily', title: 'Afterglow', store: afterglow, accent: '#ff3d8b' },
   { path: './rewild/?daily', title: 'Rewild', store: rewild, accent: '#7bd88f' },
-  { path: './glyph/?daily', title: 'Glyphwright', store: glyph, accent: '#b08cff' },
+  { path: './glyph/?daily', title: 'Glyph\u00ADwright', store: glyph, accent: '#b08cff' },
   { path: './delve/?daily', title: 'Delve', store: delve, accent: '#ffb347' },
   { path: './nightline/?daily', title: 'Nightline', store: nightline, accent: '#ff2a6d' },
   { path: './unspoken/?daily', title: 'Unspoken', store: unspoken, accent: '#c8643c' },
@@ -344,8 +344,8 @@ document.getElementById('build')!.textContent = `build ${BUILD}`;
 
 // What's new: everything since the last visit (or the latest few), then remember this visit.
 const hubStore = makeStore('hub.');
-// Before this list existed, count everything in it as new.
-const seen = hubStore.load<string>('seenNews', '2026-11-09');
+// A first-ever visit has nothing to compare with: show the latest few, unmarked.
+const seen = hubStore.load<string | null>('seenNews', null) ?? NEWS[0].day;
 const fresh = NEWS.filter((n) => n.day > seen);
 const news = document.getElementById('news')!;
 const renderNews = (all: boolean) => {

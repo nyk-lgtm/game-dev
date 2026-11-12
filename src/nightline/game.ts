@@ -1,6 +1,7 @@
 // Nightline controller: steering input, the fixed-step loop, HUD, screens.
 
 import { closeOverlay, showCard } from '../shared/cards';
+import { copyText, toast } from '../shared/debug';
 import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey } from '../shared/daily';
 import { MONO, cellWidth, makeGrid, paintGrid, type Grid } from '../shared/ascii';
 import { makeStore } from '../shared/storage';
@@ -229,8 +230,17 @@ export class Game {
           this.pause();
         },
       },
+      { label: 'Copy bug report', onClick: () => void this.copyReport() },
       { label: 'Quit to title', onClick: () => this.title() },
     ]);
+  }
+
+  /** Races are real-time (no action replay), so the report names the seed, where you were and the build. */
+  private async copyReport(): Promise<void> {
+    const r = this.race;
+    if (!r) return;
+    const text = `NIGHTLINE build=${__BUILD_ID__} seed=${r.seed}${this.day ? ` daily=${this.day}` : ''} stage=${r.stage + 1}/${STAGES} biome=${BIOME_NAMES[r.stages[r.stage].biome]} route=${r.route.join('') || '-'} t=${r.time.toFixed(1)} score=${Math.round(r.score)} screen=${innerWidth}x${innerHeight}@${devicePixelRatio} ua="${navigator.userAgent}"`;
+    toast((await copyText(text)) ? 'Bug report copied' : 'Copy failed');
   }
 
   private finish(): void {

@@ -42,10 +42,11 @@ export async function copyText(text: string): Promise<boolean> {
   }
 }
 
-export function toast(msg: string): void {
+export function toast(msg: string): HTMLDivElement {
   const el = document.createElement('div');
   el.className = 'toast';
   el.textContent = msg;
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 2200);
+  return el;
 }

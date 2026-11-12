@@ -14,3 +14,10 @@
 .c-pylon { color: #f472b6; font-weight: 700; }
 .c-heal { color: var(--heal); font-weight: 700; }
 .c-threat { color: #ff3355; font-weight: 700; }
+/* In-play hints sit over the bottom panel (not the board's top row, where stairs
+   can be) and under the menu backdrop; taps pass through them. */
+body .toast.hint {
+  top: auto; bottom: calc(env(safe-area-inset-bottom) + 122px); transform: translate(-50%, 100%);
+  width: max-content; max-width: calc(100vw - 24px); text-align: center;
+  border-radius: 14px; z-index: 5; pointer-events: none; background: #20253a;
+}

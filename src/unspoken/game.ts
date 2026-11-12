@@ -265,8 +265,11 @@ export class Game {
     if (st.every((x) => x === 'known')) b.classList.add('known');
     else if (st.some((x) => x === 'doubt')) b.classList.add('doubt');
     else if (st.some((x) => x === 'guessed' || x === 'known')) b.classList.add('guessed');
+    const read = parts.map((m) => (this.s.notebook[m] ? short(this.s.notebook[m]) : this.status(m) === 'doubt' ? '✗' : ''));
+    // Screen readers (and tiles without a label) still say which glyph this is.
+    const said = read.filter((x) => x && x !== '✗').join(' · ');
+    b.setAttribute('aria-label', `Glyph “${parts.map((m) => this.s.lang.words[m]).join(' ')}”${said ? `: ${said}` : ''}`);
     if (label) {
-      const read = parts.map((m) => (this.s.notebook[m] ? short(this.s.notebook[m]) : this.status(m) === 'doubt' ? '✗' : ''));
       // One line always: a word with marks gets a smaller label instead of wrapping.
       b.appendChild(el('span', read.length > 1 ? 'gl multi' : 'gl', read.some(Boolean) ? read.map((x) => x || '…').join(' · ') : ''));
     }
@@ -358,7 +361,14 @@ export class Game {
       b.onclick = () => this.goChapter(i);
       nav.appendChild(b);
     });
-    (nav.children[this.view] as HTMLElement | undefined)?.scrollIntoView?.({ inline: 'nearest', block: 'nearest' });
+    (nav.children[this.view] as HTMLElement | undefined)?.scrollIntoView?.({ inline: 'center', block: 'nearest' });
+    // Fade the edge(s) that hide more places, so the strip reads as scrollable.
+    const fade = () => {
+      nav.classList.toggle('more-left', nav.scrollLeft > 2);
+      nav.classList.toggle('more-right', nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 2);
+    };
+    nav.onscroll = fade;
+    fade();
 
     // The page.
     const w = this.sceneWidth();

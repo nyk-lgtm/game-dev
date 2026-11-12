@@ -40,7 +40,9 @@ header p { margin: 6px 0 0; color: var(--muted); }
 .daily-row a { min-height: 56px; padding: 8px 6px; border-radius: 12px; text-decoration: none; color: inherit; text-align: center;
   display: flex; flex-direction: column; justify-content: center; gap: 2px;
   background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--accent); }
-.daily-row a b { font-size: 14px; }
+.daily-row a b { font-size: 14px; min-width: 0; overflow-wrap: break-word; }
+/* Narrow phones: long names (Glyphwright) fit their tile; a soft hyphen covers narrower still. */
+@media (max-width: 380px) { .daily-row a b { font-size: 13px; letter-spacing: -0.01em; } }
 .daily-row a span { font-size: 12px; color: var(--muted); }
 .daily-row a.done span { color: #ffd166; }
 .daily-row a:active { transform: scale(0.97); }

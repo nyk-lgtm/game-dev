@@ -234,6 +234,16 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Grove: owner wants it kept as is (no smaller board).
 
 ## Done (recent)
+- Technical QA sweep fixes (360×640 and Pixel 7, no gameplay changes): Afterglow bug report uses `copyText` (every
+  game's copy button now does), title fits short screens, evolution line "lv 1/8 + Multicast"; Telegraph in-play
+  hints are `toast(..).classList.add('hint')` over the bottom panel, under the menu (z 5), taps pass through;
+  Unspoken 44 px scene glyph tiles with aria-labels, 44 px place tabs with fade edges and the active one centered;
+  Delve sizes its view to leave the deck ≥130 px (minimap scales down), lower pad on short screens; Ninefold #info
+  fixed at four lines (70 px); shared short-screen card rule in shell.css (`max-height: 700px`: tighter gaps,
+  44 px buttons) so every menu fits at 640; Nightline pause "Copy bug report" (seed, daily, stage, route, time:
+  races are real-time, no replay); Summit badge inside the stock button, table cards `role=button` + "7 of hearts";
+  hub Daily tile font 13 px at ≤380 px, first-ever visit shows the latest news without a count.
+  Gotcha: `toast()` now returns its element.
 - Unspoken second village (the mountain village): unlocked by finishing village 1 (ending button + menu › Villages).
   Fresh language per seed with case particles (doer / done-to, so doer and done-to swap order freely; the verb's place
   is fixed) and verb agreement (a mark under the action when many act). 5 places (Pass, Lake, Hamlet, Carvings,

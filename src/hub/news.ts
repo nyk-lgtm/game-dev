@@ -10,6 +10,7 @@ export interface News {
 }
 
 export const NEWS: News[] = [
+  { day: '2026-11-12', path: './', game: 'Game Lab', text: 'Small fixes for smaller phones: menus fit without scrolling, Afterglow’s Start button is in view and its bug report copies, Delve’s log and minimap fit, Ninefold tips show in full, Telegraph hints no longer cover the board or menu, Nightline has a bug report button, and bigger glyph tiles and place tabs in Unspoken.' },
   { day: '2026-11-12', path: './summit/', game: 'Summit', text: 'Smoother climb: more draws on floors 3-4, at most 15 carried up. Draws never repeat the waste card’s rank, Spyglass shows exactly what is coming, the lucky draw says when nothing can fit, and undo no longer hides cards you have seen. Charm texts now match the rules.' },
   { day: '2026-11-12', path: './unspoken/', game: 'Unspoken', text: 'Mountain village fixes: scenes you can already read come clear as soon as a place opens, clearer “new” and “old” pictures, a page counter for long places, labels on one line, and bug links no longer give the answers away.' },
   { day: '2026-11-12', path: './unspoken/', game: 'Unspoken', text: 'A second village: finish the first and follow the river people up the mountain (menu › Villages). A new, harder language where little words mark who acts and who is acted on, so words move around, and the action changes when many act. Five new places; the notebook writes down the rules as you prove them.' },

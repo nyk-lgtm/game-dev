@@ -545,8 +545,11 @@ export class Game {
   private resize(): void {
     const dpr = Math.min(2, devicePixelRatio || 1);
     const w = this.view.parentElement!.clientWidth;
-    // The view takes most of the width as a 4:3 window.
-    const h = Math.round(Math.min(w * 1.0, innerHeight * 0.5));
+    // The view takes most of the width as a 4:3 window, leaving the deck (minimap
+    // and log) at least DECK_MIN px on short screens.
+    const DECK_MIN = 130;
+    const room = $('pad').getBoundingClientRect().top - this.view.parentElement!.getBoundingClientRect().top;
+    const h = Math.round(Math.max(120, Math.min(w * 1.0, innerHeight * 0.5, room - DECK_MIN)));
     this.vw = w;
     this.vh = h;
     this.view.style.height = `${h}px`;
@@ -562,6 +565,9 @@ export class Game {
     const mc = $<HTMLCanvasElement>('map');
     mc.width = Math.round(150 * dpr);
     mc.height = Math.round(150 * dpr);
+    // Drawn at 150 px; shown smaller when the deck is short, so it's never cut off.
+    const ms = Math.max(90, Math.min(150, room - h - 16));
+    mc.style.width = mc.style.height = `${ms}px`;
     this.mapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.dirty = true;
   }

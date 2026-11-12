@@ -59,6 +59,11 @@ function face(c: Card): string {
   return `<span class="ix">${RANKS[c.r]}<i>${suit(c)}</i></span><span class="pip">${suit(c)}</span>`;
 }
 
+const RANK_NAMES = ['joker', 'ace', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'jack', 'queen', 'king'];
+const SUIT_NAMES = ['spades', 'hearts', 'diamonds', 'clubs'];
+/** Spoken name, e.g. "7 of hearts" (for aria-labels). */
+const spoken = (c: Card) => (c.r === 0 ? 'joker' : `${RANK_NAMES[c.r]} of ${SUIT_NAMES[c.s]}`);
+
 function cardHtml(c: Card | null, cls = '', attrs = ''): string {
   if (!c) return `<div class="pc back ${cls}" ${attrs}></div>`;
   return `<div class="pc ${isRed(c) ? 'red' : ''} ${c.r === 0 ? 'joker' : ''} ${cls}" ${attrs}>${face(c)}</div>`;
@@ -441,7 +446,9 @@ export class Game {
         const fit = can.has(i) && !this.blastMode ? how(r, s.card) : '';
         const cls = [cov ? 'covered' : '', fit === 'play' ? 'can' : fit, this.blastMode ? 'target' : '', flags && s.row === 0 ? 'peak' : ''].join(' ');
         const style = `style="left:${Math.round(left + ((s.x - minX) / 2) * cw)}px;top:${Math.round(y0 + s.row * step)}px;z-index:${s.row + 1}"`;
-        return cardHtml(shown(r, i) ? s.card : null, cls, `data-i="${i}" ${style}`);
+        const up = shown(r, i) ? s.card : null;
+        const aria = `role="button" aria-label="${up ? spoken(up) : 'face-down card'}${cov ? ', covered' : ''}"`;
+        return cardHtml(up, cls, `data-i="${i}" ${aria} ${style}`);
       })
       .join('');
   }

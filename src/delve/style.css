@@ -58,3 +58,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 #errors { position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 20; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
 #errors .err { pointer-events: auto; background: #3a0d18; border: 1px solid #ff4d6d; color: #ffd6de; padding: 8px 10px; font: 12px/1.3 var(--mono); }
 .toast { position: fixed; left: 50%; top: 64px; transform: translateX(-50%); background: #0d0b09; border: 1px solid #3a342a; padding: 8px 16px; z-index: 30; }
+/* Short or narrow screens (360×640): a lower pad leaves room for the log and minimap. */
+@media (max-height: 700px) { #pad { gap: 5px; padding: 6px 8px; } #pad button { min-height: 44px; } }
+@media (max-width: 380px) { #pad button { font-size: 13px; padding: 0 3px; white-space: nowrap; } }

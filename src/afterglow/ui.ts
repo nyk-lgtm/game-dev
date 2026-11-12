@@ -192,13 +192,13 @@ export function buildList(w: World): HTMLElement {
   for (const ws of w.weapons) {
     const d = WEAPONS[ws.id];
     let evo = '';
-    const mark = (ok: boolean, t: string) => `<span class="${ok ? 'ok' : 'no'}">${ok ? '✓' : '·'} ${t}</span>`;
+    const mark = (ok: boolean, t: string) => `<span class="${ok ? 'ok' : 'no'}">${ok ? '✓ ' : ''}${t}</span>`;
     const lvOk = ws.level >= d.maxLevel;
     if (d.union) evo = `Union of ${WEAPONS[d.union[0]].name} and ${WEAPONS[d.union[1]].name}`;
     else if (d.from) evo = 'Evolved';
     else if (d.evolvesWith) {
       const psOk = (w.passives[d.evolvesWith] ?? 0) > 0;
-      evo = `→ ${WEAPONS[d.evolvesInto!].name}: ${mark(lvOk, `lv ${ws.level}/${d.maxLevel}`)} ${mark(psOk, PASSIVES[d.evolvesWith].name)}${lvOk && psOk ? ' · open a chest' : ''}`;
+      evo = `→ ${WEAPONS[d.evolvesInto!].name}: ${mark(lvOk, `lv ${ws.level}/${d.maxLevel}`)} + ${mark(psOk, PASSIVES[d.evolvesWith].name)}${lvOk && psOk ? ' · open a chest' : ''}`;
     }
     // Union recipe for this weapon's family (evolved forms still qualify).
     const un = unionOf(d.from ?? d.id);
@@ -206,7 +206,7 @@ export function buildList(w: World): HTMLElement {
       const partner = partnerIn(un, d.from ?? d.id);
       const pw = w.weapons.find((x) => (WEAPONS[x.id].from ?? x.id) === partner);
       const pOk = !!pw && pw.level >= WEAPONS[pw.id].maxLevel;
-      evo += `${evo ? '<br>' : ''}⊕ ${WEAPONS[un].name}: ${mark(lvOk, 'max')} ${mark(pOk, `max ${WEAPONS[partner].name}`)}${lvOk && pOk ? ' · open a chest' : ''}`;
+      evo += `${evo ? '<br>' : ''}⊕ ${WEAPONS[un].name}: ${mark(lvOk, 'max')} + ${mark(pOk, `max ${WEAPONS[partner].name}`)}${lvOk && pOk ? ' · open a chest' : ''}`;
     }
     box.append(item(WEAPON_ICON[ws.id], d.hue, !!d.from || !!d.union, d.name, ws.level, d.maxLevel, evo));
   }
