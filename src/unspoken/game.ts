@@ -13,6 +13,9 @@ import {
   CONCEPT,
   RULES_VERSION,
   apply,
+  decode,
+  linkActions,
+  rulesVersion,
   contexts,
   encode,
   english,
@@ -108,7 +111,6 @@ export class Game {
   actions: string[] = [];
   daily: string | null = null;
   village = 1;
-  replayOnly = false;
   view = 0;
   sfx = new Sfx();
   private sceneCache = new Map<string, HTMLCanvasElement>();
@@ -147,7 +149,6 @@ export class Game {
     this.seed = seed;
     this.daily = daily;
     this.village = daily ? 1 : village;
-    this.replayOnly = fromLink;
     try {
       this.s = replay(seed, actions, this.village);
       this.actions = actions ? actions.split(',') : [];
@@ -157,22 +158,22 @@ export class Game {
       this.actions = [];
     }
     document.body.classList.toggle('v2', this.village === 2);
-    if (!fromLink && !daily) store.save('village', this.village);
+    if (!daily) store.save('village', this.village);
     this.sceneCache.clear();
     this.compose.clear();
     this.composeMarks.clear();
     this.pickWrong.clear();
     this.view = this.s.chapter;
     this.page = 0;
-    if (!fromLink) this.persist();
+    // A run opened from a link becomes your current run in its village too (a refresh carries on with it).
+    this.persist();
     this.render();
     $('main').scrollTop = 0;
     if (this.s.over) setTimeout(() => this.showEnding(), 300);
   }
 
   private persist(): void {
-    if (this.replayOnly) return;
-    const run: SavedRun | null = this.s.over ? null : { v: RULES_VERSION, seed: this.seed, a: this.actions.join(','), day: this.daily };
+    const run: SavedRun | null = this.s.over ? null : { v: rulesVersion(this.village), seed: this.seed, a: this.actions.join(','), day: this.daily };
     if (run && this.village === 2) run.village = 2;
     store.save(this.daily ? 'dailyRun' : runKey(this.village), run);
   }
@@ -197,7 +198,7 @@ export class Game {
     closeOverlay();
     leaveDaily();
     const saved = store.load<SavedRun | null>(runKey(village), null);
-    if (saved && saved.v === RULES_VERSION) this.start(saved.seed, saved.a, false, null, village);
+    if (saved && saved.v === rulesVersion(village)) this.start(saved.seed, saved.a, false, null, village);
     else this.start(seed ?? (Math.random() * 0xffffffff) >>> 0, '', false, null, village);
     if (village === 2 && this.actions.length === 0) setTimeout(() => this.showVillage2Intro(), 250);
   }
@@ -266,7 +267,8 @@ export class Game {
     else if (st.some((x) => x === 'guessed' || x === 'known')) b.classList.add('guessed');
     if (label) {
       const read = parts.map((m) => (this.s.notebook[m] ? short(this.s.notebook[m]) : this.status(m) === 'doubt' ? '✗' : ''));
-      b.appendChild(el('span', 'gl', read.some(Boolean) ? read.map((x) => x || '…').join(' · ') : ''));
+      // One line always: a word with marks gets a smaller label instead of wrapping.
+      b.appendChild(el('span', read.length > 1 ? 'gl multi' : 'gl', read.some(Boolean) ? read.map((x) => x || '…').join(' · ') : ''));
     }
     b.onclick = onTap ?? (() => this.openSheet(t.m, t));
     return b;
@@ -379,15 +381,23 @@ export class Game {
     else this.nextPage(box);
 
     // Pager.
+    // Long places get a counter over a slim one-row strip instead of dots that would wrap.
     const dots = $('dots');
     dots.innerHTML = '';
+    const compact = pages.length > 13;
+    dots.classList.toggle('compact', compact);
+    let row: HTMLElement = dots;
+    if (compact) {
+      dots.appendChild(el('b', 'count', `${this.page + 1} / ${pages.length}`));
+      row = dots.appendChild(el('span', 'strip'));
+    }
     pages.forEach((pg, i) => {
       const d = el('i');
       d.className = pg.kind;
       if (pg.kind === 'panel' && s.understood.includes(pg.p.id)) d.classList.add('done');
       if (pg.kind === 'riddle' && s.solved.includes(pg.c.id)) d.classList.add('done');
       if (i === this.page) d.classList.add('at');
-      dots.appendChild(d);
+      row.appendChild(d);
     });
     ($('prevBtn') as HTMLButtonElement).disabled = this.page === 0;
     ($('nextBtn') as HTMLButtonElement).disabled = this.page === pages.length - 1;
@@ -459,8 +469,8 @@ export class Game {
     box.appendChild(frame);
     box.appendChild(this.caption(p.tokens, 60));
     const ms = morphemes(p.tokens);
-    if (!clear && ms.every((m) => s.notebook[m])) {
-      const off = ms.filter((m) => s.notebook[m] !== m).length;
+    const off = ms.filter((m) => s.notebook[m] !== m).length;
+    if (!clear && off > 0 && ms.every((m) => s.notebook[m])) {
       box.appendChild(el('p', 'tip warn', off === 1 ? 'Every glyph has a reading, but one of them is off.' : 'Every glyph has a reading, but some of them are off.'));
     }
     if (!clear && n <= 2 && this.view === 0 && s.confirmed.length < 3) box.appendChild(el('p', 'tip', 'Tap a glyph to see every scene it appears in.'));
@@ -562,8 +572,10 @@ export class Game {
       slots.appendChild(b);
     });
     box.appendChild(slots);
-    if (chosen.length) box.appendChild(el('p', 'tip', 'Tap a placed glyph to take it back.'));
-    else if (this.village === 2 && c.alts?.length) box.appendChild(el('p', 'tip', 'Doer and done-to may come in either order, as long as each keeps its little word.'));
+    // One steady line, so the palette below never jumps when the first glyph goes in.
+    box.appendChild(
+      el('p', 'tip', this.village === 2 && c.alts?.length ? 'Doer and done-to may come in either order. Tap a placed glyph to take it back.' : 'Tap a placed glyph to take it back.'),
+    );
     const tiles = el('div', 'tiles');
     c.tiles.forEach((t, ti) => {
       const b = this.tokenButton(t, 44, () => {
@@ -870,12 +882,12 @@ export class Game {
 
   /** Choose between the river village and (once it is finished) the mountain village. */
   showVillages(): void {
-    const open = village2Open();
+    const open = village2Open() || this.village === 2;
     const status = (v: number) => {
       if (v === 2 && !open) return 'Locked: finish the river village first.';
       if (!this.daily && v === this.village) return this.s.over ? 'Finished. Here now.' : `Here now · place ${this.s.chapter + 1} of ${this.s.world.chapters.length}`;
       const saved = store.load<SavedRun | null>(runKey(v), null);
-      return saved && saved.v === RULES_VERSION && saved.a ? 'A language in progress' : 'A new language';
+      return saved && saved.v === rulesVersion(v) && saved.a ? 'A language in progress' : 'A new language';
     };
     showCard(
       `<h2>Villages</h2><div class="villages">
@@ -930,7 +942,6 @@ export class Game {
   }
 
   private recordEnd(): void {
-    if (this.replayOnly) return;
     const p = progress(this.s);
     const pct = Math.round((100 * p.confirmed) / p.total);
     const prof = store.load<Profile>('profile', { finished: 0, best: 0 });
@@ -953,8 +964,8 @@ export class Game {
     this.sfx.victory();
     const gloss = (id: string) => (s.notebook[id] ? short(s.notebook[id]) : '⟨?⟩');
     const v2 = this.village === 2;
-    // After the river village, the path leads on up the mountain (unless this was a replay link).
-    const climb = !v2 && !this.replayOnly && village2Open();
+    // After the river village, the path leads on up the mountain.
+    const climb = !v2 && village2Open();
     const buttons = [
       ...(climb ? [{ label: 'Climb to the mountain village', primary: true, onClick: () => this.goVillage(2, this.seed) }] : []),
       { label: 'A new language', primary: !climb, onClick: () => this.newLanguage() },
@@ -964,7 +975,7 @@ export class Game {
     ];
     showCard(
       `<div class="ending"><h2>What you understood</h2>
-      <p>You proved <b>${p.confirmed}</b> of the ${p.total} glyphs of ${s.lang.name} (${pct}%), with ${s.mistakes} slip${s.mistakes === 1 ? '' : 's'} along the way.</p>
+      <p>You proved <b>${p.confirmed}</b> of the ${p.total} glyphs of ${s.lang.name} (${pct}%), with ${this.slips()} along the way.</p>
       ${climb ? '<p class="onward">A path leads on up the mountain, where the river people went. <b>A second village is open</b>, with a harder language.</p>' : ''}
       ${v2 ? '<p>The river people are safe among the mountain folk, and the boy in the cap has found them. The feast goes on late; someone teaches you a song you can almost read.</p>' : ''}
       <h3>${v2 ? 'The mountain’s story' : 'The village’s story'}, as you read it</h3><div id="story"></div>
@@ -982,11 +993,27 @@ export class Game {
     }
   }
 
+  /** Wrong riddle answers and wrong readings (each glyph-meaning mix-up once), in words. */
+  private slips(): string {
+    const wrong = new Set<string>();
+    for (const tk of this.actions) {
+      const a = decode(tk);
+      if (a?.t === 'guess' && a.meaning && a.meaning !== a.glyph) wrong.add(`${a.glyph}=${a.meaning}`);
+    }
+    const m = this.s.mistakes;
+    const r = wrong.size;
+    if (!m && !r) return 'not a single slip';
+    const parts = [];
+    if (m) parts.push(`${m} wrong answer${m === 1 ? '' : 's'}`);
+    if (r) parts.push(`${r} wrong reading${r === 1 ? '' : 's'}`);
+    return parts.join(' and ');
+  }
+
   async copyReport(): Promise<void> {
-    const a = this.actions.join(',');
+    const a = linkActions(this.seed, this.village, this.actions);
     const v = this.village === 2 ? '&v=2' : '';
     const url = `${location.origin}${location.pathname}?seed=${this.seed}${v}&a=${a || '-'}`;
-    toast((await copyText(`UNSPOKEN v${RULES_VERSION}${this.village === 2 ? ' village=2' : ''} seed=${this.seed} a=${a}\n${url}`)) ? 'Bug report copied' : 'Copy failed');
+    toast((await copyText(`UNSPOKEN v${rulesVersion(this.village)}${this.village === 2 ? ' village=2' : ''} seed=${this.seed} a=${a}\n${url}`)) ? 'Bug report copied' : 'Copy failed');
   }
 }
 

@@ -85,9 +85,10 @@ body .icon-btn { background: transparent; border-color: var(--line); color: var(
 }
 .tok:active { background: rgba(43, 33, 24, 0.07); }
 .tok .gl {
-  font-size: 11.5px; line-height: 1.15; max-width: 74px; color: var(--muted); font-weight: 600; text-align: center;
-  min-height: 13px; min-width: 22px; margin-top: 1px;
+  font-size: 11.5px; line-height: 1.15; color: var(--muted); font-weight: 600; text-align: center;
+  min-height: 13px; min-width: 22px; margin-top: 1px; white-space: nowrap;
 }
+.tok .gl.multi { font-size: 10px; letter-spacing: -0.2px; }
 .tok .gl:empty { border-bottom: 1.5px dotted var(--faint); min-height: 8px; margin-top: 4px; }
 .tok.guessed .gl { color: var(--accent); }
 .tok.known .gl { color: var(--good); }
@@ -102,7 +103,7 @@ body .icon-btn { background: transparent; border-color: var(--line); color: var(
 .picks button.wrong { opacity: 0.3; border-color: var(--bad); }
 .picks button.right { border-color: var(--good); box-shadow: 0 0 0 2px var(--good); }
 .slots {
-  display: flex; flex-wrap: wrap; gap: 4px; min-height: 80px; padding: 6px; border-radius: 12px; border: 2px dashed var(--line);
+  display: flex; flex-wrap: wrap; gap: 4px; min-height: 94px; padding: 6px; border-radius: 12px; border: 2px dashed var(--line);
   justify-content: center; align-items: center; background: rgba(255, 255, 255, 0.25);
 }
 .slots:empty::before { content: 'Tap glyphs below, in order'; color: var(--muted); font-size: 14px; }
@@ -143,6 +144,16 @@ body .icon-btn { background: transparent; border-color: var(--line); color: var(
 #dots i.done { background: var(--good); border-color: var(--good); }
 #dots i.riddle.done { background: var(--accent); }
 #dots i.at { outline: 2px solid var(--text); outline-offset: 2px; }
+/* Long places: "3 / 17" over a one-row strip; the whole strip is the tap area (taps map by position). */
+#dots.compact { flex-direction: column; gap: 4px; flex-wrap: nowrap; align-items: stretch; }
+#dots.compact .count { font-size: 13px; font-weight: 700; color: var(--muted); text-align: center; }
+#dots.compact .strip { display: flex; gap: 3px; align-items: center; }
+#dots.compact .strip i { flex: 1; width: auto; height: 6px; border-radius: 3px; transform: none; border: 0; background: var(--line); outline: 0; }
+#dots.compact .strip i.riddle { background: rgba(181, 83, 45, 0.3); }
+#dots.compact .strip i.next { border: 0; }
+#dots.compact .strip i.done { background: var(--good); }
+#dots.compact .strip i.riddle.done { background: var(--accent); }
+#dots.compact .strip i.at { height: 10px; background: var(--text); }
 
 /* ---------- glyph sheet ---------- */
 #sheet { position: fixed; inset: 0; z-index: 12; background: rgba(43, 33, 24, 0.45); display: flex; align-items: flex-end; animation: fade 0.15s; }
@@ -208,8 +219,9 @@ body .icon-btn { background: transparent; border-color: var(--line); color: var(
 #overlay .card b { color: var(--text); }
 #overlay .card .meta { color: var(--faint); }
 /* The shared shell positions toasts at the top; the bundle may load it after this file, so be specific. */
+/* At the top, over the place tabs, so it never hides the writing palette. */
 body .toast {
-  top: auto; bottom: calc(env(safe-area-inset-bottom) + 84px); height: auto; max-width: calc(100vw - 32px);
+  top: calc(env(safe-area-inset-top) + 60px); bottom: auto; height: auto; max-width: calc(100vw - 32px);
   background: var(--text); border-color: var(--text); color: #fbf5e8; font-weight: 600; text-align: center;
   pointer-events: none; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
 }

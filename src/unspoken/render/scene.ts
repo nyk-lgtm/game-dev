@@ -364,9 +364,19 @@ function drawThing(r: R, n: string, reach: number, fierce: boolean) {
       c.beginPath(); c.moveTo(3, -44); c.quadraticCurveTo(16, -30, 25, -18); c.lineTo(3, -18); c.closePath(); paint(r, '#f4ead2');
       c.beginPath(); c.moveTo(-34, -17); c.lineTo(34, -17); c.quadraticCurveTo(30, 0, 18, 0); c.lineTo(-18, 0); c.quadraticCurveTo(-30, 0, -34, -17);
       paint(r, '#ab6a3e'); line(r, [-29, -11, 29, -11], '#f2dcb2', 2.8); break;
-    case 'fire':
-      glow(r, 0, -16, 32, '255,180,80', 0.5); cap(r, -13, -3, 13, -8, 3.5, '#8a5a3a'); cap(r, -13, -8, 13, -3, 3.5, '#7a4e32');
-      flame(r, 0, -5, 1, dark ? '#7a5a5a' : '#ef7f3a', dark ? '#8a7060' : '#f8cd52'); break;
+    case 'fire': {
+      // An old fire has burnt low: a small flame over grey ash, with smoke curling up.
+      const old = r.adj === 'old';
+      if (!old) glow(r, 0, -16, 32, '255,180,80', 0.5);
+      if (old) ell(r, 0, -2, 17, 4, '#b9b3aa');
+      cap(r, -13, -3, 13, -8, 3.5, '#8a5a3a'); cap(r, -13, -8, 13, -3, 3.5, '#7a4e32');
+      flame(r, 0, -5, old ? 0.45 : 1, dark ? '#7a5a5a' : '#ef7f3a', dark ? '#8a7060' : '#f8cd52');
+      if (old && !r.ghost) {
+        line(r, [-1, -15, -9, -26, -2, -37], '#a8a39b', 2.4, true); line(r, [-2, -37, 5, -46, -3, -56], '#bdb8b0', 2, true);
+        line(r, [5, -17, 12, -27, 6, -38], '#b4afa7', 2, true);
+      }
+      break;
+    }
     case 'lamp':
       glow(r, 0, -16, 28, '255,214,120', 0.55); tube(r, [-5, -29, 0, -40, 5, -29], 1.8, '#6a5a4a', true);
       poly(r, [-8, -24, 8, -24, 5, -30, -5, -30], '#7a6a58'); rr(r, -7, -24, 14, 17, 3, dark ? '#4e4d60' : '#f9dc84');
@@ -613,10 +623,12 @@ function adjMarks(r: R, n: string, g: Got, v: number) {
     }
   }
   if (r.adj === 'new') {
+    // Fresh and shining: white gleams across it and cool blue-white glints (unlike the gold sparks of making).
     const tw = (0.85 + 0.15 * Math.sin(r.t * 3 + v)) * (r.small ? 1.35 : 1);
-    line(r, [g.x0 + bw * 0.3, g.y0 + bh * 0.55, g.x0 + bw * 0.45, g.y0 + bh * 0.3], '#ffffff', r.lw * 1.2);
-    star4(r, g.x1 + 2, g.y0 + 4, 8 * tw, '#fff6c0', '#c8962a'); star4(r, g.x0 - 2, g.y0 + bh * 0.35, 6 * tw, '#fff6c0', '#c8962a');
-    star4(r, g.x1 + 1, g.y1 - bh * 0.3, 4.5 * tw, '#fff6c0', '#c8962a');
+    line(r, [g.x0 + bw * 0.22, g.y0 + bh * 0.62, g.x0 + bw * 0.42, g.y0 + bh * 0.26], '#ffffff', r.lw * 1.7);
+    line(r, [g.x0 + bw * 0.36, g.y0 + bh * 0.7, g.x0 + bw * 0.52, g.y0 + bh * 0.42], '#ffffff', r.lw * 1.1);
+    star4(r, g.x1 + 2, g.y0 + 4, 9 * tw, '#ffffff', '#4f8fc4'); star4(r, g.x0 - 2, g.y0 + bh * 0.35, 6.5 * tw, '#ffffff', '#4f8fc4');
+    star4(r, g.x1 + 1, g.y1 - bh * 0.3, 5 * tw, '#ffffff', '#4f8fc4');
   }
 }
 
@@ -787,7 +799,9 @@ function compose(r: R, f: Frame): Pt {
   const { W, gy } = r; const s = f.s, o = f.o ?? { n: 'stone' }, neg = !!f.neg; const [ow, oh] = sizeOf(o);
   switch (f.v) {
     case 'see': {
-      const S = subj(r, s, W * 0.21, neg ? 'stand' : 'see'); const O = obj(r, o, W * 0.7); return sight(r, S.eye, O);
+      // What is seen goes behind (a mountain must not cover the watchers or the line of sight).
+      const far = o.n === 'mountain';
+      const O = obj(r, o, W * (far ? 0.78 : 0.7), far ? { scale: 0.68 } : {}); const S = subj(r, s, W * 0.21, neg ? 'stand' : 'see'); return sight(r, S.eye, O);
     }
     case 'eat': {
       if (isAgent(s.n)) {

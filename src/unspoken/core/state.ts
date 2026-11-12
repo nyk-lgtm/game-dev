@@ -6,8 +6,13 @@ import { makeLanguage, type Language } from './lang';
 import { makeWorld, type World } from './world';
 import { makeWorld2 } from './world2';
 import { morphemes, sameTokens, tokenKey, type Token } from './sentence';
+import { ALL_CONCEPTS } from './concepts';
+import { Rng, mixSeed } from '../../shared/rng';
 
 export const RULES_VERSION = 2;
+/** The mountain village's own save version (its first release saved as 2; v3 changed its riddles). */
+export const RULES_VERSION2 = 3;
+export const rulesVersion = (village: number) => (village === 2 ? RULES_VERSION2 : RULES_VERSION);
 
 export interface State {
   seed: number;
@@ -133,6 +138,8 @@ export function apply(s: State, a: Action): Result | null {
     if (s.chapter < s.world.chapters.length - 1) {
       s.chapter++;
       res.opened = s.chapter;
+      // Scenes in the new place whose glyphs you already read come clear at once.
+      res.understood.push(...checkPanels(s));
     } else {
       s.over = true;
       res.over = true;
@@ -164,9 +171,50 @@ export function replay(seed: number, actions: string, village = 1): State {
   toks.forEach((tk, i) => {
     const a = decode(tk);
     if (!a) throw new Error(`bad action ${tk}`);
-    if (apply(s, a) === null) throw new Error(`illegal action #${i} ${tk}`);
+    if (apply(s, a) !== null) return;
+    // Older runs could still re-guess a glyph that a newly opened place has since proven; skip those.
+    if (a.t === 'guess' && s.confirmed.includes(a.glyph)) return;
+    throw new Error(`illegal action #${i} ${tk}`);
   });
   return s;
+}
+
+// ---------------------------------------------------------------- shareable links
+
+/** Glyph codes for links: a per-language shuffle, so a code says nothing about the meaning. */
+function glyphCodes(seed: number, village: number): string[] {
+  return new Rng(mixSeed(seed, 4400 + village)).shuffle(ALL_CONCEPTS.map((c) => c.id));
+}
+const b36 = (n: number) => n.toString(36);
+
+/** Actions for a bug-report link: guesses as `g<glyph code>-<meaning code>` so the link doesn't spell out answers. */
+export function linkActions(seed: number, village: number, actions: string[]): string {
+  const codes = glyphCodes(seed, village);
+  return actions
+    .map((tk) => {
+      const a = decode(tk);
+      if (!a || a.t !== 'guess') return tk;
+      const m = a.meaning === null ? '' : b36(ALL_CONCEPTS.findIndex((c) => c.id === a.meaning));
+      return `g${b36(codes.indexOf(a.glyph))}-${m}`;
+    })
+    .join(',');
+}
+
+/** Back from a link's actions to saved actions (old links with plain `G<glyph>=<meaning>` pass through). */
+export function unlinkActions(seed: number, village: number, link: string): string {
+  if (!link) return '';
+  const codes = glyphCodes(seed, village);
+  return link
+    .split(',')
+    .map((tk) => {
+      const m = /^g([0-9a-z]+)-([0-9a-z]*)$/.exec(tk);
+      if (!m) return tk;
+      const glyph = codes[parseInt(m[1], 36)];
+      const meaning = m[2] ? ALL_CONCEPTS[parseInt(m[2], 36)]?.id : '';
+      if (!glyph || meaning === undefined) throw new Error(`bad link action ${tk}`);
+      return `G${glyph}=${meaning}`;
+    })
+    .join(',');
 }
 
 /** Share of the language you've proven, and how many glyphs that is. */

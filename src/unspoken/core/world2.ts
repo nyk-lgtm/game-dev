@@ -78,7 +78,7 @@ export const CHAPTERS2: ChapterDef2[] = [
     riddles: ['roles', 'compose', 'pick', 'compose'],
     panels: [
       t('make', 'ama', 'basket'),
-      t('make', 'elder', 'new basket', undefined, OF),
+      t('see', 'elder', 'new basket', undefined, OF),
       t('sleep', 'child*'),
       t('sleep', 'dog', undefined, undefined, { neg: true }),
       t('fear', 'goat*', 'fire'),
@@ -134,12 +134,22 @@ export const CHAPTERS2: ChapterDef2[] = [
   },
 ];
 
+/** Describing words the pictures show unmistakably (stricter than the first village's rule):
+ *  big/small on things and animals; old/new on things that wear or shine; dark on houses and lamps. */
+export function adjShown2(n: string, a: string): boolean {
+  const cat = catOf(n);
+  if (a === 'big' || a === 'small') return cat === 'thing' || cat === 'animal';
+  if (a === 'old' || a === 'new') return ['basket', 'lamp', 'boat', 'house'].includes(n);
+  if (a === 'dark') return n === 'house' || n === 'lamp';
+  return false;
+}
+
 /** A random sentence for a riddle, with the grammar of the chapter's focus. */
 function frame2(rng: Rng, known: Set<string>, focus: Focus2[], needObj: boolean, needSwap: boolean): Frame | null {
   const base = focus.filter((f): f is Focus => f !== 'CASE' && f !== 'AGR');
   if (focus.includes('AGR') && !base.includes('PL')) base.push('PL');
   for (let tries = 0; tries < 40; tries++) {
-    const f = randomFrame(rng, known, base);
+    const f = randomFrame(rng, known, base, adjShown2);
     if (!f) return null;
     if (needObj && !f.o) continue;
     if (needSwap && !canSwap(f)) continue;
@@ -228,7 +238,7 @@ export function makeWorld2(lang: Language): World {
         const tokens = realize(lang, frame);
         if (tokens.length > 9) continue;
         const key = writeKey(lang, frame);
-        const muts = mutations(rng, frame, known).filter((m) => frameKey(m) !== frameKey(frame) && m.s.n !== m.d?.n && (m.s.n !== 'fish' || frame.s.n === 'fish'));
+        const muts = mutations(rng, frame, known, adjShown2).filter((m) => frameKey(m) !== frameKey(frame) && m.s.n !== m.d?.n && (m.s.n !== 'fish' || frame.s.n === 'fish'));
         const wrong: Frame[] = [];
         const seenW = new Set([key]);
         const add = (m: Frame | null) => {

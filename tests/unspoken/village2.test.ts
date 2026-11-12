@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   ALL_CONCEPTS,
   CHAPTERS2,
+  adjShown2,
+  linkActions,
+  unlinkActions,
   apply,
   contexts,
   decode,
@@ -306,6 +309,63 @@ describe('village 2 play', () => {
         expect(r.mistakes).toBe(s.mistakes);
         expect(r.chapter).toBe(s.chapter);
       }
+    }
+  });
+});
+
+describe('playtest fixes', () => {
+  it('scenes in a newly opened place come clear at once when their glyphs are already read', () => {
+    for (const village of [1, 2]) {
+      for (const seed of [4242, 7]) {
+        const s = newGame(seed, village);
+        const ch0 = s.world.chapters[0];
+        for (const p of ch0.panels) for (const m of morphemes(p.tokens)) if (s.notebook[m] !== m && !s.confirmed.includes(m)) apply(s, { t: 'guess', glyph: m, meaning: m });
+        let r = null;
+        for (const c of ch0.challenges) r = apply(s, c.kind === 'pick' ? { t: 'answer', challenge: c.id, pick: c.answer } : { t: 'answer', challenge: c.id, tiles: assign(c.tiles, c.tokens) });
+        expect(r?.opened).toBe(1);
+        for (const p of s.world.chapters[1].panels) {
+          const ready = morphemes(p.tokens).every((m) => s.notebook[m] === m);
+          expect(s.understood.includes(p.id), `${village} ${seed} ${p.id}`).toBe(ready);
+        }
+      }
+    }
+  });
+
+  it('old runs that re-guess a glyph proven by a newly opened place still replay', () => {
+    const { acts } = solveAll(4242, 2);
+    // Find the answer that opened place 2, then re-guess a glyph it proved, as older runs could.
+    const s = newGame(4242, 2);
+    let at = -1;
+    acts.forEach((tk, i) => {
+      const r = apply(s, decode(tk)!);
+      if (r?.opened === 1) at = i;
+    });
+    const s2 = replay(4242, acts.slice(0, at + 1).join(','), 2);
+    const g = s2.confirmed[0];
+    const patched = [...acts.slice(0, at + 1), `G${g}=${g}`, ...acts.slice(at + 1)];
+    expect(replay(4242, patched.join(','), 2).over).toBe(true);
+  });
+
+  it('bug-report links hide meanings and map back to the same run', () => {
+    for (const village of [1, 2]) {
+      const { acts } = solveAll(4242, village);
+      const link = linkActions(4242, village, acts);
+      expect(link).not.toMatch(/G[a-z]+=|see|dog/);
+      expect(unlinkActions(4242, village, link)).toBe(acts.join(','));
+      // Old links with plain glyph names still load.
+      expect(unlinkActions(4242, village, acts.join(','))).toBe(acts.join(','));
+      // A clear (no meaning) round-trips too.
+      expect(unlinkActions(4242, village, linkActions(4242, village, ['Gdog=']))).toBe('Gdog=');
+    }
+  });
+
+  it('village 2 riddles only use describing words the pictures show clearly', () => {
+    for (const seed of SEEDS) {
+      const s = newGame(seed, 2);
+      for (const ch of s.world.chapters)
+        for (const c of ch.challenges)
+          for (const f of [c.frame, ...c.options])
+            for (const p of [f.s, f.o, f.d]) if (p?.adj) expect(adjShown2(p.n, p.adj), `${seed} ${c.id} ${p.adj} ${p.n}`).toBe(true);
     }
   });
 });

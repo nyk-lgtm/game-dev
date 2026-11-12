@@ -216,7 +216,7 @@ export function objectOk(v: string, o: string, s: string): boolean {
   }
 }
 
-export function randomFrame(rng: Rng, known: Set<string>, focus: Focus[]): Frame | null {
+export function randomFrame(rng: Rng, known: Set<string>, focus: Focus[], adjOk = adjVisible): Frame | null {
   const verbs = Object.keys(VERBS).filter((v) => known.has(v));
   const nouns = [...known].filter((id) => ['name', 'person', 'animal', 'thing', 'nature', 'place'].includes(catOf(id)));
   const adjs = [...known].filter((id) => catOf(id) === 'quality');
@@ -241,7 +241,7 @@ export function randomFrame(rng: Rng, known: Set<string>, focus: Focus[]): Frame
     const nps = [f.s, f.o, f.d].filter((x): x is NP => !!x);
     for (const p of nps) {
       if (known.has('PL') && COUNTABLE.has(p.n) && rng.next() < want('PL') / 1.5) p.pl = true;
-      const fits = adjs.filter((a) => adjVisible(p.n, a));
+      const fits = adjs.filter((a) => adjOk(p.n, a));
       if (fits.length && rng.next() < want('ADJ') / 1.5) p.adj = rng.pick(fits);
     }
     if (known.has('NEG') && rng.next() < want('NEG')) f.neg = true;
@@ -263,7 +263,7 @@ export function adjVisible(n: string, a: string): boolean {
 }
 
 /** Variations of a frame that change exactly one thing, for wrong answers. */
-export function mutations(rng: Rng, f: Frame, known: Set<string>): Frame[] {
+export function mutations(rng: Rng, f: Frame, known: Set<string>, adjOk = adjVisible): Frame[] {
   const out: Frame[] = [];
   const clone = (): Frame => JSON.parse(JSON.stringify(f));
   const nouns = [...known].filter((id) => ['name', 'person', 'animal', 'thing', 'nature', 'place'].includes(catOf(id)));
@@ -322,7 +322,7 @@ export function mutations(rng: Rng, f: Frame, known: Set<string>): Frame[] {
   for (const slot of ['s', 'o'] as const) {
     const p = f[slot];
     if (p?.adj) {
-      const other = adjs.filter((a) => a !== p.adj && adjVisible(p.n, a));
+      const other = adjs.filter((a) => a !== p.adj && adjOk(p.n, a));
       if (other.length) {
         const m = clone();
         m[slot]!.adj = rng.pick(other);

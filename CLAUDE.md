@@ -71,7 +71,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   the done-to first; the verb carries the `PLV` mark when the subject is plural. Its extra concepts live in `GRAMMAR2`
   (not `CONCEPTS`) so village 1 never changes; tests/unspoken/village2.test.ts pins village-1 world hashes. Compose
   riddles accept either order (`Challenge.alts`). Opens once `profile.finished > 0`; saves under `run2`, last village
-  in `village`; bug links add `&v=2`. Notebook shows `grammarRules` as their glyphs are proven.
+  in `village`; bug links add `&v=2`. Notebook shows `grammarRules` as their glyphs are proven. Village 2 saves have
+  their own version (`RULES_VERSION2`, `rulesVersion(village)`); its riddles only use `adjShown2` adjectives. Copied
+  links hide answers: `linkActions`/`unlinkActions` turn `G<glyph>=<guess>` into `g<code>-<code>` (old links still
+  load), and a link-opened run becomes the current saved run of its village.
 - Hexhold runs are a seed + tick-stamped actions (`<tick>:B<cell>.<tower>`, `U`, `S`, `W`); enemies follow a
   flow field (src/hexhold/core/board.ts) rebuilt on every build/sell; `buildError` forbids sealing any portal. Flyers use `FLY_DIST`, burrowers
   `s.dig` (the tower-less field); `distFor` picks. ~1/3 of maps have two portals (`s.portals`).

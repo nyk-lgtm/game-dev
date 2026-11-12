@@ -229,7 +229,13 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   Terraces; new lake/hamlet/terraces backdrops), roles riddles write the done-to first and always offer the swapped
   scene, compose decoys include the wrong agreement, final question "who found the people?". Notebook grammar
   notes appear as their glyphs are proven. Village 1 byte-identical (hash test), no RULES_VERSION bump.
-  Next: owner playtest; is the Pass too slow (11 scenes) or the doer/done-to discovery too hard without a hint?
+  Blind playtest (all 5 places, 15/15 riddles first try; "the Pass opener was the best moment") and fixes: scenes
+  in a newly opened place clear at once (core; replay skips old re-guesses of glyphs that proves), no "some are off"
+  line when nothing is off, bug links use opaque glyph codes, link-opened runs persist across refresh, seen
+  mountains drawn behind and smaller, "new" is a white gleam with blue glints (not make's gold sparks), old fire
+  burns low with smoke, village-2 riddles only use adjectives the art shows (adjShown2; village-2 save v3), one-line
+  glyph labels, long places get a "3 / 17" counter strip, steady writing palette, toast at the top, the ending
+  counts wrong readings. Not done: vaguer Grammar chip names ("doer"/"done-to"/"many do" give the meaning away).
 - Grove blind playtest (agent: 24,775, Spirit Tree, 209 turns; "too forgiving, too long") and fixes
   (rules v2): trapping pays 50 per wisp (×2 for 2+ at once); crystals 5% → 4.5%, bolts 6% → 4.5%,
   wisps 20% → 22% (bot: 276 → 248 turns, Spirit Tree 49/60 → 30/60); help says wisps never merge and
