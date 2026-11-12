@@ -56,7 +56,8 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   - [x] Rewild (rules v3): species alive 4 seasons in a row are **settled** and pay +3 each season;
     dying out restarts the streak, so keeping wolves and deer balanced beats replanting. Stars
     rescaled to 900/1700/2400 (greedy bot 0/0/13/3 vs 0/2/11/3 before). Report and species list show
-    it. Still open: ponds/songbird goals feel out of reach; winter plants look alike.
+    it. Then (rules v4): goal targets retuned from 32 bot games (oaks 1/8 → 4/8, ponds 2/10 → 4/10;
+    soil/species made a bit harder); winter wildflowers are straw-gold with pale seed-heads.
     (Done: goals show ⚑ in the header, stars are only score stars.)
 - [x] **Unspoken art follow-ups**: held things (take/give/carry) sit beside the holder instead of
       over their body; an acting river is drawn as the river flooding its banks, not a sea wave.

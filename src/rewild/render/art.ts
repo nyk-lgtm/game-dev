@@ -472,7 +472,8 @@ function tuft(ctx: Ctx, px: number, py: number, h: number, w: number, c: RGB, se
 }
 
 function grass(ctx: Ctx, x: number, y: number, s: number, n: number, sea: number, seed: number, flowers: boolean) {
-  const c = sea === 3 ? mix(GRASS[3], [220, 226, 232], 0.12) : grade(GRASS[sea], sea);
+  // Winter: grass goes silver with frost; a dried meadow stays straw-gold so the two stay apart.
+  const c = sea === 3 ? (flowers ? ([196, 170, 112] as RGB) : mix(GRASS[3], [220, 226, 232], 0.12)) : grade(GRASS[sea], sea);
   // meadow wash so density reads at a glance
   ctx.fillStyle = css(shade(c, -0.1), 0.18 + n * 0.1);
   each(seed + 111, n + 1, s * 0.35, (dx, dy) => ell(ctx, x + dx, y + dy, s * (0.3 + n * 0.1), s * (0.22 + n * 0.08)));
@@ -482,7 +483,7 @@ function grass(ctx: Ctx, x: number, y: number, s: number, n: number, sea: number
     const h = s * (0.2 + 0.08 * n) * (0.75 + 0.5 * hash(seed, i + 300));
     shadow(ctx, x + dx, y + dy + s * 0.02, s * 0.12, s * 0.05, 0.25);
     tuft(ctx, x + dx, y + dy, h, s * 0.16, shade(c, (hash(seed, i + 301) - 0.5) * 0.15), seed + i * 13);
-    if (sea === 3) {
+    if (sea === 3 && !flowers) {
       fe(ctx, 'rgba(255,255,255,0.9)', x + dx, y + dy - h * 0.15, s * 0.05, s * 0.022);
     }
   });
@@ -501,7 +502,11 @@ function grass(ctx: Ctx, x: number, y: number, s: number, n: number, sea: number
     } else if (sea === 2) {
       fd(ctx, k % 2 ? 'rgb(176,104,52)' : 'rgb(214,160,70)', px, py, r * 0.75);
     } else {
-      fd(ctx, 'rgb(142,118,92)', px, py, r * 0.5);
+      // Dry seed-heads: pale puffs on dark stalks.
+      pen(ctx, 'rgb(120,96,64)', Math.max(0.6, s * 0.025));
+      line(ctx, px, py, px, py + s * 0.12);
+      fd(ctx, 'rgba(246,240,224,0.95)', px, py, r * 0.85);
+      fd(ctx, 'rgb(150,120,84)', px, py, r * 0.3);
     }
   }
 }
