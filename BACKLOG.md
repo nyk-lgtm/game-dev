@@ -27,7 +27,14 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   - [x] Sounds (src/ninefold/audio.ts) and windmills (rules v2: holes 4+, cross arms turning only while the
         ball rolls, same pose at every shot start, drawn turning on to that pose afterwards).
   - [x] Angled timber wedges in the outer corner of closed bends (rules v3).
-  - [ ] Blind playtest: is par fair for a thumb? Is the aim precise enough?
+  - [x] Blind playtest (agent: +6 and E over two rounds; no escapes or errors) and fixes (rules v4): pull
+        length maps linearly to roll distance (power × MAX_ROLL 150 on open grass, `speedFor` inverts the
+        friction law) and the aim shows a ring where the ball would stop; sand softer (70 + 1.3v) and at
+        most half a lane wide; slopes 48 → 34; rail ends act 0.9 wide so grazing shots slip past corners;
+        par counts obstacles on the route (+½ each, posts and mills too); picked-up holes dotted on the
+        scorecard and the ball stays put; result line in the hint bar, longer banner; a toast when an
+        update resets a round. Bot (NOISE=0.06) now median E.
+  - [ ] Next: second playtest of the new aim; maybe bigger holes on screen (COLS 5?).
 - [ ] **Hexhold** (hex maze tower defense). Milestones:
   - [x] Core (src/hexhold/core): 9x11 hex board, flow-field pathing (never sealed), 30
         seeded waves with themes, 6 towers each gifting its neighbors, 8 enemies (flyers,

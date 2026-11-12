@@ -1,7 +1,7 @@
 // Draws a Ninefold hole: moonlit lawn, mown fairway, timber rails, sand,
 // ponds, slopes, posts and bumpers, the cup and flag, the ball and the aim.
 
-import { BALL_R, CELL, COLS, CUP_R, ROWS, type Hole } from '../core';
+import { BALL_R, CELL, COLS, CUP_R, MAX_ROLL, ROWS, type Hole } from '../core';
 
 export interface View {
   scale: number;
@@ -242,36 +242,33 @@ export function draw(g: CanvasRenderingContext2D, w: number, h: number, v: View,
     for (let i = 0; i < s.trail.length; i += 2) g.lineTo(s.trail[i], s.trail[i + 1]);
     g.stroke();
   }
-  // Aim: an arrow from the ball whose length is the power.
+  // Aim: a dotted line to where the ball would stop on open grass, with a ring there.
   if (s.aim && s.ball) {
     const { angle, power } = s.aim;
-    const len = 6 + 40 * power;
+    const len = Math.max(3, MAX_ROLL * power);
     const hue = 120 - 120 * power;
     const ux = Math.cos(angle), uy = Math.sin(angle);
-    g.strokeStyle = `hsla(${hue}, 90%, 60%, 0.9)`;
-    g.fillStyle = g.strokeStyle;
-    g.lineWidth = 0.8;
-    g.setLineDash([1.6, 1.2]);
+    const col = `hsla(${hue}, 90%, 62%, 0.95)`;
+    g.strokeStyle = col;
+    g.fillStyle = col;
+    g.lineWidth = 0.7;
+    g.setLineDash([1.4, 1.4]);
     g.beginPath();
     g.moveTo(s.ball.x + ux * 2.5, s.ball.y + uy * 2.5);
     g.lineTo(s.ball.x + ux * len, s.ball.y + uy * len);
     g.stroke();
     g.setLineDash([]);
-    const tx = s.ball.x + ux * (len + 2.2), ty = s.ball.y + uy * (len + 2.2);
+    // Arrowhead near the ball shows the direction.
+    const hx = s.ball.x + ux * 7, hy = s.ball.y + uy * 7;
     g.beginPath();
-    g.moveTo(tx, ty);
-    g.lineTo(tx - ux * 3 - uy * 1.7, ty - uy * 3 + ux * 1.7);
-    g.lineTo(tx - ux * 3 + uy * 1.7, ty - uy * 3 - ux * 1.7);
+    g.moveTo(hx, hy);
+    g.lineTo(hx - ux * 3 - uy * 1.8, hy - uy * 3 + ux * 1.8);
+    g.lineTo(hx - ux * 3 + uy * 1.8, hy - uy * 3 - ux * 1.8);
     g.fill();
-    // Power ring.
+    // The stop ring.
     g.lineWidth = 0.6;
-    g.strokeStyle = 'rgba(255,255,255,0.2)';
     g.beginPath();
-    g.arc(s.ball.x, s.ball.y, 4, 0, Math.PI * 2);
-    g.stroke();
-    g.strokeStyle = `hsl(${hue}, 90%, 60%)`;
-    g.beginPath();
-    g.arc(s.ball.x, s.ball.y, 4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * power);
+    g.arc(s.ball.x + ux * len, s.ball.y + uy * len, BALL_R + 0.6, 0, Math.PI * 2);
     g.stroke();
   }
   // Splash rings.

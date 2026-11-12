@@ -7,6 +7,22 @@ export const STEP = 1 / 240;
 export const MAX_SPEED = 160;
 const MAX_STEPS = 240 * 14;
 const SINK_SPEED = 75;
+const FRICTION = 30, DRAG = 0.35;
+const SLOPE = 34;
+/** How far a full-power putt rolls on open grass. */
+export const MAX_ROLL = 150;
+/** Distance a ball launched at speed v rolls on open grass (exact for the friction law above). */
+export const rollFor = (v: number) => v / DRAG - (FRICTION / DRAG ** 2) * Math.log(1 + (DRAG * v) / FRICTION);
+/** The launch speed that rolls `d` units on open grass (power is a share of MAX_ROLL). */
+export function speedFor(d: number): number {
+  let lo = 0, hi = 400;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (rollFor(mid) < d) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
 /** Half the thickness of a windmill arm. */
 export const MILL_HALF = 0.7;
 /** A windmill's angle `step` steps into a shot (frames are every 4 steps). */
@@ -35,7 +51,7 @@ const inZone = (z: Zone, x: number, y: number) => x >= z.x && x <= z.x + z.w && 
 
 export function simulate(hole: Hole, from: { x: number; y: number }, shot: Shot): ShotResult {
   let x = from.x, y = from.y;
-  const speed0 = MAX_SPEED * Math.max(0, Math.min(1, shot.power));
+  const speed0 = speedFor(Math.max(0, Math.min(1, shot.power)) * MAX_ROLL);
   let vx = Math.cos(shot.angle) * speed0, vy = Math.sin(shot.angle) * speed0;
   const frames: number[] = [x, y];
   const hits: ShotResult['hits'] = [];
@@ -45,21 +61,21 @@ export function simulate(hole: Hole, from: { x: number; y: number }, shot: Shot)
   for (let i = 1; i <= MAX_STEPS; i++) {
     let sp = Math.hypot(vx, vy);
     // Ground: friction, sand, slopes.
-    let fr = 30 + 0.35 * sp;
+    let fr = FRICTION + DRAG * sp;
     let ax = 0, ay = 0;
     let onSand = false;
     for (const z of hole.zones) {
       if (!inZone(z, x, y)) continue;
       if (z.kind === 'sand') onSand = true;
       else if (z.kind === 'slope') {
-        ax += z.dx * 48;
-        ay += z.dy * 48;
+        ax += z.dx * SLOPE;
+        ay += z.dy * SLOPE;
       } else {
         frames.push(x, y);
         return { outcome: 'water', x, y, frames, hits, sand };
       }
     }
-    if (onSand) fr += 150 + 3 * sp;
+    if (onSand) fr += 70 + 1.3 * sp;
     if (onSand && !wasSand) sand.push(frames.length / 2);
     wasSand = onSand;
     // The cup pulls a slow ball in a little.
@@ -83,7 +99,8 @@ export function simulate(hole: Hole, from: { x: number; y: number }, shot: Shot)
       const ex = s.bx - s.ax, ey = s.by - s.ay;
       const t = Math.max(0, Math.min(1, ((x - s.ax) * ex + (y - s.ay) * ey) / (ex * ex + ey * ey)));
       const qx = s.ax + ex * t, qy = s.ay + ey * t;
-      const r = bounce(qx, qy, 0.78, BALL_R);
+      // Rail ends (the corners poking into the course) are rounded off a little, so grazing shots slip by.
+      const r = bounce(qx, qy, 0.78, t <= 0 || t >= 1 ? 0.9 : BALL_R);
       if (r) hits.push({ f: frames.length / 2, v: r, bumper: false });
     }
     for (const p of hole.posts) {

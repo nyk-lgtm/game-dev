@@ -221,7 +221,8 @@ export function makeHole(seed: number, n: number): Hole {
     } else if (kind === 'mill' && straight && mills.length < 2) {
       mills.push({ x: cx(c), y: cy(c), arm: 6.2, a0: rng.int(0, 7) * (Math.PI / 16), w: (rng.next() < 0.5 ? -1 : 1) * (1.6 + rng.next() * 1.2) });
     } else if (kind === 'sand') {
-      const w = rng.int(7, 11), h = rng.int(6, 10);
+      // Never wider than half the lane, so there is always a way round.
+      const w = rng.int(5, 8), h = rng.int(5, 8);
       zones.push({ kind: 'sand', x: x0 + rng.int(1, CELL - 1 - w), y: y0 + rng.int(1, CELL - 1 - h), w, h, dx: 0, dy: 0 });
     } else if (kind === 'water' && straight) {
       // A pond along one side of a straight run, leaving a lane open.
@@ -244,8 +245,14 @@ export function makeHole(seed: number, n: number): Hole {
   }
 
   const turns = turnsOf(path);
-  const hazards = zones.filter((z) => z.kind !== 'sand').length;
-  const par = Math.max(2, Math.min(5, 2 + Math.floor((turns + (path.length > 8 ? 1 : 0) + (hazards + mills.length > 1 ? 1 : 0)) / 2)));
+  // Par: two putts, plus half a stroke per bend and per thing in the way.
+  const onRoute = new Set(path);
+  const cellOf = (x: number, y: number) => Math.floor(y / CELL) * COLS + Math.floor(x / CELL);
+  const inWay =
+    zones.filter((z) => onRoute.has(cellOf(z.x + z.w / 2, z.y + z.h / 2))).length +
+    posts.filter((p) => !p.bumper).length +
+    mills.length;
+  const par = Math.max(2, Math.min(5, 2 + Math.floor((turns + (path.length > 8 ? 1 : 0) + inWay) / 2)));
   // Angle the outer corner of every closed bend (unless a bumper sits there) so banks play cleanly.
   const walls = buildWalls(cells);
   const wedges: number[][] = [];

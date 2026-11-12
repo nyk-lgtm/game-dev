@@ -33,3 +33,4 @@ body #info { flex: 1; min-height: 44px; font-size: 13.5px; line-height: 1.35; co
 .sc tr:last-child td { font-weight: 800; }
 .card p.big { font-size: 20px; text-align: center; margin: 8px 0; }
 .card .meta2 { color: var(--muted); font-size: 13px; text-align: center; }
+.sc td.pick { text-decoration: underline dotted; text-underline-offset: 3px; }

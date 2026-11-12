@@ -32,8 +32,8 @@ interface Playback {
 }
 
 const TIPS: Record<string, string> = {
-  first: '<b>Drag anywhere and pull back</b>, like a slingshot. The arrow shows the direction and power. Let go to putt.',
-  sand: '<b>Sand</b> soaks up speed. Hit harder to get through it.',
+  first: '<b>Drag anywhere and pull back</b>, like a slingshot. The ring shows where the ball would stop on open grass. Let go to putt.',
+  sand: '<b>Sand</b> soaks up speed. Go round it, or hit harder to get through.',
   water: '<b>Water</b>: the ball is lost, one stroke penalty, and you play again from where you were.',
   slope: '<b>Slopes</b> tilt the ball the way the arrows drift.',
   bumper: '<b>Red bumpers</b> kick the ball back hard. Bank off them.',
@@ -60,6 +60,8 @@ export class Game {
   private banner: { text: string; t: number } | null = null;
   private sfx = new Sounds();
   private millT = 0;
+  /** Where the ball stopped on the hole still being shown (null once it's in the cup). */
+  private lastBall: { x: number; y: number } | null = null;
   private millEnd: number | null = 0;
 
   constructor() {
@@ -186,7 +188,7 @@ export class Game {
       this.splash.t += dt * 1.5;
       if (this.splash.t >= 1) this.splash = null;
     }
-    let ball: { x: number; y: number } | null = this.r.over && !this.anim ? null : this.r.ball;
+    let ball: { x: number; y: number } | null = this.r.over && !this.anim ? null : this.shownHole !== this.r.hole && !this.anim ? this.lastBall : this.r.ball;
     const hole = this.anim ? this.anim.hole : this.r.holes[this.shownHole];
     const pb = this.anim;
     if (pb) {
@@ -227,7 +229,7 @@ export class Game {
     draw(this.g, w, h, this.view, { hole, ball, trail: this.trail, aim: this.aim, time: this.time, glow: this.glow, sink: this.sink, splash: this.splash, millT: pb ? pb.f / 60 : this.millT, millEnd: pb ? null : this.millEnd });
     if (this.banner) {
       this.banner.t += dt;
-      const a = Math.min(1, this.banner.t * 4, (2.2 - this.banner.t) * 3);
+      const a = Math.min(1, this.banner.t * 4, (2.8 - this.banner.t) * 3);
       if (a <= 0) this.banner = null;
       else {
         const g = this.g;
@@ -249,6 +251,7 @@ export class Game {
     const pb = this.anim!;
     this.anim = null;
     this.millT = this.millEnd = pb.f / 60;
+    this.lastBall = pb.res.outcome === 'sunk' ? null : pb.res.outcome === 'water' ? pb.from : { x: pb.res.x, y: pb.res.y };
     const h = pb.hole.n;
     if (pb.res.outcome === 'water') {
       this.splash = { x: pb.res.x, y: pb.res.y, t: 0 };
@@ -260,6 +263,7 @@ export class Game {
       const strokes = this.r.strokes[h];
       const name = pb.res.pickedUp ? 'Picked up' : scoreName(strokes, pb.hole.par);
       this.banner = { text: name, t: 0 };
+      $('info').innerHTML = `<b>${name}</b> ${pb.res.pickedUp ? 'after 8 strokes.' : `${strokes} stroke${strokes === 1 ? '' : 's'} on a par ${pb.hole.par}.`} Total ${fmtPar(toPar(this.r))}.`;
       if (strokes === 1) {
         const p = loadProfile();
         p.aces++;
@@ -282,7 +286,7 @@ export class Game {
         this.hud();
         this.tip();
         this.announce();
-      }, 1300);
+      }, 1900);
     } else {
       this.hud();
       this.tip();
@@ -338,9 +342,10 @@ export class Game {
       const d = r.strokes[i] - r.holes[i].par;
       return d < 0 ? 'under' : d > 0 ? 'over' : '';
     };
+    const picked = r.pickedUp.some(Boolean);
     return `<table class="sc"><tr><th>Hole</th>${cells((i) => String(i + 1))}</tr>
       <tr><th>Par</th>${cells((i) => String(r.holes[i].par))}</tr>
-      <tr><th>You</th>${[...Array(HOLES).keys()].map((i) => `<td class="${cls(i)}">${played(i) ? r.strokes[i] : i === r.hole ? '·' : ''}</td>`).join('')}</tr></table>`;
+      <tr><th>You</th>${[...Array(HOLES).keys()].map((i) => `<td class="${cls(i)}${r.pickedUp[i] ? ' pick' : ''}">${played(i) ? r.strokes[i] : i === r.hole ? '·' : ''}</td>`).join('')}</tr></table>${picked ? '<p class="meta2">Dotted: picked up after 8 strokes.</p>' : ''}`;
   }
 
   showScorecard(final: boolean): void {
@@ -382,7 +387,7 @@ export class Game {
       `<h2>Ninefold</h2>
        <p>Nine holes of mini-golf, grown fresh from a seed every round.</p>
        <ul>
-         <li><b>Drag anywhere and pull back</b> to aim, like a slingshot. The farther you pull, the harder the putt. Let go to play it.</li>
+         <li><b>Drag anywhere and pull back</b> to aim, like a slingshot. The farther you pull, the harder the putt; the ring marks where it would stop on open grass. Let go to play it.</li>
          <li>Sink the ball in as few strokes as you can. <b>Par</b> is a good score; under par is great.</li>
          <li>Sand slows the ball, water costs a stroke, slopes push it sideways, bumpers kick it back. After 8 strokes the ball is picked up.</li>
        </ul>`,

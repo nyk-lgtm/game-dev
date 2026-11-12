@@ -4,7 +4,7 @@
 import { HOLES, makeCourse, type Hole } from './course';
 import { simulate, type Shot, type ShotResult } from './physics';
 
-export const RULES_VERSION = 3;
+export const RULES_VERSION = 4;
 /** Strokes after which the ball is picked up (penalties count). */
 export const MAX_STROKES = 8;
 
@@ -17,11 +17,13 @@ export interface Round {
   strokes: number[];
   actions: string[];
   over: boolean;
+  /** Holes where the ball was picked up after MAX_STROKES. */
+  pickedUp: boolean[];
 }
 
 export function newRound(seed: number): Round {
   const holes = makeCourse(seed);
-  return { seed, holes, hole: 0, ball: { ...holes[0].tee }, strokes: [0], actions: [], over: false };
+  return { seed, holes, hole: 0, ball: { ...holes[0].tee }, strokes: [0], actions: [], over: false, pickedUp: [] };
 }
 
 export const encodeShot = (s: Shot): string => `${Math.round(s.angle * 1000)}.${Math.round(Math.max(0, Math.min(1, s.power)) * 1000)}`;
@@ -50,7 +52,10 @@ export function play(r: Round, action: string): PlayResult | null {
   // Water: back where you played from, one stroke penalty.
   const done = res.outcome === 'sunk';
   const pickedUp = !done && r.strokes[h] >= MAX_STROKES;
-  if (pickedUp) r.strokes[h] = MAX_STROKES;
+  if (pickedUp) {
+    r.strokes[h] = MAX_STROKES;
+    r.pickedUp[h] = true;
+  }
   if (done || pickedUp) {
     if (h + 1 >= HOLES) r.over = true;
     else {

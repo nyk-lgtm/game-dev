@@ -1,5 +1,5 @@
 import { wantsDaily } from '../shared/daily';
-import { installErrorOverlay } from '../shared/debug';
+import { installErrorOverlay, toast } from '../shared/debug';
 import { randomSeed } from '../shared/rng';
 import { RULES_VERSION } from './core';
 import { Game, store } from './game';
@@ -17,7 +17,11 @@ if (p.has('seed') && Number.isFinite(Number(p.get('seed')))) {
   history.replaceState(null, '', location.pathname);
 } else if (wantsDaily()) game.playDaily();
 else if (saved && saved.v === RULES_VERSION) game.start(saved.seed, saved.a ? saved.a.split(',') : []);
-else game.start(randomSeed());
+else {
+  game.start(randomSeed());
+  // An update changed how holes play, so an unfinished round can't be replayed: say so.
+  if (saved && saved.a) setTimeout(() => toast('Ninefold was updated, so a fresh course started'), 600);
+}
 
 if (!store.load('seenHelp', false)) game.showHelp();
 
