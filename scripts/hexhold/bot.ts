@@ -6,7 +6,13 @@ import {
   specCost, upgradeCost, type Action, type State, type TowerId,
 } from '../../src/hexhold/core';
 
-export interface Run { s: State; actions: string; reached: number }
+export interface Run {
+  s: State;
+  actions: string;
+  reached: number;
+  /** Lives lost on each wave (index = wave - 1). */
+  lost: number[];
+}
 
 /** Every portal's path, end to end (so length = total walking, cells may repeat). */
 let PORTALS: number[] = [];
@@ -49,6 +55,7 @@ export function runGame(seed: number, skill = 1): Run {
     if (act(s, a)) toks.push(encode(s.tick, a));
   };
   let built = 0;
+  const lost: number[] = [];
   while (s.status === 'playing' && s.wave < WAVES) {
     for (let guard = 0; guard < 20; guard++) {
       const id = PLAN[built % PLAN.length];
@@ -70,8 +77,10 @@ export function runGame(seed: number, skill = 1): Run {
       } else if (up && built >= 6) doAct({ t: 'up', cell: up.cell });
       else break;
     }
+    const lives = s.lives;
     doAct({ t: 'wave' });
     while (s.status === 'playing' && s.active) step(s);
+    lost.push(lives - s.lives);
   }
-  return { s, actions: toks.join(','), reached: s.wave };
+  return { s, actions: toks.join(','), reached: s.wave, lost };
 }

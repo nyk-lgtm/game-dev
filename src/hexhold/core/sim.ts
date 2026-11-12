@@ -9,6 +9,7 @@ import {
   CHILL,
   ENEMIES,
   HP_GROWTH,
+  LATE_FROM,
   LATE_GROWTH,
   LEVEL_DMG,
   LEVEL_RANGE,
@@ -140,11 +141,15 @@ const GAP: Record<EnemyId, number> = { runner: 0.5, grunt: 0.75, swarm: 0.22, br
 // What each enemy is worth in a wave's budget (splitters carry three runners inside).
 const COST: Record<EnemyId, number> = { runner: 3, grunt: 4, swarm: 1.2, brute: 14, flyer: 7, healer: 9, splitter: 14, digger: 11, boss: 80 };
 
+/** Budget scale for the first waves. */
+const EARLY = [0.7, 0.8, 0.9, 0.95];
+
 /** The enemies of wave w (1-based), in order. Depends only on the seed. */
 export function wavePlan(seed: number, w: number): EnemyId[] {
   const rng = new Rng(mixSeed(seed, 900 + w));
   const out: EnemyId[] = [];
-  let budget = 16 + w * 7 + w * w * 0.35;
+  // The first waves are gentler while you learn the board.
+  let budget = (16 + w * 7 + w * w * 0.35) * (EARLY[w - 1] ?? 1);
   if (w % 10 === 0) {
     out.push('boss');
     budget -= COST.boss;
@@ -193,7 +198,7 @@ function sendWave(s: State) {
 
 function spawn(s: State, id: EnemyId, cell = PORTAL, t = 0, hpScale = 1): Enemy {
   const def = ENEMIES[id];
-  const hp = def.hp * Math.pow(1 + HP_GROWTH, Math.max(0, s.wave - 1)) * (1 + Math.max(0, s.wave - 14) * LATE_GROWTH) * hpScale;
+  const hp = def.hp * Math.pow(1 + HP_GROWTH, Math.max(0, s.wave - 1)) * (1 + Math.max(0, s.wave - LATE_FROM) * LATE_GROWTH) * hpScale;
   const next = nextCell(distFor(s, id), cell);
   const e: Enemy = { uid: s.nextUid++, id, hp, maxHp: hp, cell, next: next < 0 ? cell : next, t, x: POS[cell].x, y: POS[cell].y, chill: 0, deep: 0, stun: 0, burn: 0, burnDps: 0, healed: 0, alive: true };
   s.enemies.push(e);
@@ -473,7 +478,8 @@ export function step(s: State): void {
   // Arrivals.
   while (s.queue.length && s.queue[0].at <= s.tick) {
     const q = s.queue.shift()!;
-    spawn(s, q.id, q.cell);
+    // The first Colossus (wave 10) is a little smaller: a warning, not a wall.
+    spawn(s, q.id, q.cell, 0, q.id === 'boss' && s.wave <= 10 ? 0.8 : 1);
   }
 
   // Towers.

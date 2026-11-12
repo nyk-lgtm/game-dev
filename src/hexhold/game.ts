@@ -39,7 +39,9 @@ import {
   type Action,
   type EnemyId,
   type State,
+  type Tower,
   type TowerId,
+  type TowerStats,
 } from './core';
 import { drawBoard, drawTowerIcon, layout, pathCells, type Effect, type View } from './render/draw';
 
@@ -57,6 +59,70 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', html = ''):
   if (cls) e.className = cls;
   if (html) e.innerHTML = html;
   return e;
+}
+
+/** A tower that isn't built yet, to ask what it would do on a cell. */
+const probe = (cell: number, id: TowerId): Tower => ({ cell, id, level: 1, cd: 0, spent: 0, hits: 0, spec: -1, dealt: 0 });
+const cells = (r: number) => (r / Math.sqrt(3)).toFixed(1);
+const secs = (r: number) => `${+r.toFixed(2)}s`;
+
+/** A tower's numbers in one line (for the tower panel and the build preview). */
+function statLine(t: Tower, st: TowerStats): string {
+  const sp = specOf(t);
+  if (t.id === 'beacon') return `Neighbors deal <b>+${Math.round(((sp?.boost ?? BEACON_BOOST[t.level]) - 1) * 100)}%</b> damage${sp?.reach ? ' and reach a cell further' : ''}.`;
+  const air = st.air ? ' · hits flyers' : '';
+  const range = ` · range <b>${cells(st.range)}</b>`;
+  switch (t.id) {
+    case 'frost':
+      return `Chills within <b>${cells(st.range)}</b>: <b>${sp?.deep ? 60 : 40}%</b> slower · <b>${Math.round(st.dmg)}</b> damage/s${air}`;
+    case 'flame':
+      return `<b>${Math.round(st.dmg)}</b> damage/s to all${range}`;
+    case 'tesla':
+      return `<b>${Math.round(st.dmg)}</b> damage, leaps to ${3 + (sp?.chain ?? 0)}, every ${secs(st.rate)}${range}${air}`;
+    case 'mortar':
+      return `<b>${Math.round(st.dmg)}</b> splash damage every ${secs(st.rate)}${range}${air}`;
+    default:
+      return `<b>${Math.round(st.dmg)}</b> damage every ${secs(st.rate)}${range}${air}`;
+  }
+}
+
+/** The same numbers squeezed onto two short lines, for the build palette. */
+function paletteStats(t: Tower, st: TowerStats): string {
+  const d = Math.round(st.dmg);
+  const r = `range ${cells(st.range)}${st.air ? ' · air' : ''}`;
+  switch (t.id) {
+    case 'beacon':
+      return `+${Math.round((BEACON_BOOST[1] - 1) * 100)}% damage<br>to neighbors`;
+    case 'frost':
+      return `40% slow · ${d}/s<br>${r}`;
+    case 'flame':
+      return `${d} dmg/s, all<br>${r}`;
+    case 'tesla':
+      return `${d} dmg ×3 / ${secs(st.rate)}<br>${r}`;
+    case 'mortar':
+      return `${d} splash / ${secs(st.rate)}<br>${r}`;
+    default:
+      return `${d} dmg / ${secs(st.rate)}<br>${r}`;
+  }
+}
+
+/** What a neighbor gives, in a few words. */
+function giftShort(n: Tower): string {
+  const sp = specOf(n);
+  switch (n.id) {
+    case 'bolt':
+      return 'hits flyers';
+    case 'mortar':
+      return '+½ range';
+    case 'frost':
+      return '+30% vs chilled';
+    case 'tesla':
+      return 'every 4th hit stuns';
+    case 'flame':
+      return 'sets enemies alight';
+    case 'beacon':
+      return `+${Math.round(((sp?.boost ?? BEACON_BOOST[n.level]) - 1) * 100)}% damage${sp?.reach ? ', +1 range' : ''}`;
+  }
 }
 
 function iconCanvas(id: TowerId, css: number): HTMLCanvasElement {
@@ -84,6 +150,10 @@ export class Game {
   private selected = -1;
   private ghost: TowerId | null = null;
   private ghostPath: number[][] | null = null;
+  /** Towers that reach today's path but would not reach the ghost's. */
+  private ghostBypass: number[] = [];
+  /** When a build that bypasses towers was first tapped (it needs a second tap). */
+  private armed = 0;
   /** Cached: does the current or next wave bring burrowers? (key = wave*2+active) */
   private digKey = -1;
   private digShow = false;
@@ -97,6 +167,8 @@ export class Game {
   /** Ignore panel taps briefly after a build, so a double tap can't also upgrade. */
   private guardUntil = 0;
   private ended = false;
+  /** This run beat the best before it (set when it ends). */
+  private newBest = false;
 
   constructor() {
     this.sfx.setMuted(store.load('muted', false));
@@ -136,8 +208,11 @@ export class Game {
     this.selected = -1;
     this.ghost = null;
     this.ghostPath = null;
+    this.ghostBypass = [];
     this.effects = [];
     this.ended = this.s.status !== 'playing';
+    this.newBest = false;
+    this.armed = 0;
     this.panelKey = '';
     if (!fromLink) this.persist(true);
     if (this.ended) setTimeout(() => this.showEnd(), 300);
@@ -190,10 +265,12 @@ export class Game {
       this.selected = -1;
       this.ghost = null;
       this.ghostPath = null;
+      this.ghostBypass = [];
     } else {
       this.selected = i;
       this.ghost = null;
       this.ghostPath = null;
+      this.ghostBypass = [];
       const g = this.s.ground[i];
       if (g === 'rock') toast('Solid rock: nothing can be built here.');
       if (g === 'portal' || g === 'core') {
@@ -208,6 +285,8 @@ export class Game {
   private pickGhost(id: TowerId): void {
     this.ghost = this.ghost === id ? null : id;
     this.ghostPath = this.ghost ? pathCells(flowField(this.s.ground, blockedSet(this.s, this.selected)).dist, this.s.portals) : null;
+    this.ghostBypass = this.ghostPath ? this.bypassed(pathCells(this.s.field.dist, this.s.portals).flat(), this.ghostPath.flat()) : [];
+    this.armed = 0;
     this.sfx.click();
     this.panelKey = '';
   }
@@ -219,11 +298,24 @@ export class Game {
       toast(err);
       return;
     }
+    if (this.ghostBypass.length) {
+      // A build that walks the path past towers needs a deliberate second tap.
+      const now = performance.now();
+      if (!this.armed) {
+        this.armed = now;
+        this.sfx.warn();
+        navigator.vibrate?.(20);
+        this.panelKey = '';
+        return;
+      }
+      if (now - this.armed < 450) return;
+    }
     this.doAct({ t: 'build', cell: this.selected, tower: this.ghost });
     this.guardUntil = performance.now() + 500;
     this.sfx.pickup();
     this.ghost = null;
     this.ghostPath = null;
+    this.ghostBypass = [];
     this.panelKey = '';
   }
 
@@ -234,6 +326,7 @@ export class Game {
       this.selected = -1;
       this.ghost = null;
       this.ghostPath = null;
+      this.ghostBypass = [];
       this.panelKey = '';
     }
   }
@@ -272,7 +365,7 @@ export class Game {
     this.effects = this.effects.filter((f) => time - f.t0 < f.life);
     const g = this.ctx;
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    drawBoard(g, this.view, s, { time, selected: this.selected, ghost: this.ghost, ghostPath: this.ghostPath, showDig: this.showDig(), effects: this.effects, hurt: this.hurt });
+    drawBoard(g, this.view, s, { time, selected: this.selected, ghost: this.ghost, ghostPath: this.ghostPath, bypass: this.ghostBypass, showDig: this.showDig(), effects: this.effects, hurt: this.hurt });
     this.hud();
     this.panel();
   }
@@ -408,8 +501,9 @@ export class Game {
       for (const id of TOWER_IDS) {
         const b = el('button');
         if (s.gold < TOWERS[id].cost) b.classList.add('poor');
-        b.appendChild(iconCanvas(id, 38));
-        b.appendChild(el('span', '', `${TOWERS[id].name}<small>${TOWERS[id].cost}</small>`));
+        b.appendChild(iconCanvas(id, 34));
+        const t = probe(cell, id);
+        b.appendChild(el('span', '', `${TOWERS[id].name} <small>${TOWERS[id].cost}</small><i>${paletteStats(t, towerStats(s, t))}</i>`));
         b.onclick = () => this.pickGhost(id);
         pal.appendChild(b);
       }
@@ -418,26 +512,31 @@ export class Game {
     }
     const def = TOWERS[this.ghost];
     p.appendChild(this.titleRow(`<span class="t">${def.name}</span><span>${def.cost} gold${ley}</span>`));
-    p.appendChild(el('div', 'text', `${def.text}<br><span class="gift">Next to it: ${def.aura}</span>`));
+    const t = probe(cell, this.ghost);
     const err = buildError(s, cell, this.ghost);
+    const bypass = err ? 0 : this.ghostBypass.length;
+    // With a warning to show, the description gives way so the buttons stay in view.
+    p.appendChild(el('div', 'text', `${statLine(t, towerStats(s, t))}${bypass ? '' : `<br>${def.text}<br><span class="gift">Next to it: ${def.aura}</span>`}`));
     const len = (ps: number[][]) => ps.reduce((a, p) => a + p.length, 0) / ps.length;
     const gain = this.ghostPath ? Math.round(len(this.ghostPath) - len(pathCells(s.field.dist, s.portals))) : 0;
     if (err) p.appendChild(el('div', 'text warn', err));
-    else {
-      if (gain !== 0) p.appendChild(el('div', 'text', `Path ${gain > 0 ? `+${gain} hexes longer` : `${gain} hexes`} (blue dashes).`));
-      const lost = this.ghostPath ? this.coverage(pathCells(s.field.dist, s.portals).flat()) - this.coverage(this.ghostPath.flat()) : 0;
-      if (lost > 0) p.appendChild(el('div', 'text warn', `⚠ The new path would slip past ${lost} of your tower${lost > 1 ? 's' : ''}.`));
-    }
+    else if (gain !== 0) p.appendChild(el('div', 'text', `Path ${gain > 0 ? '+' : '−'}${Math.abs(gain)} hex${Math.abs(gain) === 1 ? '' : 'es'} ${gain > 0 ? 'longer' : 'shorter'} (blue dashes).`));
+    const foot = el('div', 'foot');
+    if (bypass)
+      foot.appendChild(
+        el('div', 'alert', `⚠ The new path walks past <b>${bypass === 1 ? '1 tower' : `${bypass} towers`}</b> (circled red): ${bypass === 1 ? 'it' : 'they'} could no longer hit anything on it.`),
+      );
     const row = el('div', 'row');
     const back = el('button', 'secondary');
     back.textContent = 'Back';
     back.onclick = () => this.pickGhost(this.ghost!);
-    const go = el('button', 'primary');
-    go.textContent = `Build ${def.name}`;
+    const go = el('button', bypass ? 'primary danger' : 'primary');
+    go.textContent = !bypass ? `Build ${def.name}` : this.armed ? 'Tap again to build' : 'Build anyway';
     go.disabled = !!err;
     go.onclick = () => this.build();
     row.append(back, go);
-    p.appendChild(row);
+    foot.appendChild(row);
+    p.appendChild(foot);
   }
 
   private showDig(): boolean {
@@ -451,37 +550,32 @@ export class Game {
     return this.digShow || s.enemies.some((e) => e.id === 'digger');
   }
 
-  /** How many attacking towers reach at least one cell of this path. */
-  private coverage(path: number[]): number {
+  /** Attacking towers that reach some cell of the old path but none of the new one. */
+  private bypassed(before: number[], after: number[]): number[] {
     const s = this.s;
-    let n = 0;
+    const out: number[] = [];
     for (const t of s.towers) {
       if (!t || TOWERS[t.id].range === 0) continue;
       const r = towerStats(s, t).range;
-      if (path.some((c) => (POS[c].x - POS[t.cell].x) ** 2 + (POS[c].y - POS[t.cell].y) ** 2 <= r * r)) n++;
+      const reaches = (path: number[]) => path.some((c) => (POS[c].x - POS[t.cell].x) ** 2 + (POS[c].y - POS[t.cell].y) ** 2 <= r * r);
+      if (reaches(before) && !reaches(after)) out.push(t.cell);
     }
-    return n;
+    return out;
   }
 
   private towerPanel(p: HTMLElement): void {
     const s = this.s;
     const t = s.towers[this.selected]!;
     const def = TOWERS[t.id];
-    const st = towerStats(s, t);
     const sp = specOf(t);
-    p.appendChild(this.titleRow(`<span class="t">${sp ? sp.name : `${def.name} · level ${t.level}`}</span><span>${t.id === 'beacon' ? '' : `${Math.round(t.dealt).toLocaleString()} damage dealt`}</span>`));
+    p.appendChild(this.titleRow(`<span class="t">${sp ? `${sp.name} <small>(${def.name})</small>` : `${def.name} · level ${t.level}`}</span><span>${t.id === 'beacon' ? '' : `${Math.round(t.dealt).toLocaleString()} dealt`}</span>`));
     const gifts = ADJ[t.cell].map((j) => s.towers[j]).filter((x): x is NonNullable<typeof x> => !!x);
-    const got = [...new Set(gifts.map((x) => TOWERS[x.id].aura))];
-    const stats =
-      t.id === 'beacon'
-        ? `Neighbors deal <b>+${Math.round(((sp?.boost ?? BEACON_BOOST[t.level]) - 1) * 100)}%</b> damage${sp?.reach ? ' and reach a cell further' : ''}.`
-        : t.id === 'frost'
-          ? `Chills everything within <b>${(st.range / Math.sqrt(3)).toFixed(1)}</b> (${sp?.deep ? '60' : '40'}% slower) · <b>${Math.round(st.dmg)}</b> damage/s`
-          : `Damage <b>${Math.round(st.dmg * (def.rate === 0 ? 1 : 1))}</b>${def.rate === 0 ? '/s' : ` every ${+st.rate.toFixed(2)}s`} · range <b>${(st.range / Math.sqrt(3)).toFixed(1)}</b>${st.air ? ' · hits flyers' : ''}`;
-    p.appendChild(el('div', 'text', `${stats}<br><span class="gift">Gives neighbors: ${def.aura}</span>${got.length ? `<br>Gets: ${got.join(' ')}` : '<br>No neighbors yet.'}`));
-    const row = el('div', 'row');
+    const got = [...new Set(gifts.map(giftShort))];
+    // A beacon's line already says what it gives.
+    const gives = t.id === 'beacon' ? '' : `<br><span class="gift">Gives neighbors: ${def.aura}</span>`;
+    p.appendChild(el('div', 'text', `${statLine(t, towerStats(s, t))}${gives}<br>${got.length ? `Gets: ${got.join(' · ')}` : 'No neighbors yet.'}`));
     const sell = el('button', 'secondary');
-    sell.textContent = `Sell +${Math.floor(t.spent * SELL_BACK)}`;
+    const refund = Math.floor(t.spent * SELL_BACK);
     sell.onclick = () => {
       if (performance.now() < this.guardUntil) return;
       if (this.doAct({ t: 'sell', cell: t.cell })) {
@@ -490,9 +584,8 @@ export class Game {
         this.panelKey = '';
       } else toast("Can't sell that now");
     };
-    const up = el('button', 'primary');
     if (t.level >= MAX_LEVEL && t.spec < 0) {
-      // Choose a specialization: two forms, side by side.
+      // Choose a specialization: two forms side by side, Sell beside them.
       const cost = specCost(t.id);
       const pick = el('div', 'specs');
       SPECS[t.id].forEach((sd, k) => {
@@ -509,17 +602,19 @@ export class Game {
         };
         pick.appendChild(b);
       });
+      sell.classList.add('sell');
+      sell.innerHTML = `Sell<small>+${refund}</small>`;
+      pick.appendChild(sell);
       p.appendChild(pick);
-      row.append(sell);
-      p.appendChild(row);
       return;
     }
-    if (t.level >= MAX_LEVEL) {
-      up.textContent = sp ? sp.name : 'Max level';
-      up.disabled = true;
-    } else {
+    sell.textContent = `Sell +${refund}`;
+    const row = el('div', 'row');
+    row.append(sell);
+    if (t.level < MAX_LEVEL) {
       const cost = upgradeCost(t.id, t.level);
-      up.textContent = `Upgrade ${cost}${def.rate === 0 && t.id === 'beacon' ? '' : ` → ×${LEVEL_DMG[t.level + 1]}`}`;
+      const up = el('button', 'primary');
+      up.textContent = `Upgrade ${cost} → ${t.id === 'beacon' ? `+${Math.round((BEACON_BOOST[t.level + 1] - 1) * 100)}%` : `×${LEVEL_DMG[t.level + 1]}`}`;
       up.disabled = s.gold < cost;
       up.onclick = () => {
         if (performance.now() < this.guardUntil) return;
@@ -528,9 +623,11 @@ export class Game {
           this.panelKey = '';
         }
       };
+      row.append(up);
     }
-    row.append(sell, up);
-    p.appendChild(row);
+    const foot = el('div', 'foot');
+    foot.appendChild(row);
+    p.appendChild(foot);
   }
 
   // ---------------------------------------------------------------- cards
@@ -543,7 +640,9 @@ export class Game {
     if (!this.replayOnly) {
       const prof = store.load<Profile>('profile', { best: 0, wins: 0, runs: 0 });
       prof.runs++;
-      prof.best = Math.max(prof.best, s.status === 'won' ? WAVES : s.wave - 1);
+      const held = s.status === 'won' ? WAVES : s.wave - 1;
+      this.newBest = held > prof.best && held > 0;
+      prof.best = Math.max(prof.best, held);
       if (s.status === 'won') prof.wins++;
       store.save('profile', prof);
       if (this.daily) recordDaily(store, (s.status === 'won' ? 1000 : 0) + s.wave * 10 + s.lives, s.status === 'won' ? `held · ${s.lives}♥` : `wave ${s.wave}`, this.daily);
@@ -560,10 +659,17 @@ export class Game {
     const bars = dealt
       .map(([id, n]) => `<div class="dmg"><span style="width:60px">${TOWERS[id].name}</span><div class="bar"><i style="width:${(100 * n) / top}%;background:${TOWERS[id].color}"></i></div><span>${Math.round(n).toLocaleString()}</span></div>`)
       .join('');
-    const best = store.load<Profile>('profile', { best: 0, wins: 0, runs: 0 });
+    const prof = store.load<Profile>('profile', { best: 0, wins: 0, runs: 0 });
+    const record = this.newBest
+      ? ' <b>New best!</b>'
+      : prof.wins
+        ? ` ${prof.wins} win${prof.wins > 1 ? 's' : ''} so far.`
+        : prof.best
+          ? ` Your best: ${prof.best} wave${prof.best > 1 ? 's' : ''} held.`
+          : '';
     showCard(
       `<h2>${won ? 'The hold stands' : 'The core has fallen'}</h2>
-      <p>${won ? `All ${WAVES} waves held with ${s.lives} lives to spare.` : `Fell on wave ${s.wave} of ${WAVES}.`} ${s.stats.kills} enem${s.stats.kills === 1 ? 'y' : 'ies'} stopped.${best.best ? ` Best: ${best.wins ? `${best.wins} win${best.wins > 1 ? 's' : ''}` : `wave ${best.best}`}.` : ''}</p>
+      <p>${won ? `All ${WAVES} waves held with ${s.lives} lives to spare.` : `Held ${s.wave - 1} of ${WAVES} waves; the core fell on wave ${s.wave}.`} ${s.stats.kills} enem${s.stats.kills === 1 ? 'y' : 'ies'} stopped.${record}</p>
       ${this.daily ? `<p><b>Today's map · ${prettyDay(this.daily)}</b>: best ${loadDaily(store, this.daily)?.label ?? '—'}</p>` : ''}
       ${bars}
       ${s.stats.chilled > 1 ? `<p style="font-size:13px">Frost kept enemies slowed for ${Math.round(s.stats.chilled)} enemy-seconds; its share above includes the extra damage chilled enemies took from its neighbors.</p>` : ''}`,

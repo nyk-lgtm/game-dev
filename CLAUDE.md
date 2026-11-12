@@ -35,8 +35,9 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   - Afterglow: `npx vite-node scripts/afterglow/balance.ts` (bot survival per character).
   - Delve: `npx vite-node scripts/delve/balance.ts`; Nightline: `npx vite-node scripts/nightline/balance.ts`.
   - Glyphwright: `npx vite-node scripts/glyph/balance.ts` (smart bot win rate, deaths per wave).
-  - Hexhold: `npx vite-node scripts/hexhold/balance.ts 32` (heuristic bot: median wave ~27, ~8/32 wins);
-    `scripts/hexhold/probe.ts 32` lists each loss with its wave and map shape (one or two portals).
+  - Hexhold: `npx vite-node scripts/hexhold/balance.ts 32` (heuristic bot, rules v4: median wave ~28, ~7/32 wins);
+    `scripts/hexhold/probe.ts 32` lists each loss with its wave and map shape (one or two portals) and the
+    lives lost per band of waves (the difficulty curve: v4 is gentle to wave 10, pressure from 15 on).
   - Rewild: `npx vite-node scripts/rewild/balance.ts 16 greedy 1` (score, species, stars; compare
     with `random`; greedy median ~2100 with the settled bonus, stars at 900/1700/2400),
     `scripts/rewild/upto.ts <seed> <n>` (a bot game's actions to season n, for `?seed=&a=`), `scripts/rewild/probe.ts` (plays and causes of death), `trace.ts <seed>`.

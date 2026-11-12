@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ADJ, CORE, ENEMIES, N, PORTAL, START_GOLD, TWIN_GOLD, TWIN_PORTALS, buried, portalsOf, TOWERS, WAVES, act, buildError, decode, encode, flowField, makeMap, newGame, replay, step, towerStats, wavePlan,
+  ADJ, CORE, ENEMIES, HP_GROWTH, LATE_FROM, LATE_GROWTH, N, PORTAL, START_GOLD, TWIN_GOLD, TWIN_PORTALS, buried, portalsOf, TOWERS, WAVES, act, buildError, decode, encode, flowField, makeMap, newGame, replay, step, towerStats, wavePlan,
   type State,
 } from '../../src/hexhold/core';
 import { runGame } from '../../scripts/hexhold/bot';
@@ -84,6 +84,20 @@ describe('waves', () => {
       expect(p.includes('boss')).toBe(w % 10 === 0);
       expect(p.filter((x) => x === 'healer').length).toBeLessThanOrEqual(3 + Math.floor(w / 8));
     }
+  });
+
+  it('the first waves are gentle and the first Colossus is smaller than later ones', () => {
+    for (let seed = 0; seed < 30; seed++) expect(wavePlan(seed, 1).length).toBeLessThanOrEqual(6);
+    const hpOf = (w: number) => {
+      const s = newGame(1);
+      s.wave = w - 1;
+      act(s, { t: 'wave' });
+      while (!s.enemies.some((e) => e.id === 'boss')) step(s);
+      return s.enemies.find((e) => e.id === 'boss')!.maxHp;
+    };
+    const growth = (w: number) => Math.pow(1 + HP_GROWTH, w - 1) * (1 + Math.max(0, w - LATE_FROM) * LATE_GROWTH);
+    expect(hpOf(10)).toBeCloseTo(ENEMIES.boss.hp * growth(10) * 0.8);
+    expect(hpOf(20)).toBeCloseTo(ENEMIES.boss.hp * growth(20));
   });
 
   it('an undefended core loses lives and the game ends', () => {

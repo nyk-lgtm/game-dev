@@ -10,6 +10,7 @@ export interface News {
 }
 
 export const NEWS: News[] = [
+  { day: '2026-11-12', path: './hexhold/', game: 'Hexhold', text: 'A build that walks the path past your towers now circles them in red and needs a second tap. Gentler first waves and wave 10, tougher late waves; stronger Mortar and Tesla. The build sheet shows each tower’s damage, rate and range, and Sell stays in view at level 3.' },
   { day: '2026-11-12', path: './ninefold/', game: 'Ninefold', text: 'Aiming shows a ring where the ball will stop; pull length now matches distance. Softer sand, gentler slopes, kinder corners, and par counts obstacles.' },
   { day: '2026-11-12', path: './lastlight/', game: 'Last Light', text: 'Night 2: fog. The doctor’s girl is missing, the foghorn is “condemned”, and the Merrow is feeling her way in blind. Pick it from the menu.' },
   { day: '2026-11-12', path: './unspoken/', game: 'Unspoken', text: 'Tap 🔊 on a word to hear it spoken (uses your phone’s voice; off when sound is off).' },
