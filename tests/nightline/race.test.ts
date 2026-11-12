@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CAR_HIT_W, MAX_SPEED, NEAR_MISS_POINTS, NEAR_MISS_W, RISK_STEP, SEG_LEN, SPAWN_MIN, STAGES, TREE, newRace, step, type Input, type Race } from '../../src/nightline/core';
+import { CAR_HIT_W, MAX_SPEED, NEAR_MISS_POINTS, NEAR_MISS_W, PROP_KEEP, PROP_REACH, RISK_STEP, SEG_LEN, SPAWN_MIN, STAGES, TREE, newRace, segmentAt, step, type Input, type Race } from '../../src/nightline/core';
 
 const coast: Input = { steer: 0, boost: false, brake: false };
 
@@ -104,6 +104,25 @@ describe('nightline race', () => {
       const pts = r.score - before;
       expect(pts).toBeGreaterThanOrEqual(100 + (close ? NEAR_MISS_POINTS : 0));
       expect(pts).toBeLessThan(110 + (close ? NEAR_MISS_POINTS : 0));
+    }
+  });
+
+  it('a roadside prop slows you hard and bounces you back toward the road, not a dead stop', () => {
+    for (const side of [-1, 1]) {
+      const r = newRace(4);
+      r.cars = [];
+      r.player.z = SEG_LEN * 200;
+      r.player.speed = MAX_SPEED;
+      const seg = segmentAt(r, r.player.z + MAX_SPEED / 60 + PROP_REACH);
+      seg.props = [{ kind: 'pine', offset: side * 1.5 }];
+      r.player.x = side * 1.5;
+      step(r, coast);
+      expect(r.crashes).toBe(1);
+      expect(r.player.speed).toBeGreaterThanOrEqual(MAX_SPEED * PROP_KEEP * 0.95);
+      // Within a second the bounce has carried you back onto the road.
+      for (let i = 0; i < 60; i++) step(r, coast);
+      expect(Math.abs(r.player.x)).toBeLessThan(1);
+      expect(r.player.push).toBe(0);
     }
   });
 });

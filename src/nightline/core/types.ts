@@ -53,6 +53,8 @@ export interface Player {
   stun: number;
   /** Steering visual (-1..1). */
   steer: number;
+  /** Sideways bounce after hitting a roadside prop (road half-widths a second, toward the road; fades). */
+  push: number;
 }
 
 export interface Race {

@@ -5,6 +5,8 @@ import { Rng, mixSeed } from '../../shared/rng';
 import { RUNOUT, SEG_LEN, STAGES, TREE, TrackBuilder, buildFork, buildStage } from './track';
 import type { Input, Race, Segment, Stage } from './types';
 
+/** Bump when the same seed and inputs would race differently (v2: roadside hits bounce you back instead of stopping you). */
+export const RULES_VERSION = 2;
 export const DT = 1 / 60;
 /** Top speed: 40 segments a second (shown as ~300 km/h). */
 export const MAX_SPEED = SEG_LEN * 40;
@@ -38,6 +40,10 @@ export const SPAWN_MIN = 175;
 export const SPAWN_SPAN = 100;
 /** How far ahead of the car's rear (its z) a roadside prop counts as hit. */
 export const PROP_REACH = SEG_LEN * 0.5;
+/** Hitting a roadside prop keeps this share of your speed (v1: a dead stop at 12% of top speed)... */
+export const PROP_KEEP = 0.45;
+/** ...and bounces you back toward the road at this sideways speed (road half-widths a second), easing off. */
+export const PROP_BOUNCE = 2.4;
 
 export function segmentAt(r: Race, z: number): Segment {
   const i = Math.floor(z / SEG_LEN);
@@ -56,7 +62,7 @@ export function newRace(seed: number): Race {
     stages: [{ biome: TREE[0][0], start: first.start, end: first.end, bonus: 0 }],
     stage: 0,
     route: [],
-    player: { x: 0, z: 0, speed: 0, nitro: 2, boosting: false, stun: 0, steer: 0 },
+    player: { x: 0, z: 0, speed: 0, nitro: 2, boosting: false, stun: 0, steer: 0, push: 0 },
     cars: [],
     nextCarId: 1,
     score: 0,
@@ -127,20 +133,27 @@ export function step(r: Race, input: Input): void {
   const dx = dt * 2.4 * Math.min(1, pct * 1.4);
   p.x += input.steer * dx;
   p.x -= dx * pct * seg.curve * CENTRIFUGAL;
+  // The bounce off a roadside prop, fading out over about half a second.
+  if (p.push !== 0) {
+    p.x += p.push * dt;
+    p.push *= 1 - Math.min(1, dt * 4);
+    if (Math.abs(p.push) < 0.05) p.push = 0;
+  }
   p.x = Math.max(-2.6, Math.min(2.6, p.x));
 
   const before = p.z;
   p.z += p.speed * dt;
 
-  // Roadside props: hitting one stops you hard.
+  // Roadside props: hitting one costs most of your speed and bounces you back toward the road.
   if (Math.abs(p.x) > 1) {
     const s2 = segmentAt(r, p.z + PROP_REACH);
     for (const pr of s2.props) {
       if (pr.kind === 'fork') continue;
       if (Math.abs(p.x - pr.offset) < 0.22) {
-        p.speed = MAX_SPEED * 0.12;
-        p.stun = 0.5;
+        p.speed = Math.max(MAX_SPEED * 0.12, p.speed * PROP_KEEP);
+        p.stun = 0.35;
         p.x = pr.offset > 0 ? pr.offset - 0.3 : pr.offset + 0.3;
+        p.push = -Math.sign(pr.offset) * PROP_BOUNCE;
         r.crashes++;
         r.fx.push({ type: 'crash', hard: true });
         break;

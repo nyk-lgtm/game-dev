@@ -16,6 +16,15 @@ export const FORK_LEAD = 70;
 /** Colors for the gentler (left) and harder (right) branch, shared with the HUD. */
 export const EASY_COLOR = '#05d9e8';
 export const HARD_COLOR = '#ff2a6d';
+/** The fork's painted divider: orange, a colour no traffic car, lane line or arrow uses. */
+export const DIVIDER_COLOR = '#ff8c1a';
+/** Traffic body colours, by `kind`. */
+export const TRAFFIC_COLORS = ['#7fd1ff', '#ffd166', '#b8ff6b', '#ff9ef0'];
+const TAIL_LIGHT = '#ff3355';
+/** Horizon row as a share of the screen's rows (was 0.42: the road now gets more of the screen). */
+export const HORIZON = 0.32;
+/** The horizon share the camera's road width at the car was tuned (and CAR_HIT_W measured) for. */
+const REF_HORIZON = 0.42;
 
 interface Palette {
   skyTop: string;
@@ -34,7 +43,7 @@ interface Palette {
 export const PALETTES: Record<BiomeId, Palette> = {
   city: { skyTop: '#05010f', skyBot: '#2a0845', ground: ['#3a2a5a', '#2c2046'], groundCh: ['.', ':'], road: ['#4a4a62', '#38384c'], rumble: ['#ff2a6d', '#e8e8ff'], lane: '#05d9e8', skyline: '#7a3cff', prop: '#b48cff', sun: null, stars: true },
   desert: { skyTop: '#1a0630', skyBot: '#ff6a3d', ground: ['#c98a4b', '#a8703a'], groundCh: ['.', '~'], road: ['#6a5a52', '#57493f'], rumble: ['#ff3b3b', '#ffe9d0'], lane: '#ffd166', skyline: '#5a1e4c', prop: '#7fbf5a', sun: ['#ffd166', '#ff3d8b'], stars: false },
-  forest: { skyTop: '#06121a', skyBot: '#2f5d50', ground: ['#2f7a3a', '#246030'], groundCh: [',', '"'], road: ['#5a5f58', '#4a4f48'], rumble: ['#e8e8e8', '#c43b3b'], lane: '#f2f2c0', skyline: '#14382e', prop: '#3fae5a', sun: null, stars: true },
+  forest: { skyTop: '#06121a', skyBot: '#2f5d50', ground: ['#2f7a3a', '#246030'], groundCh: [',', '"'], road: ['#5a5f58', '#4a4f48'], rumble: ['#ffffff', '#ff4646'], lane: '#f2f2c0', skyline: '#14382e', prop: '#3fae5a', sun: null, stars: true },
   snow: { skyTop: '#0c1430', skyBot: '#7f9fd8', ground: ['#dfe8f5', '#b8c8e0'], groundCh: ['*', '.'], road: ['#5c6478', '#4c5366'], rumble: ['#ff4d6d', '#ffffff'], lane: '#ffe66d', skyline: '#9fb6e0', prop: '#cfe0ff', sun: null, stars: true },
   coast: { skyTop: '#2b1055', skyBot: '#ff9a8b', ground: ['#e0c27a', '#cfae62'], groundCh: [',', '.'], road: ['#6b5f6f', '#5a4f5e'], rumble: ['#ff6f91', '#fff5e1'], lane: '#ffffff', skyline: '#4a3a6a', prop: '#55c27a', sun: ['#ffe29a', '#ff6f91'], stars: false },
 };
@@ -79,6 +88,21 @@ export function carBottomRow(v: View): number {
   return v.rows - Math.ceil(96 / v.ch);
 }
 
+/** Pixels between the horizon at row share `h` and the car's bottom row. */
+function belowPx(v: View, horizonRow: number): number {
+  return Math.max(v.ch, (carBottomRow(v) - horizonRow) * v.ch);
+}
+
+/**
+ * Camera height for this view. The horizon sits higher than it used to, and
+ * the camera rises in proportion, so the road at the car is exactly as wide
+ * as before (CAR_HIT_W still matches the sprites) while the far road, its
+ * curves and traffic, spreads over more rows.
+ */
+export function camHeight(v: View): number {
+  return (CAM_HEIGHT * belowPx(v, v.horizon)) / belowPx(v, Math.round(v.rows * REF_HORIZON));
+}
+
 /**
  * How far behind the car the camera sits so that flat road at the car's z
  * projects exactly onto the car sprite's bottom row. The race core treats
@@ -86,8 +110,29 @@ export function carBottomRow(v: View): number {
  */
 export function playerDepth(v: View, depth = CAM_DEPTH): number {
   const halfW = (v.cols * v.cw) / 2;
-  const below = Math.max(v.ch, (carBottomRow(v) - v.horizon) * v.ch);
-  return (depth * CAM_HEIGHT * halfW) / below;
+  return (depth * camHeight(v) * halfW) / belowPx(v, v.horizon);
+}
+
+/** Below this many rows a traffic car is drawn as a tail-light badge (`farCar`). */
+const FAR_ROWS = 2.5;
+/** Traffic smaller than this, in your lane, gets a 'V' marker above it. */
+const MARK_ROWS = 5;
+/** Lateral distance (road half-widths) at which a car counts as in your lane for the marker. */
+const LANE_MARK_W = 0.42;
+
+/**
+ * A distant car: `.--.` over `@==@` (tail lights at the ends), one row `@=@`
+ * when narrow. Returns its top row.
+ */
+function farCar(g: Grid, bottom: number, centerCol: number, widthCols: number, color: string, clipRow: number): number {
+  const w = Math.max(3, Math.min(8, Math.round(widthCols)));
+  const c0 = Math.round(centerCol - w / 2);
+  const row = bottom - 1;
+  if (row >= clipRow) return row;
+  for (let i = 0; i < w; i++) put(g, row, c0 + i, i === 0 || i === w - 1 ? '@' : '=', i === 0 || i === w - 1 ? TAIL_LIGHT : color);
+  if (w < 4 || row - 1 < 0) return row;
+  for (let i = 0; i < w; i++) put(g, row - 1, c0 + i, i === 0 || i === w - 1 ? '.' : '-', color);
+  return row - 1;
 }
 
 /** Ground height at world z (a segment's `y` is its far end). */
@@ -110,7 +155,7 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
   const halfW = W / 2;
   const basePct = (camZ - base.z) / SEG_LEN;
   // Camera height follows the ground under the car, so the car sits on the road over hills.
-  const camY = groundY(r, p.z) + CAM_HEIGHT;
+  const camY = groundY(r, p.z) + camHeight(v);
   const camX = p.x * ROAD_W;
   const horizonPx = v.horizon * v.ch;
 
@@ -208,7 +253,7 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
         if (au <= 1) {
           const lane = band === 0 && (Math.abs(au - 1 / 3) < 0.035 || au < 0.02);
           if (goal) [chx, col] = ['#', (Math.floor((u + 1) * 8) + seg.index) % 2 ? '#ffffff' : '#30304a'];
-          else if (forkPaint && au < 0.03) [chx, col] = ['#', '#ffd166'];
+          else if (forkPaint && au < 0.03) [chx, col] = ['#', DIVIDER_COLOR];
           else if (arrows && au > 0.4 && au < 0.7) [chx, col] = u < 0 ? ['<', EASY_COLOR] : ['>', HARD_COLOR];
           else if (lane) [chx, col] = ['|', sp.lane];
           else [chx, col] = [band ? '=' : '-', sp.road[band]];
@@ -254,9 +299,20 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
       const t = (car.z - seg.z) / SEG_LEN;
       const pc = project(segX[n] + segDx[n] * t, segY0[n] + (seg.y - segY0[n]) * t, car.z);
       const rowsH = (pc.w * 0.62) / v.ch;
-      if (rowsH < 1) continue;
       const colX = (pc.x + pc.w * car.x) / v.cw;
-      blitArt(g, TRAFFIC[car.kind % TRAFFIC.length], rowsH, pc.y / v.ch, colX, ['#7fd1ff', '#ffd166', '#b8ff6b', '#ff9ef0'][car.kind % 4], { clipRow, solid: true, maxScale: 1 });
+      const color = TRAFFIC_COLORS[car.kind % TRAFFIC_COLORS.length];
+      const bottom = Math.round(pc.y / v.ch);
+      let top: number;
+      if (rowsH < FAR_ROWS) {
+        // Far away the shrunken art is mush (and vanished past ~100 segments): draw a
+        // compact, bright tail-light badge instead, at least 3 columns wide, out to the draw distance.
+        top = farCar(g, bottom, colX, (pc.w * 1.1) / v.cw, color, clipRow);
+      } else {
+        blitArt(g, TRAFFIC[car.kind % TRAFFIC.length], rowsH, pc.y / v.ch, colX, color, { clipRow, solid: true, maxScale: 1 });
+        top = bottom - Math.min(8, Math.round(rowsH));
+      }
+      // A car in your lane while it's still small gets a marker above it.
+      if (rowsH < MARK_ROWS && n > 4 && Math.abs(car.x - p.x) < LANE_MARK_W && top - 1 < clipRow) put(g, top - 1, Math.round(colX - 0.5), 'V', TAIL_LIGHT);
     }
   }
 

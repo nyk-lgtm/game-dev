@@ -274,6 +274,19 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   1:1; goals renamed "endings"; end screen shows stage progress; "SHARP LEFT · BRAKE" warning ~2 s
   before curves you can't hold at top speed (|curve| > 3.2); at a fork only x > 0.2 takes the hard
   road (the middle is gentle); start clock 65 → 70 s. Bot still finishes 10/10 left, 8/10 right.
+- [x] **Nightline second blind playtest fixes** (rules v2; 4 races by a screenshot bot: out of time 75% into stage 2,
+  97% into stage 3, 46%/92% on Pine Pass; 13-28 crashes a race; fork panels and curve warnings liked):
+  traffic smaller than 2.5 rows is a bright tail-light badge (`farCar` in render.ts) out to the draw distance
+  (was invisible past ~100 segments, mush below 3 rows) and a red `V` marks small cars in your lane; horizon
+  0.42 → 0.32 of the rows with the camera raised in proportion (`camHeight`: road width at the car unchanged, so
+  CAR_HIT_W still fits) so the far road spreads over ~23% more rows; steering slider thin, under the car;
+  roadside props keep 45% of your speed and bounce you back toward the road (`push`, PROP_KEEP/PROP_BOUNCE;
+  was a dead stop at 12%); Pine Pass rumble brighter; fork divider orange (no traffic colour), fork panels say
+  "left/middle · gentle" / "far right · hard" on one line, help matches; "CHECKPOINT 850 m" under the clock below
+  15 s (cyan if reachable at top speed, pink if not); curve warning sits in the sky above the horizon; bug report
+  carries `rules=`. Bot (40 seeds) before → after: left 40/40 (median 38.4 s left) → 40/40 (42.8 s); right
+  33/40 (16.1 s) → 38/40 (23.3 s); median crashes ~40/37 unchanged (it dodges with perfect information).
+  Next: owner playtest; if humans still run out of time, consider a small clock bonus rather than more help.
 
 ## Ideas (unscheduled)
 - Unspoken: more story templates so the village tale varies; (done: 🔊 speaks a word with the phone's

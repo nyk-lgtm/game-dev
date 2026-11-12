@@ -34,7 +34,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     diagonal steps can't squeeze between two blocked cells, so never connect areas
     only diagonally.
   - Afterglow: `npx vite-node scripts/afterglow/balance.ts` (bot survival per character).
-  - Delve: `npx vite-node scripts/delve/balance.ts`; Nightline: `npx vite-node scripts/nightline/balance.ts`.
+  - Delve: `npx vite-node scripts/delve/balance.ts`; Nightline: `npx vite-node scripts/nightline/balance.ts`
+    (rules v2: bot finishes ~40/40 always-left, ~38/40 always-right; it dodges with perfect information, so
+    human-facing fixes are about seeing traffic and curves sooner). Nightline's camera height follows the
+    horizon (`camHeight` in render.ts) so the road at the car stays as wide as CAR_HIT_W was measured for.
   - Glyphwright: `npx vite-node scripts/glyph/balance.ts 100 smart,favor` (rules v3: smart bot ~37% wins, median wave 15;
     `favor` pushes it toward each caster). `scripts/glyph/probe.ts 2` ranks every caster × modifier build by real leaks
     with a per-caster best/top-10 line (`TWEAK='beam.dmg=17,MOD.pierceThrough=t'` tries numbers without editing rules).

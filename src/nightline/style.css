@@ -17,13 +17,16 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 #progFill { display: block; height: 100%; width: 0; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
 #mult { font-size: 12px; font-weight: 800; color: #ff2a6d; min-height: 15px; }
 #fork { position: absolute; top: calc(env(safe-area-inset-top) + 124px); left: 10px; right: 10px; text-align: center; }
-#fork .label { color: #ffd166; text-shadow: 0 0 8px #ff8a3d; animation: blink 0.6s steps(2) infinite; }
+#fork .label { color: #ff8c1a; text-shadow: 0 0 8px #ff8c1a; animation: blink 0.6s steps(2) infinite; }
 #fork .sides { display: flex; gap: 8px; margin-top: 6px; }
 #fork .sides div { flex: 1; padding: 6px 4px; border: 2px solid; font-size: 12px; font-weight: 800; letter-spacing: 0.04em; background: rgba(10, 4, 24, 0.7); opacity: 0.45; transition: opacity 0.15s, transform 0.15s; }
 #forkL { color: #05d9e8; border-color: #05d9e8; }
 #forkR { color: #ff2a6d; border-color: #ff2a6d; }
 #fork .sides div.on { opacity: 1; transform: scale(1.06); box-shadow: 0 0 14px currentColor; }
-#fork small { display: block; font-size: 10px; font-weight: 600; color: #b9a6e8; margin-top: 2px; }
+#fork small { display: block; font-size: 10px; font-weight: 600; color: #b9a6e8; margin-top: 2px; letter-spacing: 0; white-space: nowrap; }
+#fork .sides div { white-space: nowrap; overflow: hidden; }
+#cpLeft { margin-top: 5px; font-size: 13px; font-weight: 900; letter-spacing: 0.12em; color: var(--cyan); text-shadow: 0 0 8px var(--cyan), 0 1px 0 #000; }
+#cpLeft.late { color: var(--pink); text-shadow: 0 0 8px var(--pink), 0 1px 0 #000; }
 #flash { position: absolute; top: 24%; left: 0; right: 0; text-align: center; font-size: 26px; font-weight: 900; letter-spacing: 0.1em; color: #ffe08a; text-shadow: 0 0 14px #ff2a6d, 0 0 2px #000, 0 2px 0 #000; -webkit-text-stroke: 1px rgba(0,0,0,0.6); opacity: 0; transition: opacity 0.25s; }
 #flash.show { opacity: 1; }
 #pauseBtn { pointer-events: auto; position: absolute; top: calc(env(safe-area-inset-top) + 70px); right: 10px; width: 44px; height: 44px; background: rgba(10, 4, 24, 0.6); color: var(--text); border: 1px solid #4a2a7a; font: 800 14px var(--mono); }
@@ -33,8 +36,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 #controls button { pointer-events: auto; touch-action: none; width: 100px; height: 64px; border: 2px solid; background: rgba(10, 4, 24, 0.55); font: 900 15px var(--mono); letter-spacing: 0.08em; }
 #controls #brakeBtn { width: 84px; }
 #nitroBox { flex: 1; max-width: 160px; margin-bottom: 8px; }
-#stick { position: absolute; width: 150px; height: 14px; margin-left: -75px; margin-top: -7px; border: 1px solid rgba(185, 166, 232, 0.5); border-radius: 7px; background: rgba(10, 4, 24, 0.35); }
-#stick i { position: absolute; top: 50%; left: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: #05d9e8; box-shadow: 0 0 10px #05d9e8; }
+/* The steering slider: thin, under the car (top is set to the car's bottom row), never over the road ahead. */
+#stick { position: absolute; width: 150px; height: 6px; margin-left: -75px; margin-top: 4px; border: 1px solid rgba(185, 166, 232, 0.45); border-radius: 3px; background: rgba(10, 4, 24, 0.35); opacity: 0.85; }
+#stick i { position: absolute; top: 50%; left: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: #05d9e8; box-shadow: 0 0 8px #05d9e8; }
 #hint { position: absolute; left: 0; right: 0; top: 58%; text-align: center; font-size: 14px; font-weight: 800; letter-spacing: 0.15em; color: #05d9e8; text-shadow: 0 0 10px #05d9e8; animation: blink 0.8s steps(2) infinite; }
 #brakeBtn { color: #b9a6e8; border-color: #4a2a7a; }
 #boostBtn { color: #ffd166; border-color: #ff8a3d; box-shadow: 0 0 14px rgba(255, 138, 61, 0.4); }
@@ -56,4 +60,4 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 #errors { position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 20; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
 #errors .err { pointer-events: auto; background: #3a0d18; border: 1px solid #ff4d6d; color: #ffd6de; padding: 8px 10px; font: 12px/1.3 var(--mono); }
 .toast { position: fixed; left: 50%; top: 80px; transform: translateX(-50%); background: #120828; border: 1px solid #4a2a7a; padding: 8px 16px; z-index: 30; }
-#curveWarn { position: absolute; top: 31%; left: 0; right: 0; text-align: center; font: 900 15px var(--mono); letter-spacing: 0.12em; color: #ffd166; text-shadow: 0 0 10px #ff8a3d, 0 1px 0 #000; animation: blink 0.5s steps(2) infinite; pointer-events: none; }
+#curveWarn { position: absolute; top: 31%; z-index: 1; left: 0; right: 0; text-align: center; font: 900 15px var(--mono); letter-spacing: 0.12em; color: #ffd166; text-shadow: 0 0 10px #ff8a3d, 0 1px 0 #000; animation: blink 0.5s steps(2) infinite; pointer-events: none; }
