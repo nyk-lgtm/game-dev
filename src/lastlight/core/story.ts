@@ -81,6 +81,8 @@ export interface State {
   };
   tomas: { trust: number; room: Room; follows: boolean; told: string[] };
   ada: { freed: boolean; room: Room; told: string[]; left: boolean };
+  /** Rooms visited (later visits get the short description). */
+  seen: Room[];
   over: Ending | null;
 }
 
@@ -110,6 +112,7 @@ export function newGame(): State {
     f: { drawer: false, door: false, window: false, hatch: false, box: false, oil: false, wick: false, lit: false, wound: false, sawShip: false, foundAda: false, read: false, heavy: false },
     tomas: { trust: 0, room: 'boathouse', follows: false, told: [] },
     ada: { freed: false, room: 'road', told: [], left: false },
+    seen: ['cottage'],
     over: null,
   };
 }
@@ -137,12 +140,15 @@ function shipLine(s: State): string {
   return 'The ship is close enough to see its sails. Without the light it will be on the rocks by midnight.';
 }
 
-export function describe(s: State): string[] {
+/** The room as you find it; brief is the short text for a later visit. */
+export function describe(s: State, brief = false): string[] {
   const out: string[] = [];
   switch (s.room) {
     case 'cottage':
       out.push(
-        `The stove ticks and the window shakes in its frame. Ada’s chair is empty; her tea has gone cold${here(s, 'logbook') ? ' beside an open logbook' : ''}.`,
+        brief
+          ? `The cottage. The stove ticks${here(s, 'logbook') ? ', and Ada’s logbook lies open on the table' : ''}.`
+          : `The stove ticks and the window shakes in its frame. Ada’s chair is empty; her tea has gone cold${here(s, 'logbook') ? ' beside an open logbook' : ''}.`,
       );
       if (here(s, 'coat')) out.push('Her old oilskin coat hangs on the hook by the door.');
       if (here(s, 'kettle')) out.push('A kettle sits on the warm stove.');
@@ -150,12 +156,12 @@ export function describe(s: State): string[] {
       if (s.ada.room === 'cottage') out.push('Ada is in her chair by the stove, her bad leg up on a stool, a blanket around her shoulders.');
       break;
     case 'yard':
-      out.push('Rain comes sideways across the yard. Above you the lighthouse stands dark, its great lens dead.');
+      out.push(brief ? (s.f.lit ? 'The yard. Above you the lamp burns.' : 'The yard, rain coming sideways. Above you the tower is dark.') : 'Rain comes sideways across the yard. Above you the lighthouse stands dark, its great lens dead.');
       if (here(s, 'stone')) out.push('One of the cobbles by the pump has worked loose.');
       out.push(s.f.window ? 'Glass glitters under the broken ground-floor window.' : s.f.door ? 'The lighthouse door stands open.' : 'The lighthouse door is shut and locked.');
       break;
     case 'base':
-      out.push('Inside the tower the storm is a roar overhead. Iron stairs wind up into the dark toward the lamp room.');
+      out.push(brief ? 'The foot of the tower. Iron stairs wind up into the dark.' : 'Inside the tower the storm is a roar overhead. Iron stairs wind up into the dark toward the lamp room.');
       if (s.f.window) out.push('Wind whistles through the broken window and up the stairwell.');
       break;
     case 'lamp':
@@ -169,7 +175,7 @@ export function describe(s: State): string[] {
       out.push(shipLine(s));
       break;
     case 'cliff':
-      out.push('The path runs along the cliff edge. The wind is strong enough to lean on.');
+      out.push(brief ? 'The cliff path, the wind shoving at you.' : 'The path runs along the cliff edge. The wind is strong enough to lean on.');
       out.push(shipLine(s));
       out.push(
         tideIn(s)
@@ -181,17 +187,17 @@ export function describe(s: State): string[] {
       if (!s.f.foundAda) out.push('Up the village road, you think you hear someone calling.');
       break;
     case 'road':
-      out.push('The road to the village dips between gorse banks. A pine has come down across it.');
+      out.push(brief ? 'The village road and the fallen pine.' : 'The road to the village dips between gorse banks. A pine has come down across it.');
       if (!s.ada.freed) out.push('Under its branches, pinned by one leg, is Ada.');
       else out.push('The branch lies where you and Tomas heaved it aside.');
       break;
     case 'shore':
-      out.push('Black water climbs the shingle with every wave. The boathouse huddles against the cliff.');
+      out.push(brief ? 'The shore. Black water climbs the shingle.' : 'Black water climbs the shingle with every wave. The boathouse huddles against the cliff.');
       if (tideIn(s)) out.push('The steps up the cliff are under the sea. You’re cut off here until the tide turns, long after midnight.');
       else if (s.t >= TIDE_T - 8) out.push('The tide is nearly at the foot of the steps. Go back up soon, or not at all.');
       break;
     case 'boathouse':
-      out.push('It smells of tar and fish. Rain drums on the tin roof.');
+      out.push(brief ? 'The boathouse: tar, fish, rain on the tin roof.' : 'It smells of tar and fish. Rain drums on the tin roof.');
       if (tideIn(s)) out.push('Water slops under the door. The steps are gone; nobody is leaving before morning.');
       else if (s.t >= TIDE_T - 8) out.push('Water is creeping under the door. The tide is nearly at the steps.');
       if (here(s, 'oil')) out.push('A full can of lamp oil stands by the door.');
@@ -345,7 +351,9 @@ export function act(s: State, id: string): string[] | null {
         out.push('“Here! Over here!” Ada’s voice, thin against the wind.');
       }
       if (to === 'cliff' || to === 'lamp') s.f.sawShip = true;
-      out.push(...describe(s));
+      const brief = s.seen.includes(to);
+      if (!brief) s.seen.push(to);
+      out.push(...describe(s, brief));
       break;
     }
     case 'take': {

@@ -27,14 +27,20 @@ body {
 }
 @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 #acts {
-  flex: none; max-height: 46%; overflow-y: auto; padding: 8px 12px max(12px, env(safe-area-inset-bottom));
-  border-top: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; gap: 8px;
+  flex: none; max-height: 46%; overflow-y: auto; padding: 6px 12px 0;
+  border-top: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; gap: 6px;
 }
-#acts .row { display: flex; flex-direction: column; gap: 4px; }
+#acts > :last-child { margin-bottom: max(12px, env(safe-area-inset-bottom)); }
+#acts .row { display: flex; flex-direction: column; gap: 3px; }
 #acts .lab { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
 #acts .list { display: flex; flex-wrap: wrap; gap: 6px; }
+/* The Go row stays pinned at the bottom of the panel while the rest scrolls. */
+#acts .row.goes {
+  position: sticky; bottom: 0; z-index: 1; margin: 0 -12px; padding: 4px 12px max(12px, env(safe-area-inset-bottom));
+  background: var(--panel); box-shadow: 0 -10px 12px -8px rgba(0, 0, 0, 0.55);
+}
 #acts button {
-  min-height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line);
+  min-height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--line);
   background: #182338; color: var(--text); font-size: 15px; font-weight: 600; text-align: left;
 }
 #acts button.chip { border-radius: 999px; }
