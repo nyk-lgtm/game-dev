@@ -30,8 +30,29 @@ const hexhold = makeStore('hexhold.');
 const triad = makeStore('triad.');
 const lastlight = makeStore('lastlight.');
 const ninefold = makeStore('ninefold.');
+const summit = makeStore('summit.');
 
 const GAMES: GameCard[] = [
+  {
+    path: './summit/',
+    title: 'Summit',
+    tag: 'Solitaire roguelite',
+    pitch: 'Eight deals of peaks solitaire: play cards one up or down, chain streaks, and pick a charm after every floor. Unused draws carry up, and the air gets thin.',
+    accent: '#8fc4ff',
+    best: () => {
+      const p = summit.load<{ runs?: number; best?: number; bestFloor?: number; wins?: number } | null>('profile', null);
+      if (!p?.runs) return null;
+      return `Best ${(p.best ?? 0).toLocaleString('en-US')} · ${p.wins ? `${p.wins} summit${p.wins === 1 ? '' : 's'}` : `floor ${p.bestFloor ?? 1}`}`;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#0e1522"/>
+      <path d="M0 76L22 40l10 14 12-20 32 42z" fill="#1d2f52"/><path d="M44 34l5 8-5-2-4 3z" fill="#f7f2e6"/>
+      <g stroke="#0e1522" stroke-width="1.2"><rect x="27" y="8" width="20" height="28" rx="3" fill="#f7f2e6"/>
+      <rect x="16" y="22" width="20" height="28" rx="3" fill="#f7f2e6"/><rect x="38" y="22" width="20" height="28" rx="3" fill="#3a5a8c"/></g>
+      <text x="31" y="20" font-family="system-ui,sans-serif" font-weight="800" font-size="10" fill="#c92c3a">7</text>
+      <text x="20" y="34" font-family="system-ui,sans-serif" font-weight="800" font-size="10" fill="#1b2233">8</text>
+      <rect x="28" y="52" width="20" height="22" rx="3" fill="#f7f2e6" stroke="#ffcf6e" stroke-width="2"/>
+      <text x="32" y="65" font-family="system-ui,sans-serif" font-weight="800" font-size="10" fill="#c92c3a">6</text></svg>`,
+  },
   {
     path: './ninefold/',
     title: 'Ninefold',
@@ -284,6 +305,7 @@ const DAILY = [
   { path: './hexhold/?daily', title: 'Hexhold', store: hexhold, accent: '#ffd77a' },
   { path: './triad/?daily', title: 'Triad', store: triad, accent: '#ff8a3d' },
   { path: './ninefold/?daily', title: 'Ninefold', store: ninefold, accent: '#9be15d' },
+  { path: './summit/?daily', title: 'Summit', store: summit, accent: '#8fc4ff' },
 ];
 const daily = document.getElementById('daily')!;
 daily.innerHTML = `<h3>Daily challenges <span>${prettyDay()}</span></h3><p>The same run for everyone today. A new one at midnight.</p>`;

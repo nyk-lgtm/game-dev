@@ -6,7 +6,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 (pseudo-3D ASCII racer), `glyph/` (Glyphwright, spell-crafting autobattler), `rewild/`
 (ecosystem builder on a hex island), `unspoken/` (learn a procedurally invented language from pictures), `hexhold/` (hex maze tower defense),
 `triad/` (hex logic puzzle: fire/water/leaf, numbers count beaten neighbors), `lastlight/` (tap-driven interactive story, two nights),
-`ninefold/` (seeded mini-golf).
+`ninefold/` (seeded mini-golf), `summit/` (peaks-solitaire roguelite with charms).
 
 - The owner plays and tests only on an Android phone (Chrome, portrait). Every UI
   change must work by touch at ~390 CSS px wide; tap targets ≥ 44px.
@@ -35,6 +35,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   - Afterglow: `npx vite-node scripts/afterglow/balance.ts` (bot survival per character).
   - Delve: `npx vite-node scripts/delve/balance.ts`; Nightline: `npx vite-node scripts/nightline/balance.ts`.
   - Glyphwright: `npx vite-node scripts/glyph/balance.ts` (smart bot win rate, deaths per wave).
+  - Summit: `npx vite-node scripts/summit/balance.ts 600` (greedy bot with chain lookahead: floor 1 ~98%,
+    floor 2 ~95%, median floor 5, ~15-19% win all 8); `DRAWS=40,20,…` tries other allotments.
   - Hexhold: `npx vite-node scripts/hexhold/balance.ts 32` (heuristic bot, rules v4: median wave ~28, ~7/32 wins);
     `scripts/hexhold/probe.ts 32` lists each loss with its wave and map shape (one or two portals) and the
     lives lost per band of waves (the difficulty curve: v4 is gentle to wave 10, pressure from 15 on).
@@ -45,7 +47,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   with batched `fillText` runs; art lives in each game's `art.ts`.
 - Daily challenges (src/shared/daily.ts): `<game>/?daily` plays today's seed (`dailySeed(game, day)`,
   local date); each game keeps its in-progress daily under `dailyRun` and today's best under `daily`.
-  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad and Ninefold; the hub's Daily section links them.
+  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad, Ninefold and Summit; the hub's Daily section links them.
 - Afterglow extras: Nights 1-5 (`NIGHTS` in content.ts, unlocked by `profile.nightsWon`), arenas
   (`ARENAS`/pillars in core/arena.ts, hashed from the seed), unions (`union` on a WeaponDef: two
   maxed weapons merge in a chest), and player damage is attributed (`w.taken`, `w.killedBy`).
@@ -81,6 +83,15 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   fitted to the bot (length, obstacles on the route, turns); `NOISE=0.06 balance.ts 8` median ≈ −2. Tools in
   scripts/ninefold: `show.ts <seed>` (ASCII), `balance.ts n` (search bot, NOISE=0.04 wobble), `trace.ts`,
   `botround.ts <seed>` (actions for `?seed=&a=`).
+- Summit (src/summit/core): 8 floors; each deal is a hand-drawn layout (layouts.ts: rows as strings in
+  half-card steps, ≤ 8 cards across; a card is covered by the next row's cards at x±1) from a seeded 52-card
+  deck, plus a draw pile. A card plays if uncovered and one rank from the waste (A-K wraps). Draws are a run-wide
+  supply: each floor adds `DEAL_DRAWS[f]` (40, 20, 12, … 3) to what's left; no plays and no draws = run over.
+  Streaks score 10·n. 13 charms (charms.ts), one of three after each floor (`offersFor`, seeded per floor).
+  Actions: `P<slot>`, `D`, `B<slot>` (Blasting Cap), `U` (Rewind: snapshots in `hist`), `C<charm>`, `X` give up;
+  `replay(seed, a)`; `startAt(seed, floor, charms)` for tests. Tools in scripts/summit: `trace.ts <seed>`,
+  `upto.ts <seed> <floor> [moves]` (bot actions for `?seed=&a=`), `show.ts <seed> <a>`, `curve.ts` (clear rate
+  vs draws per floor). UI is DOM cards (game.ts), not canvas.
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)
   plus a shape in render/draw.ts and a color in palette.ts; tests in
   tests/telegraph/enemies.test.ts. Telegraphed attacks set `aim` and resolve via

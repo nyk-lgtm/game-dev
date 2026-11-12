@@ -39,6 +39,7 @@ export default defineConfig({
         hexhold: resolve(__dirname, 'hexhold/index.html'),
         triad: resolve(__dirname, 'triad/index.html'),
         ninefold: resolve(__dirname, 'ninefold/index.html'),
+        summit: resolve(__dirname, 'summit/index.html'),
         lastlight: resolve(__dirname, 'lastlight/index.html'),
       },
     },

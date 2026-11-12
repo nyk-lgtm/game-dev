@@ -18,6 +18,22 @@ Ground rules: never break saves without bumping RULES_VERSION; never leave main 
 keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 
 ## Now
+- [ ] **Summit** (peaks-solitaire roguelite). Milestones:
+  - [x] Core (src/summit/core): 8 floors of hand-drawn peak layouts (3 rows of 16-18 cards, then 4 rows of
+        20-24, then 24-27 in 4-5 rows), more face-down cards per floor (0 → 100% of covered cards), a run-wide
+        draw supply (each floor adds 40, 20, 12, 10, 8, 6, 4, 3; unused draws carry), streaks 10·n, 13 charms
+        (Joker, Deep Pockets, Rewind, Spyglass, Flush, Mirror, Blasting Cap, High Stakes, Lantern, Second Wind,
+        Long Stride, Peak Flags, Momentum), replay, 23 tests. Per-deal draws were far too swingy (a 16-card deal
+        with 34 draws still failed 6%), hence the carried supply. Long Stride first won every bot run that took it;
+        now each stride play burns a draw.
+  - [x] Bot (scripts/summit/bot.ts: plays the first card of its best visible chain, values reveals, blasts when
+        stuck): 1000 runs: floor 1 98%, floor 2 95%, median floor 5, 19% win (16-17% on other seed ranges),
+        median score ~3,100. It never uses Rewind/Spyglass/Lantern well, so those look weak in its numbers.
+  - [x] UI: DOM cards with gold edge on playable ones, fly-to-waste, streak meter, floating points, shake +
+        hint on a wrong tap, spyglass peek, undo/blast tools, End run when cornered, charm pick card, end card
+        with the climb strip, help, menu with charms, bug report, daily (`?daily`), hub card first + Daily link.
+  - [ ] Next: owner playtest. Watch: is floor 1 too long (40 draws)? Are Long Stride / Mirror too strong for
+        people? Maybe a lantern-seen tint, charm synergies, and a "summits" stat on the hub.
 - [ ] **Ninefold** (seeded mini-golf). Milestones:
   - [x] Core: corridor holes on a 6×9 grid, rails, posts, bumpers, sand, water (+1, replay the spot), slopes;
         240 Hz physics, exact replays, 8-stroke pick-up, formula par. Search bot sinks everything (noise-free
