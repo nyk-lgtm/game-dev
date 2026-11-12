@@ -1,5 +1,5 @@
 // Drawing the Triad board: hex cells, element icons, clue numbers, notes, and
-// links (an "=" of two short bars straddling the edge between two hexes).
+// links (an "=" badge on the edge between two hexes).
 
 import { fitHexes, hexPath, hexToPx, type HexLayout } from '../../shared/hexlayout';
 import { clueCells, isLink, linkCells, makeBoard, type Board, type Puzzle } from '../core';
@@ -44,10 +44,7 @@ export function linkSvg(size = 40): string {
     <g stroke="${LINK_COLOR}" stroke-width="2.4" stroke-linecap="round"><line x1="16" y1="17.6" x2="24" y2="17.6"/><line x1="16" y1="22.4" x2="24" y2="22.4"/></g></svg>`;
 }
 
-/**
- * A link: two short bars parallel to the shared edge, one just inside each hex,
- * so together they read as "=" across the edge.
- */
+/** A link: an upright "=" on a dark badge over the middle of the shared edge. */
 function drawLink(g: CanvasRenderingContext2D, v: View, b: Board, id: number, color: string, alpha: number, wide = false) {
   const [i, j] = linkCells(b, id);
   const A = hexToPx(v.L, b.cells[i].q, b.cells[i].r);
@@ -55,14 +52,17 @@ function drawLink(g: CanvasRenderingContext2D, v: View, b: Board, id: number, co
   const size = v.L.size;
   const mx = (A.x + B.x) / 2;
   const my = (A.y + B.y) / 2;
-  const d = Math.hypot(B.x - A.x, B.y - A.y);
-  // Unit vector across the edge (center to center) and along it.
-  const ux = (B.x - A.x) / d;
-  const uy = (B.y - A.y) / d;
-  const half = size * (wide ? 0.26 : 0.21);
-  const off = size * 0.11;
+  // Always an upright "=" on a small dark badge at the edge's middle, so it reads the same on every edge.
+  const ux = 0;
+  const uy = 1;
+  const half = size * (wide ? 0.2 : 0.16);
+  const off = size * 0.085;
   g.save();
   g.globalAlpha = alpha;
+  g.fillStyle = 'rgba(8, 10, 16, 0.9)';
+  g.beginPath();
+  g.arc(mx, my, size * (wide ? 0.3 : 0.26), 0, Math.PI * 2);
+  g.fill();
   g.lineCap = 'round';
   for (const [w, c] of [
     [Math.max(4.5, size * 0.2), 'rgba(8, 10, 16, 0.85)'],
