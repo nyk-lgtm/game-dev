@@ -51,8 +51,8 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
     (a crowd), the spell card also shows dps on a single foe, and row names never truncate (tags
     moved to the dps line).
   - [x] Telegraph: depths 2-3 get +2 enemy budget (depth 1 stays the tutorial; rules v4). Greedy bot
-    median depth 8 → 7 (back on target), more of its runs end on depth 3. Still open: bomb badge
-    tucked onto the player's hex reads like a status effect.
+    median depth 8 → 7 (back on target), more of its runs end on depth 3. A bomb someone stands on
+    is now drawn under them (a lit ring) with a "💣 n" fuse tag below, not a badge on top.
   - [x] Rewild (rules v3): species alive 4 seasons in a row are **settled** and pay +3 each season;
     dying out restarts the streak, so keeping wolves and deer balanced beats replanting. Stars
     rescaled to 900/1700/2400 (greedy bot 0/0/13/3 vs 0/2/11/3 before). Report and species list show

@@ -136,14 +136,14 @@ export function draw(
 
   // Units, top to bottom so lower ones overlap upper ones.
   const units = [...scene.units.values()].sort((a, b) => a.r + a.q / 2 - (b.r + b.q / 2));
+  const coveredBy = (b: { q: number; r: number }) => units.some((u) => Math.abs(u.q - b.q) < 0.5 && Math.abs(u.r - b.r) < 0.5);
+  // A bomb someone stands on lies under them: a lit ring on the floor, with its fuse on a tag below.
+  for (const b of scene.bombs) if (coveredBy(b)) drawGroundBomb(ctx, L, b.q, b.r, b.fuse, time);
   for (const u of units) drawUnit(ctx, L, u, time, ov.inspect === u.id);
+  for (const b of scene.bombs) if (coveredBy(b)) drawBombTag(ctx, L, b.q, b.r, b.fuse);
 
-  // Bombs: drawn over units, tucked into the hex corner when someone stands on them.
-  for (const b of scene.bombs) {
-    const covered = units.some((u) => Math.abs(u.q - b.q) < 0.5 && Math.abs(u.r - b.r) < 0.5);
-    const off = covered ? 0.42 : 0;
-    drawBomb(ctx, L, b.q + off * 0.6, b.r + off * 0.3, 0, b.fuse, time);
-  }
+  // Bombs on open floor.
+  for (const b of scene.bombs) if (!coveredBy(b)) drawBomb(ctx, L, b.q, b.r, 0, b.fuse, time);
 
   // Preview: ghost of the player at the destination, and outcome marks.
   if (ov.selected && ov.outcome) drawPreview(ctx, L, scene, ov.selected, ov.outcome, time);
@@ -453,6 +453,35 @@ function drawBomb(ctx: CanvasRenderingContext2D, L: Layout, q: number, r: number
     ctx.fillStyle = fuse <= 1 ? '#ff6b81' : C.text;
     ctx.fillText(String(fuse), x, by + S * 0.02);
   }
+}
+
+function drawGroundBomb(ctx: CanvasRenderingContext2D, L: Layout, q: number, r: number, fuse: number, time: number): void {
+  const S = L.size;
+  const { x, y } = hexToPx(L, q, r);
+  const pulse = 0.5 + 0.5 * Math.sin(time / (fuse <= 1 ? 90 : 160));
+  ctx.beginPath();
+  ctx.ellipse(x, y + S * 0.12, S * 0.62, S * 0.36, 0, 0, TAU);
+  ctx.fillStyle = C.bomb;
+  ctx.fill();
+  ctx.lineWidth = S * (0.06 + 0.03 * pulse);
+  ctx.strokeStyle = fuse <= 1 ? '#ff6b81' : C.bomber;
+  ctx.stroke();
+}
+
+function drawBombTag(ctx: CanvasRenderingContext2D, L: Layout, q: number, r: number, fuse: number): void {
+  if (fuse <= 0) return;
+  const S = L.size;
+  const { x, y } = hexToPx(L, q, r);
+  const w = S * 0.78, h = S * 0.34, ty = y + S * 0.62;
+  ctx.beginPath();
+  ctx.roundRect(x - w / 2, ty - h / 2, w, h, h / 2);
+  ctx.fillStyle = fuse <= 1 ? '#ff6b81' : C.bomber;
+  ctx.fill();
+  ctx.font = `800 ${Math.round(S * 0.24)}px system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#10131c';
+  ctx.fillText(`💣 ${fuse}`, x, ty + S * 0.01);
 }
 
 function dirAngle(L: Layout, dir: number): number {
