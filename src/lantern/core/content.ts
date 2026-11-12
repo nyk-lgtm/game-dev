@@ -14,17 +14,19 @@ export interface MonsterDef {
   sight: number;
   /** Chance per turn to flit randomly instead of chasing. */
   erratic: number;
+  /** Chance your blow misses it (you hit 1 - dodge of the time). */
+  dodge: number;
   blurb: string;
 }
 
 export const MONSTERS: Record<MonsterKind, MonsterDef> = {
-  rat: { name: 'rat', glyph: 'r', hp: 4, atk: 2, def: 0, xp: 2, gold: [0, 1], sight: 5, erratic: 0, blurb: 'A fat rat. Mostly teeth.' },
-  wolf: { name: 'wolf', glyph: 'w', hp: 9, atk: 4, def: 0, xp: 5, gold: [0, 0], sight: 7, erratic: 0, blurb: 'Grey wolf. It has your scent.' },
-  goblin: { name: 'goblin', glyph: 'g', hp: 10, atk: 3, def: 1, xp: 6, gold: [2, 5], sight: 6, erratic: 0, blurb: 'A goblin with a rusty knife and a full purse.' },
-  bat: { name: 'bat', glyph: 'b', hp: 5, atk: 3, def: 0, xp: 3, gold: [0, 1], sight: 6, erratic: 0.5, blurb: 'Flits about wildly. Hard to pin down.' },
-  spider: { name: 'spider', glyph: 's', hp: 12, atk: 5, def: 1, xp: 8, gold: [0, 2], sight: 5, erratic: 0, blurb: 'A cave spider the size of a dog.' },
-  skeleton: { name: 'skeleton', glyph: 'k', hp: 16, atk: 6, def: 2, xp: 12, gold: [3, 6], sight: 6, erratic: 0, blurb: 'Old bones that remember how to fight.' },
-  king: { name: 'Hollow King', glyph: 'K', hp: 45, atk: 9, def: 3, xp: 50, gold: [30, 30], sight: 7, erratic: 0, blurb: 'A crown of black iron. The Ember glows in his chest.' },
+  rat: { name: 'rat', glyph: 'r', hp: 4, atk: 2, def: 0, xp: 2, gold: [0, 1], sight: 5, erratic: 0, dodge: 0.1, blurb: 'A fat rat. Mostly teeth.' },
+  wolf: { name: 'wolf', glyph: 'w', hp: 9, atk: 4, def: 0, xp: 5, gold: [0, 0], sight: 7, erratic: 0, dodge: 0.15, blurb: 'Grey wolf. It has your scent.' },
+  goblin: { name: 'goblin', glyph: 'g', hp: 10, atk: 3, def: 1, xp: 6, gold: [2, 5], sight: 6, erratic: 0, dodge: 0.1, blurb: 'A goblin with a rusty knife and a full purse.' },
+  bat: { name: 'bat', glyph: 'b', hp: 5, atk: 3, def: 0, xp: 3, gold: [0, 1], sight: 6, erratic: 0.5, dodge: 0.3, blurb: 'Flits about wildly. Hard to pin down.' },
+  spider: { name: 'spider', glyph: 's', hp: 12, atk: 5, def: 1, xp: 8, gold: [0, 2], sight: 5, erratic: 0, dodge: 0.1, blurb: 'A cave spider the size of a dog.' },
+  skeleton: { name: 'skeleton', glyph: 'k', hp: 16, atk: 6, def: 2, xp: 12, gold: [3, 6], sight: 6, erratic: 0, dodge: 0.1, blurb: 'Old bones that remember how to fight.' },
+  king: { name: 'Hollow King', glyph: 'K', hp: 70, atk: 10, def: 4, xp: 50, gold: [30, 30], sight: 7, erratic: 0, dodge: 0.15, blurb: 'A crown of black iron. The Ember glows in his chest.' },
 };
 
 export const WEAPONS = { dagger: { name: 'Dagger', atk: 0 }, sword: { name: 'Sword', atk: 3 }, axe: { name: 'Iron Axe', atk: 5 } };
@@ -101,13 +103,14 @@ export function dialogue(s: GameState, npc: NpcId): Dialogue {
     case 'hermit':
       return {
         name,
-        text: 'Going to the Hollow? The dark below eats careless lanterns. The skeletons hit hard: fight them in corridors, one at a time.',
+        text: 'Going to the Hollow? The dark below eats careless lanterns. The Hollow King sits at the very bottom, past the long tunnel of the Deep Hollow. The skeletons hit hard: fight them in corridors, one at a time.',
         options: [],
       };
   }
 }
 
 export const LANTERN_TEXT = {
-  cold: 'The village Lantern. Cold iron and dead glass.',
+  cold: 'The village Lantern. Cold iron and dead glass. Its Ember was taken into the Hollow.',
+  ember: 'You set the Ember in the cold glass. Light floods Emberwick!',
   lit: 'The village Lantern blazes with the Ember’s light.',
 };

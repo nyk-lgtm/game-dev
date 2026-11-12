@@ -330,6 +330,18 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   wisps 20% → 22% (bot: 276 → 248 turns, Spirit Tree 49/60 → 30/60); help says wisps never merge and
   what traps pay; brighter labels; empty stash is dashed and says so. Still long for one sitting —
   owner said keep the board as is (no smaller board).
+- Lantern second blind playtest (finished at level 6, 804 turns, 0 falls) and fixes (rules v2): taps into the
+  dark re-plan every step (`planWalk`) so a walk goes on until arrival; a walk stops only for a new monster, a met
+  one coming within 3, a monster in the way or an event, and says why; tap elsewhere to re-route, tap yourself to
+  stop; unreachable taps say so (a chase no longer silently drops). Floaters replace older ones on the same cell
+  (same-turn ones stack), level-up and the Ember are banners, NPC labels flip below when you stand above them. HUD XP
+  bar; an info line shows the adjacent/last-fought monster's HP and both sides' hit % and damage, else the goal;
+  per-monster dodge (bat 30%, wolf/King 15%, others 10%) explained in the miss line; the Lantern and the way home are
+  flagged with the Ember, and bumping the Lantern with it wins. Level 1 softer: attack 4 (was 3), 3 potions, heal
+  1 HP / 3 turns when nothing sees you (10 otherwise) and Wait becomes Rest (until healed or something shows up).
+  End tougher: King 70 HP / atk 10 / def 4 (was 45/9/3), reached only through Deep Hollow's long bottom tunnel and a
+  skeleton guard. Completion bot 98% → 100%, king level median 7 → 8, falls median 0 (max 1 → 0). Duel probe
+  (axe, 1 potion): L5 98% → 29%, L6 100% → 87%. Not done: rushers can still skip most of floor 1.
 - Lantern blind playtest (agent reached the Hollow at level 3) and fixes: a far/unexplored tap walks
   to the nearest reachable cell (pathToward) instead of refusing; a monster is announced once and
   later only stops a walk within 3 cells; Wait and shop actions say what happened (in the dialog);

@@ -29,8 +29,9 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     `floorBudget`: +3 a floor to 24 at depth 8, then +2; at most 11 enemies, 4 brutes).
   - Grove: `npx vite-node scripts/grove/balance.ts 60` (score, game length, best tier; rules v2:
     median ~248 turns, Spirit Tree in ~half the games).
-  - Lantern: `npx vite-node scripts/lantern/balance.ts 50` (completion bot: ~98% finish,
-    level 7 at the king). Maps are hand-drawn strings in src/lantern/core/maps.ts;
+  - Lantern: `npx vite-node scripts/lantern/balance.ts 50` (completion bot, rules v2: ~100% finish,
+    0 falls, level 8 at the king; it clears everything). `scripts/lantern/duel.ts [potions]` pits each level
+    against the King (axe, cloth): L6 + 1 potion ~87%, L5 ~29% (`OLD=1` for the v1 King). Maps are hand-drawn strings in src/lantern/core/maps.ts;
     diagonal steps can't squeeze between two blocked cells, so never connect areas
     only diagonally.
   - Afterglow: `npx vite-node scripts/afterglow/balance.ts` (bot survival per character).

@@ -4,7 +4,7 @@
 import { Rng, mixSeed } from '../../shared/rng';
 import { ARMORS, LANTERN_TEXT, MONSTERS, POTION_HEAL, PRICES, WEAPONS, XP_TABLE } from './content';
 import { MAPS } from './maps';
-import type { Action, GameEvent, GameState, MapId, Monster, NpcId, Pos, StepResult } from './types';
+import type { Action, GameEvent, GameState, MapId, Monster, MonsterKind, NpcId, Pos, StepResult } from './types';
 import {
   DIRS8,
   WORLD,
@@ -22,10 +22,17 @@ import {
   samePos,
 } from './world';
 
-export const PLAYER_HIT = 0.85;
 export const MONSTER_HIT = 0.8;
-/** Regain 1 HP every this many turns. */
+/** Regain 1 HP every this many turns while something is hunting you... */
 export const REGEN_EVERY = 10;
+/** ...and this often when nothing is (no monster that can see you). */
+export const CALM_REGEN_EVERY = 3;
+export const START_POTIONS = 3;
+
+/** Chance your blow lands on a monster of this kind. */
+export const hitChance = (kind: MonsterKind) => 1 - MONSTERS[kind].dodge;
+/** Damage range of a blow (before the ±1 roll is clamped to at least 1). */
+export const damageRange = (atk: number, def: number): [number, number] => [Math.max(1, atk - def - 1), Math.max(1, atk - def + 1)];
 const LOG_MAX = 40;
 
 export const attackOf = (s: GameState) => s.player.baseAtk + WEAPONS[s.player.weapon].atk;
@@ -121,7 +128,7 @@ export function applyAction(prev: GameState, a: Action): StepResult {
     s.turn++;
     monsterPhase(s, events);
     if (p.hp <= 0) knockedOut(s, events);
-    else if (s.turn % REGEN_EVERY === 0 && p.hp < p.maxHp) p.hp++;
+    else if (p.hp < p.maxHp && s.turn % (hunted(s) ? REGEN_EVERY : CALM_REGEN_EVERY) === 0) p.hp++;
   }
   updateSeen(s);
   return { state: s, events };
@@ -151,6 +158,14 @@ function step(s: GameState, dir: number, events: GameEvent[]): boolean {
     return false;
   }
   if (mk?.kind === 'lantern') {
+    if (s.quest === 'ember') {
+      // Carrying the Ember: set it in the Lantern yourself.
+      s.quest = 'won';
+      say(s, LANTERN_TEXT.ember);
+      events.push({ type: 'read', text: LANTERN_TEXT.ember });
+      events.push({ type: 'win' });
+      return false;
+    }
     const text = s.quest === 'won' ? LANTERN_TEXT.lit : LANTERN_TEXT.cold;
     say(s, text);
     events.push({ type: 'read', text });
@@ -178,8 +193,8 @@ function damageRoll(s: GameState, atk: number, def: number): number {
 
 function playerAttack(s: GameState, foe: Monster, events: GameEvent[]): void {
   const def = MONSTERS[foe.kind];
-  if (roll(s) >= PLAYER_HIT) {
-    say(s, `You miss the ${def.name}.`);
+  if (roll(s) >= hitChance(foe.kind)) {
+    say(s, `You miss: the ${def.name} dodges (${Math.round(100 * hitChance(foe.kind))}% to hit).`);
     events.push({ type: 'miss', at: foe.pos });
     return;
   }
@@ -311,6 +326,15 @@ function monsterPhase(s: GameState, events: GameEvent[]): void {
   }
 }
 
+/** Is any monster on your map close enough to see you (so you heal slowly)? */
+export function hunted(s: GameState): boolean {
+  const p = s.player;
+  const m = WORLD[p.map];
+  return s.monsters.some(
+    (mo) => mo.hp > 0 && mo.map === p.map && chebyshev(mo.pos, p.pos) <= MONSTERS[mo.kind].sight && los(m, mo.pos, p.pos),
+  );
+}
+
 function knockedOut(s: GameState, events: GameEvent[]): void {
   const p = s.player;
   s.deaths++;
@@ -362,10 +386,10 @@ export function newGame(seed: number): GameState {
       maxHp: 20,
       level: 1,
       xp: 0,
-      baseAtk: 3,
+      baseAtk: 4,
       baseDef: 0,
       gold: 8,
-      potions: 2,
+      potions: START_POTIONS,
       weapon: 'dagger',
       armor: 'cloth',
     },
