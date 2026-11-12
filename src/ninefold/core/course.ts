@@ -25,6 +25,14 @@ export interface Post {
   /** Bumpers spring the ball back faster; posts are dead stone. */
   bumper: boolean;
 }
+/** A windmill: a cross of arms turning at `w` rad/s from angle `a0` at the start of every shot. */
+export interface Mill {
+  x: number;
+  y: number;
+  arm: number;
+  a0: number;
+  w: number;
+}
 export interface Zone {
   kind: 'sand' | 'water' | 'slope';
   x: number;
@@ -47,6 +55,7 @@ export interface Hole {
   walls: Seg[];
   posts: Post[];
   zones: Zone[];
+  mills: Mill[];
 }
 
 const cx = (c: number) => (c % COLS) * CELL + CELL / 2;
@@ -181,11 +190,13 @@ export function makeHole(seed: number, n: number): Hole {
   const pool: string[] = ['post', 'bumper', 'sand'];
   if (n >= 2) pool.push('slope');
   if (n >= 3) pool.push('water');
-  if (n >= 5) pool.push('slope', 'water', 'bumper');
+  if (n >= 3) pool.push('mill');
+  if (n >= 5) pool.push('slope', 'water', 'bumper', 'mill');
+  const mills: Mill[] = [];
   const count = Math.min(path.length - 2, 1 + Math.floor(n / 2) + rng.int(0, 1));
   const mids = rng.shuffle(path.slice(1, -1));
   for (const c of mids) {
-    if (posts.length + zones.length >= count) break;
+    if (posts.length + zones.length + mills.length >= count) break;
     if (used.has(c)) continue;
     const i = index.get(c)!;
     const din = dirBetween(path[i - 1], c), dout = dirBetween(c, path[i + 1]);
@@ -205,6 +216,8 @@ export function makeHole(seed: number, n: number): Hole {
         const side = rng.next() < 0.5 ? -1 : 1;
         posts.push({ x: cx(c) + along[1] * 4 * side, y: cy(c) + along[0] * 4 * side, r: 2.2, bumper: true });
       }
+    } else if (kind === 'mill' && straight && mills.length < 2) {
+      mills.push({ x: cx(c), y: cy(c), arm: 6.2, a0: rng.int(0, 7) * (Math.PI / 16), w: (rng.next() < 0.5 ? -1 : 1) * (1.6 + rng.next() * 1.2) });
     } else if (kind === 'sand') {
       const w = rng.int(7, 11), h = rng.int(6, 10);
       zones.push({ kind: 'sand', x: x0 + rng.int(1, CELL - 1 - w), y: y0 + rng.int(1, CELL - 1 - h), w, h, dx: 0, dy: 0 });
@@ -230,8 +243,8 @@ export function makeHole(seed: number, n: number): Hole {
 
   const turns = turnsOf(path);
   const hazards = zones.filter((z) => z.kind !== 'sand').length;
-  const par = Math.max(2, Math.min(5, 2 + Math.floor((turns + (path.length > 8 ? 1 : 0) + (hazards > 1 ? 1 : 0)) / 2)));
-  return { n, par, cells, path, tee, cup, walls: buildWalls(cells), posts, zones };
+  const par = Math.max(2, Math.min(5, 2 + Math.floor((turns + (path.length > 8 ? 1 : 0) + (hazards + mills.length > 1 ? 1 : 0)) / 2)));
+  return { n, par, cells, path, tee, cup, walls: buildWalls(cells), posts, zones, mills };
 }
 
 export const makeCourse = (seed: number): Hole[] => [...Array(HOLES).keys()].map((n) => makeHole(seed, n));

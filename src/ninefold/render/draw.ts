@@ -42,6 +42,9 @@ export interface Scene {
   /** Ball sinking: 0..1 (shrinks into the cup). */
   sink: number;
   splash: { x: number; y: number; t: number } | null;
+  /** Seconds since the last shot began, and when it ended (null while rolling). */
+  millT: number;
+  millEnd: number | null;
 }
 
 const hash = (a: number, b: number) => {
@@ -182,6 +185,38 @@ export function draw(g: CanvasRenderingContext2D, w: number, h: number, v: View,
       g.fill();
     }
   });
+  // Windmills: after a shot they turn on to their starting pose (they look alike every quarter turn).
+  for (const m of hole.mills) {
+    const P = Math.PI / 2 / Math.abs(m.w);
+    const t = s.millEnd === null ? s.millT : Math.min(s.millT, Math.ceil(s.millEnd / P - 1e-9) * P);
+    const a = m.a0 + m.w * t;
+    g.lineCap = 'round';
+    g.strokeStyle = 'rgba(0,0,0,0.35)';
+    g.lineWidth = 1.6;
+    g.beginPath();
+    for (let k = 0; k < 4; k++) {
+      const aa = a + (k * Math.PI) / 2;
+      g.moveTo(m.x + 0.4, m.y + 0.6);
+      g.lineTo(m.x + 0.4 + Math.cos(aa) * m.arm, m.y + 0.6 + Math.sin(aa) * m.arm);
+    }
+    g.stroke();
+    g.strokeStyle = '#e9dcc0';
+    g.lineWidth = 1.4;
+    g.beginPath();
+    for (let k = 0; k < 4; k++) {
+      const aa = a + (k * Math.PI) / 2;
+      g.moveTo(m.x, m.y);
+      g.lineTo(m.x + Math.cos(aa) * m.arm, m.y + Math.sin(aa) * m.arm);
+    }
+    g.stroke();
+    g.strokeStyle = '#8a5a3a';
+    g.lineWidth = 0.5;
+    g.stroke();
+    g.fillStyle = '#c0573f';
+    g.beginPath();
+    g.arc(m.x, m.y, 1.5, 0, Math.PI * 2);
+    g.fill();
+  }
   // Trail.
   if (s.trail.length >= 4) {
     g.strokeStyle = 'rgba(255, 255, 255, 0.22)';

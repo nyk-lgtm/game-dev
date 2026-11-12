@@ -11,7 +11,7 @@ export interface News {
 
 export const NEWS: News[] = [
   { day: '2026-11-12', path: './unspoken/', game: 'Unspoken', text: 'Tap 🔊 on a word to hear it spoken (uses your phone’s voice; off when sound is off).' },
-  { day: '2026-11-12', path: './ninefold/', game: 'Ninefold', text: 'Sounds: the putt, rail knocks, bumpers, splashes and the cup.' },
+  { day: '2026-11-12', path: './ninefold/', game: 'Ninefold', text: 'Sounds, and windmills from hole 4: they turn while the ball rolls, from the same pose every shot, so time your putt through the gaps.' },
   { day: '2026-11-12', path: './ninefold/', game: 'Ninefold', text: 'New game: mini-golf. Nine holes grown from a seed, with rails to bank off, sand, ponds, slopes and bumpers. Pull back and let go. There is a daily course too.' },
   { day: '2026-11-12', path: './delve/', game: 'Delve', text: 'Corners and side openings now have lit edges in the 3D view, so turns are easier to spot.' },
   { day: '2026-11-12', path: './grove/', game: 'Grove', text: 'Trapping wisps now pays (+50, double for two at once); fewer crystals and bolts, so runs are tighter and the Spirit Tree is a real achievement.' },

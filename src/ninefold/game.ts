@@ -37,6 +37,7 @@ const TIPS: Record<string, string> = {
   water: '<b>Water</b>: the ball is lost, one stroke penalty, and you play again from where you were.',
   slope: '<b>Slopes</b> tilt the ball the way the arrows drift.',
   bumper: '<b>Red bumpers</b> kick the ball back hard. Bank off them.',
+  mill: '<b>Windmills</b> turn while the ball rolls, starting from the same pose every shot. Time your putt through the gaps.',
   post: '<b>Stone posts</b> stop a ball dead. Go round them.',
 };
 
@@ -58,6 +59,8 @@ export class Game {
   private last = 0;
   private banner: { text: string; t: number } | null = null;
   private sfx = new Sounds();
+  private millT = 0;
+  private millEnd: number | null = 0;
 
   constructor() {
     new ResizeObserver(() => this.resize()).observe(this.canvas);
@@ -155,6 +158,8 @@ export class Game {
     if (!res) return;
     navigator.vibrate?.(10);
     this.anim = { res, hole, f: 0, from, hitsDone: 0 };
+    this.millT = 0;
+    this.millEnd = null;
     this.trail = [];
     this.save();
     this.hud(true);
@@ -175,6 +180,7 @@ export class Game {
     const dt = Math.min(0.05, (t - (this.last || t)) / 1000);
     this.last = t;
     this.time += dt;
+    this.millT += dt;
     for (const [k, v] of this.glow) this.glow.set(k, Math.max(0, v - dt * 3));
     if (this.splash) {
       this.splash.t += dt * 1.5;
@@ -218,7 +224,7 @@ export class Game {
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
     const dpr = this.canvas.width / Math.max(1, w);
     this.g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    draw(this.g, w, h, this.view, { hole, ball, trail: this.trail, aim: this.aim, time: this.time, glow: this.glow, sink: this.sink, splash: this.splash });
+    draw(this.g, w, h, this.view, { hole, ball, trail: this.trail, aim: this.aim, time: this.time, glow: this.glow, sink: this.sink, splash: this.splash, millT: pb ? pb.f / 60 : this.millT, millEnd: pb ? null : this.millEnd });
     if (this.banner) {
       this.banner.t += dt;
       const a = Math.min(1, this.banner.t * 4, (2.2 - this.banner.t) * 3);
@@ -242,6 +248,7 @@ export class Game {
   private finishShot(): void {
     const pb = this.anim!;
     this.anim = null;
+    this.millT = this.millEnd = pb.f / 60;
     const h = pb.hole.n;
     if (pb.res.outcome === 'water') {
       this.splash = { x: pb.res.x, y: pb.res.y, t: 0 };
@@ -270,6 +277,7 @@ export class Game {
           return;
         }
         this.shownHole = this.r.hole;
+        this.millT = this.millEnd = 0;
         this.resize();
         this.hud();
         this.tip();
@@ -307,7 +315,8 @@ export class Game {
     const p = loadProfile();
     const present = new Set<string>(hole.zones.map((z) => z.kind));
     hole.posts.forEach((q) => present.add(q.bumper ? 'bumper' : 'post'));
-    const fresh = ['first', 'water', 'slope', 'bumper', 'sand', 'post'].find((k) => (k === 'first' || present.has(k)) && !p.seen.includes(k));
+    if (hole.mills.length) present.add('mill');
+    const fresh = ['first', 'mill', 'water', 'slope', 'bumper', 'sand', 'post'].find((k) => (k === 'first' || present.has(k)) && !p.seen.includes(k));
     if (fresh) {
       p.seen.push(fresh);
       store.save('profile', p);

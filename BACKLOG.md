@@ -24,8 +24,9 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         it beats par by ~15, so par is for thumbs). 7 tests.
   - [x] UI: drag-anywhere slingshot aim with power arrow, playback with trail, bumper glow, splash, hole
         banners (Birdie! etc.), first-time tips per obstacle, scorecard, round card, daily, hub card.
-  - [ ] Blind playtest: is par fair for a thumb? Is the aim precise enough? Then: windmills or moving
-        gates, chamfered corners, sounds.
+  - [x] Sounds (src/ninefold/audio.ts) and windmills (rules v2: holes 4+, cross arms turning only while the
+        ball rolls, same pose at every shot start, drawn turning on to that pose afterwards).
+  - [ ] Blind playtest: is par fair for a thumb? Is the aim precise enough? Then: chamfered corners.
 - [ ] **Hexhold** (hex maze tower defense). Milestones:
   - [x] Core (src/hexhold/core): 9x11 hex board, flow-field pathing (never sealed), 30
         seeded waves with themes, 6 towers each gifting its neighbors, 8 enemies (flyers,

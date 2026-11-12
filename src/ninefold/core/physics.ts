@@ -1,12 +1,16 @@
 // Ball physics for one shot, at a fixed 240 Hz step so a shot always plays out
 // the same way. Returns the ball's path (every 4th step) for the renderer.
 
-import { BALL_R, CELL, COLS, CUP_R, type Hole, type Zone } from './course';
+import { BALL_R, CELL, COLS, CUP_R, type Hole, type Mill, type Zone } from './course';
 
 export const STEP = 1 / 240;
 export const MAX_SPEED = 160;
 const MAX_STEPS = 240 * 14;
 const SINK_SPEED = 75;
+/** Half the thickness of a windmill arm. */
+export const MILL_HALF = 0.7;
+/** A windmill's angle `step` steps into a shot (frames are every 4 steps). */
+export const millAngle = (m: Mill, step: number) => m.a0 + m.w * step * STEP;
 
 export interface Shot {
   /** Angle in radians (0 = right, π/2 = down), power 0..1. */
@@ -102,6 +106,30 @@ export function simulate(hole: Hole, from: { x: number; y: number }, shot: Shot)
           vy *= want / s2;
         }
         if (-vn > 15) hits.push({ f: frames.length / 2, v: -vn, bumper: p.bumper });
+      }
+    }
+    // Windmills: four turning arms and a hub; a blade carries the ball with it.
+    for (const m of hole.mills) {
+      const ang = millAngle(m, i);
+      for (let k = 0; k < 4; k++) {
+        const a = ang + (k * Math.PI) / 2;
+        const ex = Math.cos(a) * m.arm, ey = Math.sin(a) * m.arm;
+        const t = Math.max(0, Math.min(1, ((x - m.x) * ex + (y - m.y) * ey) / (ex * ex + ey * ey)));
+        const qx = m.x + ex * t, qy = m.y + ey * t;
+        const dx = x - qx, dy = y - qy;
+        const d = Math.hypot(dx, dy);
+        const r = BALL_R + MILL_HALF;
+        if (d >= r || d < 1e-6) continue;
+        const nx = dx / d, ny = dy / d;
+        x = qx + nx * r;
+        y = qy + ny * r;
+        const bvx = -m.w * (qy - m.y), bvy = m.w * (qx - m.x);
+        const vn = (vx - bvx) * nx + (vy - bvy) * ny;
+        if (vn < 0) {
+          vx -= 1.6 * vn * nx;
+          vy -= 1.6 * vn * ny;
+          if (-vn > 15) hits.push({ f: frames.length / 2, v: -vn, bumper: false });
+        }
       }
     }
     sp = Math.hypot(vx, vy);
