@@ -14,7 +14,11 @@ export const BRAKE = MAX_SPEED * 1.2;
 export const COAST = MAX_SPEED / 5;
 export const OFFROAD_LIMIT = MAX_SPEED * 0.35;
 export const CENTRIFUGAL = 0.32;
-export const START_CLOCK = 65;
+export const START_CLOCK = 70;
+/** At a fork you take the hard (right) road only past this far right; the middle takes the gentle one. */
+export const FORK_SPLIT = 0.2;
+/** A curve this strong can't be held at top speed without braking (full steer cancels 1 / CENTRIFUGAL). */
+export const SHARP_CURVE = 3.2;
 export const NITRO_MAX = 4;
 export const CAR_COUNT = 16;
 /** Score multiplier gained per harder (right-hand) branch. */
@@ -187,7 +191,7 @@ export function step(r: Race, input: Input): void {
       return;
     }
     // Which side of the road were you on at the fork?
-    const side = p.x > 0 ? 1 : 0;
+    const side = p.x > FORK_SPLIT ? 1 : 0;
     r.route.push(side);
     const pos = r.route.reduce((a, b) => a + b, 0);
     const level = r.stage + 1;

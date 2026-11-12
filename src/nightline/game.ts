@@ -6,7 +6,7 @@ import { MONO, cellWidth, makeGrid, paintGrid, type Grid } from '../shared/ascii
 import { makeStore } from '../shared/storage';
 import { Sfx } from '../afterglow/audio';
 import { LOGO } from './art';
-import { BIOME_NAMES, DT, MAX_SPEED, NEAR_MISS_POINTS, NITRO_MAX, RISK_STEP, SEG_LEN, STAGES, TREE, newRace, randomSeed, stageProgress, step, type Input, type Race } from './core';
+import { BIOME_NAMES, DT, FORK_SPLIT, MAX_SPEED, NEAR_MISS_POINTS, NITRO_MAX, RISK_STEP, SEG_LEN, SHARP_CURVE, STAGES, TREE, newRace, randomSeed, stageProgress, step, type Input, type Race } from './core';
 import { Engine } from './engine';
 import { FORK_LEAD, advanceSky, drawRace, type SkyState, type View } from './render';
 
@@ -412,11 +412,30 @@ export class Game {
     this.set('stageName', `${r.stage + 1}/5 ${BIOME_NAMES[r.stages[r.stage].biome].toUpperCase()}`);
     this.set('progFill', `${(stageProgress(r) * 100).toFixed(1)}%`, true);
     this.set('nitroFill', `${((p.nitro / NITRO_MAX) * 100).toFixed(1)}%`, true);
+    // Sharp curve ahead (one you can't hold at top speed): warn about two seconds out.
+    let warn = '';
+    if (r.status === 'racing') {
+      const here = Math.floor(p.z / SEG_LEN);
+      const ahead = Math.ceil((Math.max(p.speed, MAX_SPEED * 0.5) * 2) / SEG_LEN);
+      const cur = r.segments[here]?.curve ?? 0;
+      for (let k = 4; k <= ahead; k++) {
+        const c = r.segments[here + k]?.curve ?? 0;
+        if (Math.abs(c) > SHARP_CURVE && Math.abs(cur) < SHARP_CURVE * 0.8) {
+          warn = c < 0 ? '◀ SHARP LEFT · BRAKE' : 'BRAKE · SHARP RIGHT ▶';
+          break;
+        }
+      }
+    }
+    if (this.hudCache.get('warn') !== warn) {
+      this.hudCache.set('warn', warn);
+      $('curveWarn').textContent = warn;
+      $('curveWarn').hidden = !warn;
+    }
     // The fork panel: both destinations, with the side you're on lit up.
     const stage = r.stages[r.stage];
     const toFork = stage.end - p.z / SEG_LEN;
     const forkOn = r.status === 'racing' && r.stage + 1 < STAGES && toFork > 0 && toFork < FORK_LEAD + 50;
-    const side = forkOn ? (p.x > 0 ? 'R' : 'L') : '';
+    const side = forkOn ? (p.x > FORK_SPLIT ? 'R' : 'L') : '';
     const key = forkOn ? `${r.stage}${side}` : '';
     if (this.hudCache.get('fork') !== key) {
       this.hudCache.set('fork', key);

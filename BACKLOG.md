@@ -92,12 +92,11 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         the stove, endings say where everyone is, story scrolls fully.
   - [ ] Maybe a second night (a different story on the same engine).
 
-- [ ] **Nightline fixes from its blind playtest** (agent reached the goal on run 3; no errors).
-  Done: steering ~120 px to full lock (was 70); HUD top bar and controls on dark backing panels,
-  11 px labels, brighter TIME UP; traffic drawn 1:1 (no doubled letters); goals renamed "endings";
-  the end screen says how far into which stage time ran out. Still open:
-  5. Fork divider sits mid-road (centre = knife edge); warn before sharp curves on hard roads;
-     stage 1's 65 s clock snowballs (few crashes → time up before the first checkpoint).
+- [x] **Nightline fixes from its blind playtest** (agent reached the goal on run 3; no errors):
+  steering ~120 px to full lock; HUD on backing panels, 11 px labels, brighter TIME UP; traffic drawn
+  1:1; goals renamed "endings"; end screen shows stage progress; "SHARP LEFT · BRAKE" warning ~2 s
+  before curves you can't hold at top speed (|curve| > 3.2); at a fork only x > 0.2 takes the hard
+  road (the middle is gentle); start clock 65 → 70 s. Bot still finishes 10/10 left, 8/10 right.
 
 ## Ideas (unscheduled)
 - Unspoken: more story templates so the village tale varies; spoken pronunciation via
