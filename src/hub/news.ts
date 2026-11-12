@@ -10,6 +10,7 @@ export interface News {
 }
 
 export const NEWS: News[] = [
+  { day: '2026-11-12', path: './summit/', game: 'Summit', text: 'Fewer draws early, more on high floors; no more back-to-back same ranks, and the 3rd dry draw in a row always fits. Mirror and Long Stride have a few uses per deal and their own colours; Lantern, Second Wind, High Stakes and Flush reworked; peak tops marked for Peak Flags.' },
   { day: '2026-11-12', path: './triad/', game: 'Triad', text: 'Fixed: after a hint, tapping the hex and then an element now fills it. Links are clearer pills on the edge, Normal links puzzles lean less on copying along links, and hints skip steps a link just copies.' },
   { day: '2026-11-12', path: './ninefold/', game: 'Ninefold', text: 'The aim line now follows the real roll, slopes and sand included, up to the first bounce.' },
   { day: '2026-11-12', path: './ninefold/', game: 'Ninefold', text: 'Windmills are fair now: single bars that never stop turning, so you can watch and time your putt, with room to slip past at the walls.' },

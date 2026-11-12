@@ -13,13 +13,29 @@ import { freshDeck, rankGap, type Card } from './cards';
 import { CHARMS, type CharmId } from './charms';
 import { layoutFor, slotsOf } from './layouts';
 
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 2;
 export const FLOORS = 8;
 /** New draws added to the pile on each floor, before charms. Unused draws carry over. */
-export const DEAL_DRAWS = [40, 20, 12, 10, 8, 6, 4, 3];
+export const DEAL_DRAWS = [34, 13, 9, 8, 9, 8, 8, 7];
 /** Chance a covered card starts face down, per floor. */
 export const FACE_DOWN = [0, 0.25, 0.45, 0.6, 0.7, 0.8, 0.9, 1];
-export const WIND_DRAWS = 6;
+/** Charm strengths (an object so balance probes can try other values). */
+export const TUNE = {
+  /** Same-rank plays per deal (Mirror). */
+  mirrors: 2,
+  /** Long-stride plays per deal. */
+  strides: 3,
+  /** Draws given back per peak top (Peak Flags). */
+  flags: 1,
+  /** Fresh draws from Second Wind. */
+  wind: 12,
+  /** Extra draws per deal (Lantern). */
+  lantern: 1,
+  /** Extra draws per deal (Deep Pockets). */
+  pockets: 3,
+};
+/** The draw that ends this many plays-free draws in a row always fits, if any card in the pile does. */
+export const MERCY = 3;
 export const WIN_BONUS = 500;
 export const JOKER: Card = { r: 0, s: -1 };
 
@@ -46,7 +62,14 @@ export interface Deal {
   reserve: Card[];
   ri: number;
   streak: number;
+  /** Cards of one suit played in a row (Flush), and that suit. */
   suitRun: number;
+  runSuit: number;
+  /** Mirror and Long Stride plays left this deal. */
+  mirrors: number;
+  strides: number;
+  /** Draws since the last play. */
+  dry: number;
   blasts: number;
 }
 
@@ -94,6 +117,10 @@ export interface Outcome {
   bonus?: number;
   unused?: number;
   won?: boolean;
+  /** The mercy rule swapped in a card that fits. */
+  lucky?: boolean;
+  /** A Mirror play (same rank). */
+  mirror?: boolean;
   /** Second Wind just blew. */
   wind?: boolean;
   over?: boolean;
@@ -103,7 +130,7 @@ export const has = (r: Run, c: CharmId) => r.charms.includes(c);
 
 /** New draws this floor brings (charms included). */
 export function freshDraws(r: Run): number {
-  return Math.max(2, DEAL_DRAWS[r.floor] + (has(r, 'pockets') ? 3 : 0) - (has(r, 'stakes') ? 2 : 0) - (has(r, 'lantern') ? 1 : 0));
+  return Math.max(2, DEAL_DRAWS[r.floor] + (has(r, 'pockets') ? TUNE.pockets : 0) + (has(r, 'lantern') ? TUNE.lantern : 0) - (has(r, 'stakes') ? 1 : 0));
 }
 
 function newDeal(r: Run): Deal {
@@ -118,7 +145,7 @@ function newDeal(r: Run): Deal {
   const n = slots.length;
   const pool = deck.slice(n + 1).concat(rng.shuffle(freshDeck()), rng.shuffle(freshDeck()));
   const draws = Math.min(pool.length - 20, r.carry + freshDraws(r));
-  const stock = pool.slice(0, draws);
+  const stock = declump(pool.slice(0, draws));
   const jokerAt = rng.int(1, stock.length);
   if (has(r, 'joker')) stock.splice(jokerAt, 0, { ...JOKER });
   return {
@@ -131,8 +158,28 @@ function newDeal(r: Run): Deal {
     ri: 0,
     streak: 0,
     suitRun: 0,
+    runSuit: -1,
+    mirrors: has(r, 'mirror') ? TUNE.mirrors : 0,
+    strides: has(r, 'stride') ? TUNE.strides : 0,
+    dry: 0,
     blasts: has(r, 'blast') ? 1 : 0,
   };
+}
+
+/** No two cards of one rank back to back in the pile (draws come off the end). */
+function declump(stock: Card[]): Card[] {
+  const n = stock.length;
+  const r = (k: number) => (k >= 0 && k < n ? stock[k].r : -1);
+  // Would card c sit at k without matching a neighbour (ignoring position `skip`)?
+  const fitsAt = (c: Card, k: number, skip: number) => (k - 1 === skip || r(k - 1) !== c.r) && (k + 1 === skip || r(k + 1) !== c.r);
+  for (let i = n - 2; i >= 0; i--) {
+    if (stock[i].r !== stock[i + 1].r) continue;
+    // Swap stock[i] with the nearest card (deeper first, then above) that leaves both spots clean.
+    const order = [...Array(n).keys()].filter((j) => j < i).reverse().concat([...Array(n).keys()].filter((j) => j > i + 1));
+    const j = order.find((j) => stock[j].r !== stock[i].r && fitsAt(stock[j], i, j) && fitsAt(stock[i], j, i));
+    if (j !== undefined) [stock[i], stock[j]] = [stock[j], stock[i]];
+  }
+  return stock;
 }
 
 function startFloor(r: Run): void {
@@ -182,8 +229,8 @@ export function fitKind(r: Run, c: Card, t: Card = top(r.deal)): 'play' | 'strid
   if (t.r === 0 || c.r === 0) return 'play';
   const g = rankGap(c.r, t.r);
   if (g === 1) return 'play';
-  if (g === 0 && has(r, 'mirror')) return 'play';
-  if (g === 2 && has(r, 'stride') && r.deal.stock.length) return 'stride';
+  if (g === 0 && r.deal.mirrors > 0) return 'play';
+  if (g === 2 && r.deal.strides > 0 && r.deal.stock.length) return 'stride';
   return null;
 }
 
@@ -227,6 +274,12 @@ function giveBack(d: Deal): number {
   return 1;
 }
 
+function flagDraws(d: Deal): number {
+  let n = 0;
+  for (let k = 0; k < TUNE.flags; k++) n += giveBack(d);
+  return n;
+}
+
 function flip(d: Deal): number[] {
   const out: number[] = [];
   d.slots.forEach((s, i) => {
@@ -264,14 +317,34 @@ function afterRemove(r: Run, o: Outcome): void {
   }
 }
 
+/**
+ * Mercy: if the card about to be drawn fits nothing that's open, swap in the
+ * nearest card further down the pile that does. Returns whether it swapped.
+ */
+function mercy(r: Run): boolean {
+  const d = r.deal;
+  const open = d.slots.filter((s, i) => !s.gone && !isCovered(d, i));
+  const fits = (c: Card) => open.some((s) => fitKind(r, s.card, c) === 'play');
+  const k = d.stock.length - 1;
+  if (k < 0 || fits(d.stock[k])) return false;
+  for (let j = k - 1; j >= 0; j--)
+    if (fits(d.stock[j])) {
+      [d.stock[k], d.stock[j]] = [d.stock[j], d.stock[k]];
+      return true;
+    }
+  return false;
+}
+
 function checkStuck(r: Run, o: Outcome): void {
-  if (r.phase !== 'play' || !stuck(r)) return;
-  if (has(r, 'wind') && !r.windUsed) {
+  if (r.phase !== 'play') return;
+  // Second Wind blows as soon as plays and draws run out, before any blast or undo.
+  if (cornered(r) && has(r, 'wind') && !r.windUsed) {
     r.windUsed = true;
-    for (let k = 0; k < WIND_DRAWS; k++) giveBack(r.deal);
+    for (let k = 0; k < TUNE.wind; k++) giveBack(r.deal);
     o.wind = true;
     return;
   }
+  if (!stuck(r)) return;
   r.phase = 'over';
   o.over = true;
 }
@@ -304,10 +377,13 @@ export function act(r: Run, a: string): Outcome | null {
   } else if (a === 'D') {
     if (!d.stock.length) return null;
     snap(r);
-    d.waste.push(d.stock.pop()!);
     d.streak = 0;
     d.suitRun = 0;
+    d.runSuit = -1;
+    d.dry++;
     o = { kind: 'draw' };
+    if (d.dry >= MERCY && mercy(r)) o.lucky = true;
+    d.waste.push(d.stock.pop()!);
   } else if (c === 'P' && /^P\d+$/.test(a)) {
     if (!playable(r, n)) return null;
     snap(r);
@@ -317,24 +393,37 @@ export function act(r: Run, a: string): Outcome | null {
     s.gone = true;
     d.waste.push(s.card);
     o = { kind: 'play', slot: n, points: 0, refund: 0 };
+    d.dry = 0;
     if (kind === 'stride') {
-      // A long stride burns the next draw.
+      // A long stride discards the top card of the pile.
       d.stock.pop();
       o.stride = true;
       d.streak = 0;
       d.suitRun = 0;
+      d.runSuit = -1;
+      d.strides--;
     } else {
+      if (t.r > 0 && s.card.r === t.r) {
+        d.mirrors--;
+        o.mirror = true;
+      }
       d.streak++;
       r.bestStreak = Math.max(r.bestStreak, d.streak);
       let pts = 10 * d.streak;
       if (has(r, 'stakes')) pts *= 2;
-      const same = t.s >= 0 && t.s === s.card.s;
-      d.suitRun = same ? d.suitRun + 1 : 0;
-      if (same && has(r, 'flush')) {
-        pts *= 2;
-        o.flush = true;
+      if (s.card.s === d.runSuit) d.suitRun++;
+      else {
+        d.runSuit = s.card.s;
+        d.suitRun = 1;
+      }
+      if (has(r, 'flush')) {
+        if (t.s >= 0 && t.s === s.card.s) {
+          pts *= 2;
+          o.flush = true;
+        }
         if (d.suitRun >= 3) {
           d.suitRun = 0;
+          d.runSuit = -1;
           o.refund! += giveBack(d);
         }
       }
@@ -342,7 +431,7 @@ export function act(r: Run, a: string): Outcome | null {
       o.points = pts;
       r.score += pts;
     }
-    if (s.row === 0 && has(r, 'flags')) o.refund! += giveBack(d);
+    if (s.row === 0 && has(r, 'flags')) o.refund! += flagDraws(d);
     afterRemove(r, o);
   } else if (c === 'B' && /^B\d+$/.test(a)) {
     const s = d.slots[n];
@@ -350,7 +439,7 @@ export function act(r: Run, a: string): Outcome | null {
     snap(r);
     d.blasts--;
     s.gone = true;
-    o = { kind: 'blast', slot: n, refund: s.row === 0 && has(r, 'flags') ? giveBack(d) : 0 };
+    o = { kind: 'blast', slot: n, refund: s.row === 0 && has(r, 'flags') ? flagDraws(d) : 0 };
     afterRemove(r, o);
   } else return null;
   r.actions.push(a);

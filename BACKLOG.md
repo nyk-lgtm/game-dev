@@ -32,8 +32,22 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   - [x] UI: DOM cards with gold edge on playable ones, fly-to-waste, streak meter, floating points, shake +
         hint on a wrong tap, spyglass peek, undo/blast tools, End run when cornered, charm pick card, end card
         with the climb strip, help, menu with charms, bug report, daily (`?daily`), hub card first + Daily link.
-  - [ ] Next: owner playtest. Watch: is floor 1 too long (40 draws)? Are Long Stride / Mirror too strong for
-        people? Maybe a lantern-seen tint, charm synergies, and a "summits" stat on the hub.
+  - [x] Blind playtest (floors 3, 8 (lost on the last card), 5, 3; "planning a 7-9 card chain is the best part")
+        and fixes (rules v2): draws 40,20,12,10,8,6,4,3 → 34,13,9,8,9,8,8,7; piles never deal two of a rank
+        back to back, and the 3rd plays-free draw in a row always fits if the pile has a fitting card ("lucky
+        draw"); Mirror 2 / Long Stride 3 plays per deal (were unlimited) with their own edge colours (violet =,
+        blue ↷), named in the hint line, charges on the charm chips; Stride says "discards the top card of the
+        pile"; High Stakes −2 → −1 draw; Lantern now +1 draw instead of −1; Second Wind 6 → 12 draws and it now
+        fires even with an undo or blast left (it never did); Flush counts cards of one suit played in a row
+        (was: plays onto the same suit); peak tops marked 🚩 with Peak Flags; points float above the charms, not
+        over the hint line; floor banner hides once the streak meter shows; out-of-moves text names only what
+        you own; End-run confirm has End first. Bot (1000 runs): floor 1 98%, floor 2 95%, median floor 5,
+        14% wins (was 19%). Charms compared with `CHARM=` (each run starts holding it; 15% with none): Flags 46%,
+        Pockets 42%, Mirror 39% (was 79%), Joker/Blast 37%, Lantern/Momentum 31%, Wind 27%, Stride 25% (was 80%),
+        Flush 19%, Spyglass 17%, Rewind 16%, Stakes 7% (the bot can't use info or undos, so those read low).
+        Peak Flags is the bot's strongest but felt weak to the tester; kept at 1 draw per peak, now marked.
+  - [ ] Next: second playtest. Watch: does the lucky draw feel fair/visible; is floor 1 still too easy for
+        people (34 draws); High Stakes is weak for survival (a score charm).
 - [ ] **Ninefold** (seeded mini-golf). Milestones:
   - [x] Core: corridor holes on a 6×9 grid, rails, posts, bumpers, sand, water (+1, replay the spot), slopes;
         240 Hz physics, exact replays, 8-stroke pick-up, formula par. Search bot sinks everything (noise-free
