@@ -21,6 +21,7 @@ import {
   monsterAt,
   newGame,
   pathTo,
+  pathToward,
   randomSeed,
   replay,
   samePos,
@@ -51,6 +52,9 @@ export class Game {
   private h = 0;
   private fx: Fx[] = [];
   private flash: { at: Pos; t: number; color: string } | null = null;
+  /** Monsters already described in the log (UI only; they no longer stop a walk unless close). */
+  private announced = new Set<number>();
+  private talkNote = '';
   /** Auto-walk: remaining steps and where they lead. */
   private walk: { dirs: number[]; target: Pos; chase: number | null } | null = null;
   private nextStepAt = 0;
@@ -61,7 +65,12 @@ export class Game {
     new ResizeObserver(() => this.resize()).observe(canvas.parentElement!);
     this.resize();
     this.bindInput();
-    $('waitBtn').onclick = () => this.act({ type: 'wait' });
+    $('waitBtn').onclick = () => {
+      const hp = this.state.player.hp;
+      this.act({ type: 'wait' });
+      const gained = this.state.player.hp - hp;
+      this.say(gained > 0 ? `You catch your breath. +${gained} HP.` : 'You wait a moment.');
+    };
     $('potionBtn').onclick = () => this.act({ type: 'potion' });
     $('packBtn').onclick = () => this.showPack();
     requestAnimationFrame((t) => this.frame(t));
@@ -130,9 +139,10 @@ export class Game {
     const s = this.state;
     if (samePos(target, s.player.pos)) return;
     const foe = monsterAt(s, s.player.map, target);
-    const dirs = pathTo(s, target);
+    // Can't reach it (yet)? Head as close as you can.
+    const dirs = pathTo(s, target) ?? pathToward(s, target);
     if (!dirs) {
-      this.say('You can’t get there from here.');
+      this.say('No way closer from here.');
       return;
     }
     this.walk = { dirs, target, chase: foe ? foe.id : null };
@@ -165,11 +175,18 @@ export class Game {
     );
     if (stop || w.dirs.length === 0 && w.chase === null) this.walk = null;
     else {
-      const fresh = this.visibleMonsters().find((mo) => !before.has(mo.id));
+      // A monster you haven't met yet stops you once, with its description; one you've
+      // seen before only stops you if it's close.
+      const pp = s.player.pos;
+      const near = (mo: { pos: { x: number; y: number } }) => Math.max(Math.abs(mo.pos.x - pp.x), Math.abs(mo.pos.y - pp.y)) <= 3;
+      const fresh = this.visibleMonsters().find((mo) => !before.has(mo.id) && (!this.announced.has(mo.id) || near(mo)));
       if (fresh) {
         this.walk = null;
-        const def = MONSTERS[fresh.kind];
-        this.say(`${/^[A-Z]/.test(def.name) ? 'The' : 'A'} ${def.name}! ${def.blurb}`);
+        if (!this.announced.has(fresh.id)) {
+          this.announced.add(fresh.id);
+          const def = MONSTERS[fresh.kind];
+          this.say(`${/^[A-Z]/.test(def.name) ? 'The' : 'A'} ${def.name}! ${def.blurb}`);
+        }
       }
     }
   }
@@ -275,11 +292,14 @@ export class Game {
       onClick: () => {
         if (!o.enabled) return;
         this.act(o.action);
+        // Say what happened right in the dialog (the log is hidden behind it).
+        this.talkNote = this.state.log[this.state.log.length - 1] ?? '';
         this.showTalk(npc);
+        this.talkNote = '';
       },
     }));
     showCard(
-      `<p class="speaker">${d.name}</p><p>${d.text}</p><p>You have ${this.state.player.gold} gold.</p>`,
+      `<p class="speaker">${d.name}</p><p>${d.text}</p>${this.talkNote ? `<p class="said">${this.talkNote}</p>` : ''}<p>You have ${this.state.player.gold} gold.</p>`,
       [...buttons, { label: 'Goodbye', primary: true, onClick: closeOverlay }],
     );
     // Grey out options you can't afford.
@@ -315,10 +335,10 @@ export class Game {
       `<h2>How to play Lantern</h2>
       <ul>
         <li><b>Tap anywhere</b> to walk there. Tap again to stop. You stop by yourself when something shows up.</li>
-        <li><b>Tap a monster</b> to walk up and hit it. One tap, one attack (monsters hit back each turn).</li>
+        <li><b>Tap a monster</b> (or just walk into it) to hit it. One tap, one attack (monsters hit back each turn).</li>
         <li><b>Tap a person</b> (coloured <b>@</b>) to talk and shop. <b>?</b> is a sign, <b>≡</b> a chest.</li>
         <li><b>Potion</b> heals 12. <b>Wait</b> passes a turn. You also heal slowly over time.</li>
-        <li>Level up by winning fights. Bram sells steel, Mira heals.</li>
+        <li>Level up by winning fights: the rats near the village are the safe first fights; goblins across the bridge hit hard at level 1. Bram sells steel, Mira heals.</li>
         <li>Caves are dark: you see only what your lantern lights. Explored ground stays dimly remembered.</li>
         <li>If you fall, you wake in the village with half your gold. Slain monsters stay slain.</li>
       </ul>`,

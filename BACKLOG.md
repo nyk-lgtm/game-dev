@@ -106,6 +106,11 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Afterglow: owner is happy with it — leave alone unless they report something.
 
 ## Done (recent)
+- Lantern blind playtest (agent reached the Hollow at level 3) and fixes: a far/unexplored tap walks
+  to the nearest reachable cell (pathToward) instead of refusing; a monster is announced once and
+  later only stops a walk within 3 cells; Wait and shop actions say what happened (in the dialog);
+  disabled options look disabled; help says walking into monsters attacks and rats are the safe
+  first fights. Tried goblin def 1 → 0: completion bot fell 98% → 94%, reverted.
 - Delve blind playtest (agent reached depth 2) and fixes (rules v4): floor 1 has 6 rooms not 9
   (bot floor-1 turns 199 → 155; win rate 58% → 52%, within noise); player marker cyan (stairs are amber);
   potions green (red is foes only); legend lists pillar and you; help explains swipe direction and

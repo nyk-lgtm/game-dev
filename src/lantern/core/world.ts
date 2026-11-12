@@ -171,6 +171,40 @@ export function monsterAt(s: GameState, map: MapId, p: Pos) {
 }
 
 /**
+ * When `to` can't be reached (unexplored dark, behind a wall), the walk to the
+ * reachable known cell nearest to it, so a far tap still heads that way.
+ * Returns null if no reachable cell is any closer than where you stand.
+ */
+export function pathToward(s: GameState, to: Pos): number[] | null {
+  const m = WORLD[s.player.map];
+  const from = s.player.pos;
+  const seen = s.seen[m.id];
+  const known = (p: Pos) => !MAPS[m.id].dark || (seen !== undefined && seen[p.y * m.w + p.x] === '1');
+  const dist = (p: Pos) => Math.max(Math.abs(p.x - to.x), Math.abs(p.y - to.y)) * 4 + Math.abs(p.x - to.x) + Math.abs(p.y - to.y);
+  let best = from;
+  let bestD = dist(from);
+  const seenK = new Set([posKey(from)]);
+  const q: Pos[] = [from];
+  for (let i = 0; i < q.length; i++) {
+    const cur = q[i];
+    for (let d = 0; d < 8; d++) {
+      const n = addPos(cur, DIRS8[d]);
+      const k = posKey(n);
+      if (seenK.has(k) || !inMap(m, n) || !canStep(m, cur, d) || !passable(m, n) || !known(n) || monsterAt(s, m.id, n)) continue;
+      if (markerAt(m, n)?.kind === 'exit') continue;
+      seenK.add(k);
+      q.push(n);
+      const dn = dist(n);
+      if (dn < bestD) {
+        bestD = dn;
+        best = n;
+      }
+    }
+  }
+  return samePos(best, from) ? null : pathTo(s, best);
+}
+
+/**
  * Shortest 8-way walk for the player from `from` to `to` on the current map,
  * through passable known ground, avoiding monsters. If `to` itself is not
  * walkable (a monster, NPC, chest...), the path ends next to it and the final

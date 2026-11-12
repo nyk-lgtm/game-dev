@@ -32,3 +32,5 @@ body { font-family: var(--mono); }
 .card table { width: 100%; border-collapse: collapse; color: var(--muted); }
 .card td { padding: 3px 0; }
 .card td:last-child { text-align: right; color: var(--text); }
+#overlay .card button:disabled { opacity: 0.38; }
+#overlay .card .said { color: #e7b84a; font-weight: 700; }
