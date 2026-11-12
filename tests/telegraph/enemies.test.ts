@@ -20,6 +20,9 @@ import {
   previewAction,
   replay,
   threats,
+  threatsAt,
+  floorBudget,
+  zapRays,
   type Action,
   type EnemyKind,
   type GameEvent,
@@ -824,6 +827,69 @@ describe('pylon', () => {
     expect(has(events, 'zap')).toBe(false);
     expect(state.player.hp).toBe(3);
     expect(enemy(state, py.id)).toMatchObject({ aim: null, pos: hex(3, 4) });
+  });
+});
+
+describe('playtest 2: previews name their sources and what comes next', () => {
+  it('a move safe this turn but into a pylon that starts charging says so (next)', () => {
+    const s = blankState(hex(1, 2)); // off every ray
+    const py = addEnemy(s, 'pylon', hex(3, 3));
+    const rays = zapRays(s, py).flat();
+    const into = legalMoves(s).find((m) => rays.some((h) => eq(h, m)))!;
+    const away = legalMoves(s).find((m) => !rays.some((h) => eq(h, m)))!;
+    const o = previewAction(s, move(into));
+    expect(o.damageTaken).toBe(0);
+    expect(o.next).toEqual([{ by: py.id, kind: 'zap' }]);
+    expect(previewAction(s, move(away)).next).toEqual([]);
+  });
+
+  it('a bomb lobbed at where you end up shows in next, with its fuse', () => {
+    const s = blankState(hex(3, 4));
+    const b = addEnemy(s, 'bomber', hex(3, 0));
+    expect(previewAction(s, move(P)).next).toEqual([{ by: b.id, kind: 'bomb', fuse: 2 }]);
+  });
+
+  it('hurtBy names who hits you; threatsAt lists every source on a hex', () => {
+    const s = blankState(P);
+    const br = addEnemy(s, 'brute', at(at(P, 0), 1)); // next to where you step, not a lunge
+    const ar = addEnemy(s, 'archer', at(P, 3, 3), { aim: 0 });
+    const to = at(P, 0); // next to the brute and in the arrow's line
+    const o = previewAction(s, move(to));
+    expect(o.damageTaken).toBe(2);
+    expect(o.hurtBy).toEqual(expect.arrayContaining([{ by: br.id, kind: 'smash' }, { by: ar.id, kind: 'shot' }]));
+    const t = threatsAt(threats(s), to);
+    expect(t).toEqual(expect.arrayContaining([{ by: br.id, kind: 'smash' }, { by: ar.id, kind: 'shot' }]));
+    expect(threatsAt(threats(s), at(P, 4, 3))).toEqual([]);
+  });
+});
+
+describe('playtest 2: bombers and deep floors', () => {
+  it('a reloading bomber in range holds its ground instead of backing away', () => {
+    const s = blankState(hex(3, 5));
+    const b = addEnemy(s, 'bomber', hex(3, 1), { reload: 2 });
+    const { state } = applyAction(s, move(hex(3, 4))); // now 3 away
+    expect(enemy(state, b.id)!.pos).toEqual(hex(3, 1));
+    const s2 = applyAction(state, move(hex(3, 3))).state; // 2 away: it still stays
+    expect(enemy(s2, b.id)!.pos).toEqual(hex(3, 1));
+  });
+
+  it('a bomber out of range walks closer', () => {
+    const s = blankState(hex(3, 8));
+    const b = addEnemy(s, 'bomber', hex(3, 0), { reload: 2 });
+    const { state } = applyAction(s, move(hex(3, 7)));
+    expect(enemy(state, b.id)!.pos).not.toEqual(hex(3, 0));
+  });
+
+  it('the spawn budget grows by 2 a floor past depth 8 and floors keep at most 4 brutes', () => {
+    expect(floorBudget(8)).toBe(24);
+    expect(floorBudget(9) - floorBudget(8)).toBe(2);
+    expect(floorBudget(12) - floorBudget(11)).toBe(2);
+    for (let seed = 1; seed <= 40; seed++)
+      for (let depth = 9; depth <= 14; depth++) {
+        const f = generateFloor(seed, depth);
+        expect(f.enemies.length).toBeLessThanOrEqual(11);
+        expect(f.enemies.filter((e) => e.kind === 'brute').length).toBeLessThanOrEqual(4);
+      }
   });
 });
 

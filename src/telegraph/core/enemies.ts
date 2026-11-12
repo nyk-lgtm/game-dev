@@ -198,6 +198,7 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     maxHp: 2,
     cost: 2,
     minDepth: 1,
+    max: 4,
     blurb: 'Smashes you if you end your turn next to it. Otherwise walks toward you.',
     act(s, e, events) {
       if (isAdjacent(e.pos, s.player.pos)) smash(s, e, events);
@@ -282,7 +283,7 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
     cost: 3,
     minDepth: 5,
     blurb:
-      'Lobs a bomb at your hex from 2–4 away. Two turns later it blasts that hex and the 6 around it — enemies too.',
+      'Lobs a bomb at your hex from 2–4 away, then rests 2 turns. Two turns later it blasts that hex and the 6 around it — enemies too. Never backs away.',
     act(s, e, events) {
       const p = s.player.pos;
       const d = distance(e.pos, p);
@@ -292,7 +293,9 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
         events.push({ type: 'throw', by: e.id, at: p });
         return;
       }
-      reposition(s, e, events, (h) => -Math.abs(distance(h, p) - 3));
+      // It closes to lobbing range, but never backs away from you: corner it
+      // and it's yours (playtesters found a kiting bomber tedious).
+      if (d > BOMB_MAX_RANGE) stepToward(s, e, events);
     },
   },
 

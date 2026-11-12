@@ -35,6 +35,24 @@ export function showCard(html: string, buttons: CardButton[], dismissable = true
   card.appendChild(meta);
   o.appendChild(card);
   o.hidden = false;
+  // A long card whose primary button starts out below the fold keeps that
+  // button pinned to the card's bottom edge (a sticky footer) until you scroll
+  // to where it really sits, so "Got it" is always one tap away.
+  const primary = [...card.querySelectorAll<HTMLButtonElement>(':scope > button.primary')][0];
+  let footer: HTMLElement | null = null;
+  if (primary && primary.getBoundingClientRect().bottom > card.getBoundingClientRect().bottom) {
+    footer = document.createElement('div');
+    footer.className = 'stick';
+    // Span the card's side padding and cover its bottom padding, whatever a
+    // game's own card style sets them to.
+    const cs = getComputedStyle(card);
+    footer.style.margin = `0 -${cs.paddingRight} 0 -${cs.paddingLeft}`;
+    footer.style.paddingLeft = cs.paddingLeft;
+    footer.style.paddingRight = cs.paddingRight;
+    footer.style.bottom = `-${cs.paddingBottom}`;
+    card.insertBefore(footer, primary);
+    footer.appendChild(primary);
+  }
   // Long cards get a "more below" hint pinned to the bottom until you scroll
   // there. Only real content counts: not the build line, nor the hint itself.
   const hidden = card.scrollHeight - card.clientHeight - meta.offsetHeight;
@@ -42,7 +60,9 @@ export function showCard(html: string, buttons: CardButton[], dismissable = true
     const more = document.createElement('div');
     more.className = 'more';
     more.textContent = '▼ scroll for more';
-    card.appendChild(more);
+    // With a sticky footer the hint rides just above its button.
+    if (footer) footer.prepend(more);
+    else card.appendChild(more);
     card.addEventListener('scroll', () => {
       more.style.opacity = card.scrollTop >= hidden - 8 ? '0' : '1';
     });

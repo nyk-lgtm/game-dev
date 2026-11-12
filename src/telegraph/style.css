@@ -21,3 +21,6 @@ body .toast.hint {
   width: max-content; max-width: calc(100vw - 24px); text-align: center;
   border-radius: 14px; z-index: 5; pointer-events: none; background: #20253a;
 }
+#info .warn { color: var(--gold); }
+/* Long labels ("Move — you die") wrap instead of crowding the panel text. */
+#actBtn { max-width: 42%; line-height: 1.15; padding: 6px 10px; }

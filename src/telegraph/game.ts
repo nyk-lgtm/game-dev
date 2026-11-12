@@ -20,11 +20,13 @@ import {
   randomSeed,
   replay,
   threats,
+  threatsAt,
   type Action,
   type Enemy,
   type GameState,
   type Hex,
   type Outcome,
+  type ThreatSource,
 } from './core';
 import { copyText, toast } from '../shared/debug';
 import { bugReport } from './debug';
@@ -46,6 +48,21 @@ function statusOf(e: Enemy): string {
   return e.kind === 'pylon' ? ' · charges after your move' : '';
 }
 
+/** "a Brute's smash", "an Archer's arrow"…: who threatens a hex, and how. */
+function threatPhrase(s: GameState, t: ThreatSource): string {
+  if (t.kind === 'bomb') return t.fuse === 1 ? 'a bomb blast' : `a bomb (in ${t.fuse ?? 2} turns)`;
+  const e = s.enemies.find((x) => x.id === t.by);
+  const name = e ? ENEMIES[e.kind].name : 'enemy';
+  const a = /^[AEIOU]/i.test(name) ? 'an' : 'a';
+  const what = { smash: 'smash', shot: 'arrow', charge: 'charge', hook: 'hook', zap: 'zap' }[t.kind];
+  return `${a} <span class="c-${e?.kind ?? 'threat'}">${name}</span>'s ${what}`;
+}
+
+function threatList(s: GameState, ts: ThreatSource[]): string {
+  const parts = ts.map((t) => threatPhrase(s, t));
+  return parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`;
+}
+
 interface SavedRun {
   seed: number;
   actions: string;
@@ -65,6 +82,10 @@ export class Game {
   private bashSel: Hex | null = null;
   private outcome: Outcome | null = null;
   private inspect: number | null = null;
+  /** A hex tapped just to look at it: which enemies threaten it. */
+  private probe: Hex | null = null;
+  /** A fatal action's button was pressed once; the second press does it. */
+  private armed = false;
   private last = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -137,8 +158,8 @@ export class Game {
     if (legalMoves(this.state).some((m) => eq(m, h))) {
       if (this.selected && eq(this.selected, h)) {
         // A move that hurts only goes through the red button.
-        if (this.outcome && this.outcome.damageTaken > 0) {
-          hint('That move hurts: press the red button if you mean it');
+        if (this.outcome && (this.outcome.damageTaken > 0 || this.outcome.dies)) {
+          hint(this.outcome.dies ? 'That move kills you: use the red button if you mean it' : 'That move hurts: press the red button if you mean it');
           return;
         }
         this.commit({ type: 'move', to: h });
@@ -160,47 +181,47 @@ export class Game {
       this.clearSelection();
       const e = enemyAt(this.state, h);
       this.inspect = e ? e.id : null;
-      if (!e && playerWalkable(tileAt(this.state, h))) {
-        if (this.floorClear()) {
-          this.walkTo = h;
-          this.walkStep();
-          return;
-        }
-        hint('One hex per turn: tap a hex next to you');
+      if (!e && playerWalkable(tileAt(this.state, h)) && this.state.enemies.length === 0) {
+        // Floor cleared: walk there (around any bomb still ticking).
+        this.walkTo = h;
+        this.walkStep();
+        return;
       }
+      // Anything else: look at the hex and who threatens it.
+      if (!e && !eq(h, this.state.player.pos)) this.probe = h;
     }
     this.refreshUi();
   }
 
-  /** Nothing left that can hurt you on this floor. */
-  private floorClear(): boolean {
-    return this.state.enemies.length === 0 && this.state.bombs.length === 0;
-  }
-
-  /** Auto-walk on a cleared floor: one step toward `walkTo`, then the next after it animates. */
+  /**
+   * Auto-walk on a cleared floor: one step toward `walkTo`, then the next
+   * after it animates. A bomb that is still lit is walked around: each step
+   * is the closest one that takes no damage, and if every step would, the
+   * walk stops and says so.
+   */
   private walkTo: Hex | null = null;
   private walkStep(): void {
     const s = this.state;
     const goal = this.walkTo;
-    if (!goal || s.status !== 'playing' || !this.floorClear() || eq(s.player.pos, goal)) {
+    if (!goal || s.status !== 'playing' || s.enemies.length > 0 || eq(s.player.pos, goal)) {
       this.walkTo = null;
       this.refreshUi();
       return;
     }
     const field = distanceField(s, goal, playerWalkable);
-    let best: Hex | null = null;
-    for (const m of legalMoves(s)) {
-      const d = field.get(key(m));
-      if (d !== undefined && (best === null || d < field.get(key(best))!)) best = m;
-    }
     const here = field.get(key(s.player.pos));
-    if (!best || here === undefined || field.get(key(best))! >= here) {
+    const steps = legalMoves(s)
+      .filter((m) => field.has(key(m)))
+      .map((m) => ({ m, d: field.get(key(m))!, hurt: s.bombs.length ? previewAction(s, { type: 'move', to: m }).damageTaken : 0 }))
+      .filter((x) => x.hurt === 0 && (s.bombs.length > 0 || x.d < here!))
+      .sort((a, b) => a.d - b.d);
+    if (here === undefined || steps.length === 0) {
       this.walkTo = null;
-      hint("Can't reach that");
+      hint(here === undefined ? "Can't reach that" : 'A bomb is about to go off: step clear of its blast first');
       this.refreshUi();
       return;
     }
-    this.commit({ type: 'move', to: best });
+    this.commit({ type: 'move', to: steps[0].m });
   }
 
   private clearSelection(): void {
@@ -208,6 +229,8 @@ export class Game {
     this.bashSel = null;
     this.outcome = null;
     this.inspect = null;
+    this.probe = null;
+    this.armed = false;
   }
 
   private commit(a: Action): void {
@@ -253,6 +276,7 @@ export class Game {
       if (o.hookedTo) parts.push('<span class="bad">Hooked!</span>');
       if (o.dies) parts.push('<span class="bad">You will die</span>');
       else if (o.damageTaken) parts.push(`<span class="bad">You take ${o.damageTaken} damage</span>`);
+      else if (!o.descends && o.next.length) parts.push('Safe this turn');
       else if (!o.descends) parts.push('Safe');
       if (o.healed) parts.push('<span class="good">+1 ♥</span>');
       const act: Action | null = this.selected
@@ -260,19 +284,55 @@ export class Game {
         : this.bashSel
           ? { type: 'bash', target: this.bashSel }
           : null;
+      // Who hurts you (outlined in red on the board), or what aims at you next.
+      const hurtBy = o.hurtBy.length ? `Hit by ${threatList(s, o.hurtBy)}. ` : '';
+      const then = o.next.length ? `<span class="warn">Then in line for ${threatList(s, o.next)}.</span> ` : '';
       const body = target
-        ? `${ENEMIES[target.kind].name} ${target.hp}/${target.maxHp} HP: ${ENEMIES[target.kind].blurb}`
-        : o.damageTaken > 0
-          ? 'This move hurts. Press the red button if you mean it.'
-          : 'Tap again or press Move.';
-      renderPanel(
-        `<div class="title">${parts.join(' · ')}</div>${body}`,
-        {
-          label: bashing ? 'Bash' : o.damageTaken > 0 ? `Move (−${o.damageTaken} ♥)` : 'Move',
-          danger: o.damageTaken > 0,
-          onClick: () => act && this.commit(act),
+        ? `${hurtBy}${then}${ENEMIES[target.kind].name} ${target.hp}/${target.maxHp} HP: ${ENEMIES[target.kind].blurb}`
+        : o.dies
+          ? `${hurtBy}This move kills you.`
+          : o.damageTaken > 0
+            ? `${hurtBy}Press the red button if you mean it.`
+            : `${then}Tap again or press Move.`;
+      const verb = bashing ? 'Bash' : 'Move';
+      const hurts = o.damageTaken > 0 || o.dies;
+      renderPanel(`<div class="title">${parts.join(' · ')}</div>${body}`, {
+        label: o.dies
+          ? this.armed
+            ? 'Sure? You die'
+            : `${verb} — you die`
+          : o.damageTaken > 0
+            ? `${verb} (−${o.damageTaken} ♥)`
+            : verb,
+        danger: hurts,
+        onClick: () => {
+          if (!act) return;
+          // A fatal action takes two presses.
+          if (o.dies && !this.armed) {
+            this.armed = true;
+            navigator.vibrate?.(30);
+            this.refreshUi();
+            return;
+          }
+          this.commit(act);
         },
-      );
+      });
+      return;
+    }
+    if (this.probe) {
+      const h = this.probe;
+      const ts = threatsAt(threats(s), h);
+      const stairs = eq(h, s.stairs);
+      const title = ts.length
+        ? `<span class="bad">Threatened</span> by ${threatList(s, ts)}`
+        : stairs
+          ? 'The stairs'
+          : 'No threat here this turn';
+      const left = s.enemies.length;
+      const body = stairs
+        ? `${left} enem${left === 1 ? 'y' : 'ies'} left: clear the floor first to <span class="good">heal 1 ♥</span>. You move one hex per turn.`
+        : 'You move one hex per turn: tap a hex next to you.';
+      renderPanel(`<div class="title">${title}</div>${body}`, null);
       return;
     }
     if (this.inspect !== null) {
@@ -359,6 +419,13 @@ export class Game {
 
   // ---------- rendering ----------
 
+  /** Enemies to ring in red: who hurts the previewed action, or threatens the looked-at hex. */
+  private marked(): number[] {
+    if (this.outcome) return this.outcome.hurtBy.map((t) => t.by);
+    if (this.probe) return threatsAt(threats(this.state), this.probe).map((t) => t.by);
+    return [];
+  }
+
   private resize(): void {
     const parent = this.canvas.parentElement!;
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
@@ -412,6 +479,9 @@ export class Game {
         inspect: idle ? this.inspect : null,
         bashTargets: idle ? bashTargets(this.state) : [],
         bashSelected: idle ? this.bashSel : null,
+        probe: idle ? this.probe : null,
+        marked: idle ? this.marked() : [],
+        warned: idle && this.outcome ? this.outcome.next.map((t) => t.by) : [],
       },
       t,
     );

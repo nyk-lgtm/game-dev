@@ -25,7 +25,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 - Before pushing: `npm test && npm run build`. Balance probes:
   - Telegraph: `npx vite-node scripts/telegraph/balance.ts 150` (greedy bot median
     depth ≈ 7, ~15% of runs end on depth 3; it can't plan bash/lunge combos). `scripts/telegraph/damage.ts`
-    shows what hurts the player.
+    shows what hurts the player; `scripts/telegraph/floors.ts` counts enemies/kinds per depth (budget
+    `floorBudget`: +3 a floor to 24 at depth 8, then +2; at most 11 enemies, 4 brutes).
   - Grove: `npx vite-node scripts/grove/balance.ts 60` (score, game length, best tier; rules v2:
     median ~248 turns, Spirit Tree in ~half the games).
   - Lantern: `npx vite-node scripts/lantern/balance.ts 50` (completion bot: ~98% finish,
@@ -145,7 +146,9 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)
   plus a shape in render/draw.ts and a color in palette.ts; tests in
   tests/telegraph/enemies.test.ts. Telegraphed attacks set `aim` and resolve via
-  `release` at the start of the next enemy phase; a releasing enemy skips `act`.
+  `release` at the start of the next enemy phase; a releasing enemy skips `act`. Previews
+  (core/preview.ts) give `hurtBy` (who hits you) and `next` (telegraphs covering where a safe move ends
+  up, from the simulated post-state); `threatsAt(threats(s), hex)` lists who threatens a hex.
 - Visual check: build, `npx vite preview`, screenshot with Playwright using the
   `Pixel 7` device profile. `window.__game` exposes each game's controller.
 - Bug reports from the owner look like `TELEGRAPH …`/`GROVE …`/`LANTERN …`/`GLYPH …`/`REWILD … seed=… a=…` (and the other games' equivalents);

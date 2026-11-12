@@ -9,7 +9,7 @@ import type { Enemy, EnemyKind, GameState, Player, Tile } from './types';
 export const COLS = 7;
 export const ROWS = 9;
 const START = offsetToAxial(3, ROWS - 1);
-const MAX_ENEMIES = 12;
+const MAX_ENEMIES = 11;
 
 export interface Floor {
   tiles: Record<string, Tile>;
@@ -84,8 +84,7 @@ function tryFloor(rng: Rng, depth: number): Floor | null {
     cells.filter((h) => tiles[key(h)] === 'floor' && distance(h, START) >= 4),
   );
   const enemies: Omit<Enemy, 'id'>[] = [];
-  // Depth 1 is the tutorial floor; from depth 2 there is a little more to fight.
-  let budget = depth <= 1 ? 4 : 3 * depth + (depth <= 3 ? 2 : 0);
+  let budget = floorBudget(depth);
   const squad = pickSquad(rng, depth);
   const count = (k: EnemyKind) => enemies.filter((e) => e.kind === k).length;
   const canAdd = (k: EnemyKind) => ENEMIES[k].cost <= budget && count(k) < (ENEMIES[k].max ?? MAX_ENEMIES);
@@ -117,6 +116,17 @@ function tryFloor(rng: Rng, depth: number): Floor | null {
   if (enemies.length === 0) return null;
 
   return { tiles, stairs, start: START, enemies };
+}
+
+/**
+ * Spawn budget per depth. Depth 1 is the tutorial floor; depths 2-3 get a
+ * little extra; past depth 8 it grows by 2 a floor instead of 3, so deep
+ * floors stay crowded but not packed wall to wall.
+ */
+export function floorBudget(depth: number): number {
+  if (depth <= 1) return 4;
+  if (depth <= 8) return 3 * depth + (depth <= 3 ? 2 : 0);
+  return 24 + 2 * (depth - 8);
 }
 
 /** Kinds that may spawn on a floor: brutes alone on depth 1, then 2-3 kinds. */

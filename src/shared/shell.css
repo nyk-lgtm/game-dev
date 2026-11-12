@@ -101,6 +101,18 @@ button:active { transform: scale(0.97); }
   background: linear-gradient(rgba(0,0,0,0), var(--panel) 55%);
   pointer-events: none; transition: opacity 0.2s;
 }
+/* Sticky footer for a long card's primary button (cards.ts adds it only when
+   the button starts below the fold). It covers the card's bottom padding so
+   text never shows under the button, and inherits the card's background. */
+.card .stick {
+  position: sticky; bottom: 0; z-index: 1; flex: none;
+  display: flex; flex-direction: column;
+  padding-top: 8px; padding-bottom: 14px;
+  background: inherit;
+}
+.card .stick .more {
+  position: absolute; left: 0; right: 0; bottom: 100%; margin: 0; padding: 18px 0 4px;
+}
 /* Short screens (360×640): menus fit without scrolling. */
 @media (max-height: 700px) {
   #overlay { padding: 10px; }
@@ -109,6 +121,7 @@ button:active { transform: scale(0.97); }
   .card button.primary { min-height: 48px; }
   .card button.secondary { min-height: 44px; }
   .card .more { margin: -6px -16px -14px; bottom: -14px; }
+  .card .stick { padding-top: 6px; padding-bottom: 10px; }
 }
 #errors {
   position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 20;

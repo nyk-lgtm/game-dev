@@ -60,9 +60,10 @@ export const HELP_HTML = `
   <li><b>Tap a hex</b> to preview. <b>Tap it again</b> (or press the button) to do it. The preview is exact: ✕ marks who dies, and it shows damage you will take.</li>
   <li><b>Moving is attacking.</b> <b>Stab</b>: step from one hex next to an enemy to another hex next to it (1 damage). <b>Lunge</b>: step straight toward an enemy 2 hexes away (2 damage).</li>
   <li><b>Bash</b>: tap an adjacent enemy, then press <b>Bash</b> to shove it 1 hex. It is <b>dazed</b> (skips its next action, loses its aim). Into lava it dies; into a wall or another enemy, both take 1 damage. Recharges in 3 turns.</li>
-  <li><span class="c-threat">Red</span> = danger for the coming enemy turn: solid red lines are aimed attacks, faint red outlines are where a brute can reach, dashed orange is a bomb's blast. Walls block arrows; lava blocks walking, not arrows.</li>
-  <li>The dots under an enemy are its health. A move that would hurt you needs the red button: tapping the hex again won't do it.</li>
-  <li>Once a floor is clear, tap the stairs (or any hex) to walk there.</li>
+  <li><span class="c-threat">Red</span> = danger for the coming enemy turn: solid red lines are aimed attacks, faint red outlines are where a brute can reach, dashed orange is a bomb's blast. Walls block arrows; lava blocks walking, not arrows. <b>Tap any hex</b> to see who threatens it: those enemies get a red ring.</li>
+  <li>"Safe" is about the coming enemy turn. If something will take aim at where you end up (a pylon charging, a bomb lobbed at you), the preview says so in amber with a <b>!</b>.</li>
+  <li>The dots under an enemy are its health. A move or Bash that would hurt you needs the red button: tapping the hex again won't do it. One that would kill you needs two presses.</li>
+  <li>Once a floor is clear, tap the stairs (or any hex) to walk there, around any bomb still ticking.</li>
   <li>Kill every enemy before taking the stairs to <span class="c-heal">heal 1 ♥</span>.</li>
 </ul>
 <h2>Enemies</h2>

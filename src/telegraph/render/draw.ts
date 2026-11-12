@@ -16,6 +16,15 @@ export interface Overlay {
   bashTargets: Hex[];
   /** The enemy hex a previewed Bash targets (with `outcome`). */
   bashSelected: Hex | null;
+  /** A hex tapped to look at (outlined). */
+  probe: Hex | null;
+  /**
+   * Enemies that threaten the looked-at hex or hurt the previewed action:
+   * ringed in red, while other threats fade back so overlaps read clearly.
+   */
+  marked: number[];
+  /** Enemies that will aim at where a safe preview ends up (amber rings). */
+  warned: number[];
 }
 
 const TAU = Math.PI * 2;
@@ -86,12 +95,15 @@ export function draw(
     }
   }
 
-  // Threats (only when idle).
+  // Threats (only when idle). With enemies marked, the rest fade back.
   if (ov.threats) {
+    const focus = ov.marked.length ? new Set(ov.marked) : null;
+    const fade = (ids: number[]) => (ctx.globalAlpha = focus && !ids.some((id) => focus.has(id)) ? 0.3 : 1);
     for (const k of ov.threats.melee) {
       const [q, r] = k.split(',').map(Number);
       const t = s.tiles[k];
       if (t === 'wall' || t === 'lava') continue;
+      fade(ov.threats.meleeBy.get(k) ?? []);
       const { x, y } = hexToPx(L, q, r);
       hexPath(ctx, x, y, S * 0.94);
       ctx.fillStyle = `rgba(${C.threat}, 0.16)`;
@@ -101,8 +113,24 @@ export function draw(
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
-    for (const b of ov.threats.blasts) drawBlastZone(ctx, L, b.hexes, b.fuse, time);
-    for (const line of ov.threats.lines) drawThreatLine(ctx, L, scene, line.by, line.kind, line.path, time);
+    for (const b of ov.threats.blasts) {
+      fade([b.by]);
+      drawBlastZone(ctx, L, b.hexes, b.fuse, time);
+    }
+    for (const line of ov.threats.lines) {
+      fade([line.by]);
+      drawThreatLine(ctx, L, scene, line.by, line.kind, line.path, time);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // The hex being looked at.
+  if (ov.probe) {
+    const { x, y } = hexToPx(L, ov.probe.q, ov.probe.r);
+    hexPath(ctx, x, y, S * 0.82);
+    ctx.strokeStyle = C.text;
+    ctx.lineWidth = 3;
+    ctx.stroke();
   }
 
 
@@ -142,6 +170,29 @@ export function draw(
   for (const b of scene.bombs) if (coveredBy(b)) drawGroundBomb(ctx, L, b.q, b.r, b.fuse, time);
   for (const u of units) drawUnit(ctx, L, u, time, ov.inspect === u.id);
   for (const b of scene.bombs) if (coveredBy(b)) drawBombTag(ctx, L, b.q, b.r, b.fuse);
+  // Who threatens the looked-at hex (red) or will aim at a safe preview (amber).
+  const pulse = 0.5 + 0.5 * Math.sin(time / 160);
+  for (const [ids, color, dash] of [
+    [ov.warned, C.archer, true],
+    [ov.marked, `rgb(${C.threat})`, false],
+  ] as const) {
+    for (const id of ids) {
+      const u = scene.units.get(id);
+      if (!u) continue;
+      const { x, y } = hexToPx(L, u.q, u.r);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, y, S * (0.74 + 0.05 * pulse), 0, TAU);
+      if (dash) ctx.setLineDash([S * 0.16, S * 0.1]);
+      ctx.strokeStyle = C.bg;
+      ctx.lineWidth = 6;
+      ctx.stroke();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
 
   // Bombs on open floor.
   for (const b of scene.bombs) if (!coveredBy(b)) drawBomb(ctx, L, b.q, b.r, 0, b.fuse, time);
@@ -589,15 +640,34 @@ function drawUnit(ctx: CanvasRenderingContext2D, L: Layout, u: VisUnit, time: nu
     ctx.stroke();
     ctx.fillStyle = C.guardDark;
     ctx.fillRect(-S * 0.2, -S * 0.12, S * 0.4, S * 0.08); // visor
-    // Shield: a thick arc on the facing side, spanning the 3 front hexes.
+    // Shield: a thick arc on the facing side, spanning the 3 front hexes,
+    // with a dark rim so it reads on any floor or threat tint, and a bright
+    // edge along the three hex sides it covers.
     const ang = dirAngle(L, u.facing);
     ctx.save();
     ctx.rotate(ang);
     ctx.beginPath();
-    ctx.arc(0, 0, S * 0.66, -Math.PI / 2.4, Math.PI / 2.4);
+    for (let i = 0; i <= 3; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / 3;
+      const px = (S * 0.9 * Math.cos(a)) / u.scale;
+      const py = (S * 0.9 * Math.sin(a)) / u.scale;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
     ctx.strokeStyle = C.shield;
-    ctx.lineWidth = S * 0.14;
+    ctx.globalAlpha = u.alpha * 0.75;
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    ctx.globalAlpha = u.alpha;
+    ctx.beginPath();
+    ctx.arc(0, 0, S * 0.68, -Math.PI / 2.3, Math.PI / 2.3);
     ctx.lineCap = 'round';
+    ctx.strokeStyle = C.guardDark;
+    ctx.lineWidth = S * 0.26;
+    ctx.stroke();
+    ctx.strokeStyle = C.shield;
+    ctx.lineWidth = S * 0.18;
     ctx.stroke();
     ctx.restore();
   } else if (u.kind === 'bomber') {
@@ -831,6 +901,16 @@ function drawOutcomeMarks(
     ctx.strokeText(txt, x, y - S * 0.7);
     ctx.fillStyle = C.brute;
     ctx.fillText(txt, x, y - S * 0.7);
+  } else if (out.next.length > 0) {
+    // Safe this turn, but something takes aim at it next: an amber "!".
+    ctx.font = `900 ${Math.round(S * 0.5)}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = C.bg;
+    ctx.strokeText('!', x, y - S * 0.68);
+    ctx.fillStyle = C.archer;
+    ctx.fillText('!', x, y - S * 0.68);
   }
 }
 

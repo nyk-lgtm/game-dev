@@ -176,6 +176,21 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   - [x] Telegraph: depths 2-3 get +2 enemy budget (depth 1 stays the tutorial; rules v4). Greedy bot
     median depth 8 → 7 (back on target), more of its runs end on depth 3. A bomb someone stands on
     is now drawn under them (a lit ring) with a "💣 n" fuse tag below, not a badge on top.
+  - [x] Telegraph second blind playtest (rules v5; runs to depths 6, 11, 13, "fair but steep"). Bash
+    gets the move's red "Bash (−n ♥)" button; a fatal move/bash says "Move — you die" and needs a second
+    press ("Sure? You die"). Previews name who hits you (red rings, other threats fade) and, when safe,
+    what takes aim at where you end up next (amber "!" and "Then in line for a Pylon's zap", from the
+    simulated post-state), so a pylon that starts charging no longer reads as a lie. Tapping any other
+    hex shows who threatens it (stairs: how many enemies are left). Guard shields: thicker arc with a dark
+    rim plus a bright edge on the 3 front hex sides. Cleared floor with a bomb still ticking: auto-walk
+    steps around the blast (or says to step clear) instead of silently refusing. Shared cards: a long
+    card whose primary button starts below the fold pins it in a sticky footer (Telegraph/Glyphwright
+    help). Balance: spawn budget past depth 8 grows +2 a floor (was +3), at most 11 enemies (was 12)
+    and 4 brutes (were up to 8; 6+ on ~18% of deep floors); bombers never back away (close to lob range
+    and hold). Greedy bot x150: median 7 → 7, mean 6.59 → 6.77, depth-3 deaths 23 → 23, max 12 → 15;
+    deep floors d9-14 average 9.2-11.0 enemies (were 9.6-12.0). Bombs hit the bot more (60 → 78 of
+    ~600 hits) since bombers hold their ground in range.
+  - [ ] Next: owner feedback on depths 9+; if still steep, a heal source (e.g. a shrine every few floors).
   - [x] Rewild (rules v3): species alive 4 seasons in a row are **settled** and pay +3 each season;
     dying out restarts the streak, so keeping wolves and deer balanced beats replanting. Stars
     rescaled to 900/1700/2400 (greedy bot 0/0/13/3 vs 0/2/11/3 before). Report and species list show
@@ -271,6 +286,9 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Grove: owner wants it kept as is (no smaller board).
 
 ## Done (recent)
+- Telegraph second blind playtest fixes (rules v5; see Design follow-ups): Bash/fatal confirm buttons,
+  threat sources ringed on tap, amber "then in line for…" on safe previews, bolder guard shields, bomb-aware
+  auto-walk, gentler deep floors, bombers hold their ground. Shared cards pin a long card's primary button.
 - Technical QA sweep fixes (360×640 and Pixel 7, no gameplay changes): Afterglow bug report uses `copyText` (every
   game's copy button now does), title fits short screens, evolution line "lv 1/8 + Multicast"; Telegraph in-play
   hints are `toast(..).classList.add('hint')` over the bottom panel, under the menu (z 5), taps pass through;
