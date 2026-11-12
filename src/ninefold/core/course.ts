@@ -56,6 +56,8 @@ export interface Hole {
   posts: Post[];
   zones: Zone[];
   mills: Mill[];
+  /** Angled rails across the outer corner of bends: corner point, then the two ends of the rail. */
+  wedges: number[][];
 }
 
 const cx = (c: number) => (c % COLS) * CELL + CELL / 2;
@@ -244,7 +246,27 @@ export function makeHole(seed: number, n: number): Hole {
   const turns = turnsOf(path);
   const hazards = zones.filter((z) => z.kind !== 'sand').length;
   const par = Math.max(2, Math.min(5, 2 + Math.floor((turns + (path.length > 8 ? 1 : 0) + (hazards + mills.length > 1 ? 1 : 0)) / 2)));
-  return { n, par, cells, path, tee, cup, walls: buildWalls(cells), posts, zones, mills };
+  // Angle the outer corner of every closed bend (unless a bumper sits there) so banks play cleanly.
+  const walls = buildWalls(cells);
+  const wedges: number[][] = [];
+  const K = 6;
+  for (let i = 1; i < path.length - 1; i++) {
+    const c = path[i];
+    const din = dirBetween(path[i - 1], c), dout = dirBetween(c, path[i + 1]);
+    if (din === dout) continue;
+    const back = (dout + 2) % 4;
+    const a = neighbor(c, din), b = neighbor(c, back);
+    const diag = a >= 0 ? neighbor(a, back) : -1;
+    if ([a, b, diag].some((m) => m >= 0 && cells[m])) continue;
+    const ox = DIRS[din][0] + DIRS[back][0], oy = DIRS[din][1] + DIRS[back][1];
+    const kx = cx(c) + ox * (CELL / 2), ky = cy(c) + oy * (CELL / 2);
+    if (posts.some((p) => Math.hypot(p.x - kx, p.y - ky) < CELL / 2)) continue;
+    const ax = kx + DIRS[dout][0] * K, ay = ky + DIRS[dout][1] * K;
+    const bx = kx - DIRS[din][0] * K, by = ky - DIRS[din][1] * K;
+    walls.push({ ax, ay, bx, by });
+    wedges.push([kx, ky, ax, ay, bx, by]);
+  }
+  return { n, par, cells, path, tee, cup, walls, posts, zones, mills, wedges };
 }
 
 export const makeCourse = (seed: number): Hole[] => [...Array(HOLES).keys()].map((n) => makeHole(seed, n));

@@ -88,6 +88,22 @@ export function draw(g: CanvasRenderingContext2D, w: number, h: number, v: View,
     g.fillStyle = '#34965a';
     for (let k = 0; k < CELL; k += 8) g.fillRect(x, y + k, CELL, 4);
   });
+  // Angled corners: timber wedges.
+  for (const [kx, ky, ax, ay, bx, by] of hole.wedges) {
+    g.fillStyle = '#b8875a';
+    g.beginPath();
+    g.moveTo(kx, ky);
+    g.lineTo(ax, ay);
+    g.lineTo(bx, by);
+    g.closePath();
+    g.fill();
+    g.strokeStyle = '#5a3c22';
+    g.lineWidth = 0.8;
+    g.beginPath();
+    g.moveTo(ax, ay);
+    g.lineTo(bx, by);
+    g.stroke();
+  }
   // Inner lip of the rails.
   g.strokeStyle = 'rgba(0, 0, 0, 0.3)';
   g.lineWidth = 0.7;

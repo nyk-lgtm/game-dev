@@ -26,7 +26,8 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         banners (Birdie! etc.), first-time tips per obstacle, scorecard, round card, daily, hub card.
   - [x] Sounds (src/ninefold/audio.ts) and windmills (rules v2: holes 4+, cross arms turning only while the
         ball rolls, same pose at every shot start, drawn turning on to that pose afterwards).
-  - [ ] Blind playtest: is par fair for a thumb? Is the aim precise enough? Then: chamfered corners.
+  - [x] Angled timber wedges in the outer corner of closed bends (rules v3).
+  - [ ] Blind playtest: is par fair for a thumb? Is the aim precise enough?
 - [ ] **Hexhold** (hex maze tower defense). Milestones:
   - [x] Core (src/hexhold/core): 9x11 hex board, flow-field pathing (never sealed), 30
         seeded waves with themes, 6 towers each gifting its neighbors, 8 enemies (flyers,
