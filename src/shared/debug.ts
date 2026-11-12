@@ -6,6 +6,13 @@ export const BUILD = `${__BUILD_ID__} · ${__BUILD_TIME__} UTC`;
 
 export function installErrorOverlay(): void {
   applySettings();
+  // Remember which game was played last, for the hub's Continue button.
+  try {
+    const game = location.pathname.split('/').filter(Boolean).pop();
+    if (game && !game.includes('.')) localStorage.setItem('hub.last', game);
+  } catch {
+    // storage blocked: no Continue button
+  }
   const box = document.getElementById('errors')!;
   const show = (msg: string) => {
     const el = document.createElement('div');

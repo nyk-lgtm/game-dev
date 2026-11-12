@@ -10,6 +10,7 @@ export interface News {
 }
 
 export const NEWS: News[] = [
+  { day: '2026-11-12', path: './', game: 'Game Lab', text: 'A Continue button at the top takes you straight back to the game you played last.' },
   { day: '2026-11-12', path: './summit/', game: 'Summit', text: 'Fewer draws early, more on high floors; no more back-to-back same ranks, and the 3rd dry draw in a row always fits. Mirror and Long Stride have a few uses per deal and their own colours; Lantern, Second Wind, High Stakes and Flush reworked; peak tops marked for Peak Flags.' },
   { day: '2026-11-12', path: './quarry/', game: 'Quarry', text: 'New game: a word dig. Drag through touching letter hexes to spell words; long ones pay. Reach each depth’s target before your words run out, use fuses before they blow, break rocks, and pick a perk on the way down eight depths. There is a daily dig too.' },
   { day: '2026-11-12', path: './triad/', game: 'Triad', text: 'Fixed: after a hint, tapping the hex and then an element now fills it. Links are clearer pills on the edge, Normal links puzzles lean less on copying along links, and hints skip steps a link just copies.' },

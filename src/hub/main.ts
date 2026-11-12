@@ -348,7 +348,7 @@ const seen = hubStore.load<string>('seenNews', '2026-11-09');
 const fresh = NEWS.filter((n) => n.day > seen);
 const news = document.getElementById('news')!;
 const renderNews = (all: boolean) => {
-  const list = all ? NEWS : fresh.length ? fresh.slice(0, 8) : NEWS.slice(0, 3);
+  const list = all ? NEWS : fresh.length ? fresh.slice(0, 5) : NEWS.slice(0, 3);
   news.innerHTML = `<h3>What's new${fresh.length && seen ? `<span>${fresh.length} since your last visit</span>` : ''}</h3><ul>${list
     .map((n) => `<li class="${seen && n.day > seen ? 'new' : ''}"><a href="${n.path}"><b>${n.game}</b><span>${n.text}</span></a></li>`)
     .join('')}</ul>${!all && list.length < NEWS.length ? '<button id="newsAll">Show all changes</button>' : ''}`;
@@ -377,3 +377,22 @@ const renderSettings = () => {
   };
 };
 renderSettings();
+
+// Continue: the game played last, one tap away.
+{
+  const el = document.getElementById('continue') as HTMLAnchorElement;
+  let last: string | null = null;
+  try {
+    last = localStorage.getItem('hub.last');
+  } catch {
+    last = null;
+  }
+  const g = last ? GAMES.find((x) => x.path === `./${last}/`) : undefined;
+  if (g) {
+    el.href = g.path;
+    el.style.setProperty('--accent', g.accent);
+    const best = g.best();
+    el.innerHTML = `<span class="lab">Continue</span><b>${g.title}</b>${best ? `<span class="sub">${best}</span>` : ''}<span class="go">›</span>`;
+    el.hidden = false;
+  }
+}
