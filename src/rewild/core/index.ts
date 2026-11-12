@@ -5,3 +5,4 @@ export * from './sim';
 export * from './rules';
 export * from './replay';
 export * from './report';
+export * from './forecast';

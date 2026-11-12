@@ -48,7 +48,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     `scripts/hexhold/probe.ts 32` lists each loss with its wave and map shape (one or two portals) and the
     lives lost per band of waves (the difficulty curve: v4 is gentle to wave 10, pressure from 15 on).
   - Rewild: `npx vite-node scripts/rewild/balance.ts 16 greedy 1` (score, species, stars; compare
-    with `random`; greedy median ~2100 with the settled bonus, stars at 900/1700/2400),
+    with `random`; rules v5: greedy median ~2330 (32 games), stars at 900/1700/2400, ~1/4 of bot games 3★),
     `scripts/rewild/upto.ts <seed> <n>` (a bot game's actions to season n, for `?seed=&a=`), `scripts/rewild/probe.ts` (plays and causes of death), `trace.ts <seed>`.
 - ASCII games (Delve, Nightline) draw into a character `Grid` (src/shared/ascii.ts) painted
   with batched `fillText` runs; art lives in each game's `art.ts`.
@@ -65,7 +65,11 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   element (last wins); burn is a fraction of the finished hit.
 - Rewild runs are a seed + actions (`P<card>.<cell>` place, `R` new hand, `E` end season). The
   season sim (src/rewild/core/sim.ts) visits cells in index order with one Rng per season, so
-  the UI's forecasts (clone + end season) are exact.
+  the UI's forecasts (clone + end season) are exact. `track(ev, cell, id, after)` (core/forecast.ts) follows one
+  population through those events (`feed` events carry food/need when it eats, `move` says flee/food), so the
+  placement glow and the cell readout come from the same trial. Wildfire burns last in a lightning summer
+  (after grazing): only full-grown grass/flowers/shrubs on moisture-0 ground; the board draws the burn plan.
+  Deals favour cards that can be placed somewhere (`placeReason` gives the blocker kind for hints).
 - Unspoken: `makeLanguage(seed)` (core/lang.ts) invents grammar, sounds and glyphs; `makeWorld` builds
   5 chapters of authored scenes (every word in 2+ scenes; tests enforce it) plus generated riddles; state
   actions are `G<glyph>=<guess>` and `A<challenge>~p<n>` / `~<tile.tile…>`. Scene art: render/scene.ts.

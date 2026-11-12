@@ -1,7 +1,7 @@
 // Rewild bots. greedy: tries every card on every legal cell, simulates the
 // season plus a couple of idle seasons, keeps the best. random: any legal move.
 import { Rng, mixSeed } from '../../src/shared/rng';
-import { GOALS, apply, census, clone, encode, newGame, placeError, seasonPoints, type Action, type GameState } from '../../src/rewild/core';
+import { GOALS, apply, census, clone, encode, moisture, newGame, placeError, seasonPoints, type Action, type GameState } from '../../src/rewild/core';
 
 export interface Result { seed: number; s: GameState; actions: string }
 
@@ -24,8 +24,9 @@ function value(s: GameState, look: number): number {
 
 export function legal(s: GameState): Action[] {
   const out: Action[] = [];
+  const wet = moisture(s.cells, s.weather);
   s.hand.forEach((_, card) => s.cells.forEach((_, cell) => {
-    if (placeError(s, card, cell) === null) out.push({ type: 'place', card, cell });
+    if (placeError(s, card, cell, wet) === null) out.push({ type: 'place', card, cell });
   }));
   return out;
 }

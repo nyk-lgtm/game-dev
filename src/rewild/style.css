@@ -36,7 +36,10 @@ body {
 }
 #banner.show { opacity: 1; transform: translate(-50%, 0); }
 
-#panel { height: 140px; padding: 6px 14px 8px; gap: 10px; }
+/* (body #panel: the shell's #panel may come later in the bundle.) */
+body #panel { padding: 6px 14px 8px; gap: 10px; position: relative; }
+/* Tall phones have room to spare under the (width-bound) island: give the text more. */
+@media (min-height: 800px) { body #panel { height: 176px; } }
 #info { font-size: 13px; }
 #info .title { font-size: 15px; }
 #info .row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
@@ -49,6 +52,14 @@ body {
 #info .head .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #info .head .act { flex: none; }
 #info .line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#info .line.wrap { white-space: normal; }
+/* Long text scrolls inside the panel; a fade and a "more" tag say there is more below. */
+#info { overscroll-behavior: contain; padding-bottom: 2px; }
+#info.more { -webkit-mask-image: linear-gradient(#000 calc(100% - 26px), transparent); mask-image: linear-gradient(#000 calc(100% - 26px), transparent); }
+body #panel.more::after {
+  content: 'scroll ▾'; position: absolute; right: 12px; bottom: 4px;
+  font-size: 11px; font-weight: 700; color: var(--accent); pointer-events: none;
+}
 #info .gold, .card .gold { color: var(--gold); font-weight: 700; }
 #info .land { color: #e8c890; }
 .card h3.warn { color: var(--warn); }
