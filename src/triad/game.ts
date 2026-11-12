@@ -10,6 +10,7 @@ import { makeStore } from '../shared/storage';
 import {
   CLUE_MODES,
   ELEMENT_NAMES,
+  LINKS_VERSION,
   RULES_VERSION,
   LEVELS,
   SIZES,
@@ -46,10 +47,18 @@ interface SavedRun {
   level?: Level;
   /** Absent in older saves: numbers. */
   clues?: ClueMode;
+  /** LINKS_VERSION of a links-mode save. */
+  lv?: number;
 }
+
+/** A save this version still rebuilds the same puzzle for. */
+export const validSave = (s: SavedRun | null | undefined): s is SavedRun =>
+  !!s && s.v === RULES_VERSION && (s.clues !== 'links' || s.level === 'hard' || s.lv === LINKS_VERSION);
 
 interface Profile {
   solved: number;
+  /** Solved per level and mode (`level` or `level+links`). */
+  solvedBy?: Record<string, number>;
   /** Best time per size (normal) or `size-level`, with `+links` in links mode. */
   best: Partial<Record<string, number>>;
 }
@@ -90,6 +99,16 @@ export class Game {
       this.tapAt(e.clientX - r.left, e.clientY - r.top);
     });
     new ResizeObserver(() => this.resize()).observe(this.canvas);
+    // A tap on the dimmed backdrop over ＋ or ☰ closes the card and presses the
+    // button too, so it doesn't take two taps (e.g. ＋ right after Solved).
+    $('overlay').addEventListener('click', (e) => {
+      if (e.target !== $('overlay')) return;
+      setTimeout(() => {
+        if (!$('overlay').hidden) return;
+        const btn = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('#newBtn, #menuBtn');
+        btn?.click();
+      });
+    });
     document.addEventListener('visibilitychange', () => this.save(true));
     addEventListener('pagehide', () => this.save(true));
     requestAnimationFrame((t) => this.frame(t));
@@ -173,6 +192,10 @@ export class Game {
     this.start((Math.random() * 0xffffffff) >>> 0, size);
   }
 
+  private solvedKey(level = this.level, mode = this.mode): string {
+    return `${level}${mode === 'links' ? '+links' : ''}`;
+  }
+
   /** Key for best times: plain size for Normal (older saves), else size-level; `+links` in links mode. */
   private bestKey(size = this.size, level = this.level, mode = this.mode): string {
     return `${level === 'normal' ? size : `${size}-${level}`}${mode === 'links' ? '+links' : ''}`;
@@ -183,7 +206,7 @@ export class Game {
     const day = todayKey();
     const saved = store.load<SavedRun | null>('dailyRun', null);
     const seed = dailySeed('triad', day);
-    if (saved && saved.v === RULES_VERSION && saved.day === day) this.start(saved.seed, saved.size, saved, day);
+    if (validSave(saved) && saved.day === day) this.start(saved.seed, saved.size, saved, day);
     else this.start(seed, 'medium', null, day);
   }
 
@@ -191,7 +214,7 @@ export class Game {
     closeOverlay();
     leaveDaily();
     const saved = store.load<SavedRun | null>('run', null);
-    if (saved && saved.v === RULES_VERSION) this.start(saved.seed, saved.size, saved);
+    if (validSave(saved)) this.start(saved.seed, saved.size, saved);
     else this.newPuzzle('medium');
   }
 
@@ -212,6 +235,7 @@ export class Game {
       day: this.daily,
       level: this.level,
       clues: this.mode,
+      lv: this.mode === 'links' ? LINKS_VERSION : undefined,
     };
     store.save(this.daily ? 'dailyRun' : 'run', run);
   }
@@ -227,8 +251,10 @@ export class Game {
       this.refresh();
       return;
     }
-    // Tapping the selected cell again cycles it: empty → fire → water → leaf → empty.
-    if (i === this.selected && !this.done && this.p.given[i] < 0 && !this.notesMode) {
+    // Tapping a selected, filled hex again cycles it: fire → water → leaf → empty.
+    // An empty one just stays selected, so "tap a hex, then an element" always works
+    // (also right after a hint selected it).
+    if (i === this.selected && !this.done && this.p.given[i] < 0 && !this.notesMode && this.vals[i] >= 0) {
       this.set(i, this.vals[i] === 2 ? -1 : this.vals[i] + 1);
       return;
     }
@@ -277,7 +303,8 @@ export class Game {
   }
 
   private set(i: number, v: number): void {
-    if (this.vals[i] === v && v >= 0) v = -1;
+    // Pressing the element a hex already holds keeps it (Clear empties a hex).
+    if (this.vals[i] === v) return;
     this.undoStack.push({ cell: i, val: this.vals[i], notes: this.notes[i] });
     this.vals[i] = v;
     if (v >= 0) this.notes[i] = 0;
@@ -353,6 +380,8 @@ export class Game {
     this.save(true);
     const prof = store.load<Profile>('profile', { solved: 0, best: {} });
     prof.solved++;
+    const sk = this.solvedKey();
+    prof.solvedBy = { ...prof.solvedBy, [sk]: (prof.solvedBy?.[sk] ?? 0) + 1 };
     const prev = prof.best[this.bestKey()];
     const score = this.total();
     const newBest = prev === undefined || score < prev;
@@ -421,7 +450,7 @@ export class Game {
           ? this.p.links
             ? 'Fill every hex. A <b>number</b> counts the neighbors its hex beats; a <b>link</b> joins two hexes that match.'
             : 'Fill every hex. A <b>number</b> says how many of its neighbors that hex beats.'
-          : `${filled}/${total} filled. Tap a hex, then an element. Tap it again to cycle.`,
+          : `${filled}/${total} filled. Tap a hex, then an element.`,
       );
     else {
       const nl = this.p.links ? linksAt(makeBoard(this.p.radius), this.p.clue, i).length : 0;
@@ -429,7 +458,7 @@ export class Game {
       if (this.p.given[i] >= 0) this.info(`A given <b>${ELEMENT_NAMES[this.p.given[i]]}</b>.${this.p.clue[i] >= 0 ? ` It beats <b>${this.p.clue[i]}</b> of its neighbors.` : ''}${linked}`);
       else if (this.p.clue[i] >= 0) this.info(`This hex beats exactly <b>${this.p.clue[i]}</b> of its neighbors.${linked}${this.notesMode ? ' Notes on.' : ''}`);
       else if (linked) this.info(`${linked.slice(1)}${this.notesMode ? ' Notes on.' : ''}`);
-      else this.info(this.notesMode ? 'Notes: tap elements to pencil them in.' : 'Pick an element, or tap the hex again to cycle.');
+      else this.info(this.notesMode ? 'Notes: tap elements to pencil them in.' : (this.vals[i] >= 0 ? 'Pick another element, or tap the hex again to cycle.' : 'Pick an element.'));
     }
     this.draw();
   }
@@ -483,14 +512,12 @@ export class Game {
       `<h2>How to play</h2>
       <p>Fill every hex with an element. ${iconSvg(0, 16)} <b>Fire</b> burns ${iconSvg(2, 16)} <b>Leaf</b>, leaf drinks ${iconSvg(1, 16)} <b>Water</b>, and water douses fire.</p>
       <ul>
-        <li>A <b>number</b> on a hex says how many of its (up to six) neighbors that hex <b>beats</b>. A 0 beats none; a 6 beats every neighbor.</li>
-        <li>Hexes with a ring are given. Every puzzle has exactly one answer, and you never need to guess.</li>
-        <li>Tap a hex, then an element. Tapping the same hex again cycles it.</li>
-        <li><b>Notes</b> let you pencil in what a hex might be. A number turns <span style="color:#ff5d7a">red</span> when its neighbors can no longer add up.</li>
-        <li>Pick <b>Easy</b>, <b>Normal</b> or <b>Hard</b> with ＋. Hard puzzles sometimes need a "what if": suppose a hex is fire and see a number break.</li>
-        <li><b>Hint</b> shows the next hex you can work out, or a wrong one (each adds 30 seconds to your time).</li>
-        <li>A number fades once all its neighbors are filled and it adds up.</li>
-        <li>${linkSvg(26)} In <b>Numbers + links</b> puzzles (pick it with ＋), a <b>link</b> across an edge means the two hexes it joins hold the same element.</li>
+        <li>A <b>number</b> on a hex counts the neighbors that hex <b>beats</b> (0 to 6). It fades once it adds up, and turns <span style="color:#ff5d7a">red</span> when it no longer can.</li>
+        <li>Ringed hexes are given. There is exactly one answer, and you never need to guess.</li>
+        <li>Tap a hex, then an element. <b>Notes</b> pencil in what a hex might be.</li>
+        <li><b>＋</b> picks <b>Easy</b>, <b>Normal</b> or <b>Hard</b> (sometimes needs a "what if": suppose a hex is fire and see a number break).</li>
+        <li>${linkSvg(26)} With <b>Numbers + links</b>, a <b>link</b> on an edge means the two hexes it joins hold the same element.</li>
+        <li><b>Hint</b> shows the next step, or a wrong hex (+30 seconds each).</li>
       </ul>`,
       [
         { label: 'Show me (60-second tutorial)', primary: true, onClick: () => this.startTutorial() },
@@ -517,7 +544,11 @@ export class Game {
       const b = prof.best[this.bestKey(s, lv, md)];
       return `${SIZES[s].name} · ${makeBoard(SIZES[s].radius).cells.length} hexes${b !== undefined ? ` · best ${fmt(b)}` : ''}`;
     };
-    const text = () => `${LEVELS[lv].text}${md === 'links' ? ` ${CLUE_MODES.links.text}` : ''}${prof.solved ? ` ${prof.solved} solved so far.` : ''}`;
+    const text = () => {
+      const n = prof.solvedBy?.[this.solvedKey(lv, md)] ?? 0;
+      const lvText = md === 'links' ? LEVELS[lv].text.replace(/number/g, 'clue') : LEVELS[lv].text;
+      return `${lvText}${md === 'links' ? ` ${CLUE_MODES.links.text}` : ''}${n ? ` ${n} solved at this level.` : ''}`;
+    };
     const sizes = Object.keys(SIZES) as Size[];
     showCard(
       `<h2>New puzzle</h2><div class="levels">${levels}</div><div class="levels modes" aria-label="Clues">${modes}</div><p class="lvtext">${text()}</p>`,

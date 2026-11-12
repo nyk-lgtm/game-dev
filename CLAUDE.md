@@ -72,7 +72,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   Links mode (`generate(seed, r, level, 'links')`, `p.links`): `p.clue` continues past the cells with one entry per
   `b.edges` edge (clue id = cells + edge; -1 or SAME = both hexes match); links are ordinary clues in `clueSupport`/
   `propagate`/hints/`brokenClues`, and get stripped together with numbers. Numbers mode must stay byte-identical
-  (fingerprint test in tests/triad/links.test.ts). Saves record `clues`; the daily is numbers-only.
+  (fingerprint test in tests/triad/links.test.ts). Easy/Normal links (`tidy`): no link touches a given, linked
+  groups have at most 3 hexes; Hard links keeps the original generator (playtest favourite). Bump `LINKS_VERSION`
+  when links puzzles change (saves record `clues` + `lv`; `validSave`); the daily is numbers-only. Hints skip
+  hexes that links merely copy from a filled hex unless nothing else is left.
 - Last Light: one pure module per night, night 1 (storm) src/lastlight/core/story.ts, night 2 (fog) core/night2.ts;
   core/nights.ts wraps each as a `Story` (core/types.ts) that game.ts drives. `choices(s)` lists legal action ids
   (`go:<room>`, `take:<item>`, `use:<item>:<target>`, `give:`, `say:<npc>:<topic>`, …); `act(s, id)` returns the text.

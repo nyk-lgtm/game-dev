@@ -1,6 +1,6 @@
 // Checking a player's board and finding the next hint. Pure.
 
-import { ELEMENT_NAMES, bit, initialDomains, isLink, linkCells, makeBoard, prey, propagate, propagateDeep, single, type Puzzle, type Step, type Trial } from './puzzle';
+import { ELEMENT_NAMES, bit, initialDomains, isLink, linkCells, linksAt, makeBoard, prey, propagate, propagateDeep, single, type Puzzle, type Step, type Trial } from './puzzle';
 
 /**
  * Clues that can no longer be met, given what's filled in (only counts filled
@@ -54,6 +54,10 @@ export function nextHint(p: Puzzle, vals: number[], notes?: number[]): Hint {
   const steps: Step[] = [];
   propagate(b, p.clue, dom, steps);
   let partial = false;
+  // A hex a link merely copies from a filled one is no news to the player: offer
+  // a real deduction first, and the copy only if nothing else is left.
+  let copy: Hint | null = null;
+  const known = (k: number) => vals[k] >= 0 || p.given[k] >= 0;
   for (const s of steps) {
     const v = single(s.left);
     if (v < 0 || vals[s.cell] >= 0 || p.given[s.cell] >= 0) {
@@ -64,16 +68,37 @@ export function nextHint(p: Puzzle, vals: number[], notes?: number[]): Hint {
     const by = [...new Set(steps.slice(0, steps.indexOf(s) + 1).filter((t) => t.cell === s.cell).map((t) => t.clue))];
     const own = by.includes(s.cell);
     const links = by.filter((c) => isLink(b, c));
-    const others = by.filter((c) => c !== s.cell && !isLink(b, c)).map((c) => `<b>${p.clue[c]}</b>`);
     const name = ELEMENT_NAMES[v];
+    // Linked (directly or along a chain of links) to a filled hex?
+    const group = [s.cell];
+    const via = new Map<number, number>([[s.cell, -1]]);
+    for (let k = 0; k < group.length; k++)
+      for (const id of linksAt(b, p.clue, group[k]))
+        for (const j of linkCells(b, id))
+          if (!via.has(j)) {
+            via.set(j, id);
+            group.push(j);
+          }
+    const src = group.find((j) => j !== s.cell && known(j));
+    if (src !== undefined) {
+      const chain: number[] = [];
+      for (let j = src; j !== s.cell; j = linkCells(b, via.get(j)!).find((k) => k !== j)!) chain.push(via.get(j)!);
+      const text = chain.length === 1 ? `The link says it matches the <b>${name}</b> next to it.` : `Links chain it to a <b>${name}</b>, so it's <b>${name}</b> too.`;
+      copy ??= { kind: 'step', clue: chain[chain.length - 1], cell: s.cell, value: v, text, notes: partial, clues: chain };
+      continue;
+    }
+    const others = by.filter((c) => c !== s.cell && !isLink(b, c)).map((c) => `<b>${p.clue[c]}</b>`);
     const link = links.length > 1 ? `its ${links.length} links` : 'the link';
     const who = [own ? `its own <b>${p.clue[s.cell]}</b>` : '', others.length ? `the ${others.join(' and ')} next to it` : '', links.length ? link : ''].filter(Boolean).join(' and ');
     const text =
       links.length === by.length
-        ? `${link[0].toUpperCase()}${link.slice(1)} say${links.length > 1 ? '' : 's'} ${links.length > 1 ? 'they all' : 'these two'} match, so this is <b>${name}</b>.`
+        ? links.length > 1
+          ? `Its links say these all match, and together they leave only <b>${name}</b>.`
+          : `The link says these two match, and the hex across it can only be <b>${name}</b>.`
         : `${who[0].toUpperCase()}${who.slice(1)} only work${by.length > 1 ? '' : 's'} if this is <b>${name}</b>.`;
     return { kind: 'step', clue: s.clue, cell: s.cell, value: v, text, notes: partial, clues: by };
   }
+  if (copy) return copy;
   // Stuck on single numbers (Hard puzzles): a "what if" rules something out.
   const trials: Trial[] = [];
   propagateDeep(b, p.clue, dom.slice(), trials);

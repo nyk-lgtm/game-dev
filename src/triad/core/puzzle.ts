@@ -10,6 +10,8 @@ import { DIRS, key, type Hex } from '../../shared/hex';
 import { Rng, mixSeed } from '../../shared/rng';
 
 export const RULES_VERSION = 1;
+/** Links-mode generator version (Easy/Normal changed in 2; Hard and numbers mode didn't). */
+export const LINKS_VERSION = 2;
 
 export const FIRE = 0;
 export const WATER = 1;
@@ -293,6 +295,23 @@ export function generate(seed: number, radius: number, level: Level = 'normal', 
     if (new Set(solution).size < 3) continue;
     const clue = solution.map((_, i) => beatsCount(b, solution, i));
     if (links) for (const [x, y] of b.edges) clue.push(solution[x] === solution[y] ? SAME : -1);
+    // Easy/Normal links: no chains of more than two links (three matching hexes),
+    // which would just be copied along. (Hard keeps its original generator.)
+    const tidy = links && level !== 'hard';
+    if (tidy) {
+      const root = [...Array(N).keys()];
+      const size = new Array(N).fill(1);
+      const find = (k: number): number => (root[k] === k ? k : (root[k] = find(root[k])));
+      for (const e of rng.shuffle([...b.edges.keys()])) {
+        if (clue[N + e] < 0) continue;
+        const [x, y] = b.edges[e].map(find);
+        if (size[x] + size[y] > 3) clue[N + e] = -1;
+        else {
+          root[y] = x;
+          size[x] += size[y];
+        }
+      }
+    }
     const M = clue.length;
     const given = new Array(N).fill(-1);
     // Rotating every element (fire→water→leaf→fire) keeps every count, so at
@@ -300,6 +319,8 @@ export function generate(seed: number, radius: number, level: Level = 'normal', 
     const order = rng.shuffle([...Array(N).keys()]);
     for (const i of order) {
       given[i] = solution[i];
+      // Easy/Normal links: no link touches a given (it would only copy it).
+      if (tidy) for (const id of linksAt(b, clue, i)) clue[id] = -1;
       if (deducible(b, clue, given, deep)) break;
     }
     if (!deducible(b, clue, given, deep)) continue;
