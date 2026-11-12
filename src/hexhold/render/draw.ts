@@ -270,6 +270,8 @@ export interface DrawOpts {
   ghost: TowerId | null;
   /** The paths as they would be with the ghost built. */
   ghostPath: number[][] | null;
+  /** Towers the ghost's path would walk past (circled red). */
+  bypass: number[];
   /** Burrowers are coming: show their straight route. */
   showDig: boolean;
   effects: Effect[];
@@ -339,7 +341,32 @@ export function drawBoard(g: CanvasRenderingContext2D, v: View, s: State, o: Dra
     g.stroke();
     g.restore();
   };
-  if (o.showDig) for (const p of pathCells(s.dig, s.portals)) drawPath(p, 'rgba(200, 140, 90, 0.55)', [2, 10]);
+  // Burrowers' straight route: a faint line strung with small diamonds in their own color,
+  // so it can't be mistaken for the walking path's pale dashes.
+  if (o.showDig) {
+    const seen = new Set<number>();
+    for (const p of pathCells(s.dig, s.portals)) {
+      drawPath(p, 'rgba(143, 168, 255, 0.35)', []);
+      for (const c of p) {
+        if (seen.has(c) || s.ground[c] === 'portal' || s.ground[c] === 'core') continue;
+        seen.add(c);
+        const x = sx(v, c);
+        const y = sy(v, c);
+        const d = size * 0.2;
+        g.beginPath();
+        g.moveTo(x, y - d * 1.3);
+        g.lineTo(x + d, y);
+        g.lineTo(x, y + d * 1.3);
+        g.lineTo(x - d, y);
+        g.closePath();
+        g.fillStyle = 'rgba(143, 168, 255, 0.85)';
+        g.fill();
+        g.strokeStyle = 'rgba(10, 12, 20, 0.8)';
+        g.lineWidth = 1;
+        g.stroke();
+      }
+    }
+  }
   for (const p of pathCells(s.field.dist, s.portals)) drawPath(p, 'rgba(255, 210, 120, 0.28)', [4, 8]);
   if (o.ghostPath) for (const p of o.ghostPath) drawPath(p, 'rgba(140, 230, 255, 0.75)', [6, 6]);
 
@@ -396,6 +423,34 @@ export function drawBoard(g: CanvasRenderingContext2D, v: View, s: State, o: Dra
       g.stroke();
     }
     drawTowerIcon(g, t.id, sx(v, i), sy(v, i), size * 0.92, t.level);
+  }
+  // Towers a planned build would leave out of reach: a pulsing red ring and a cross.
+  for (const c of o.bypass) {
+    const x = sx(v, c);
+    const y = sy(v, c);
+    const pulse = reducedFx() ? 1 : 0.8 + 0.2 * Math.sin(o.time * 6);
+    g.save();
+    g.strokeStyle = `rgba(255, 77, 109, ${pulse})`;
+    g.lineWidth = 3;
+    g.beginPath();
+    g.arc(x, y, size * 0.98, 0, Math.PI * 2);
+    g.stroke();
+    const d = size * 0.3;
+    const cx = x + size * 0.62;
+    const cy = y - size * 0.62;
+    g.beginPath();
+    g.arc(cx, cy, d, 0, Math.PI * 2);
+    g.fillStyle = '#ff4d6d';
+    g.fill();
+    g.strokeStyle = '#2a0610';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(cx - d * 0.45, cy - d * 0.45);
+    g.lineTo(cx + d * 0.45, cy + d * 0.45);
+    g.moveTo(cx + d * 0.45, cy - d * 0.45);
+    g.lineTo(cx - d * 0.45, cy + d * 0.45);
+    g.stroke();
+    g.restore();
   }
   if (o.ghost && o.selected >= 0 && !s.towers[o.selected]) drawTowerIcon(g, o.ghost, sx(v, o.selected), sy(v, o.selected), size * 0.92, 1, 0.55);
 

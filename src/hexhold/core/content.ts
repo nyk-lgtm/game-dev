@@ -24,11 +24,11 @@ export interface TowerDef {
 export const TOWERS: Record<TowerId, TowerDef> = {
   bolt: { id: 'bolt', name: 'Bolt', cost: 50, range: 2.6, rate: 0.7, dmg: 11, air: true, color: '#7ad7ff',
     text: 'Fast shots at one enemy. Hits flyers.', aura: 'Neighbors can hit flyers too.' },
-  mortar: { id: 'mortar', name: 'Mortar', cost: 90, range: 3.6, rate: 2.2, dmg: 26, air: false, color: '#ffb35c',
+  mortar: { id: 'mortar', name: 'Mortar', cost: 90, range: 3.6, rate: 2.0, dmg: 30, air: false, color: '#ffb35c',
     text: 'Slow shells that burst on a group. Ground only.', aura: 'Neighbors reach half a cell further.' },
   frost: { id: 'frost', name: 'Frost', cost: 70, range: 1.8, rate: 0, dmg: 2, air: true, color: '#b9e6ff',
     text: 'Chills everything nearby: 40% slower.', aura: 'Neighbors deal +30% to chilled enemies.' },
-  tesla: { id: 'tesla', name: 'Tesla', cost: 110, range: 2.3, rate: 1.4, dmg: 15, air: true, color: '#c9a2ff',
+  tesla: { id: 'tesla', name: 'Tesla', cost: 110, range: 2.3, rate: 1.2, dmg: 17, air: true, color: '#c9a2ff',
     text: 'Lightning that leaps to 3 enemies.', aura: "Every neighbor's 4th hit stuns for half a second." },
   flame: { id: 'flame', name: 'Flame', cost: 80, range: 1.3, rate: 0, dmg: 20, air: false, color: '#ff6b3d',
     text: 'Burns everything close by, every moment. Ground only.', aura: 'Neighbors set enemies alight (burn).' },
@@ -69,11 +69,11 @@ export const SPECS: Record<TowerId, [SpecDef, SpecDef]> = {
     { name: 'Repeater', text: 'A stream of quick bolts: three times the rate, lighter hits.', dmg: 0.55, rate: 0.33 },
   ],
   mortar: [
-    { name: 'Siege', text: 'Shells punch through armor and hit twice as hard.', dmg: 2.0, pierce: true },
-    { name: 'Cluster', text: 'Much wider bursts that shred swarms.', dmg: 1.2, splash: 1.7 },
+    { name: 'Siege', text: 'Shells punch through armor and hit ×1.7 harder.', dmg: 1.7, pierce: true },
+    { name: 'Cluster', text: 'Much wider bursts that shred swarms.', dmg: 1.1, splash: 1.7 },
   ],
   frost: [
-    { name: 'Glacier', text: 'Deep chill: enemies crawl at 40% speed, wider aura.', deep: true, range: 1.25 },
+    { name: 'Glacier', text: 'Deep chill: 60% slower instead of 40%, and a wider aura.', deep: true, range: 1.25 },
     { name: 'Hail', text: 'A storm of ice that really hurts (×6 damage).', dmg: 6 },
   ],
   tesla: [
@@ -125,24 +125,25 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
   runner: { id: 'runner', name: 'Runner', hp: 26, speed: 1.7, armor: 0, bounty: 3, leak: 1, from: 1, color: '#ff8a8a', text: 'Quick and frail.' },
   grunt: { id: 'grunt', name: 'Grunt', hp: 60, speed: 1.0, armor: 0, bounty: 4, leak: 1, from: 1, color: '#e0a060', text: 'Steady.' },
   swarm: { id: 'swarm', name: 'Mite', hp: 12, speed: 1.4, armor: 0, bounty: 1, leak: 1, from: 4, color: '#ffd166', text: 'Comes in swarms. Splash damage shreds them.' },
-  brute: { id: 'brute', name: 'Brute', hp: 210, speed: 0.65, armor: 4, bounty: 11, leak: 2, from: 6, color: '#b07850', text: 'Armored: each hit loses 4 damage. Big hits work best.' },
+  brute: { id: 'brute', name: 'Brute', hp: 190, speed: 0.65, armor: 4, bounty: 11, leak: 2, from: 6, color: '#b07850', text: 'Armored: each hit loses 4 damage. Big hits work best.' },
   flyer: { id: 'flyer', name: 'Wisp', hp: 44, speed: 1.2, armor: 0, bounty: 5, leak: 1, fly: true, from: 5, color: '#9ef0d8', text: 'Flies straight over your maze. Only some towers hit it.' },
   healer: { id: 'healer', name: 'Mender', hp: 80, speed: 0.9, armor: 1, bounty: 8, leak: 1, heal: 7, from: 8, color: '#7cff9a', text: 'Heals nearby enemies. Kill it first.' },
   splitter: { id: 'splitter', name: 'Splitter', hp: 95, speed: 0.95, armor: 0, bounty: 6, leak: 1, split: 3, from: 10, color: '#d88cff', text: 'Bursts into three runners.' },
-  digger: { id: 'digger', name: 'Burrower', hp: 125, speed: 0.8, armor: 2, bounty: 8, leak: 2, dig: true, from: 12, color: '#8fa8ff', text: "Ignores your maze: it digs the straight way (brown dots) and can't be hit while under a tower. Cover its line with open ground." },
+  digger: { id: 'digger', name: 'Burrower', hp: 125, speed: 0.8, armor: 2, bounty: 8, leak: 2, dig: true, from: 12, color: '#8fa8ff', text: "Ignores your maze: it digs the straight way (blue diamonds) and can't be hit while under a tower. Cover its line with open ground." },
   boss: { id: 'boss', name: 'Colossus', hp: 1050, speed: 0.45, armor: 7, bounty: 120, leak: 6, from: 10, color: '#ff5a5a', text: 'A giant that comes every tenth wave. Armored, slow, and it costs 6 lives if it reaches your core. Have big hits ready.' },
 };
 export const ENEMY_IDS = Object.keys(ENEMIES) as EnemyId[];
 
 export const WAVES = 30;
-export const START_GOLD = 190;
+export const START_GOLD = 210;
 /** Extra starting gold on two-portal maps. */
 export const TWIN_GOLD = 60;
 export const START_LIVES = 20;
-/** Extra health per wave past wave 14, so the late game keeps biting. */
-export const LATE_GROWTH = 0.035;
+/** Extra health per wave past wave 11, so the late game keeps biting. */
+export const LATE_GROWTH = 0.07;
+export const LATE_FROM = 11;
 /** Enemy health grows this much per wave (compounding). */
-export const HP_GROWTH = 0.105;
+export const HP_GROWTH = 0.098;
 /** Status effects. */
 export const CHILL = 0.6;
 export const BURN_DPS = 6;

@@ -61,7 +61,17 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   - [x] Frost checked: not weak (bot without Frost: median wave 20, 0 wins; with one: 27, 8 wins).
         It looked useless only because its value is the slow and the +30% shatter its neighbors get;
         stats now credit that bonus to Frost (11% share) and the results show enemy-seconds chilled.
-  - [ ] Next ideas: a second blind playtest once owner feedback comes in.
+  - [x] Second blind playtest and fixes (rules v4): a build that moves the path away from towers
+        shows a red alert, circles those towers on the board and needs a second tap ("Build anyway");
+        build sheet shows damage/rate/range per tower (2 columns), build preview shows the tower's
+        numbers on that cell; level-3 Sell sits beside the spec cards (fits 390×740); short "Gets:"
+        gifts; Beacon panel/upgrade show the real +%; no leftover disabled spec button; results say
+        "Held N of 30 waves" and "New best!"; Frost/Glacier both say "% slower"; burrower route is
+        blue diamonds on a line. Balance: waves 1-4 budget ×0.7/0.8/0.9/0.95, start gold 210, Brute
+        hp 190, first Colossus 80% hp, HP_GROWTH 0.098 plus 7%/wave from wave 11 (was 3.5% from 14);
+        Mortar 30 dmg/2.0s (Siege ×1.7), Tesla 17/1.2s. Bot: median 27 → 28, wins 8 → 7/32; lives
+        lost by waves (probe.ts) 1-3/4-7/8-10: 5/73/143 → 0/43/26, 15-25: 117 → 166, 26-30: 185 → 267.
+  - [ ] Next ideas: owner feedback on the new curve (is 15-25 tense now? is the end too hard?).
 - [x] **Blind playtests** for Rewild, Glyphwright, Telegraph, and their bug/UX fixes (shipped).
 - [ ] **Design follow-ups from those playtests** (balance; need care, not quick fixes):
   - [x] Glyphwright gold sink (rules v2): **Empower** raises a rune a tier for gold (4×/10× its
