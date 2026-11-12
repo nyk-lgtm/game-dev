@@ -77,7 +77,8 @@ export class Game {
     this.canvas.addEventListener('pointermove', (e) => {
       if (e.pointerId !== id || this.tilt) return;
       // The further you drag from where you touched, the harder you steer.
-      this.steer = Math.max(-1, Math.min(1, (e.clientX - x0) / 70));
+      // ~120 px of drag is full lock (70 was twitchy on a phone).
+      this.steer = Math.max(-1, Math.min(1, (e.clientX - x0) / 120));
       knob.style.transform = `translateX(${this.steer * 64}px)`;
     });
     const up = (e: PointerEvent) => {
@@ -138,10 +139,10 @@ export class Game {
     const goals = store.load<number[]>('goals', []);
     const daily = loadDaily(store);
     const goalList = TREE[STAGES - 1]
-      .map((b, i) => `<span style="color:${goals.includes(i) ? '#ffd166' : '#4a3a6a'}">${goals.includes(i) ? '[x]' : '[ ]'} ${BIOME_NAMES[b]}</span>`)
+      .map((b, i) => `<span style="color:${goals.includes(i) ? '#ffd166' : '#4a3a6a'}">${goals.includes(i) ? '[x]' : '[ ]'} ending ${i + 1}: ${BIOME_NAMES[b]}</span>`)
       .join('<br>');
     showCard(
-      `<pre>${LOGO.join('\n')}</pre><p>Five stages. One clock. Pick your road at every fork: right is harder, but every hard road raises your score multiplier.</p>${best ? `<p class="meta">Best score ${best.toLocaleString()}</p>` : ''}<p class="meta" style="text-align:left;display:inline-block;margin:0 auto">Goals reached ${goals.length}/${TREE[STAGES - 1].length}<br>${goalList}</p>`,
+      `<pre>${LOGO.join('\n')}</pre><p>Five stages. One clock. Pick your road at every fork: right is harder, but every hard road raises your score multiplier.</p>${best ? `<p class="meta">Best score ${best.toLocaleString()}</p>` : ''}<p class="meta" style="text-align:left;display:inline-block;margin:0 auto">Endings found ${goals.length}/${TREE[STAGES - 1].length}<br>${goalList}</p>`,
       [
         { label: 'Drive', primary: true, onClick: () => this.start() },
         { label: `Daily route · ${daily ? daily.label : 'not driven'}`, onClick: () => this.start(todayKey()) },
@@ -187,7 +188,7 @@ export class Game {
       <li>Passing cars refills nitro; a <b>close</b> pass (just beside them) scores extra and refills more. Ramming them costs speed.</li>
       <li>Reach each checkpoint before the clock runs out to earn more time.</li>
       <li>At the end of each stage the road forks (a yellow divider and arrows mark it): be <b>left</b> of the divider for the gentler route or <b>right</b> for a harder one. Each hard road adds x${RISK_STEP} to your score multiplier but gives a little less time.</li>
-      <li>There are five different goals at the end of the last stage. Can you reach them all?</li></ul>`,
+      <li>Your forks decide which of five <b>endings</b> the last stage leads to (each a different road to the finish). Can you find them all?</li></ul>`,
       [{ label: 'Back', primary: true, onClick: () => this.title() }],
       false,
     );
@@ -249,7 +250,9 @@ export class Game {
       const goals = store.load<number[]>('goals', []);
       const fresh = !goals.includes(pos);
       if (fresh) store.save('goals', [...goals, pos].sort());
-      goalLine = `<p>${fresh ? '<b>New goal reached!</b> ' : ''}Goals ${goals.length + (fresh ? 1 : 0)}/${TREE[STAGES - 1].length}</p>`;
+      goalLine = `<p>${fresh ? '<b>New ending found!</b> ' : ''}Endings ${goals.length + (fresh ? 1 : 0)}/${TREE[STAGES - 1].length}</p>`;
+    } else {
+      goalLine = `<p>Time ran out ${Math.round(stageProgress(r) * 100)}% into stage ${r.stage + 1} of ${STAGES} (${BIOME_NAMES[r.stages[r.stage].biome]}).</p>`;
     }
     const day = this.day;
     const daily = day ? recordDaily(store, score, `${score.toLocaleString()}${won ? ' · goal' : ` · stage ${r.stage + 1}`}`, day) : null;

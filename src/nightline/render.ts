@@ -255,7 +255,7 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
       const rowsH = (pc.w * 0.62) / v.ch;
       if (rowsH < 1) continue;
       const colX = (pc.x + pc.w * car.x) / v.cw;
-      blitArt(g, TRAFFIC[car.kind % TRAFFIC.length], rowsH, pc.y / v.ch, colX, ['#7fd1ff', '#ffd166', '#b8ff6b', '#ff9ef0'][car.kind % 4], { clipRow, solid: true, maxScale: 2 });
+      blitArt(g, TRAFFIC[car.kind % TRAFFIC.length], rowsH, pc.y / v.ch, colX, ['#7fd1ff', '#ffd166', '#b8ff6b', '#ff9ef0'][car.kind % 4], { clipRow, solid: true, maxScale: 1 });
     }
   }
 

@@ -3,11 +3,11 @@
 html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #05010f; color: var(--text); font: 14px var(--mono); user-select: none; -webkit-user-select: none; }
 #view { position: fixed; inset: 0; width: 100vw; height: 100dvh; touch-action: none; display: block; }
 #hud { position: fixed; inset: 0; pointer-events: none; padding-top: env(safe-area-inset-top); }
-#top { display: flex; justify-content: space-between; align-items: flex-start; padding: 8px 12px; text-shadow: 0 0 8px rgba(255, 42, 109, 0.7); }
+#top { display: flex; justify-content: space-between; align-items: flex-start; padding: 8px 12px; background: linear-gradient(rgba(6, 3, 18, 0.88), rgba(6, 3, 18, 0.55)); border-bottom: 1px solid rgba(185, 166, 232, 0.15); text-shadow: 0 0 8px rgba(255, 42, 109, 0.7); }
 .cell { display: flex; flex-direction: column; min-width: 72px; }
 .cell:last-child { text-align: right; }
 .cell.time { text-align: center; align-items: center; }
-.label { font-size: 10px; letter-spacing: 0.2em; color: #b9a6e8; }
+.label { font-size: 11px; letter-spacing: 0.2em; color: #b9a6e8; }
 #speed, #score { font-size: 20px; font-weight: 800; }
 #clock { font-size: 40px; font-weight: 900; color: #ffd166; text-shadow: 0 0 12px #ff8a3d; line-height: 1; }
 #clock.low { color: var(--pink); animation: blink 0.5s steps(2) infinite; }
@@ -24,11 +24,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 #forkR { color: #ff2a6d; border-color: #ff2a6d; }
 #fork .sides div.on { opacity: 1; transform: scale(1.06); box-shadow: 0 0 14px currentColor; }
 #fork small { display: block; font-size: 10px; font-weight: 600; color: #b9a6e8; margin-top: 2px; }
-#flash { position: absolute; top: 24%; left: 0; right: 0; text-align: center; font-size: 26px; font-weight: 900; letter-spacing: 0.1em; color: #ffd166; text-shadow: 0 0 14px #ff2a6d; opacity: 0; transition: opacity 0.25s; }
+#flash { position: absolute; top: 24%; left: 0; right: 0; text-align: center; font-size: 26px; font-weight: 900; letter-spacing: 0.1em; color: #ffe08a; text-shadow: 0 0 14px #ff2a6d, 0 0 2px #000, 0 2px 0 #000; -webkit-text-stroke: 1px rgba(0,0,0,0.6); opacity: 0; transition: opacity 0.25s; }
 #flash.show { opacity: 1; }
 #pauseBtn { pointer-events: auto; position: absolute; top: calc(env(safe-area-inset-top) + 70px); right: 10px; width: 44px; height: 44px; background: rgba(10, 4, 24, 0.6); color: var(--text); border: 1px solid #4a2a7a; font: 800 14px var(--mono); }
 /* Both pedals bottom-right (below the car) so the left thumb can steer anywhere without touching them. */
-#controls { position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 14px); display: flex; align-items: flex-end; justify-content: space-between; padding: 0 12px; gap: 16px; }
+#controls { position: absolute; left: 0; right: 0; bottom: 0; padding-bottom: calc(env(safe-area-inset-bottom) + 14px) !important; padding-top: 10px !important; background: linear-gradient(rgba(6, 3, 18, 0), rgba(6, 3, 18, 0.85) 30%); display: flex; align-items: flex-end; justify-content: space-between; padding: 0 12px; gap: 16px; }
 #pedals { display: flex; gap: 8px; }
 #controls button { pointer-events: auto; touch-action: none; width: 100px; height: 64px; border: 2px solid; background: rgba(10, 4, 24, 0.55); font: 900 15px var(--mono); letter-spacing: 0.08em; }
 #controls #brakeBtn { width: 84px; }
