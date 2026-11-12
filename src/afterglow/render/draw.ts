@@ -1,5 +1,6 @@
 // Draws one frame of the world: background grid, pickups, telegraphs,
 // enemies, weapons, the player, bullets and effects.
+import { reducedFx } from '../../shared/settings';
 
 import { BLOAT_SWELL, DART_AIM, MINE_HUE, pillarsNear, PRISM_AIM, SLAM_AIM, SLAM_RADIUS, SPIT_AIM, eclipseCycle, ENEMIES, RUN_SECONDS, type Enemy, type EnemyKind, type World } from '../core';
 import type { Fx } from './fx';
@@ -49,7 +50,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, fx: Fx, cam: 
   const { k } = cam;
   let shakeX = 0;
   let shakeY = 0;
-  if (fx.shake > 0.3) {
+  if (fx.shake > 0.3 && !reducedFx()) {
     shakeX = (Math.random() - 0.5) * fx.shake;
     shakeY = (Math.random() - 0.5) * fx.shake;
   }
@@ -386,7 +387,7 @@ export function drawWorld(ctx: CanvasRenderingContext2D, w: World, fx: Fx, cam: 
     ctx.fillStyle = vg;
     ctx.fillRect(0, 0, cam.w, cam.h);
   }
-  if (fx.levelFlash > 0.01) {
+  if (fx.levelFlash > 0.01 && !reducedFx()) {
     ctx.fillStyle = `rgba(120,230,255,${0.12 * fx.levelFlash})`;
     ctx.fillRect(0, 0, cam.w, cam.h);
   }

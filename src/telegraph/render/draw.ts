@@ -1,4 +1,5 @@
 // Canvas 2D drawing. Everything is procedural vector shapes: no image assets.
+import { reducedFx } from '../../shared/settings';
 
 import { DIRS, allHexes, key, type Hex, type Outcome, type Threats } from '../core';
 import { hexToPx, type Layout } from './layout';
@@ -44,7 +45,7 @@ export function draw(
   ctx.fillRect(0, 0, w, h);
 
   ctx.save();
-  if (scene.shake > 0.2) {
+  if (scene.shake > 0.2 && !reducedFx()) {
     ctx.translate((Math.random() - 0.5) * scene.shake, (Math.random() - 0.5) * scene.shake);
   }
 

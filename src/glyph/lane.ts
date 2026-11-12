@@ -1,5 +1,6 @@
 // Battle lane renderer: enemies march down toward the tower at the bottom,
 // spells flare as they resolve.
+import { reducedFx } from '../shared/settings';
 
 import { ASPECT, ELEMENT_HUE, ENEMIES, isBoss, type Battle, type BattleFx, type Element, type EnemyKind } from './core';
 
@@ -41,7 +42,7 @@ export class Lane {
     // The lane maps x 0..1 across the width; y 0..1 down a height of w * ASPECT (or less).
     const lh = Math.min(h - 10, w * ASPECT);
     const lw = lh / ASPECT;
-    const ox = (w - lw) / 2 + (Math.random() - 0.5) * this.shake;
+    const ox = (w - lw) / 2 + (reducedFx() ? 0 : (Math.random() - 0.5) * this.shake);
     const oy = 4;
     const X = (x: number) => ox + x * lw;
     const Y = (y: number) => oy + y * lh;

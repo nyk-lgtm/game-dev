@@ -12,7 +12,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 - Layout: `<game>/index.html` is the page; code in `src/<game>/` with a pure
   `core/` (rules), `render/`, controller `game.ts`, `main.ts`. Shared code in
   `src/shared/` (hex math, rng, storage with per-game prefixes, debug overlay,
-  modal cards, timeline, hex layout, shell.css, settings: hub-wide sound/vibration, checked by
+  modal cards, timeline, hex layout, shell.css, settings: hub-wide sound/vibration/reduced effects (`reducedFx()`), checked by
   afterglow/audio's Sfx and applied in installErrorOverlay). Tests in `tests/<game>/`,
   tools in `scripts/<game>/`.
 - Adding a game: new `<game>/index.html`, `src/<game>/`, an entry in

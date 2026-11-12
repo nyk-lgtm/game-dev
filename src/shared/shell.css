@@ -117,3 +117,5 @@ button:active { transform: scale(0.97); }
   background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
   padding: 8px 16px; z-index: 30; font-size: 14px;
 }
+/* Reduced effects (hub setting): blinking and looping animations play once. */
+html.reduced-fx *, html.reduced-fx *::before, html.reduced-fx *::after { animation-iteration-count: 1 !important; }

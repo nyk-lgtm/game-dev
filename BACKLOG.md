@@ -102,7 +102,9 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Unspoken: more story templates so the village tale varies; spoken pronunciation via
   speech synthesis; a harder "second village" with case markers or verb agreement.
 - [x] Hub: shared Sound / Vibration switches (src/shared/settings.ts; audio never starts when off,
-  navigator.vibrate becomes a no-op). Reduced effects not done.
+  navigator.vibrate becomes a no-op). Reduced effects done 2026-11-12: hub "Effects" switch (defaults to the
+  phone's reduce-motion), `reducedFx()` gates shake (Telegraph, Glyphwright, Afterglow), Afterglow level flash,
+  Hexhold hurt tint, Nightline streaks; html.reduced-fx makes CSS animations play once.
 - Afterglow: owner is happy with it — leave alone unless they report something.
 
 ## Done (recent)

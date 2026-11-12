@@ -1,6 +1,7 @@
 // Pseudo-3D road in ASCII. Segments are projected near-to-far with a
 // shrinking clip line (so hills hide what's behind them); sprites are drawn
 // far-to-near on top, clipped by the road in front of them.
+import { reducedFx } from '../shared/settings';
 
 import { blitArt, clearGrid, put, text, type Art, type Grid } from '../shared/ascii';
 import { FORK_SIGN, PLAYER_BOOST, PLAYER_CAR, PROPS, SKYLINES, TRAFFIC } from './art';
@@ -270,7 +271,7 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
 
   // Speed streaks: a few faint ones near top speed, a storm while boosting.
   const pct = p.speed / MAX_SPEED;
-  const streaks = p.boosting ? 14 : pct > 0.8 ? Math.round((pct - 0.8) * 30) : 0;
+  const streaks = (p.boosting ? 14 : pct > 0.8 ? Math.round((pct - 0.8) * 30) : 0) * (reducedFx() ? 0.25 : 1);
   for (let i = 0; i < streaks; i++) {
     const rr = v.horizon + 3 + Math.floor(hash(i + Math.floor(time * 30) * 13) * (v.rows - v.horizon - 6));
     const left = hash(i * 3 + Math.floor(time * 30)) < 0.5;

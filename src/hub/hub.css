@@ -59,3 +59,4 @@ header p { margin: 6px 0 0; color: var(--muted); }
 #settings { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 #settings button { min-height: 48px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 15px; font-weight: 600; }
 #settings button.off { color: var(--muted); border-style: dashed; }
+#settings button.wide { grid-column: 1 / -1; }

@@ -298,7 +298,11 @@ hubStore.save('seenNews', NEWS[0].day);
 const settingsBox = document.getElementById('settings')!;
 const renderSettings = () => {
   const st = loadSettings();
-  settingsBox.innerHTML = `<button id="setSound" class="${st.sound ? '' : 'off'}">${st.sound ? '🔊 Sound on' : '🔇 Sound off'}</button><button id="setVib" class="${st.vibrate ? '' : 'off'}">${st.vibrate ? '📳 Vibration on' : '📴 Vibration off'}</button>`;
+  settingsBox.innerHTML = `<button id="setSound" class="${st.sound ? '' : 'off'}">${st.sound ? '🔊 Sound on' : '🔇 Sound off'}</button><button id="setVib" class="${st.vibrate ? '' : 'off'}">${st.vibrate ? '📳 Vibration on' : '📴 Vibration off'}</button><button id="setFx" class="wide ${st.reduced ? 'off' : ''}">${st.reduced ? '✨ Effects: reduced (no shake or flashes)' : '✨ Effects: full'}</button>`;
+  document.getElementById('setFx')!.onclick = () => {
+    saveSettings({ ...st, reduced: !st.reduced });
+    renderSettings();
+  };
   document.getElementById('setSound')!.onclick = () => {
     saveSettings({ ...st, sound: !st.sound });
     renderSettings();
