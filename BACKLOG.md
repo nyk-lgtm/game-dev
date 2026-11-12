@@ -92,6 +92,16 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         the stove, endings say where everyone is, story scrolls fully.
   - [ ] Maybe a second night (a different story on the same engine).
 
+- [ ] **Nightline fixes from its blind playtest** (agent reached the goal on run 3; no errors):
+  1. Steering too twitchy (~70px drag = full lock): aim ~130px, show a marker where the drag began.
+  2. HUD (NITRO bar, BRAKE/BOOST, time, stage label) needs a backing panel: road, fork divider and
+     the moon draw over it. TIME UP banner is dim; HUD labels are 10px.
+  3. Near traffic sprites double their letters ("VVAANN77") — scale them another way.
+  4. Goals reuse stage names (Neon City is stage 1 and a goal): call them endings, show stage
+     progress (e.g. "85% of stage 1") and crashes on the end screen.
+  5. Fork divider sits mid-road (centre = knife edge); warn before sharp curves on hard roads;
+     stage 1's 65 s clock snowballs (few crashes → time up before the first checkpoint).
+
 ## Ideas (unscheduled)
 - Unspoken: more story templates so the village tale varies; spoken pronunciation via
   speech synthesis; a harder "second village" with case markers or verb agreement.
