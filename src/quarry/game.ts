@@ -26,6 +26,7 @@ import {
   evaluate,
   face,
   has,
+  isRare,
   isScore,
   perkDef,
   replay,
@@ -72,6 +73,8 @@ export class Game {
   private oy = 0;
   /** Line under the word box when nothing is being traced. */
   private msg: string | null = null;
+  /** The last word played and its total, shown big above its breakdown while `msg` is that breakdown. */
+  private last: { msg: string; text: string } | null = null;
   private bannerTimer = 0;
   private els: HTMLElement[] = [];
 
@@ -91,6 +94,7 @@ export class Game {
     };
     $('perkBar').addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>('button');
+      if (b?.dataset.more) return this.showOwned();
       if (!b?.dataset.p) return;
       const p = perkDef(b.dataset.p as never);
       this.msg = `${p.icon} <b>${p.name}</b>: ${p.text}`;
@@ -315,7 +319,7 @@ export class Game {
       }
       this.floatPts(`+${o.total}`);
       this.msg = this.resultLine(s, o);
-      if (o.reshuffled) this.msg += ' <span class="warn">No words were left, so the face was shaken.</span>';
+      this.last = { msg: this.msg, text: `${upper(s.word)} +${o.total}` };
     } else if (o.kind === 'shake') {
       this.sfx.shake();
       this.msg = o.reshuffled ? 'Shaken (and again, for a face with words on it).' : `Shaken. ${plural(r.shakes, 'shake')} left on this depth.`;
@@ -339,12 +343,23 @@ export class Game {
   }
 
   private resultLine(s: Score, o: Outcome): string {
-    const bits = [`${s.base} × ${s.mult}`, ...s.extras];
-    if (o.blastPts) bits.push(`+${o.blastPts} blast`);
-    if (o.rockPts) bits.push(`+${o.rockPts} ${o.broken!.length === 1 ? 'rock' : 'rocks'}`);
-    let line = `<b>${upper(s.word)}</b> +${o.total} <span class="dim">(${bits.join(' · ')})</span>`;
-    if (o.lostWords) line += ` <span class="warn">A fuse blew: −${plural(o.lostWords, 'word')}.</span>`;
-    return line;
+    const extra: string[] = [];
+    if (o.blastPts) extra.push(`<span class="c">+${o.blastPts} blast</span>`);
+    if (o.rockPts) extra.push(`<span class="c">+${o.rockPts} ${o.broken!.length === 1 ? 'rock' : 'rocks'}</span>`);
+    if (o.lostWords) extra.push(`<span class="c warn">fuse blew −${plural(o.lostWords, 'word')}</span>`);
+    if (o.reshuffled) extra.push('<span class="c warn">no words left: shaken</span>');
+    return this.chips(s, '', extra);
+  }
+
+  /**
+   * One line: the word's score taken apart, every modifier named
+   * ("8 letters ×3 length +1 Hot Seam ×2 gold"). Scrolls sideways if it must.
+   */
+  private chips(s: Score, lead: string, extra: string[] = []): string {
+    const c: string[] = [`<span class="c">${s.base} pts${s.wild ? ` <i>(?=0)</i>` : ''}</span>`, `<span class="c">×${s.lenMult} length</span>`];
+    for (const [name, n] of s.adds) c.push(`<span class="c len">+${n} ${name}</span>`);
+    if (s.factor > 1) c.push(`<span class="c x">×${s.factor} ${s.boosts.map(([name, n]) => (n > 1 && !name.endsWith('gold') ? `${name} +${n}` : name)).join(', ')}</span>`);
+    return `<div class="chips">${lead}${c.join('')}${extra.join('')}</div>`;
   }
 
   /** Brief shake of some tiles (a miss). */
@@ -439,9 +454,13 @@ export class Game {
     $('layer').textContent = `${DEPTH_NAMES[Math.min(r.depth, DEPTHS - 1)]}`;
     document.body.dataset.depth = String(r.depth);
     if (drop) this.renderBoard(new Map(), true);
-    $('perkBar').innerHTML = r.perks
-      .map((id) => `<button data-p="${id}" aria-label="${perkDef(id).name}">${perkDef(id).icon}</button>`)
-      .join('');
+    // Perk icons, as many as fit beside the tools; the rest fold into a "+n" button.
+    const bar = $('perkBar');
+    const room = Math.max(1, Math.floor(($('dock').clientWidth - $('tools').offsetWidth - 34 + 6) / 50));
+    const shown = r.perks.length > room ? r.perks.slice(0, room - 1) : r.perks;
+    bar.innerHTML =
+      shown.map((id) => `<button data-p="${id}" aria-label="${perkDef(id).name}">${perkDef(id).icon}</button>`).join('') +
+      (shown.length < r.perks.length ? `<button data-more="1" class="more" aria-label="All perks">+${r.perks.length - shown.length}</button>` : '');
     const shakeBtn = $('shakeBtn') as HTMLButtonElement;
     shakeBtn.disabled = r.shakes <= 0 || r.phase !== 'play';
     $('shakeN').textContent = String(r.shakes);
@@ -472,7 +491,8 @@ export class Game {
     if (t.rock) return `<div class="tile rock${t.rock > 1 ? ' granite' : ''}" data-i="${i}" ${pos}><span class="cr"></span></div>`;
     const cls = ['tile', t.gold ? 'gold' : '', t.fuse ? 'fuse' : '', t.ch === '*' ? 'blank' : '', t.ch === 'q' ? 'qu' : ''].join(' ');
     const v = VALUES[t.ch] ?? 0;
-    return `<div class="${cls}" data-i="${i}" ${pos}><b>${face(t)}</b>${t.ch === '*' ? '' : `<i>${v}</i>`}${t.fuse ? `<em class="${t.fuse === 1 ? 'hot' : ''}">${t.fuse}</em>` : ''}</div>`;
+    const gem = this.r && has(this.r, 'rare') && isRare(t) ? ' gem' : '';
+    return `<div class="${cls}${gem}" data-i="${i}" ${pos}><b>${face(t)}</b>${t.ch === '*' ? '' : `<i>${v}</i>`}${t.fuse ? `<em class="${t.fuse === 1 ? 'hot' : ''}">${t.fuse}</em>` : ''}</div>`;
   }
 
   /**
@@ -557,14 +577,13 @@ export class Game {
     const sub = $('wordSub');
     const box = $('wordBox');
     const r = this.r;
-    box.classList.remove('ok', 'bad', 'idle');
+    box.classList.remove('ok', 'bad', 'idle', 'last');
     if (this.path.length) {
       const letters = this.path.map((i) => face(r.board[i])).join('');
       if (e && isScore(e)) {
         box.classList.add('ok');
-        word.textContent = upper(e.word);
-        const bits = [`${e.base} × ${e.mult}`, ...e.extras];
-        sub.innerHTML = `<b>+${e.points}</b> <span class="dim">${bits.join(' · ')}</span>`;
+        word.innerHTML = `${upper(e.word)} <small>+${e.points}</small>`;
+        sub.innerHTML = this.chips(e, '');
       } else {
         box.classList.add('bad');
         word.textContent = letters.toUpperCase();
@@ -574,7 +593,9 @@ export class Game {
       return;
     }
     box.classList.add('idle');
-    word.textContent = '';
+    const showLast = !!this.last && this.msg === this.last.msg;
+    word.textContent = showLast ? this.last!.text : '';
+    box.classList.toggle('last', showLast);
     let html = this.msg;
     if (!html && r.phase === 'play') {
       const fuse = r.board.find((t) => t.fuse);
@@ -673,12 +694,28 @@ export class Game {
        <p>Dig words out of a wall of letter stones, eight depths down.</p>
        <ul>
          <li><b>Drag through touching tiles</b> to spell a word of 3+ letters, then lift your finger. The tiles go and the ones above fall in.</li>
-         <li>Points: <b>letter values × length</b> (3 letters ×1, 4 ×2, 5 ×3…). Long words pay.</li>
-         <li>Reach each depth’s <b>target</b> before its words run out. Spare words pay a bonus, then you pick a <b>perk</b>.</li>
-         <li><span class="chip gold">A</span> Gold doubles the word. <span class="chip rock"></span> Rocks break when you spell <b>beside</b> them. <span class="chip fuse">E<em>3</em></span> Use a fuse within its count: it blasts its neighbours for points. Left alone, it blows and <b>costs a word</b>.</li>
+         <li>Points: add up the <b>letter values</b> (the small numbers), then multiply by the <b>length bonus</b>: letters minus two (3 letters ×1, 4 ×2, 5 ×3, 6 ×4…).</li>
+         <li>Reach each depth’s <b>target</b> before its words run out. Each spare word pays <b>10 × the depth number</b>, then you pick a <b>perk</b>.</li>
+         <li><span class="chip gold">A</span> Gold: <b>×2</b> for the word, <b>×3</b> with two golds. Perk bonuses like Chisel add to that multiplier the same way.</li>
+         <li><span class="chip rock"></span> Rocks break when you spell <b>beside</b> them (+5). From depth 5 some are <b>granite</b> (two dots): two hits.</li>
+         <li><span class="chip fuse">E<em>3</em></span> From depth 3, fuses: use one in a word within its count and it blasts its neighbours for points. Left alone it blows and <b>costs a word</b>.</li>
          <li>🌀 <b>Shake</b> jumbles the face, once per depth.</li>
        </ul>`,
       [{ label: 'Start digging', primary: true, onClick: closeOverlay }],
+    );
+  }
+
+  /** Every perk owned (the bar folds when there are many). */
+  private showOwned(): void {
+    const r = this.r;
+    showCard(
+      `<h2>Your perks</h2><div class="owned">${r.perks
+        .map((id) => {
+          const p = perkDef(id);
+          return `<div>${p.icon} <b>${p.name}</b>: ${p.text}</div>`;
+        })
+        .join('')}</div>`,
+      [{ label: 'Back to digging', primary: true, onClick: closeOverlay }],
     );
   }
 

@@ -50,12 +50,28 @@ body[data-depth='7'] { --top: #241a30; }
 #word:empty { display: none; }
 #wordBox.ok #word { color: var(--ok); }
 #wordBox.bad #word { color: #cfc6d6; }
+#wordBox.last #word { font-size: 24px; color: var(--text); letter-spacing: 0.06em; }
 #wordSub { font-size: 14px; line-height: 1.35; color: var(--muted); margin-top: 2px; }
 #wordBox.ok #wordSub b { color: var(--ok); font-size: 17px; }
 #wordSub b { color: var(--text); }
 #wordSub .dim { color: var(--muted); font-size: 13px; }
 #wordSub .warn { color: var(--warn); font-weight: 700; }
 #wordBox.idle #wordSub { font-size: 14.5px; max-width: 380px; }
+#wordSub .chips {
+  display: flex; align-items: center; justify-content: safe center; gap: 4px;
+  white-space: nowrap; overflow-x: auto; scrollbar-width: none; max-width: calc(100vw - 20px);
+}
+#wordSub .chips::-webkit-scrollbar { display: none; }
+#wordSub .chips > b { margin-right: 2px; font-size: 15px; }
+#wordBox.ok #wordSub .chips > b { font-size: 17px; }
+#wordSub .c {
+  flex: none; font-size: 12.5px; line-height: 20px; padding: 0 5px; border-radius: 6px;
+  background: #2d2636; color: var(--muted);
+}
+#wordSub .c i { font-style: normal; opacity: 0.8; }
+#wordSub .c.len { color: #9fd3ff; }
+#wordSub .c.x { color: var(--accent); }
+#wordSub .c.warn { color: var(--warn); font-weight: 700; }
 
 /* ---------------------------------------------------------------- tiles */
 #stage { overflow: hidden; touch-action: none; }
@@ -93,6 +109,8 @@ body[data-depth='7'] { --top: #241a30; }
 .tile em.hot { animation: hot 0.8s ease-in-out infinite alternate; }
 @keyframes hot { to { background: #ff7a2f; box-shadow: 0 0 0 3px rgba(255, 122, 47, 0.4); } }
 .tile.blank b { color: #6f4fc0; }
+.tile.gem i { opacity: 1; color: #7a3fd6; font-weight: 900; }
+.tile.gem i::before { content: '◆'; font-size: 0.8em; margin-right: 1px; }
 .tile.rock { background: #2f2a35; }
 .tile.rock::after { background: linear-gradient(165deg, #8a8290 0%, #6a6272 55%, #4f4857 100%); }
 .tile.rock.granite::after { background: linear-gradient(165deg, #6c6474 0%, #4b4453 55%, #353040 100%); }
@@ -107,6 +125,8 @@ body[data-depth='7'] { --top: #241a30; }
 .tile.sel::after { background: linear-gradient(170deg, #ffe7a8 0%, #ffcf6a 60%, #f2b34a 100%); }
 .tile.sel.ok { background: #2f9a5a; }
 .tile.sel.ok::after { background: linear-gradient(170deg, #d6f8e0 0%, #9ae8b5 60%, #6ccf90 100%); }
+/* A gold tile in the trail keeps its gold rim. */
+.tile.sel.gold, .tile.sel.ok.gold { background: #d79a12; }
 #board.picking .tile { cursor: crosshair; }
 #board.picking .tile::after { filter: brightness(0.92); }
 #board.picking .tile.rock { background: var(--warn); }
@@ -131,11 +151,12 @@ body[data-depth='7'] { --top: #241a30; }
   padding: 8px 12px max(10px, env(safe-area-inset-bottom));
   display: flex; align-items: center; gap: 10px; min-height: 64px;
 }
-#perkBar { flex: 1; display: flex; gap: 6px; overflow-x: auto; min-width: 0; }
+#perkBar { flex: 1; display: flex; gap: 6px; overflow: hidden; min-width: 0; }
 #perkBar button {
   flex: none; width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line);
   background: #29222f; font-size: 21px; padding: 0; color: var(--text);
 }
+#perkBar button.more { font-size: 15px; font-weight: 800; color: var(--accent); }
 #tools { display: flex; gap: 8px; flex: none; }
 .tool {
   min-width: 52px; min-height: 46px; border-radius: 12px; border: 1px solid var(--line);
@@ -196,3 +217,4 @@ body[data-depth='7'] { --top: #241a30; }
 .chip.rock { background: #6a6272; }
 .chip.fuse { background: #f6c9b4; }
 .chip.fuse em { font-style: normal; color: #d63c2f; font-size: 10px; margin-left: 1px; }
+#word small { font-size: 0.72em; letter-spacing: 0.02em; }

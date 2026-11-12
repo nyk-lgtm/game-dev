@@ -23,10 +23,14 @@ export interface BotOpts {
   seen?: number;
   /** Human: longest word it finds. */
   maxLen?: number;
+  /** Perk preference, best first (default PRIORITY). */
+  perks?: readonly PerkId[];
 }
 
 /** Perk preference, best first. */
 export const PRIORITY: PerkId[] = ['shift', 'long', 'streak', 'rare', 'gold', 'first', 'echo', 'rocks', 'blast', 'short', 'wild', 'shake', 'pick'];
+/** The weakest perks first (from `PERKTABLE=1` on balance.ts): a run with unlucky picks. */
+export const WORST: PerkId[] = ['pick', 'shake', 'wild', 'blast', 'rocks', 'short', 'first', 'echo', 'gold', 'rare', 'streak', 'long', 'shift'];
 
 interface Cand {
   path: number[];
@@ -65,7 +69,7 @@ export function candidates(r: Run, dict: Dict, o: BotOpts = {}): Cand[] {
 }
 
 export function botAction(r: Run, dict: Dict, o: BotOpts = {}): string {
-  if (r.phase === 'perk') return `P${PRIORITY.find((p) => r.offer.includes(p)) ?? r.offer[0]}`;
+  if (r.phase === 'perk') return `P${(o.perks ?? PRIORITY).find((p) => r.offer.includes(p)) ?? r.offer[0]}`;
   if (r.phase !== 'play') return 'Q';
   const cands = candidates(r, dict, o);
   if (r.picks > 0) {

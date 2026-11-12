@@ -35,8 +35,17 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         fall in (WAAPI), blasts and crumbling rocks, sounds, depth banner, perk card, end card with depth strip and
         best/longest word, help, menu, bug report, daily (`?daily`), hub card first + Daily link. Pixel 7 checked
         (touch drag via CDP touch events works).
-  - [ ] Next: owner playtest. Watch: are 7-8 letter words findable on a phone? Is the first depth too easy? Do
-        fuses feel fair? Perk balance is guessed (the bot always takes Overtime/Long Haul/Hot Seam); a hint button?
+  - [x] Blind playtest (agent: won 3,157 with Chisel/Gold Rush/Prospector/Opening Strike, lost on depth 5 with Long
+        Haul/Hot Seam/Echo/Wild Stone; dragging precise, no errors) and fixes (rules v2): word multipliers add
+        (two golds + Opening Strike +2 = ×5; Echo, Chisel and Prospector stack the same way, never multiplied together), Prospector is +1 multiplier per letter worth 4+ (◆ on tiles), Long Haul +1 per
+        letter past four, Hot Seam (5+ letters) +1/+2/+3, Echo any repeated letter, Chisel/Opening +2, Stonebreaker
+        rocks 10 (was 20), Demolition an extra fuse, Pickaxe twice, Wild Stone two blanks; granite from depth 5;
+        targets 90…475 (late depths steeper). Perk bar folds into "+n"; one-line breakdown chips naming every
+        modifier; the last word shown big; help explains the multipliers, granite and the spare-word bonus; fuses
+        avoid cramped spots. Bot (300 runs): v1 28% wins / median depth 6 → v2 32% / 7; weakest perks 17%;
+        favoring any single perk 18-33% (v1 the perk mattered far more: Hot Seam alone 69% under the additive
+        draft before its nerf).
+  - [ ] Next: owner playtest. Watch: are 7-8 letter words findable on a phone? Do fuses feel fair? A hint button?
 - [ ] **Summit** (peaks-solitaire roguelite). Milestones:
   - [x] Core (src/summit/core): 8 floors of hand-drawn peak layouts (3 rows of 16-18 cards, then 4 rows of
         20-24, then 24-27 in 4-5 rows), more face-down cards per floor (0 → 100% of covered cards), a run-wide
