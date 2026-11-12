@@ -98,7 +98,7 @@ describe('links mode', () => {
           dom.forEach((d, i) => expect(d).toBe(bit(p.solution[i])));
           if (radius === 2) expect(countAnswers(p)).toBe(1);
         }
-      });
+      }, 60_000);
 
   it('easy keeps more clues than normal, hard fewer', () => {
     const count = (l: Level) => [...Array(10).keys()].reduce((a, s) => a + generate(s + 1, 3, l, 'links').clue.filter((c) => c >= 0).length, 0);

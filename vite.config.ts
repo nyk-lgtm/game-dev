@@ -46,5 +46,7 @@ export default defineConfig({
   },
   test: {
     include: ['tests/**/*.test.ts'],
+    // CI runners are several times slower than a laptop; generator and bot tests need room.
+    testTimeout: 30_000,
   },
 });

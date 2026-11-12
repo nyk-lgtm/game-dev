@@ -6,7 +6,7 @@ import { dailySeed, leaveDaily, loadDaily, recordDaily, todayKey } from '../shar
 import { copyText, toast } from '../shared/debug';
 import { randomSeed } from '../shared/rng';
 import { makeStore } from '../shared/storage';
-import { HOLES, RULES_VERSION, encodeShot, fmtPar, newRound, play, replay, scoreName, toPar, type Hole, type PlayResult, type Round } from './core';
+import { HOLES, RULES_VERSION, TICK_WRAP, decodeShot, encodeShot, fmtPar, newRound, play, replay, scoreName, toPar, type Hole, type PlayResult, type Round } from './core';
 import { Sounds } from './audio';
 import { draw, fitView, type Aim, type Scene, type View } from './render/draw';
 
@@ -29,6 +29,8 @@ interface Playback {
   f: number;
   from: { x: number; y: number };
   hitsDone: number;
+  /** Clock tick the putt started at. */
+  tick: number;
 }
 
 const TIPS: Record<string, string> = {
@@ -37,7 +39,7 @@ const TIPS: Record<string, string> = {
   water: '<b>Water</b>: the ball is lost, one stroke penalty, and you play again from where you were.',
   slope: '<b>Slopes</b> tilt the ball the way the arrows drift.',
   bumper: '<b>Red bumpers</b> kick the ball back hard. Bank off them.',
-  mill: '<b>Windmills</b> turn while the ball rolls, starting from the same pose every shot. Time your putt through the gaps.',
+  mill: '<b>Windmills</b> never stop turning. Watch the bar, then time your putt past it, or hug a wall where it can’t reach.',
   post: '<b>Stone posts</b> stop a ball dead. Go round them.',
 };
 
@@ -59,10 +61,10 @@ export class Game {
   private last = 0;
   private banner: { text: string; t: number } | null = null;
   private sfx = new Sounds();
-  private millT = 0;
+  /** The hole clock in ticks (240/s): windmills turn on it all the time, and a putt records it. */
+  private clock = 0;
   /** Where the ball stopped on the hole still being shown (null once it's in the cup). */
   private lastBall: { x: number; y: number } | null = null;
-  private millEnd: number | null = 0;
 
   constructor() {
     new ResizeObserver(() => this.resize()).observe(this.canvas);
@@ -136,7 +138,7 @@ export class Game {
     const dx = this.drag.x - p.x, dy = this.drag.y - p.y;
     const full = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) * 0.42;
     const power = Math.min(1, Math.hypot(dx, dy) / full);
-    this.aim = power < 0.04 ? null : { angle: Math.atan2(dy, dx), power };
+    this.aim = power < 0.02 ? null : { angle: Math.atan2(dy, dx), power };
     $('info').innerHTML = this.aim ? `Power <b>${Math.round(power * 100)}%</b> · drag back to the start to cancel` : 'Pull back further to aim, or let go to cancel.';
   }
 
@@ -150,7 +152,8 @@ export class Game {
       return;
     }
     this.sfx.putt(aim.power);
-    this.shoot(encodeShot(aim));
+    const hole = this.r.holes[this.r.hole];
+    this.shoot(encodeShot({ ...aim, tick: hole.mills.length ? Math.round(this.clock) : 0 }));
   }
 
   private shoot(action: string): void {
@@ -159,9 +162,7 @@ export class Game {
     const res = play(this.r, action);
     if (!res) return;
     navigator.vibrate?.(10);
-    this.anim = { res, hole, f: 0, from, hitsDone: 0 };
-    this.millT = 0;
-    this.millEnd = null;
+    this.anim = { res, hole, f: 0, from, hitsDone: 0, tick: decodeShot(action)?.tick ?? 0 };
     this.trail = [];
     this.save();
     this.hud(true);
@@ -182,7 +183,7 @@ export class Game {
     const dt = Math.min(0.05, (t - (this.last || t)) / 1000);
     this.last = t;
     this.time += dt;
-    this.millT += dt;
+    if (!this.anim) this.clock = (this.clock + dt * 240) % TICK_WRAP;
     for (const [k, v] of this.glow) this.glow.set(k, Math.max(0, v - dt * 3));
     if (this.splash) {
       this.splash.t += dt * 1.5;
@@ -226,7 +227,7 @@ export class Game {
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
     const dpr = this.canvas.width / Math.max(1, w);
     this.g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    draw(this.g, w, h, this.view, { hole, ball, trail: this.trail, aim: this.aim, time: this.time, glow: this.glow, sink: this.sink, splash: this.splash, millT: pb ? pb.f / 60 : this.millT, millEnd: pb ? null : this.millEnd });
+    draw(this.g, w, h, this.view, { hole, ball, trail: this.trail, aim: this.aim, time: this.time, glow: this.glow, sink: this.sink, splash: this.splash, millTick: pb ? pb.tick + pb.f * 4 : this.clock });
     if (this.banner) {
       this.banner.t += dt;
       const a = Math.min(1, this.banner.t * 4, (2.8 - this.banner.t) * 3);
@@ -250,7 +251,7 @@ export class Game {
   private finishShot(): void {
     const pb = this.anim!;
     this.anim = null;
-    this.millT = this.millEnd = pb.f / 60;
+    this.clock = (pb.tick + (pb.res.frames.length / 2 - 1) * 4) % TICK_WRAP;
     this.lastBall = pb.res.outcome === 'sunk' ? null : pb.res.outcome === 'water' ? pb.from : { x: pb.res.x, y: pb.res.y };
     const h = pb.hole.n;
     if (pb.res.outcome === 'water') {
@@ -281,7 +282,6 @@ export class Game {
           return;
         }
         this.shownHole = this.r.hole;
-        this.millT = this.millEnd = 0;
         this.resize();
         this.hud();
         this.tip();

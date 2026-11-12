@@ -25,13 +25,17 @@ export function speedFor(d: number): number {
 }
 /** Half the thickness of a windmill arm. */
 export const MILL_HALF = 0.7;
-/** A windmill's angle `step` steps into a shot (frames are every 4 steps). */
-export const millAngle = (m: Mill, step: number) => m.a0 + m.w * step * STEP;
+/** A windmill's angle at a tick of the hole's clock (240 ticks a second; a shot starts at its own tick). */
+export const millAngle = (m: Mill, tick: number) => m.a0 + m.w * tick * STEP;
+/** How close to a windmill's hub a ball may not rest (the bar would sweep it). */
+export const millReach = (m: Mill) => m.arm + MILL_HALF + BALL_R;
 
 export interface Shot {
   /** Angle in radians (0 = right, π/2 = down), power 0..1. */
   angle: number;
   power: number;
+  /** The hole clock's tick at the putt (windmill phase). */
+  tick?: number;
 }
 export type Outcome = 'rest' | 'sunk' | 'water';
 export interface ShotResult {
@@ -51,6 +55,7 @@ const inZone = (z: Zone, x: number, y: number) => x >= z.x && x <= z.x + z.w && 
 
 export function simulate(hole: Hole, from: { x: number; y: number }, shot: Shot): ShotResult {
   let x = from.x, y = from.y;
+  const tick0 = shot.tick ?? 0;
   const speed0 = speedFor(Math.max(0, Math.min(1, shot.power)) * MAX_ROLL);
   let vx = Math.cos(shot.angle) * speed0, vy = Math.sin(shot.angle) * speed0;
   const frames: number[] = [x, y];
@@ -127,9 +132,9 @@ export function simulate(hole: Hole, from: { x: number; y: number }, shot: Shot)
     }
     // Windmills: four turning arms and a hub; a blade carries the ball with it.
     for (const m of hole.mills) {
-      const ang = millAngle(m, i);
-      for (let k = 0; k < 4; k++) {
-        const a = ang + (k * Math.PI) / 2;
+      const ang = millAngle(m, tick0 + i);
+      for (let k = 0; k < 2; k++) {
+        const a = ang + k * Math.PI;
         const ex = Math.cos(a) * m.arm, ey = Math.sin(a) * m.arm;
         const t = Math.max(0, Math.min(1, ((x - m.x) * ex + (y - m.y) * ey) / (ex * ex + ey * ey)));
         const qx = m.x + ex * t, qy = m.y + ey * t;
@@ -145,6 +150,10 @@ export function simulate(hole: Hole, from: { x: number; y: number }, shot: Shot)
         if (vn < 0) {
           vx -= 1.6 * vn * nx;
           vy -= 1.6 * vn * ny;
+          // ...and flings it outward along the bar, so nothing circles the hub for ever.
+          const rx = x - m.x, ry = y - m.y, rd = Math.hypot(rx, ry) || 1;
+          vx += (rx / rd) * 12;
+          vy += (ry / rd) * 12;
           if (-vn > 15) hits.push({ f: frames.length / 2, v: -vn, bumper: false });
         }
       }
@@ -158,7 +167,9 @@ export function simulate(hole: Hole, from: { x: number; y: number }, shot: Shot)
     slow = sp < 1.5 ? slow + 1 : 0;
     // At rest: still on flat ground, or pinned (against a wall on a slope) for a moment.
     const tilted = ax !== 0 || ay !== 0;
-    if ((sp < 1.5 && !tilted) || slow > 30) break;
+    // Never at rest where a windmill bar would sweep the ball: it gets batted on its way.
+    const swept = hole.mills.some((m) => Math.hypot(x - m.x, y - m.y) < millReach(m));
+    if (!swept && ((sp < 1.5 && !tilted) || slow > 30)) break;
   }
   frames.push(x, y);
   return { outcome: 'rest', x, y, frames, hits, sand };

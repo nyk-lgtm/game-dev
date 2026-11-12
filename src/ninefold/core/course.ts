@@ -25,7 +25,7 @@ export interface Post {
   /** Bumpers spring the ball back faster; posts are dead stone. */
   bumper: boolean;
 }
-/** A windmill: a cross of arms turning at `w` rad/s from angle `a0` at the start of every shot. */
+/** A windmill: a bar turning at `w` rad/s all the time; its angle is a0 + w·t on the hole's clock. */
 export interface Mill {
   x: number;
   y: number;
@@ -199,6 +199,8 @@ export function makeHole(seed: number, n: number): Hole {
   if (n >= 3) pool.push('mill');
   if (n >= 5) pool.push('slope', 'water', 'bumper', 'mill');
   const mills: Mill[] = [];
+  const kindAt = new Map<number, string>();
+  const near = (i: number, k: string) => [path[i - 1], path[i + 1]].some((c) => kindAt.get(c) === k);
   const count = Math.min(path.length - 2, 1 + Math.floor(n / 2) + rng.int(0, 1));
   const mids = rng.shuffle(path.slice(1, -1));
   for (const c of mids) {
@@ -223,12 +225,17 @@ export function makeHole(seed: number, n: number): Hole {
         posts.push({ x: cx(c) + along[1] * 4 * side, y: cy(c) + along[0] * 4 * side, r: 2.2, bumper: true });
       }
     } else if (kind === 'mill' && straight && mills.length < 2) {
-      mills.push({ x: cx(c), y: cy(c), arm: 6.2, a0: rng.int(0, 7) * (Math.PI / 16), w: (rng.next() < 0.5 ? -1 : 1) * (1.6 + rng.next() * 1.2) });
+      // Never beside water: a knock into a pond is luck, not skill.
+      if (near(i, 'water')) continue;
+      mills.push({ x: cx(c), y: cy(c), arm: 4.2, a0: rng.int(0, 7) * (Math.PI / 8), w: (rng.next() < 0.5 ? -1 : 1) * (1.1 + rng.next() * 0.6) });
+      kindAt.set(c, 'mill');
     } else if (kind === 'sand') {
       // Never wider than half the lane, so there is always a way round.
       const w = rng.int(5, 8), h = rng.int(5, 8);
       zones.push({ kind: 'sand', x: x0 + rng.int(1, CELL - 1 - w), y: y0 + rng.int(1, CELL - 1 - h), w, h, dx: 0, dy: 0 });
     } else if (kind === 'water' && straight) {
+      if (near(i, 'mill')) continue;
+      kindAt.set(c, 'water');
       // A pond along one side of a straight run, leaving a lane open.
       const side = rng.next() < 0.5 ? 0 : 1;
       if (along[0] === 0) zones.push({ kind: 'water', x: x0 + (side ? CELL - 8 : 0), y: y0 + 2, w: 8, h: CELL - 4, dx: 0, dy: 0 });
@@ -243,7 +250,8 @@ export function makeHole(seed: number, n: number): Hole {
   // Side pockets: sometimes a pond or sand trap waits in them.
   for (const c of extra) {
     if (rng.next() < (n >= 3 ? 0.6 : 0.3)) {
-      const kind = n >= 3 && rng.next() < 0.5 ? 'water' : 'sand';
+      const millNext = [0, 1, 2, 3].some((d) => kindAt.get(neighbor(c, d)) === 'mill');
+      const kind = n >= 3 && rng.next() < 0.5 && !millNext ? 'water' : 'sand';
       zones.push({ kind, x: (c % COLS) * CELL + 2, y: Math.floor(c / COLS) * CELL + 2, w: CELL - 4, h: CELL - 4, dx: 0, dy: 0 });
     }
   }

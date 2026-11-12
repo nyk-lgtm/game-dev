@@ -4,7 +4,9 @@
 import { HOLES, makeCourse, type Hole } from './course';
 import { simulate, type Shot, type ShotResult } from './physics';
 
-export const RULES_VERSION = 5;
+export const RULES_VERSION = 6;
+/** The hole clock wraps every 10 minutes (ticks are 1/240 s). */
+export const TICK_WRAP = 240 * 600;
 /** Strokes after which the ball is picked up (penalties count). */
 export const MAX_STROKES = 8;
 
@@ -26,10 +28,11 @@ export function newRound(seed: number): Round {
   return { seed, holes, hole: 0, ball: { ...holes[0].tee }, strokes: [0], actions: [], over: false, pickedUp: [] };
 }
 
-export const encodeShot = (s: Shot): string => `${Math.round(s.angle * 1000)}.${Math.round(Math.max(0, Math.min(1, s.power)) * 1000)}`;
+export const encodeShot = (s: Shot): string =>
+  `${Math.round(s.angle * 1000)}.${Math.round(Math.max(0, Math.min(1, s.power)) * 1000)}${s.tick ? `.${s.tick % TICK_WRAP}` : ''}`;
 export function decodeShot(a: string): Shot | null {
-  const m = /^(-?\d+)\.(\d+)$/.exec(a);
-  return m ? { angle: Number(m[1]) / 1000, power: Number(m[2]) / 1000 } : null;
+  const m = /^(-?\d+)\.(\d+)(?:\.(\d+))?$/.exec(a);
+  return m ? { angle: Number(m[1]) / 1000, power: Number(m[2]) / 1000, tick: m[3] ? Number(m[3]) : 0 } : null;
 }
 
 export interface PlayResult extends ShotResult {

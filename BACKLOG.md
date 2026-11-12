@@ -52,7 +52,12 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         update resets a round. Bot (NOISE=0.06) now median E.
   - [x] Holes keep to a 4-column band (taller, ~25% bigger on screen); par fitted to the bot with wobble
         (round(0.335·len + 0.284·obstacles + 0.1·turns), 2-5); bot NOISE=0.06 median −2 (rules v5).
-  - [ ] Next: second playtest of the new aim.
+  - [x] Second playtest (agent: ring "stops within ~5px", +11 with every lost stroke on windmill holes) and
+        fixes (rules v6): windmills are single bars (arm 4.2, room at the walls) turning on a running hole
+        clock; a putt records the tick (`angle.power.tick`), so you can watch and time it; a ball never
+        rests inside a bar's reach (the bar flings it out); no water next to a windmill; hint bar fixed
+        height (the course no longer shifts mid-drag); shorter minimum putt.
+  - [ ] Next: slopes could bend the aim ring.
 - [ ] **Hexhold** (hex maze tower defense). Milestones:
   - [x] Core (src/hexhold/core): 9x11 hex board, flow-field pathing (never sealed), 30
         seeded waves with themes, 6 towers each gifting its neighbors, 8 enemies (flyers,
