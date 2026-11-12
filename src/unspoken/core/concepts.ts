@@ -70,7 +70,17 @@ export const CONCEPTS: Concept[] = [
   c('TO', 'to / toward', 'grammar'),
 ];
 
-export const CONCEPT = new Map(CONCEPTS.map((x) => [x.id, x]));
+/** Grammar only the second village's language has: case particles and verb agreement.
+ *  Kept out of CONCEPTS so the first village's language (built by walking CONCEPTS) never changes. */
+export const GRAMMAR2: Concept[] = [
+  c('SUBJ', 'the doer (who acts)', 'grammar'),
+  c('OBJ', 'the one it is done to', 'grammar'),
+  c('PLV', 'many are doing it (on the action)', 'grammar'),
+];
+/** Every concept either village can write. */
+export const ALL_CONCEPTS: Concept[] = [...CONCEPTS, ...GRAMMAR2];
+
+export const CONCEPT = new Map(ALL_CONCEPTS.map((x) => [x.id, x]));
 export const ids = (cat: Category) => CONCEPTS.filter((x) => x.cat === cat).map((x) => x.id);
 
 export const NOUN_CATS: Category[] = ['name', 'person', 'animal', 'thing', 'nature', 'place'];

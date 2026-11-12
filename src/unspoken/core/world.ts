@@ -10,7 +10,7 @@ import { BREAKABLE, CONCEPT, COUNTABLE, EDIBLE, FORCES, MAKEABLE, PORTABLE, VERB
 import { type Language } from './lang';
 import { realize, frameKey, morphemes, tokenKey, type Frame, type NP, type Tense, type Token } from './sentence';
 
-export type Backdrop = 'shore' | 'market' | 'houses' | 'murals' | 'mountain';
+export type Backdrop = 'shore' | 'market' | 'houses' | 'murals' | 'mountain' | 'lake' | 'hamlet' | 'terraces';
 
 export interface Panel {
   id: string;
@@ -33,6 +33,10 @@ export interface Challenge {
   tiles: Token[];
   /** The final question, asked by the elder, when this challenge answers it. */
   question?: Token[];
+  /** Second village (compose): other correct writings (the doer and done-to swapped). */
+  alts?: Token[][];
+  /** Second village: what this riddle tests, for its hint line. */
+  tests?: 'roles' | 'many';
 }
 
 export interface Chapter {
@@ -53,7 +57,7 @@ export interface World {
 // ---------------------------------------------------------------- templates
 
 /** "big fish*" -> {n: fish, adj: big, pl: true}; a|b picks one at random. */
-function np(rng: Rng, s: string): NP {
+export function np(rng: Rng, s: string): NP {
   const parts = s.split(' ').map((p) => (p.includes('|') ? rng.pick(p.split('|')) : p));
   let n = parts[parts.length - 1];
   const pl = n.endsWith('*');
@@ -64,18 +68,20 @@ function np(rng: Rng, s: string): NP {
   return out;
 }
 
-interface T {
+export interface T {
   v: string;
   s: string;
   o?: string;
   d?: string;
   t?: Tense;
   neg?: boolean;
+  /** Second village: write the done-to first (true), doer first (false), or let the seed decide. */
+  of?: boolean;
 }
 
-const t = (v: string, s: string, o?: string, d?: string, extra: Partial<T> = {}): T => ({ v, s, o, d, ...extra });
+export const t = (v: string, s: string, o?: string, d?: string, extra: Partial<T> = {}): T => ({ v, s, o, d, ...extra });
 
-function frameOf(rng: Rng, x: T): Frame {
+export function frameOf(rng: Rng, x: T): Frame {
   const f: Frame = { v: x.v, s: np(rng, x.s), tense: x.t ?? 'now' };
   if (x.o) f.o = np(rng, x.o);
   if (x.d) f.d = np(rng, x.d);
@@ -83,13 +89,15 @@ function frameOf(rng: Rng, x: T): Frame {
   return f;
 }
 
+export type Focus = 'PL' | 'NEG' | 'PAST' | 'FUT' | 'TO' | 'ADJ';
+
 interface ChapterDef {
   title: string;
   backdrop: Backdrop;
   intro: string;
   panels: T[];
   /** Grammar this chapter is about; challenges lean on it. */
-  focus: ('PL' | 'NEG' | 'PAST' | 'FUT' | 'TO' | 'ADJ')[];
+  focus: Focus[];
 }
 
 const CHAPTERS: ChapterDef[] = [
@@ -185,9 +193,9 @@ const CHAPTERS: ChapterDef[] = [
 
 // ---------------------------------------------------------------- random sentences
 
-const catOf = (id: string): Category => CONCEPT.get(id)!.cat;
+export const catOf = (id: string): Category => CONCEPT.get(id)!.cat;
 
-function objectOk(v: string, o: string, s: string): boolean {
+export function objectOk(v: string, o: string, s: string): boolean {
   if (o === s) return false;
   switch (v) {
     case 'eat':
@@ -208,7 +216,7 @@ function objectOk(v: string, o: string, s: string): boolean {
   }
 }
 
-function randomFrame(rng: Rng, known: Set<string>, focus: ChapterDef['focus']): Frame | null {
+export function randomFrame(rng: Rng, known: Set<string>, focus: Focus[]): Frame | null {
   const verbs = Object.keys(VERBS).filter((v) => known.has(v));
   const nouns = [...known].filter((id) => ['name', 'person', 'animal', 'thing', 'nature', 'place'].includes(catOf(id)));
   const adjs = [...known].filter((id) => catOf(id) === 'quality');
@@ -229,7 +237,7 @@ function randomFrame(rng: Rng, known: Set<string>, focus: ChapterDef['focus']): 
       if (dests.length && known.has('TO') && (v !== 'give' || true)) f.d = { n: rng.pick(dests) };
       else if (v === 'give' || v === 'go') continue;
     }
-    const want = (k: ChapterDef['focus'][number]) => (focus.includes(k) ? 0.6 : 0.2);
+    const want = (k: Focus) => (focus.includes(k) ? 0.6 : 0.2);
     const nps = [f.s, f.o, f.d].filter((x): x is NP => !!x);
     for (const p of nps) {
       if (known.has('PL') && COUNTABLE.has(p.n) && rng.next() < want('PL') / 1.5) p.pl = true;
@@ -246,7 +254,7 @@ function randomFrame(rng: Rng, known: Set<string>, focus: ChapterDef['focus']): 
 }
 
 /** Adjectives the pictures can show clearly on this noun. */
-function adjVisible(n: string, a: string): boolean {
+export function adjVisible(n: string, a: string): boolean {
   const cat = catOf(n);
   if (cat === 'thing') return true;
   if (cat === 'animal') return a === 'big' || a === 'small';
@@ -255,7 +263,7 @@ function adjVisible(n: string, a: string): boolean {
 }
 
 /** Variations of a frame that change exactly one thing, for wrong answers. */
-function mutations(rng: Rng, f: Frame, known: Set<string>): Frame[] {
+export function mutations(rng: Rng, f: Frame, known: Set<string>): Frame[] {
   const out: Frame[] = [];
   const clone = (): Frame => JSON.parse(JSON.stringify(f));
   const nouns = [...known].filter((id) => ['name', 'person', 'animal', 'thing', 'nature', 'place'].includes(catOf(id)));

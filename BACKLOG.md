@@ -205,7 +205,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 
 ## Ideas (unscheduled)
 - Unspoken: more story templates so the village tale varies; (done: 🔊 speaks a word with the phone's
-  voice, Italian when available); a harder "second village" with case markers or verb agreement.
+  voice, Italian when available; done: the second village, see Done).
 - [x] Hub: shared Sound / Vibration switches (src/shared/settings.ts; audio never starts when off,
   navigator.vibrate becomes a no-op). Reduced effects done 2026-11-12: hub "Effects" switch (defaults to the
   phone's reduce-motion), `reducedFx()` gates shake (Telegraph, Glyphwright, Afterglow), Afterglow level flash,
@@ -214,6 +214,13 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Grove: owner wants it kept as is (no smaller board).
 
 ## Done (recent)
+- Unspoken second village (the mountain village): unlocked by finishing village 1 (ending button + menu › Villages).
+  Fresh language per seed with case particles (doer / done-to, so doer and done-to swap order freely; the verb's place
+  is fixed) and verb agreement (a mark under the action when many act). 5 places (Pass, Lake, Hamlet, Carvings,
+  Terraces; new lake/hamlet/terraces backdrops), roles riddles write the done-to first and always offer the swapped
+  scene, compose decoys include the wrong agreement, final question "who found the people?". Notebook grammar
+  notes appear as their glyphs are proven. Village 1 byte-identical (hash test), no RULES_VERSION bump.
+  Next: owner playtest; is the Pass too slow (11 scenes) or the doer/done-to discovery too hard without a hint?
 - Grove blind playtest (agent: 24,775, Spirit Tree, 209 turns; "too forgiving, too long") and fixes
   (rules v2): trapping pays 50 per wisp (×2 for 2+ at once); crystals 5% → 4.5%, bolts 6% → 4.5%,
   wisps 20% → 22% (bot: 276 → 248 turns, Spirit Tree 49/60 → 30/60); help says wisps never merge and

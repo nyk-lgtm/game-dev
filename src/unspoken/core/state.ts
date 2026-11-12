@@ -4,12 +4,15 @@
 
 import { makeLanguage, type Language } from './lang';
 import { makeWorld, type World } from './world';
+import { makeWorld2 } from './world2';
 import { morphemes, sameTokens, tokenKey, type Token } from './sentence';
 
 export const RULES_VERSION = 2;
 
 export interface State {
   seed: number;
+  /** 1: the river village (the original game); 2: the mountain village. */
+  village: number;
   lang: Language;
   world: World;
   /** Glyph concept id -> your guess (a concept id). */
@@ -32,10 +35,10 @@ export type Action =
   | { t: 'guess'; glyph: string; meaning: string | null }
   | { t: 'answer'; challenge: string; pick?: number; tiles?: number[] };
 
-export function newGame(seed: number): State {
-  const lang = makeLanguage(seed);
-  const world = makeWorld(lang);
-  return { seed, lang, world, notebook: {}, confirmed: [], doubted: [], understood: [], solved: [], mistakes: 0, chapter: 0, over: false };
+export function newGame(seed: number, village = 1): State {
+  const lang = makeLanguage(seed, village);
+  const world = village === 2 ? makeWorld2(lang) : makeWorld(lang);
+  return { seed, village, lang, world, notebook: {}, confirmed: [], doubted: [], understood: [], solved: [], mistakes: 0, chapter: 0, over: false };
 }
 
 export function findChallenge(s: State, id: string) {
@@ -96,8 +99,13 @@ export function apply(s: State, a: Action): Result | null {
   } else {
     if (!a.tiles || a.tiles.some((i) => i < 0 || i >= c.tiles.length) || new Set(a.tiles).size !== a.tiles.length) return null;
     const written: Token[] = a.tiles.map((i) => c.tiles[i]);
-    ok = sameTokens(written, c.tokens);
-    if (!ok) right = written.map((tk, i) => !!c.tokens[i] && tokenKey(tk) === tokenKey(c.tokens[i]));
+    // The second village accepts the doer and done-to in either order.
+    const ways = [c.tokens, ...(c.alts ?? [])];
+    ok = ways.some((w) => sameTokens(written, w));
+    if (!ok) {
+      const marks = ways.map((w) => written.map((tk, i) => !!w[i] && tokenKey(tk) === tokenKey(w[i])));
+      right = marks.reduce((a, b) => (b.filter(Boolean).length > a.filter(Boolean).length ? b : a));
+    }
   }
   if (!ok) {
     s.mistakes++;
@@ -150,8 +158,8 @@ export function decode(tok: string): Action | null {
   return null;
 }
 
-export function replay(seed: number, actions: string): State {
-  const s = newGame(seed);
+export function replay(seed: number, actions: string, village = 1): State {
+  const s = newGame(seed, village);
   const toks = actions ? actions.split(',') : [];
   toks.forEach((tk, i) => {
     const a = decode(tk);
