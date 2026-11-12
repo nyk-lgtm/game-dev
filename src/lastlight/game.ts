@@ -174,7 +174,9 @@ export class Game {
         // Carried things always show by name, so you can see what you have.
         const carried = st.carried(s, k);
         // A lone action stands in for its subject; people keep their name on it.
-        const label = isPerson(k) ? `${st.subjectName(s, k)}: ${list[0].label[0].toLowerCase()}${list[0].label.slice(1)}` : list[0].label;
+        // A lone action under People keeps the person's name, unless it already says it.
+        const who = st.subjectName(s, k);
+        const label = isPerson(k) && !list[0].label.includes(who) ? `${who}: ${list[0].label[0].toLowerCase()}${list[0].label.slice(1)}` : list[0].label;
         if (list.length === 1 && !carried) return [btn(label, 'act', () => this.do(list[0].id))];
         const chip = btn(st.subjectName(s, k), `chip${this.open === k ? ' on' : ''}`, () => {
           this.open = this.open === k ? null : k;
