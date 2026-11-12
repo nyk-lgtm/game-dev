@@ -57,7 +57,8 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         clock; a putt records the tick (`angle.power.tick`), so you can watch and time it; a ball never
         rests inside a bar's reach (the bar flings it out); no water next to a windmill; hint bar fixed
         height (the course no longer shifts mid-drag); shorter minimum putt.
-  - [ ] Next: slopes could bend the aim ring.
+  - [x] Aim preview runs the real physics (as the putt will be saved, windmill clock included) and draws
+        the path to the first knock (a spark there) or a ring where the ball stops; slopes and sand show.
 - [ ] **Hexhold** (hex maze tower defense). Milestones:
   - [x] Core (src/hexhold/core): 9x11 hex board, flow-field pathing (never sealed), 30
         seeded waves with themes, 6 towers each gifting its neighbors, 8 enemies (flyers,

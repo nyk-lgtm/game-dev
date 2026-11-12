@@ -6,7 +6,7 @@ import { dailySeed, leaveDaily, loadDaily, recordDaily, todayKey } from '../shar
 import { copyText, toast } from '../shared/debug';
 import { randomSeed } from '../shared/rng';
 import { makeStore } from '../shared/storage';
-import { HOLES, RULES_VERSION, TICK_WRAP, decodeShot, encodeShot, fmtPar, newRound, play, replay, scoreName, toPar, type Hole, type PlayResult, type Round } from './core';
+import { HOLES, RULES_VERSION, TICK_WRAP, decodeShot, encodeShot, simulate, fmtPar, newRound, play, replay, scoreName, toPar, type Hole, type PlayResult, type Round } from './core';
 import { Sounds } from './audio';
 import { draw, fitView, type Aim, type Scene, type View } from './render/draw';
 
@@ -34,7 +34,7 @@ interface Playback {
 }
 
 const TIPS: Record<string, string> = {
-  first: '<b>Drag anywhere and pull back</b>, like a slingshot. The ring shows where the ball would stop on open grass. Let go to putt.',
+  first: '<b>Drag anywhere and pull back</b>, like a slingshot. The dotted line shows its path to the first bounce; a ring, where it stops. Let go to putt.',
   sand: '<b>Sand</b> soaks up speed. Go round it, or hit harder to get through.',
   water: '<b>Water</b>: the ball is lost, one stroke penalty, and you play again from where you were.',
   slope: '<b>Slopes</b> tilt the ball the way the arrows drift.',
@@ -138,8 +138,19 @@ export class Game {
     const dx = this.drag.x - p.x, dy = this.drag.y - p.y;
     const full = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) * 0.42;
     const power = Math.min(1, Math.hypot(dx, dy) / full);
-    this.aim = power < 0.02 ? null : { angle: Math.atan2(dy, dx), power };
+    this.aim = power < 0.02 ? null : this.preview(Math.atan2(dy, dx), power);
     $('info').innerHTML = this.aim ? `Power <b>${Math.round(power * 100)}%</b> · drag back to the start to cancel` : 'Pull back further to aim, or let go to cancel.';
+  }
+
+  /** Where the putt would really go, up to its first knock (as the shot will be saved: quantized). */
+  private preview(angle: number, power: number): Aim {
+    const hole = this.r.holes[this.r.hole];
+    const shot = decodeShot(encodeShot({ angle, power, tick: hole.mills.length ? Math.round(this.clock) : 0 }))!;
+    const res = simulate(hole, this.r.ball, shot);
+    const knock = res.hits.length ? res.hits[0].f : Infinity;
+    const end = Math.min(res.frames.length / 2 - 1, knock);
+    const path = res.frames.slice(0, (end + 1) * 2);
+    return { angle, power, path, stops: end < knock && res.outcome !== 'water' };
   }
 
   private up(e: PointerEvent): void {
@@ -184,6 +195,8 @@ export class Game {
     this.last = t;
     this.time += dt;
     if (!this.anim) this.clock = (this.clock + dt * 240) % TICK_WRAP;
+    // Windmills keep turning while you hold a putt: keep its preview in step.
+    if (this.aim && this.drag && this.r.holes[this.r.hole].mills.length) this.aim = this.preview(this.aim.angle, this.aim.power);
     for (const [k, v] of this.glow) this.glow.set(k, Math.max(0, v - dt * 3));
     if (this.splash) {
       this.splash.t += dt * 1.5;
@@ -387,7 +400,7 @@ export class Game {
       `<h2>Ninefold</h2>
        <p>Nine holes of mini-golf, grown fresh from a seed every round.</p>
        <ul>
-         <li><b>Drag anywhere and pull back</b> to aim, like a slingshot. The farther you pull, the harder the putt; the ring marks where it would stop on open grass. Let go to play it.</li>
+         <li><b>Drag anywhere and pull back</b> to aim, like a slingshot. The farther you pull, the harder the putt; the dotted line shows its path up to the first bounce, and a ring where it would stop. Let go to play it.</li>
          <li>Sink the ball in as few strokes as you can. <b>Par</b> is a good score; under par is great.</li>
          <li>Sand slows the ball, water costs a stroke, slopes push it sideways, bumpers kick it back. After 8 strokes the ball is picked up.</li>
        </ul>`,

@@ -29,6 +29,9 @@ export function fitView(hole: Hole, w: number, h: number): View {
 export interface Aim {
   angle: number;
   power: number;
+  /** The ball's real path up to its first knock (x,y pairs), and whether it comes to rest there. */
+  path?: number[];
+  stops?: boolean;
 }
 
 export interface Scene {
@@ -246,20 +249,23 @@ export function draw(g: CanvasRenderingContext2D, w: number, h: number, v: View,
     for (let i = 0; i < s.trail.length; i += 2) g.lineTo(s.trail[i], s.trail[i + 1]);
     g.stroke();
   }
-  // Aim: a dotted line to where the ball would stop on open grass, with a ring there.
+  // Aim: the ball's real path (slopes and sand included) up to its first knock, a ring where it stops.
   if (s.aim && s.ball) {
     const { angle, power } = s.aim;
-    const len = Math.max(3, MAX_ROLL * power);
     const hue = 120 - 120 * power;
     const ux = Math.cos(angle), uy = Math.sin(angle);
     const col = `hsla(${hue}, 90%, 62%, 0.95)`;
+    const path = s.aim.path ?? [s.ball.x, s.ball.y, s.ball.x + ux * MAX_ROLL * power, s.ball.y + uy * MAX_ROLL * power];
     g.strokeStyle = col;
     g.fillStyle = col;
     g.lineWidth = 0.7;
     g.setLineDash([1.4, 1.4]);
     g.beginPath();
-    g.moveTo(s.ball.x + ux * 2.5, s.ball.y + uy * 2.5);
-    g.lineTo(s.ball.x + ux * len, s.ball.y + uy * len);
+    for (let i = 0; i < path.length; i += 2) {
+      // Start just clear of the ball.
+      if (i === 0) g.moveTo(path[0] + ux * 2.5, path[1] + uy * 2.5);
+      else g.lineTo(path[i], path[i + 1]);
+    }
     g.stroke();
     g.setLineDash([]);
     // Arrowhead near the ball shows the direction.
@@ -269,10 +275,18 @@ export function draw(g: CanvasRenderingContext2D, w: number, h: number, v: View,
     g.lineTo(hx - ux * 3 - uy * 1.8, hy - uy * 3 + ux * 1.8);
     g.lineTo(hx - ux * 3 + uy * 1.8, hy - uy * 3 - ux * 1.8);
     g.fill();
-    // The stop ring.
+    const ex = path[path.length - 2], ey = path[path.length - 1];
     g.lineWidth = 0.6;
     g.beginPath();
-    g.arc(s.ball.x + ux * len, s.ball.y + uy * len, BALL_R + 0.6, 0, Math.PI * 2);
+    if (s.aim.stops !== false) g.arc(ex, ey, BALL_R + 0.6, 0, Math.PI * 2);
+    else {
+      // It knocks something here and carries on: a small spark.
+      for (let k = 0; k < 4; k++) {
+        const a = (k * Math.PI) / 2 + Math.PI / 4;
+        g.moveTo(ex + Math.cos(a) * 0.8, ey + Math.sin(a) * 0.8);
+        g.lineTo(ex + Math.cos(a) * 2, ey + Math.sin(a) * 2);
+      }
+    }
     g.stroke();
   }
   // Splash rings.
