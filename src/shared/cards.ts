@@ -35,15 +35,22 @@ export function showCard(html: string, buttons: CardButton[], dismissable = true
   card.appendChild(meta);
   o.appendChild(card);
   o.hidden = false;
-  // Long cards get a "more below" hint pinned to the bottom until you scroll there.
-  if (card.scrollHeight > card.clientHeight + 8) {
+  // Long cards get a "more below" hint pinned to the bottom until you scroll
+  // there. Only real content counts: not the build line, nor the hint itself.
+  const hidden = card.scrollHeight - card.clientHeight - meta.offsetHeight;
+  if (hidden > 24) {
     const more = document.createElement('div');
     more.className = 'more';
     more.textContent = '▼ scroll for more';
     card.appendChild(more);
     card.addEventListener('scroll', () => {
-      more.style.opacity = card.scrollTop + card.clientHeight >= card.scrollHeight - 24 ? '0' : '1';
+      more.style.opacity = card.scrollTop >= hidden - 8 ? '0' : '1';
     });
   }
-  o.onclick = dismissable ? (e) => e.target === o && closeOverlay() : null;
+  // A tap on the backdrop closes it. Pointer events rather than click: a tap
+  // whose finger drifts a little can lose its click on a phone.
+  let downOnBackdrop = false;
+  o.onclick = null;
+  o.onpointerdown = dismissable ? (e) => (downOnBackdrop = e.target === o) : null;
+  o.onpointerup = dismissable ? (e) => downOnBackdrop && e.target === o && closeOverlay() : null;
 }

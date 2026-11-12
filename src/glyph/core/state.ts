@@ -78,9 +78,16 @@ export function fits(r: Rune, at: Slot): boolean {
   return (at.col === 0) === (RUNES[r.id].kind === 'caster');
 }
 
-/** Three identical runes (same id and tier) merge into one of the next tier. */
-export function mergeAll(s: GameState): Rune[] {
+/**
+ * Three identical runes (same id and tier) merge into one of the next tier,
+ * which lands where the first of them sits (loom rows first, then the bench).
+ * `fresh`: only sets that include one of these slots merge (the runes an action
+ * just placed), so a set the player chose to keep unmerged stays put.
+ */
+export function mergeAll(s: GameState, fresh?: Slot[]): Rune[] {
   const made: Rune[] = [];
+  const hot = fresh && [...fresh];
+  const key = (at: Slot) => (at.area === 'loom' ? `L${at.row}${at.col}` : `b${(at as { i: number }).i}`);
   for (let guard = 0; guard < 10; guard++) {
     const spots: Slot[] = [];
     for (let row = 0; row < 3; row++) for (let col = 0; col < 4; col++) spots.push({ area: 'loom', row, col });
@@ -92,14 +99,28 @@ export function mergeAll(s: GameState): Rune[] {
       const k = `${r.id}:${r.tier}`;
       groups.set(k, [...(groups.get(k) ?? []), at]);
     }
-    const trio = [...groups.values()].find((g) => g.length >= 3);
+    let trio: Slot[] | undefined;
+    for (const g of groups.values()) {
+      if (g.length < 3) continue;
+      if (!hot) {
+        trio = g.slice(0, 3);
+        break;
+      }
+      const h = g.find((at) => hot.some((f) => key(f) === key(at)));
+      if (!h) continue;
+      // The fresh rune plus the first two others, in board order.
+      trio = [h, ...g.filter((at) => at !== h).slice(0, 2)].sort((a, b) => g.indexOf(a) - g.indexOf(b));
+      break;
+    }
     if (!trio) break;
     const first = trio[0];
     const r = get(s, first)!;
-    for (const at of trio.slice(0, 3)) set(s, at, null);
+    for (const at of trio) set(s, at, null);
     const up: Rune = { id: r.id, tier: (r.tier + 1) as 2 | 3 };
     set(s, first, up);
     made.push(up);
+    // The new rune may complete a set of its own tier.
+    hot?.push(first);
   }
   return made;
 }
@@ -108,8 +129,8 @@ export function freeBench(s: GameState): number {
   return s.bench.findIndex((r) => r === null);
 }
 
-/** Buy a shop rune into `to` (or the first free bench slot). */
-export function buy(s: GameState, shopIndex: number, to?: Slot): Rune[] | null {
+/** Buy a shop rune into `to` (or the first free bench slot). `keep`: don't merge it. */
+export function buy(s: GameState, shopIndex: number, to?: Slot, keep = false): Rune[] | null {
   const o = s.shop[shopIndex];
   if (!o || o.sold || s.phase !== 'build' || s.gold < price(o.rune)) return null;
   let dest: Slot | undefined = to;
@@ -126,11 +147,11 @@ export function buy(s: GameState, shopIndex: number, to?: Slot): Rune[] | null {
         // since the merge frees the space at once.
         const k = `${o.rune.id}:${o.rune.tier}`;
         const owned = [...s.loom.flat(), ...s.bench].filter((r) => r && `${r.id}:${r.tier}` === k).length;
-        if (owned < 2 || o.rune.tier >= 3) return null;
+        if (keep || owned < 2 || o.rune.tier >= 3) return null;
         s.gold -= price(o.rune);
         o.sold = true;
         s.bench.push({ ...o.rune });
-        const made = mergeAll(s);
+        const made = mergeAll(s, [{ area: 'bench', i: BENCH_SIZE }]);
         s.bench = s.bench.slice(0, BENCH_SIZE);
         return made;
       }
@@ -140,11 +161,11 @@ export function buy(s: GameState, shopIndex: number, to?: Slot): Rune[] | null {
   s.gold -= price(o.rune);
   o.sold = true;
   set(s, dest, { ...o.rune });
-  return mergeAll(s);
+  return keep ? [] : mergeAll(s, [dest]);
 }
 
-/** Move (or swap) runes between loom and bench. Returns false if not allowed. */
-export function move(s: GameState, from: Slot, to: Slot): boolean {
+/** Move (or swap) runes between loom and bench. Returns false if not allowed. `keep`: don't merge. */
+export function move(s: GameState, from: Slot, to: Slot, keep = false): boolean {
   if (s.phase !== 'build' || from.area === 'shop' || to.area === 'shop') return false;
   const a = get(s, from);
   const b = get(s, to);
@@ -152,7 +173,7 @@ export function move(s: GameState, from: Slot, to: Slot): boolean {
   if (!fits(a, to) || (b && !fits(b, from))) return false;
   set(s, to, a);
   set(s, from, b);
-  mergeAll(s);
+  if (!keep) mergeAll(s, [from, to]);
   return true;
 }
 
@@ -179,13 +200,13 @@ export function empowerCost(r: Rune): number {
   return RUNES[r.id].cost * (r.tier === 1 ? 4 : 10);
 }
 
-/** Empower: pay to raise a loom or bench rune one tier. */
-export function empower(s: GameState, at: Slot): boolean {
+/** Empower: pay to raise a loom or bench rune one tier. `keep`: don't merge it. */
+export function empower(s: GameState, at: Slot, keep = false): boolean {
   const r = get(s, at);
   if (!r || at.area === 'shop' || s.phase !== 'build' || r.tier >= 3 || s.gold < empowerCost(r)) return false;
   s.gold -= empowerCost(r);
   set(s, at, { id: r.id, tier: (r.tier + 1) as 2 | 3 });
-  mergeAll(s);
+  if (!keep) mergeAll(s, [at]);
   return true;
 }
 
@@ -203,9 +224,12 @@ export function startBattle(s: GameState): boolean {
   return true;
 }
 
-/** Interest: +1 gold per 5 banked, up to +3. */
-export function income(s: GameState, earned: number): number {
-  return 5 + Math.floor(s.wave / 3) + Math.min(3, Math.floor(s.gold / 5)) + earned;
+/** Most bounty (gold dropped by slain foes, Gild aside) a wave pays out. */
+export const bountyCap = (wave: number): number => 6 + Math.floor(wave / 2);
+
+/** Interest: +1 gold per 5 banked, up to +3. Bounty is capped; Gild's gold isn't. */
+export function income(s: GameState, earned: number, gilded = 0): number {
+  return 5 + Math.floor(s.wave / 3) + Math.min(3, Math.floor(s.gold / 5)) + Math.min(bountyCap(s.wave), earned) + gilded;
 }
 
 /** Advance the battle one step; on its end, pay out and move to the next wave. */
@@ -224,7 +248,7 @@ export function tick(s: GameState): void {
     s.phase = 'won';
     return;
   }
-  s.gold += income(s, b.goldEarned);
+  s.gold += income(s, b.goldEarned, b.gilded);
   s.wave++;
   s.waveRerolls = 0;
   s.phase = 'build';

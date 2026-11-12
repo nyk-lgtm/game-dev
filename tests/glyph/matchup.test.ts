@@ -52,7 +52,10 @@ describe('matchups and warnings', () => {
   it('flags immunity, resistance and heavy armor, worst first', () => {
     expect(warnings(row('bolt', 'fire'), [foe('drake', 4)])[0]).toMatchObject({ level: 2, text: 'Drakes immune to fire' });
     expect(warnings(row('bolt', 'storm'), [foe('golem', 2)])[0]).toMatchObject({ level: 1, kind: 'golem' });
-    expect(warnings(row('rain'), [foe('golem', 2)])[0].text).toBe('Golems: armor eats 67%');
+    expect(warnings(row('rain'), [foe('golem', 2)])[0].text).toBe('Golems: armor eats 55%');
+    // Fire then Storm: storm hits land on drakes, the burn doesn't.
+    expect(warnings(row('bolt', 'fire', 'storm'), [foe('drake', 4)])[0]).toMatchObject({ level: 1, text: "Drakes can't burn" });
+    expect(matchups(row('bolt', 'fire', 'storm'), [foe('drake', 4), foe('imp', 4)]).map((m) => m.burns)).toEqual([false, true]);
     expect(warnings(row('bolt', 'heavy', 'heavy', 'pierce'), [foe('golem', 2)])).toEqual([]);
     const w = warnings(row('bolt', 'frost'), [foe('golem', 2), foe('wisp', 4)]);
     expect(w[0].level).toBeGreaterThanOrEqual(w[w.length - 1].level);

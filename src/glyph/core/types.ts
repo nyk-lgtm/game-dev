@@ -87,7 +87,10 @@ export interface Battle {
   /** Pending echo casts: [time, row, spell]. */
   echoQueue: [number, number, Spell][];
   nextId: number;
+  /** Bounty: gold dropped by slain foes (capped when paid, see bountyCap). */
   goldEarned: number;
+  /** Extra gold from Gild (paid in full). */
+  gilded: number;
   kills: number;
   leaked: number;
   /** Which foes got through (for the end-of-wave note). */

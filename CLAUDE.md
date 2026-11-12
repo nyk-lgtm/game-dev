@@ -34,7 +34,9 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     only diagonally.
   - Afterglow: `npx vite-node scripts/afterglow/balance.ts` (bot survival per character).
   - Delve: `npx vite-node scripts/delve/balance.ts`; Nightline: `npx vite-node scripts/nightline/balance.ts`.
-  - Glyphwright: `npx vite-node scripts/glyph/balance.ts` (smart bot win rate, deaths per wave).
+  - Glyphwright: `npx vite-node scripts/glyph/balance.ts 100 smart,favor` (rules v3: smart bot ~37% wins, median wave 15;
+    `favor` pushes it toward each caster). `scripts/glyph/probe.ts 2` ranks every caster × modifier build by real leaks
+    with a per-caster best/top-10 line (`TWEAK='beam.dmg=17,MOD.pierceThrough=t'` tries numbers without editing rules).
   - Summit: `npx vite-node scripts/summit/balance.ts 1000` (greedy bot with chain lookahead, rules v3: floor 1
     ~98%, floor 2 ~94%, median floor 5, ~14-17% win all 8); `DRAWS=34,13,…` tries other allotments, `TUNE=mirrors:1`
     other charm strengths, and `CHARM=mirror` starts every run holding one charm (the fair way to compare charms:
@@ -57,8 +59,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   (`ARENAS`/pillars in core/arena.ts, hashed from the seed), unions (`union` on a WeaponDef: two
   maxed weapons merge in a chest), and player damage is attributed (`w.taken`, `w.killedBy`).
   `NIGHT=n ARENA=1 npx vite-node scripts/afterglow/probe.ts` probes them.
-- Glyphwright runs are a seed + build actions (`B`uy/`M`ove/`S`ell/`R`eroll/`F`reeze/`G`o);
-  battles are deterministic, so `replay(seed, a)` rebuilds the run.
+- Glyphwright runs are a seed + build actions (`B`uy/`M`ove/`S`ell/`E`mpower/`R`eroll/`F`reeze/`G`o; a trailing
+  `k` on B/M/E keeps a set unmerged, and merges only take sets that include a rune the action placed);
+  battles are deterministic, so `replay(seed, a)` rebuilds the run. Modifier order only matters for Echo and the
+  element (last wins); burn is a fraction of the finished hit.
 - Rewild runs are a seed + actions (`P<card>.<cell>` place, `R` new hand, `E` end season). The
   season sim (src/rewild/core/sim.ts) visits cells in index order with one Rng per season, so
   the UI's forecasts (clone + end season) are exact.

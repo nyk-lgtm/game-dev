@@ -1,6 +1,8 @@
 // Glyphwright balance probe. Run: npx vite-node scripts/glyph/balance.ts [runs] [bots]
 //   bots: comma list of naive, smart, favor (smart bot pushed toward each caster),
 //   favor:mods (toward each modifier), favor:beam+fire (toward the given runes)
+// Rules v3 (order-free Fire, caster buffs, bounty cap), 100 seeds: smart 37% (v2: 41%), primary casters
+//   bolt 12 / beam 4 / nova 56 / rain 27 / orb 1 (v2: 63/0/31/1/5); see BACKLOG.md for favor runs.
 // Rules v2 (Empower, rising rerolls), 60 seeds: smart 32%, oldsmart (never empowers) 35%.
 // Last result before v2 (200 seeds): smart 36% wins, median wave 15, deaths spread 9-15
 // (lich 41, colossus 10); naive median 7, all deaths on waves 4-10.
@@ -32,16 +34,19 @@ function report(p: Player, verbose = true): RunResult[] {
   const N = new Array(WAVES + 1).fill(0);
   const L = new Array(WAVES + 1).fill(0);
   const G = new Array(WAVES + 1).fill(0);
+  const B = new Array(WAVES + 1).fill(0);
   for (const r of res)
     for (const w of r.log) {
       T[w.wave] += w.t;
       N[w.wave]++;
       L[w.wave] += w.hpLost;
       G[w.wave] += w.goldEarned;
+      B[w.wave] += w.goldBefore;
     }
   console.log(`battle s/wave: ${T.map((t, w) => (N[w] ? `${w}:${Math.round(t / N[w])}` : '')).filter(Boolean).join(' ')}`);
   console.log(`hp lost/wave:  ${L.map((t, w) => (N[w] ? `${w}:${r1(t / N[w])}` : '')).filter(Boolean).join(' ')}`);
-  console.log(`kill gold/wave: ${G.map((t, w) => (N[w] ? `${w}:${Math.round(t / N[w])}` : '')).filter(Boolean).join(' ')}`);
+  console.log(`kill gold/wave: ${G.map((t, w) => (N[w] ? `${w}:${Math.round(t / N[w])}` : '')).filter(Boolean).join(' ')} (bounty paid is capped)`);
+  console.log(`gold unspent at fight: ${B.map((t, w) => (N[w] ? `${w}:${Math.round(t / N[w])}` : '')).filter(Boolean).join(' ')}`);
   if (wins.length) {
     const hp = wins.map((r) => r.s.hp).sort((a, b) => a - b);
     console.log(`hp left on wins: ${hp.join(' ')} (flawless ${wins.filter((r) => r.s.hp === r.s.maxHp).length})`);

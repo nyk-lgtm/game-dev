@@ -75,7 +75,8 @@
 #tip .bad { color: var(--danger); font-weight: 700; }
 #tip b { color: var(--text); }
 #tip .star { color: var(--gold); font-weight: 700; }
-#tip button { min-height: 40px; min-width: 76px; font-size: 14px; padding: 0 10px; }
+#tip button { min-height: 44px; min-width: 76px; font-size: 14px; padding: 0 10px; }
+#tip .nx { color: #cdb8ff; }
 #tip.sellzone { background: #3a1420; color: #ffb3c1; justify-content: center; font-weight: 700; }
 #tip.sellzone.hover { background: #6a1f33; }
 
@@ -132,6 +133,8 @@ body.battle #bench, body.battle #shop { display: none; }
 .card .good { color: #2fd3a5; font-weight: 700; }
 .card .warn { color: #ffb86b; font-weight: 700; }
 .card .bad { color: #ff6b88; font-weight: 700; }
-#tip button.emp { min-width: 58px; padding: 0 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
+#tip button.emp { min-width: 58px; min-height: 48px; padding: 0 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
 #tip button.emp small { font-size: 11px; font-weight: 700; opacity: 0.85; }
 .lrow .sum .dl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .runes .tiers { color: #cdb8ff; font-size: 12px; }
+.card p.through { color: #ffb86b; }

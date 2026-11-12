@@ -3,7 +3,7 @@
 //   Every caster × every ordered triple of modifiers (all at `tier`), the same
 //   row on all three rows; ranks builds by HP leaked (lower is better).
 import { Evaluator, profileFor } from './smart';
-import { CASTERS, MODS, finishBattle, newGame, startBattle, type CasterId, type ModId, type Rune } from '../../src/glyph/core';
+import { CASTERS, MOD, MODS, casterBase, finishBattle, newGame, startBattle, type CasterId, type ModId, type Rune } from '../../src/glyph/core';
 
 export function leakTest(rows: (Rune | null)[][], waves: number[], seeds: number[]): { leak: number; t: number } {
   let leak = 0;
@@ -20,6 +20,17 @@ export function leakTest(rows: (Rune | null)[][], waves: number[], seeds: number
       t += s.battle!.t;
     }
   return { leak, t: t / (seeds.length * waves.length) };
+}
+
+// Try numbers without editing the rules: TWEAK='beam.dmg=20,orb.cooldown=2' (caster base stats);
+// modifier numbers as MOD.<key>=<number or expression in t>, e.g. 'MOD.pierceThrough=t'.
+for (const kv of (process.env.TWEAK ?? '').split(',').filter(Boolean)) {
+  const [path, v] = kv.split('=');
+  const [c, k] = path.split('.');
+  if (c === 'MOD') {
+    const m = MOD as unknown as Record<string, unknown>;
+    m[k] = typeof m[k] === 'function' ? new Function('t', `return ${v}`) : Number(v);
+  } else (casterBase(c as CasterId) as unknown as Record<string, number>)[k] = Number(v);
 }
 
 {
@@ -78,6 +89,14 @@ export function leakTest(rows: (Rune | null)[][], waves: number[], seeds: number
     const best = results.filter((r) => r.c === c).slice(0, 3);
     console.log(`best ${c}: ${best.map((r) => `${r.mods.join('+')} (${r.leak})`).join(', ')}`);
   }
+  // Per caster: leak of its best build and the mean of its top 10 (lower is better).
+  console.log(
+    'caster best / top-10 mean:',
+    CASTERS.map((c) => {
+      const xs = results.filter((r) => r.c === c).slice(0, 10).map((r) => r.leak);
+      return `${c} ${xs[0]}/${Math.round(xs.reduce((a, b) => a + b, 0) / xs.length)}`;
+    }).join(', '),
+  );
   // Mod strength: average rank of builds containing each mod.
   const rank = new Map<ModId, number[]>();
   results.forEach((r, i) => new Set(r.mods).forEach((m) => rank.set(m, [...(rank.get(m) ?? []), i])));

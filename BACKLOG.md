@@ -154,6 +154,25 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
     Empower; win rate unchanged (~32-35%). Then: the dps estimate counts extra targets at half
     (a crowd), the spell card also shows dps on a single foe, and row names never truncate (tags
     moved to the dps line).
+  - [x] Glyphwright second blind playtest (rules v3). Fire's burn is a fraction of the finished hit, so
+    Fire/Split/Heavy order no longer matters (Bolt III+Fire II+Haste+Split II was 299 vs 207 dps by
+    order) and split bolts share the burn; the dps estimate counts a burn once per foe (renewed, not
+    stacked; echoes add none) and the spell card gives its share and "~N against Drakes" when they
+    can't burn. Casters: Beam 11→17 dmg, 2.3→2.2s; Rain 9→11, 2.4→2.2s; Orb 12→14; Nova 27→30;
+    Pierce +10% dmg (was 15%) and passes t foes (was 1+t). Bounty paid ≤ 6 + wave/2 (Gild extra
+    uncapped). Merges only take sets that include the rune an action placed; one that would empty a
+    loom slot asks first (Merge / Keep them apart / Cancel; `k` suffix on B/M/E). Second tap
+    deselects a shop rune; tier I/II/III stats in the tip, ★ line and Runes page; Frost shows
+    "+X% longer in range"; names list both elements (last = the hits'); banner/end screen say what
+    got through ("2 Drakes (−6)"); 44+ px tip buttons; shared cards close on a backdrop tap via
+    pointer events and only hint "scroll for more" when real content is hidden. Bot (100 seeds):
+    smart 41% → 37%; primary caster bolt/beam/nova/rain/orb 63/0/31/1/5 → 12/4/56/27/1; favor runs
+    bolt 32→46, beam 36→43, nova 28→24, rain 42→35, orb 39→36%. probe.ts tier 2 (best/top-10 leak):
+    bolt 42/58, beam 120/138, nova 55/64, rain 99/107, orb 67/74 → 54/73, 49/60, 54/62, 53/68,
+    46/53; tier 3/2 waves 12,14: bolt 0/1, beam 97/112, nova 66/79, rain 67/76, orb 9/16 → 0/5,
+    3/13, 61/75, 12/25, 0/3 (late Nova lags: it can't hit the flyers).
+  - [ ] Next: does Bolt still feel dominant late? Nova is weak against late flyer-heavy waves in the
+    probe, but buffing it (cd 1.6) made the bot lean on it and lose more; refit `W` (fit.ts) first.
   - [x] Telegraph: depths 2-3 get +2 enemy budget (depth 1 stays the tutorial; rules v4). Greedy bot
     median depth 8 → 7 (back on target), more of its runs end on depth 3. A bomb someone stands on
     is now drawn under them (a lit ring) with a "💣 n" fuse tag below, not a badge on top.

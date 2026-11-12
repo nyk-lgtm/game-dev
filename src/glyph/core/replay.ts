@@ -9,18 +9,19 @@
 //   R            reroll
 //   F            toggle freeze
 //   G            fight: start the battle and run it to the end
-// slot: L<row><col> (loom) or b<i> (bench)
+// slot: L<row><col> (loom) or b<i> (bench). A trailing k on B, M or E keeps the
+// rune unmerged (the player declined a merge that would empty a loom slot).
 
 import { buy, empower, move, newGame, reroll, sell, startBattle, tick, toggleFreeze } from './state';
 import type { GameState, Slot } from './types';
 
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 
 export type Action =
-  | { t: 'buy'; i: number; to?: Slot }
-  | { t: 'move'; from: Slot; to: Slot }
+  | { t: 'buy'; i: number; to?: Slot; keep?: boolean }
+  | { t: 'move'; from: Slot; to: Slot; keep?: boolean }
   | { t: 'sell'; at: Slot }
-  | { t: 'empower'; at: Slot }
+  | { t: 'empower'; at: Slot; keep?: boolean }
   | { t: 'reroll' }
   | { t: 'freeze' }
   | { t: 'fight' };
@@ -40,13 +41,13 @@ function parseSlot(code: string): Slot {
 export function encode(a: Action): string {
   switch (a.t) {
     case 'buy':
-      return `B${a.i}${a.to ? slotCode(a.to) : ''}`;
+      return `B${a.i}${a.to ? slotCode(a.to) : ''}${a.keep ? 'k' : ''}`;
     case 'move':
-      return `M${slotCode(a.from)}${slotCode(a.to)}`;
+      return `M${slotCode(a.from)}${slotCode(a.to)}${a.keep ? 'k' : ''}`;
     case 'sell':
       return `S${slotCode(a.at)}`;
     case 'empower':
-      return `E${slotCode(a.at)}`;
+      return `E${slotCode(a.at)}${a.keep ? 'k' : ''}`;
     case 'reroll':
       return 'R';
     case 'freeze':
@@ -57,15 +58,16 @@ export function encode(a: Action): string {
 }
 
 const SLOT = '(L\\d\\d|b\\d)';
-const RE = new RegExp(`^(?:B(\\d)${SLOT}?|M${SLOT}${SLOT}|S${SLOT}|E${SLOT}|R|F|G)$`);
+const RE = new RegExp(`^(?:B(\\d)${SLOT}?|M${SLOT}${SLOT}|S${SLOT}|E${SLOT}|R|F|G)(k?)$`);
 
 export function decode(tok: string): Action {
   const m = RE.exec(tok);
-  if (!m) throw new Error(`bad action ${tok}`);
-  if (tok[0] === 'B') return { t: 'buy', i: +m[1], to: m[2] ? parseSlot(m[2]) : undefined };
-  if (tok[0] === 'M') return { t: 'move', from: parseSlot(m[3]), to: parseSlot(m[4]) };
+  if (!m || (m[7] && !'BME'.includes(tok[0]))) throw new Error(`bad action ${tok}`);
+  const keep = m[7] ? { keep: true } : {};
+  if (tok[0] === 'B') return { t: 'buy', i: +m[1], to: m[2] ? parseSlot(m[2]) : undefined, ...keep };
+  if (tok[0] === 'M') return { t: 'move', from: parseSlot(m[3]), to: parseSlot(m[4]), ...keep };
   if (tok[0] === 'S') return { t: 'sell', at: parseSlot(m[5]) };
-  if (tok[0] === 'E') return { t: 'empower', at: parseSlot(m[6]) };
+  if (tok[0] === 'E') return { t: 'empower', at: parseSlot(m[6]), ...keep };
   if (tok === 'R') return { t: 'reroll' };
   if (tok === 'F') return { t: 'freeze' };
   return { t: 'fight' };
@@ -75,13 +77,13 @@ export function decode(tok: string): Action {
 export function apply(s: GameState, a: Action): boolean {
   switch (a.t) {
     case 'buy':
-      return buy(s, a.i, a.to) !== null;
+      return buy(s, a.i, a.to, a.keep) !== null;
     case 'move':
-      return move(s, a.from, a.to);
+      return move(s, a.from, a.to, a.keep);
     case 'sell':
       return sell(s, a.at);
     case 'empower':
-      return empower(s, a.at);
+      return empower(s, a.at, a.keep);
     case 'reroll':
       return reroll(s);
     case 'freeze':

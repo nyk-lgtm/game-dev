@@ -107,6 +107,7 @@ export function newBattle(s: GameState): Battle {
     echoQueue: [],
     nextId: 1,
     goldEarned: 0,
+    gilded: 0,
     kills: 0,
     leaked: 0,
     leakedBy: {},
@@ -206,9 +207,12 @@ function die(s: GameState, b: Battle, e: Enemy, sp: Spell | null): void {
   b.kills++;
   const d = ENEMIES[e.kind];
   let gold = d.gold;
-  if (sp && sp.gild > 0 && battleRng(s, b, 1) < sp.gild) gold++;
-  if (sp && sp.leech > 0 && battleRng(s, b, 2) < sp.leech) s.hp = Math.min(s.maxHp, s.hp + 1);
   b.goldEarned += gold;
+  if (sp && sp.gild > 0 && battleRng(s, b, 1) < sp.gild) {
+    gold++;
+    b.gilded++;
+  }
+  if (sp && sp.leech > 0 && battleRng(s, b, 2) < sp.leech) s.hp = Math.min(s.maxHp, s.hp + 1);
   b.fx.push({ type: 'kill', x: e.x, y: e.y, kind: e.kind, gold });
   if (e.kind === 'splitter') for (const dx of [-0.04, 0.04]) spawn(s, b, 'imp', Math.min(0.95, Math.max(0.05, e.x + dx)), e.y);
 }

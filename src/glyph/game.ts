@@ -14,6 +14,8 @@ import {
   MOD,
   MODS,
   SLOW_TIME,
+  bountyCap,
+  burnDps,
   empowerCost,
   rerollCost,
   RULES_VERSION,
@@ -36,6 +38,7 @@ import {
   waveFoes,
   warnings,
   type Action,
+  type Element,
   type EnemyKind,
   type GameState,
   type Rune,
@@ -203,9 +206,14 @@ export class Game {
     }
     const gained = s.gold - this.goldBefore;
     const interest = Math.min(3, Math.floor(this.goldBefore / 5));
-    const parts = [`${gained - interest - b.goldEarned} pay`, interest ? `${interest} interest` : '', b.goldEarned ? `${b.goldEarned} bounty` : ''].filter(Boolean);
-    const through = Object.entries(b.leakedBy).map(([k, n]) => `${ENEMIES[k as keyof typeof ENEMIES].name}${n! > 1 ? ` ×${n}` : ''}`).join(', ');
-    this.banner(`Wave ${s.wave - 1} cleared`, `+${gained}● (${parts.join(' + ')})${b.leaked ? ` · −${b.leaked} tower: ${through} got through` : ''}`);
+    const bounty = Math.min(b.goldEarned, bountyCap(s.wave - 1));
+    const parts = [
+      `${gained - interest - bounty - b.gilded} pay`,
+      interest ? `${interest} interest` : '',
+      bounty ? `${bounty} bounty${b.goldEarned > bounty ? ' (max)' : ''}` : '',
+      b.gilded ? `${b.gilded} gild` : '',
+    ].filter(Boolean);
+    this.banner(`Wave ${s.wave - 1} cleared`, `+${gained}● (${parts.join(' + ')})${b.leaked ? ` · −${b.leaked} tower: ${leakText(b.leakedBy)}` : ''}`);
     this.sfx.levelUp();
     this.render();
   }
@@ -393,10 +401,16 @@ export class Game {
         const had = sp ? warnings(sp, foes).map((w) => w.text) : [];
         const bad = warnings(pv, foes).find((w) => w.level === 2 && !had.includes(w.text));
         const d = Math.round(after - before);
-        extra = `<span class="up">here → ${Math.round(after)} dps${sp ? ` (${d >= 0 ? '+' : ''}${d})` : ''}${bad ? ' <span class="bad">⚠</span>' : ''}</span>`;
+        // A slow adds no damage but keeps foes under fire longer: say how much.
+        const slow = pv.slow > (sp?.slow ?? 0) ? pc(slowGain(pv)) : '';
+        const warnMark = bad ? ' <span class="bad">⚠</span>' : '';
+        extra =
+          slow && sp && d === 0
+            ? `<span class="up">❄ +${slow} longer in range${warnMark}</span>`
+            : `<span class="up">here → ${Math.round(after)} dps${sp ? ` (${d >= 0 ? '+' : ''}${d})` : ''}${slow ? ` ❄+${slow}` : ''}${warnMark}</span>`;
       } else if (warn) extra = `<span class="warn${warn.level === 2 ? ' bad' : ''}">⚠ ${warn.text}</span>`;
       const el = $(`row${row}`);
-      el.querySelector('.sum')!.innerHTML = rowSummary(sp, extra);
+      el.querySelector('.sum')!.innerHTML = rowSummary(sp, extra, s.loom[row]);
       el.classList.toggle('pv', !!pv);
     }
     if (!battle)
@@ -426,25 +440,34 @@ export class Game {
       const empty = s.loom.findIndex((row) => !row[0]);
       tip.innerHTML = `<div class="txt">${
         s.wave === 1 && this.actions.length < 3
-          ? 'Tap a rune in the shop to buy it. Each row casts one spell: a <b>caster</b> on the left, then up to 3 <b>modifiers</b>, read left → right.'
+          ? 'Tap a rune in the shop, then <b>Buy</b> (or tap the slot it goes in). Each row casts one spell: a <b>caster</b> on the left, then up to 3 <b>modifiers</b>.'
           : empty >= 0 && s.wave > 1
             ? `Row ${empty + 1} has no caster: it stays silent. Three identical runes merge into a stronger one.`
             : s.wave <= 3
               ? 'Tap a spell (the text beside a row) to see what each rune adds and how it fares against the next wave.'
-              : 'Drag runes to rearrange. Order matters: <b>Echo</b> repeats only what is to its left. Three of a kind merge.'
+              : 'Drag runes to rearrange. Order matters for <b>Echo</b> (it repeats what is to its left) and for the element (the last one counts). Three of a kind merge.'
       }</div>`;
       return;
     }
     const def = RUNES[r.id];
     const kind = def.kind === 'caster' ? 'caster' : 'modifier';
     const name = `<b>${def.name} ${ROMAN[r.tier]}</b> <span>${kind}</span>`;
+    // What the next tier brings (merging or empowering).
+    const next = r.tier < 3 ? `${ROMAN[r.tier + 1]}: ${def.stat(r.tier + 1)}` : '';
     const div = document.createElement('div');
     div.className = 'txt';
     if (this.sel.area === 'shop') {
-      // The merged rune lands where the first copy is; a second copy in another row leaves it.
-      const spots = this.where(r).slice(0, 2);
-      const loses = spots[1] && spots[1] !== 'bench' && spots[1] !== spots[0] ? ` <span class="bad">⚠ ${spots[1]} loses its ${def.name}</span>` : '';
-      const merge = r.tier < 3 && this.owned(r) >= 2 ? ` <span class="star">★ merges with yours (${spots.join(', ')}) → ${ROMAN[r.tier + 1]}</span>${loses}` : '';
+      // Would buying it merge a rune out of a row? (Buy asks first.)
+      let loses = '';
+      if (r.tier < 3 && this.owned(r) >= 2) {
+        const t = JSON.parse(JSON.stringify(s)) as GameState;
+        const a: Action = { t: 'buy', i: this.sel.i };
+        if (apply(t, a)) {
+          const { lost } = this.mergeEffect(s, t, a);
+          if (lost.length) loses = ` <span class="bad">⚠ ${lost.map((l) => `row ${l.row + 1}`).join(', ')} would lose its ${def.name}</span>`;
+        }
+      }
+      const merge = r.tier < 3 && this.owned(r) >= 2 ? ` <span class="star">★ merges with yours (${this.where(r).slice(0, 2).join(', ')}) → ${next}</span>${loses}` : '';
       div.innerHTML = `${name} · ${price(r)}●${merge}<br>${def.text(r.tier)}`;
       const b = document.createElement('button');
       b.className = 'primary';
@@ -456,7 +479,7 @@ export class Game {
     } else {
       const n = this.owned(r);
       const set = r.tier < 3 && n > 1 ? ` · <span class="star">${n}/3 for ${ROMAN[r.tier + 1]}</span>` : '';
-      div.innerHTML = `${name}${set}<br>${def.text(r.tier)}`;
+      div.innerHTML = `${name}${set}${next ? ` · <span class="nx">${next}</span>` : ''}<br>${def.text(r.tier)}`;
       const b = document.createElement('button');
       b.className = 'secondary';
       b.textContent = `Sell +${sellValue(r)}●`;
@@ -475,10 +498,7 @@ export class Game {
         e.disabled = cost > s.gold;
         e.setAttribute('aria-label', `Empower to ${ROMAN[r.tier + 1]} for ${cost} gold`);
         e.onclick = () => {
-          if (this.act({ t: 'empower', at })) {
-            this.sfx.evolve();
-            this.banner(`${def.name} ${ROMAN[r.tier + 1]}!`, `empowered for ${cost}●`);
-          }
+          this.commit({ t: 'empower', at });
           this.render();
         };
         btns.unshift(e);
@@ -643,7 +663,7 @@ export class Game {
     if (!sel) {
       this.sel = r ? at : null;
     } else if (same(sel, at)) {
-      if (at.area === 'shop') this.buy(at.i);
+      // A second tap only deselects; buying takes the Buy button (or a tap on a slot).
       this.sel = null;
     } else if (at.area === 'shop' || (r && sel.area === 'shop')) {
       this.sel = r ? at : null;
@@ -668,9 +688,9 @@ export class Game {
         toast('Not enough gold');
         return false;
       }
-      return this.buyAt(from.i, to);
+      return this.commit({ t: 'buy', i: from.i, to });
     }
-    const ok = this.act({ t: 'move', from, to });
+    const ok = this.commit({ t: 'move', from, to });
     if (!ok) {
       const other = get(this.s, to);
       if (other && !fits(other, from)) toast("They can't swap: casters and modifiers have their own slots");
@@ -685,41 +705,127 @@ export class Game {
       toast('Not enough gold');
       return;
     }
-    if (!this.buyAt(i)) toast('No room: sell something or make space on the bench');
+    if (!this.commit({ t: 'buy', i })) toast('No room: sell something or make space on the bench');
     this.sel = null;
     this.render();
   }
 
-  private buyAt(i: number, to?: Slot): boolean {
-    const before = this.owns().length;
-    const had = this.owns();
-    const ok = this.act({ t: 'buy', i, to });
-    if (ok) {
-      this.sfx.pickup();
-      // A merge happened only if we now own fewer runes than before + the one bought.
-      if (this.owns().length < before + 1) {
-        // The merged rune(s): owned now, not before; the highest tier last.
-        const made = this.owns().filter((k) => {
-          const i = had.indexOf(k);
-          if (i < 0) return true;
-          had.splice(i, 1);
-          return false;
-        });
-        this.merged(made.map((k) => ({ id: k.split(':')[0], tier: Number(k.split(':')[1]) }) as Rune).filter((r) => r.tier > 1).sort((a, b) => a.tier - b.tier));
+  /** "row 2 (Nova)" */
+  private rowName(row: number, loom = this.s.loom): string {
+    const c = loom[row][0];
+    return `row ${row + 1}${c ? ` (${RUNES[c.id].name})` : ''}`;
+  }
+
+  /**
+   * What a merge would do to the rows: loom runes it would pull out (other
+   * than the ones the action itself moves) and where the merged rune lands.
+   */
+  private mergeEffect(before: GameState, after: GameState, a: Action): { lost: { row: number; rune: Rune }[]; landed: { row: number; rune: Rune } | null } {
+    const touched = a.t === 'move' ? [a.from, a.to] : a.t === 'empower' ? [a.at] : [];
+    const lost: { row: number; rune: Rune }[] = [];
+    let landed: { row: number; rune: Rune } | null = null;
+    before.loom.forEach((cells, row) =>
+      cells.forEach((x, col) => {
+        const y = after.loom[row][col];
+        if (x && !y && !touched.some((at) => at.area === 'loom' && at.row === row && at.col === col)) lost.push({ row, rune: x });
+        if (y && y.tier > 1 && (!x || (x.id === y.id && y.tier > x.tier))) landed = { row, rune: y };
+      }),
+    );
+    return { lost, landed };
+  }
+
+  /** Apply a buy, move or empower; first ask if a merge would pull a rune out of a row. */
+  private commit(a: Action): boolean {
+    if (a.t === 'buy' || a.t === 'move' || a.t === 'empower') {
+      const t = JSON.parse(JSON.stringify(this.s)) as GameState;
+      if (!apply(t, a)) return false;
+      const { lost } = this.mergeEffect(this.s, t, a);
+      if (lost.length) {
+        this.confirmMerge(a, t, lost);
+        return true;
       }
     }
-    return ok;
+    return this.run(a);
+  }
+
+  private confirmMerge(a: Action, after: GameState, lost: { row: number; rune: Rune }[]): void {
+    const r = lost[0].rune;
+    const name = RUNES[r.id].name;
+    const up = `${name} ${ROMAN[r.tier + 1]}`;
+    // Where it lands: the loom cell that went up a tier, else the bench.
+    let land = 'on the bench';
+    after.loom.forEach((cells, row) =>
+      cells.forEach((y, col) => {
+        const x = this.s.loom[row][col];
+        if (y && y.id === r.id && y.tier === r.tier + 1 && (!x || x.tier !== y.tier)) land = `in ${this.rowName(row)}`;
+      }),
+    );
+    const rows = lost.map((l) => this.rowName(l.row));
+    const k = JSON.parse(JSON.stringify(this.s)) as GameState;
+    const keep = { ...a, keep: true } as Action;
+    const canKeep = apply(k, keep);
+    // Where a kept new rune goes (a bought one may slot into a row).
+    let goes = 'to the bench';
+    k.loom.forEach((cells, row) => cells.forEach((y, col) => y && !this.s.loom[row][col] && (goes = `into ${this.rowName(row)}`)));
+    const done = (x: Action) => () => {
+      closeOverlay();
+      this.sel = null;
+      this.run(x);
+      this.render();
+    };
+    showCard(
+      `<h2>Merge into ${up}?</h2>
+       <p>Three ${name} ${ROMAN[r.tier]} make one ${up}, which lands ${land}. The ${name} in <b>${rows.join(' and ')}</b> joins it, so <b class="bad">that row loses it</b>.</p>
+       ${canKeep ? `<p>Or keep them apart: no merge for now${a.t === 'buy' ? `, the new ${name} goes ${goes}` : ''}. They merge when you next move one of them.</p>` : ''}`,
+      [
+        { label: `Merge → ${up}`, primary: true, onClick: done(a) },
+        ...(canKeep ? [{ label: 'Keep them apart', onClick: done(keep) }] : []),
+        { label: 'Cancel', onClick: closeOverlay },
+      ],
+    );
+  }
+
+  /** Apply an action and say what any merge did (and to which rows). */
+  private run(a: Action): boolean {
+    const before = JSON.parse(JSON.stringify({ loom: this.s.loom, bench: this.s.bench })) as GameState;
+    const had = this.owns();
+    if (!this.act(a)) return false;
+    if (a.t === 'buy') this.sfx.pickup();
+    const now = this.owns();
+    if (now.length >= had.length + (a.t === 'buy' ? 1 : 0)) {
+      if (a.t === 'empower') {
+        const r = get(this.s, a.at)!;
+        this.sfx.evolve();
+        this.banner(`${RUNES[r.id].name} ${ROMAN[r.tier]}!`, `empowered for ${empowerCost({ id: r.id, tier: (r.tier - 1) as Rune['tier'] })}●`);
+      }
+      return true;
+    }
+    // Merged: the new rune(s) are those owned now and not before; the highest tier last.
+    const left = [...had];
+    const made = now
+      .filter((k) => {
+        const i = left.indexOf(k);
+        if (i < 0) return true;
+        left.splice(i, 1);
+        return false;
+      })
+      .map((k) => ({ id: k.split(':')[0], tier: Number(k.split(':')[1]) }) as Rune)
+      .filter((r) => r.tier > 1)
+      .sort((x, y) => x.tier - y.tier);
+    const r = made[made.length - 1];
+    const { lost, landed } = this.mergeEffect(before, this.s, a);
+    const sub = lost.length
+      ? `${lost.map((l) => this.rowName(l.row, before.loom)).join(' and ')} gave up its ${RUNES[lost[0].rune.id].name}: check your rows`
+      : landed
+        ? `three became one, in ${this.rowName(landed.row)}`
+        : 'three became one, on the bench';
+    this.sfx.evolve();
+    this.banner(r ? `${RUNES[r.id].name} ${ROMAN[r.tier]}!` : 'Runes merged', sub);
+    return true;
   }
 
   private owns(): string[] {
     return [...this.s.loom.flat(), ...this.s.bench].filter((r): r is Rune => !!r).map((r) => `${r.id}:${r.tier}`);
-  }
-
-
-  private merged(made: Rune[]): void {
-    this.sfx.evolve();
-    const r = made[made.length - 1];
-    this.banner(r ? `${RUNES[r.id].name} ${ROMAN[r.tier]}!` : 'Runes merged', 'three became one: check your rows');
   }
 
   // ---- cards ----
@@ -765,11 +871,11 @@ export class Game {
        <ul>
         <li>Foes march down the lane toward your <b>tower</b>. Each one that reaches it costs tower HP. Survive <b>15 waves</b>.</li>
         <li>Your <b>loom</b> has three rows. Each row is one spell: a <b>caster</b> in the first slot, then up to three <b>modifiers</b>. Spells fire on their own.</li>
-        <li>Modifiers apply <b>left to right</b>. <b>Echo</b> repeats the spell as built so far, so what sits after it isn't echoed.</li>
+        <li>Order matters in two ways: <b>Echo</b> repeats the spell as built so far (what sits after it isn't echoed), and the <b>last</b> Fire, Frost or Storm sets the element of the hits (an earlier one's burn, slow or arcs still work). Other modifiers stack the same in any order.</li>
         <li>Buy runes in the shop, drag them around, or tap one and then tap where it goes. Drop on the bar above the bench to sell.</li>
-        <li><b>Three identical runes merge</b> into the next tier (I → II → III). The ★ in the shop marks a rune that completes a set.</li>
+        <li><b>Three identical runes merge</b> into the next tier (I → II → III). The ★ in the shop marks a rune that completes a set. If a merge would take a rune out of a row, you're asked first and can keep them apart.</li>
         <li>Or <b>empower</b> one: tap a rune you own and press <b>II ↑</b> / <b>III ↑</b> to raise it a tier for gold (pricier than finding copies, but sure).</li>
-        <li>Between waves you earn 5 gold, more in later waves, plus <b>interest</b>: +1 per 5 gold banked (max +3). <b>Freeze</b> keeps the shop for next wave. Rerolls get dearer the more you use them in one wave.</li>
+        <li>Between waves you earn 5 gold, more in later waves, plus <b>interest</b>: +1 per 5 gold banked (max +3), plus <b>bounty</b>: the gold tougher foes and bosses drop when slain (at most ${bountyCap(1)} + half the wave number per wave; Gild's extra gold always counts). <b>Freeze</b> keeps the shop for next wave. Rerolls get dearer the more you use them in one wave.</li>
         <li>Armor eats a flat amount of every hit, so big hits beat many small ones. Some foes resist elements. Tap the wave preview to see them.</li>
         <li><b>Tap a spell</b> (the text beside its row) for a rune-by-rune breakdown and how it hits the next wave. <b style="color:#ffb86b">⚠</b> marks foes it struggles with.</li>
        </ul>`,
@@ -806,13 +912,24 @@ export class Game {
             ? `<span class="bad">immune to ${sp.element}</span>`
             : [m.resist !== 1 ? `${sp.element} ×${m.resist}` : '', m.armor ? `armor ${m.armor}` : ''].filter(Boolean).join(', ');
         const cls = m.ratio < 0.25 ? 'bad' : m.ratio < 0.6 ? 'warn' : 'good';
-        return `<div><i style="background:hsl(${d.hue},85%,55%)"></i>${d.name}${m.count > 1 ? ` ×${m.count}` : ''} · <span class="${cls}">${r0(m.perHit)} a hit</span>${note ? ` · ${note}` : ''}</div>`;
+        const burn = sp.burn > 0 && m.canHit && m.resist > 0 ? (m.burns ? ` + burns ${r0(sp.burn)}/s` : ' · <span class="warn">no burn</span>') : '';
+        return `<div><i style="background:hsl(${d.hue},85%,55%)"></i>${d.name}${m.count > 1 ? ` ×${m.count}` : ''} · <span class="${cls}">${r0(m.perHit)} a hit</span>${burn}${note ? ` · ${note}` : ''}</div>`;
       })
       .join('');
     const dur = sp.cooldown.toFixed(2);
+    // Burn's share of the estimate, and the foes of this wave it can't touch.
+    const burnShare = Math.round(burnDps(sp));
+    // (Fire hits on a fire-immune foe do nothing at all: the foe list says so.)
+    const unburnt = sp.burn > 0 && sp.element !== 'fire' ? this.foes().filter((f) => (ENEMIES[f.kind].resist.fire ?? 1) === 0) : [];
+    const burnNote = burnShare
+      ? ` (${burnShare} of it burn${unburnt.length ? `; <span class="warn">${unburnt.map((f) => `${ENEMIES[f.kind].name}s`).join(', ')} can't burn: ~${Math.round(spellDps(sp, true, false))} against them</span>` : ''})`
+      : '';
+    const els = rowElements(cells);
+    const elNote = els.length > 1 ? ` · hits are <b>${sp.element}</b> (the last element)` : '';
+    const slowNote = sp.slow ? ` · slowed foes stay ~${pc(slowGain(sp))} longer in range` : '';
     showCard(
-      `<h2>${spellName(sp)}</h2>
-       <p><b>${r0(sp.dmg)}</b> dmg${sp.caster === 'nova' ? ' to every foe in the blast' : sp.count > 1 ? ` × ${sp.count} ${UNIT[sp.caster]}` : ''} · every <b>${dur}s</b>${sp.echoes.length ? ` · then ${sp.echoes.length} echo${sp.echoes.length > 1 ? 'es' : ''}` : ''} · ~<b>${Math.round(spellDps(sp))}</b> dps in a crowd, ~${Math.round(spellDps(sp, false))} on a single foe</p>
+      `<h2>${spellName(sp, cells)}</h2>
+       <p><b>${r0(sp.dmg)}</b> dmg${sp.caster === 'nova' ? ' to every foe in the blast' : sp.count > 1 ? ` × ${sp.count} ${UNIT[sp.caster]}` : ''} · every <b>${dur}s</b>${sp.echoes.length ? ` · then ${sp.echoes.length} echo${sp.echoes.length > 1 ? 'es' : ''}` : ''}${elNote} · ~<b>${Math.round(spellDps(sp))}</b> dps in a crowd${burnNote}, ~${Math.round(spellDps(sp, false))} on a single foe${slowNote}</p>
        <div class="scroll">
        <div class="steps">${steps.join('')}</div>
        <p class="sub">Against wave ${this.s.wave}</p>
@@ -826,8 +943,10 @@ export class Game {
 
   private showRunes(): void {
     const ids = [...CASTERS, ...MODS];
-    const rows = ids.map((id) => `<canvas data-rune="${id}"></canvas><div><b>${RUNES[id].name}</b> · ${RUNES[id].cost}●<br>${RUNES[id].text(1)}</div>`).join('');
-    showCard(`<h2>Runes</h2><div class="scroll"><div class="runes">${rows}</div></div>`, [{ label: 'Back', primary: true, onClick: () => this.showMenu() }]);
+    const rows = ids
+      .map((id) => `<canvas data-rune="${id}"></canvas><div><b>${RUNES[id].name}</b> · ${RUNES[id].cost}●<br>${RUNES[id].text(1)}<br><span class="tiers">I ${RUNES[id].stat(1)} · II ${RUNES[id].stat(2)} · III ${RUNES[id].stat(3)}</span></div>`)
+      .join('');
+    showCard(`<h2>Runes</h2><p>Merging or empowering raises a tier (I → II → III):</p><div class="scroll"><div class="runes">${rows}</div></div>`, [{ label: 'Back', primary: true, onClick: () => this.showMenu() }]);
     for (const c of document.querySelectorAll<HTMLCanvasElement>('canvas[data-rune]')) drawSigil(c, { id: c.dataset.rune as Rune['id'], tier: 1 }, 40);
   }
 
@@ -854,13 +973,18 @@ export class Game {
   private showEnd(): void {
     const won = this.s.phase === 'won';
     const spells = this.s.loom
-      .map((row) => compileRow(row))
-      .filter((x): x is Spell => !!x)
-      .map((sp) => `<li>${spellName(sp)} · ${Math.round(spellDps(sp))} dps</li>`)
+      .map((row) => {
+        const sp = compileRow(row);
+        return sp ? `<li>${spellName(sp, row)} · ${Math.round(spellDps(sp))} dps</li>` : '';
+      })
       .join('');
+    // What got through on the last wave.
+    const b = this.s.battle;
+    const through = b && b.leaked ? `<p class="through">Wave ${this.s.wave}: <b>−${b.leaked} tower</b> from ${leakText(b.leakedBy)}.</p>` : '';
     showCard(
       `<h2>${won ? 'The Lich is unmade' : 'The tower falls'}</h2>
        <p>${won ? `All ${WAVES} waves held.` : `Fell on wave ${this.s.wave} of ${WAVES}.`} ${this.s.totalKills} foes slain.</p>
+       ${through}
        <ul>${spells}</ul>
        ${this.daily ? `<p><b>Daily run · ${prettyDay(this.daily)}</b><br>${this.dailyResult?.improved ? 'New best for today!' : `Today's best: ${loadDaily(store, this.daily)?.label ?? '—'}`}</p>` : ''}`,
       [
@@ -882,21 +1006,45 @@ export class Game {
   }
 }
 
-function spellName(sp: Spell): string {
-  const el = sp.element === 'arcane' ? '' : sp.element[0].toUpperCase() + sp.element.slice(1) + ' ';
-  return `${el}${RUNES[sp.caster].name}`;
+/** The elements a row's modifiers bring, in order (the last one is what its hits are). */
+function rowElements(cells: (Rune | null)[]): Element[] {
+  const out: Element[] = [];
+  for (const r of cells.slice(1)) if (r && (r.id === 'fire' || r.id === 'frost' || r.id === 'storm') && !out.includes(r.id)) out.push(r.id);
+  return out;
 }
 
-function rowSummary(sp: Spell | null, extra = ''): string {
+const cap = (x: string) => x[0].toUpperCase() + x.slice(1);
+
+/** "Bolt", "Fire Bolt", or with two elements "Fire-Storm Bolt": the last word is the element its hits have. */
+function spellName(sp: Spell, cells?: (Rune | null)[]): string {
+  const els = cells ? rowElements(cells).filter((e) => e !== sp.element) : [];
+  if (sp.element !== 'arcane') els.push(sp.element);
+  return `${els.map(cap).join('-')}${els.length ? ' ' : ''}${RUNES[sp.caster].name}`;
+}
+
+/** How much longer a slow keeps the foes it hits in range (renewed every cast while it lasts). */
+function slowGain(sp: Spell): number {
+  return 1 / (1 - sp.slow * Math.min(1, SLOW_TIME / sp.cooldown)) - 1;
+}
+
+function rowSummary(sp: Spell | null, extra = '', cells?: (Rune | null)[]): string {
   if (!sp) return `<b style="color:var(--muted)">— silent —</b>${extra || '<div>needs a caster</div>'}`;
   const tags: string[] = [];
   if (sp.count > 1) tags.push(`×${sp.count}`);
   if (sp.chain) tags.push(`arcs ${sp.chain}`);
   if (sp.echoes.length) tags.push(`echo ×${sp.echoes.length}`);
-  if (sp.slow) tags.push('slows');
+  if (sp.slow) tags.push(`slows ${pc(sp.slow)}`);
   if (sp.burn) tags.push('burns');
   // The name gets its own line; tags ride after the dps so nothing important is cut off.
-  return `<b>${spellName(sp)}</b><div class="dl"><span class="dps">${Math.round(spellDps(sp))} dps</span> · ${sp.cooldown.toFixed(1)}s${tags.length ? ` · ${tags.join(' · ')}` : ''}</div>${extra}`;
+  return `<b>${spellName(sp, cells)}</b><div class="dl"><span class="dps">${Math.round(spellDps(sp))} dps</span> · ${sp.cooldown.toFixed(1)}s${tags.length ? ` · ${tags.join(' · ')}` : ''}</div>${extra}`;
+}
+
+/** "3 Drakes (−9), Imp (−1)": what got through, worst first. */
+function leakText(by: Partial<Record<EnemyKind, number>>): string {
+  return (Object.entries(by) as [EnemyKind, number][])
+    .sort((a, b) => b[1] * ENEMIES[b[0]].leak - a[1] * ENEMIES[a[0]].leak)
+    .map(([k, n]) => `${n > 1 ? `${n} ${ENEMIES[k].name}s` : ENEMIES[k].name} (−${n * ENEMIES[k].leak})`)
+    .join(', ');
 }
 
 const r0 = (x: number) => String(Math.round(x));
@@ -918,7 +1066,7 @@ function spellDiff(a: Spell, b: Spell): string {
   if (b.area > a.area * 1.01 && b.count === a.count) out.push(b.caster === 'nova' ? `blast ${pc(b.area / a.area - 1)} wider` : 'bigger hits');
   if (Math.abs(b.cooldown - a.cooldown) > 0.005) out.push(`every ${a.cooldown.toFixed(2)}s → <b>${b.cooldown.toFixed(2)}s</b>`);
   if (b.burn !== a.burn) out.push(`burns <b>${r0(b.burn)}/s</b> for 3s`);
-  if (b.slow !== a.slow) out.push(`slows <b>${pc(b.slow)}</b> for ${SLOW_TIME}s`);
+  if (b.slow !== a.slow) out.push(`slows <b>${pc(b.slow)}</b> for ${SLOW_TIME}s (foes it hits stay ~${pc(slowGain(b))} longer in range)`);
   if (b.chain !== a.chain) out.push(`arcs to <b>${b.chain}</b> more foes at ${pc(MOD.stormDmg)}`);
   if (b.pierce !== a.pierce && (b.caster === 'bolt' || b.caster === 'orb')) out.push(`passes through <b>${b.pierce}</b> foes`);
   if (b.shred !== a.shred) out.push(`ignores <b>${b.shred}</b> armor`);

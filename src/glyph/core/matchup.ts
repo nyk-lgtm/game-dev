@@ -19,6 +19,8 @@ export interface FoeMatch {
   resist: number;
   /** Armor left after the spell's shred. */
   armor: number;
+  /** The spell burns and this foe can burn. */
+  burns: boolean;
 }
 
 export interface WaveFoe {
@@ -52,6 +54,7 @@ export function matchups(sp: Spell, foes: WaveFoe[]): FoeMatch[] {
       canHit: ok,
       resist: d.resist[sp.element] ?? 1,
       armor: Math.max(0, d.armor - sp.shred),
+      burns: ok && sp.burn > 0 && (d.resist.fire ?? 1) > 0,
     };
   });
 }
@@ -75,6 +78,8 @@ export function warnings(sp: Spell, foes: WaveFoe[]): Warning[] {
     else if (m.resist === 0) out.push({ level: 2, text: `${name} immune to ${sp.element}`, kind: m.kind });
     else if (m.resist <= 0.5) out.push({ level: m.resist <= 0.25 ? 2 : 1, text: `${name} ${m.count > 1 ? 'resist' : 'resists'} ${sp.element}`, kind: m.kind });
     else if (m.ratio < 0.5) out.push({ level: m.ratio < 0.25 ? 2 : 1, text: `${name}: armor eats ${Math.round((1 - m.ratio) * 100)}%`, kind: m.kind });
+    // Hits of another element still land, but the burn doesn't.
+    else if (sp.burn > 0 && !m.burns) out.push({ level: 1, text: `${name} can't burn`, kind: m.kind });
   }
   return out.sort((a, b) => b.level - a.level);
 }

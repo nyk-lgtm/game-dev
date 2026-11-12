@@ -8,7 +8,11 @@ import {
   rerollCost,
   TIER_MULT,
   buy,
+  bountyCap,
+  burnDps,
   casterBase,
+  hitDps,
+  spellDps,
   compileRow,
   fits,
   income,
@@ -41,6 +45,9 @@ function blank(seed = 1): GameState {
   s.gold = 100;
   return s;
 }
+
+/** A spell with its numbers rounded (multiplication order changes the last bits). */
+const rounded = (sp: object) => JSON.parse(JSON.stringify(sp, (_, v) => (typeof v === 'number' ? Number(v.toFixed(9)) : v)));
 
 function shopOf(s: GameState, ...runes: Rune[]) {
   s.shop = runes.map((rune) => ({ rune, sold: false }));
@@ -81,19 +88,33 @@ describe('compileRow', () => {
     expect(compileRow([R('bolt'), R('gild', 2), R('leech', 3), null])!).toMatchObject({ gild: MOD.gild(2), leech: MOD.leech(3) });
   });
 
-  it('reads modifiers left to right: fire after heavy burns hotter, last element wins', () => {
+  it('order only decides the element (last wins) and what echoes copy; burn follows the finished hit', () => {
     const heavyFire = compileRow([R('bolt'), R('heavy'), R('fire'), null])!;
     const fireHeavy = compileRow([R('bolt'), R('fire'), R('heavy'), null])!;
-    // Same hit either way (multiplication commutes)...
-    expect(heavyFire.dmg).toBeCloseTo(fireHeavy.dmg);
-    // ...but the burn is set from the hit as built when fire is read.
-    expect(heavyFire.burn).toBeGreaterThan(fireHeavy.burn);
+    expect(rounded(heavyFire)).toEqual(rounded(fireHeavy));
     expect(heavyFire.burn).toBeCloseTo(casterBase('bolt').dmg * MOD.heavyDmg(1) * MOD.fireDmg * MOD.fireBurn(1));
+    // The playtest exploit: Fire before Split burned with the whole pre-split hit on every projectile.
+    const perms = [
+      [R('fire', 2), R('haste'), R('split', 2)],
+      [R('split', 2), R('haste'), R('fire', 2)],
+      [R('haste'), R('split', 2), R('fire', 2)],
+    ].map((mods) => compileRow([R('bolt', 3), ...mods])!);
+    for (const sp of perms) expect(rounded(sp)).toEqual(rounded(perms[0]));
+    expect(perms[0].burn).toBeCloseTo(perms[0].dmg * MOD.fireBurn(2));
     expect(compileRow([R('bolt'), R('fire'), R('frost'), null])!.element).toBe('frost');
     expect(compileRow([R('bolt'), R('frost'), R('fire'), null])!.element).toBe('fire');
     // Burns don't stack: a second fire keeps the hotter burn.
-    const ff = compileRow([R('bolt'), R('fire'), R('fire'), null])!;
-    expect(ff.burn).toBeCloseTo(casterBase('bolt').dmg * MOD.fireDmg * MOD.fireDmg * MOD.fireBurn(1));
+    const ff = compileRow([R('bolt'), R('fire'), R('fire', 2), null])!;
+    expect(ff.burn).toBeCloseTo(casterBase('bolt').dmg * MOD.fireDmg * MOD.fireDmg * MOD.fireBurn(2));
+  });
+
+  it('counts a burn once per foe in the dps estimate (renewed, not stacked; echoes add none)', () => {
+    const fire = compileRow([R('bolt'), R('fire', 3), null, null])!;
+    expect(burnDps(fire, false)).toBeCloseTo(fire.burn);
+    expect(spellDps(fire, false)).toBeCloseTo(fire.dmg / fire.cooldown + fire.burn);
+    const echoed = compileRow([R('bolt'), R('fire', 3), R('echo'), null])!;
+    expect(burnDps(echoed, false)).toBeCloseTo(echoed.burn);
+    expect(spellDps(fire, true, false)).toBeCloseTo(hitDps(fire));
   });
 
   it('echo copies only the spell built to its left', () => {
@@ -164,6 +185,27 @@ describe('mergeAll', () => {
     expect([...s.loom.flat(), ...s.bench].filter(Boolean)).toEqual([R('orb', 3)]);
     s.bench = [R('orb', 3), R('orb', 3), null, null, null, null];
     expect(mergeAll(s)).toEqual([]);
+  });
+
+  it('can be declined: a kept set stays until one of its runes is moved, bought or empowered', () => {
+    const s = blank();
+    s.loom[0] = [R('bolt'), R('fire'), null, null];
+    s.loom[1] = [R('nova'), R('fire'), null, null];
+    shopOf(s, R('fire'), R('haste'), R('fire'));
+    // Kept: it goes to the bench and both rows keep their Fire.
+    expect(buy(s, 0, { area: 'bench', i: 0 }, true)).toEqual([]);
+    expect(s.loom[0][1]).toEqual(R('fire'));
+    expect(s.loom[1][1]).toEqual(R('fire'));
+    expect(s.bench[0]).toEqual(R('fire'));
+    // Unrelated actions leave the set alone.
+    expect(buy(s, 1, { area: 'bench', i: 1 })).toEqual([]);
+    expect(move(s, { area: 'bench', i: 1 }, { area: 'bench', i: 4 })).toBe(true);
+    expect(s.loom[1][1]).toEqual(R('fire'));
+    // Moving one of the three merges them (landing in row 1, taking row 2's).
+    expect(move(s, { area: 'bench', i: 0 }, { area: 'bench', i: 3 })).toBe(true);
+    expect(s.loom[0][1]).toEqual(R('fire', 2));
+    expect(s.loom[1][1]).toBeNull();
+    expect(s.bench[3]).toBeNull();
   });
 });
 
@@ -363,6 +405,11 @@ describe('economy', () => {
     expect(income(s, 0)).toBe(8);
     s.wave = 6;
     expect(income(s, 0)).toBe(10);
+    // Bounty is capped (late waves drop a lot of it); Gild's gold isn't.
+    s.wave = 12;
+    expect(bountyCap(12)).toBe(12);
+    expect(income(s, 30)).toBe(5 + 4 + 3 + 12);
+    expect(income(s, 30, 4)).toBe(5 + 4 + 3 + 12 + 4);
     // Paid out at the end of a battle.
     const g = newGame(2);
     g.gold = 10;

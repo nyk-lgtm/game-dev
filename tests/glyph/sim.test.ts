@@ -118,7 +118,11 @@ describe('replay encoding', () => {
     }
     expect(() => decode('X')).toThrow();
     expect(() => decode('ML00')).toThrow();
-    expect(RULES_VERSION).toBe(2);
+    expect(RULES_VERSION).toBe(3);
+    expect(decode('B2b0k')).toEqual({ t: 'buy', i: 2, to: { area: 'bench', i: 0 }, keep: true });
+    expect(encode({ t: 'move', from: slots[0], to: slots[2], keep: true })).toBe('ML00b0k');
+    expect(decode('EL01k')).toMatchObject({ t: 'empower', keep: true });
+    expect(() => decode('Rk')).toThrow();
     expect(decode('EL01')).toEqual({ t: 'empower', at: { area: 'loom', row: 0, col: 1 } });
   });
 
@@ -140,9 +144,9 @@ function randomAction(rng: Rng, s: GameState): Action {
   const r = rng.next();
   if (r < 0.35) {
     const i = rng.int(0, s.shop.length - 1);
-    return rng.next() < 0.5 ? { t: 'buy', i } : { t: 'buy', i, to: rng.pick(ALL) };
+    return rng.next() < 0.5 ? { t: 'buy', i, ...(rng.next() < 0.2 ? { keep: true } : {}) } : { t: 'buy', i, to: rng.pick(ALL) };
   }
-  if (r < 0.65) return { t: 'move', from: rng.pick(ALL), to: rng.pick(ALL) };
+  if (r < 0.65) return { t: 'move', from: rng.pick(ALL), to: rng.pick(ALL), ...(rng.next() < 0.1 ? { keep: true } : {}) };
   if (r < 0.72) return { t: 'sell', at: rng.pick(ALL) };
   if (r < 0.82) return { t: 'reroll' };
   if (r < 0.87) return { t: 'freeze' };

@@ -146,9 +146,9 @@ export const W = {
   shred: 0.013,
   // Per-caster trust (set from favor runs in balance.ts, not the row fit).
   bolt: 1,
-  beam: 1.3,
-  nova: 0.85,
-  rain: 1.4,
+  beam: 1,
+  nova: 0.75,
+  rain: 1.1,
   orb: 1.1,
 };
 
