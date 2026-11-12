@@ -35,10 +35,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   - Afterglow: `npx vite-node scripts/afterglow/balance.ts` (bot survival per character).
   - Delve: `npx vite-node scripts/delve/balance.ts`; Nightline: `npx vite-node scripts/nightline/balance.ts`.
   - Glyphwright: `npx vite-node scripts/glyph/balance.ts` (smart bot win rate, deaths per wave).
-  - Summit: `npx vite-node scripts/summit/balance.ts 1000` (greedy bot with chain lookahead, rules v2: floor 1
-    ~98%, floor 2 ~95%, median floor 5, ~14% win all 8); `DRAWS=34,13,…` tries other allotments, `TUNE=mirrors:1`
+  - Summit: `npx vite-node scripts/summit/balance.ts 1000` (greedy bot with chain lookahead, rules v3: floor 1
+    ~98%, floor 2 ~94%, median floor 5, ~14-17% win all 8); `DRAWS=34,13,…` tries other allotments, `TUNE=mirrors:1`
     other charm strengths, and `CHARM=mirror` starts every run holding one charm (the fair way to compare charms:
-    v2 wins 15% with none, ~37-46% Pockets/Flags/Mirror/Joker/Blast, ~25-31% Lantern/Wind/Stride/Momentum).
+    v3 wins 16% with none, ~36-43% Pockets/Flags/Mirror/Joker/Blast, ~27-34% Lantern/Wind/Stride/Momentum).
   - Quarry: `npx vite-node scripts/quarry/balance.ts 300 human` (bot that spots 8% of the common words ≤ 6 letters;
     rules v2: median depth 7, ~32% wins; `PICK=worst` (weakest perks) ~17%; `SEEN=0.05` ~6%; `best` mode 100%);
     `PERKTABLE=1` favors each perk in turn (others weakest-first: all within ~18-33% wins); `TARGETS=`/`WORDS=` try others.
@@ -107,10 +107,13 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 - Summit (src/summit/core): 8 floors; each deal is a hand-drawn layout (layouts.ts: rows as strings in
   half-card steps, ≤ 8 cards across; a card is covered by the next row's cards at x±1) from a seeded 52-card
   deck, plus a draw pile. A card plays if uncovered and one rank from the waste (A-K wraps). Draws are a run-wide
-  supply: each floor adds `DEAL_DRAWS[f]` (34, 13, 9, 8, 9, 8, 8, 7) to what's left; no plays and no draws =
-  run over. Dead draws are softened: a fresh pile never has two of a rank back to back (`declump`), and the
-  `MERCY`-th (3rd) draw in a row without a play swaps in the nearest deeper card that fits an open card.
-  Charm strengths live in `TUNE` (Mirror 2 / Long Stride 3 plays per deal, Flags 1 draw per peak top, Wind 12).
+  supply: each floor adds `DEAL_DRAWS[f]` (34, 14, 11, 11, 10, 9, 8, 8) to what's left, of which at most
+  `TUNE.carry` (15) carry up; no plays and no draws = run over. Every draw goes through `drawStep`: it never
+  turns up the waste's rank (`noRepeat`), and from the `MERCY`-th (3rd) draw in a row without a play it swaps in
+  the nearest deeper card that fits an open card, a plain card before the Joker (`o.noLuck` when none can).
+  Spyglass shows `nextDraws(r, 3)`, which runs the same steps on a copy, so it's exact for draws in a row.
+  Undo keeps cards you have seen face up. Charm strengths live in `TUNE` (Mirror 2 / Long Stride 3 plays per
+  deal, Flags 1 draw per peak top, Wind 12, carry 15); a test checks the charm texts quote them.
   Streaks score 10·n. 13 charms (charms.ts), one of three after each floor (`offersFor`, seeded per floor).
   Actions: `P<slot>`, `D`, `B<slot>` (Blasting Cap), `U` (Rewind: snapshots in `hist`), `C<charm>`, `X` give up;
   `replay(seed, a)`; `startAt(seed, floor, charms)` for tests. Tools in scripts/summit: `trace.ts <seed>`,

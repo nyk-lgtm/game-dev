@@ -74,8 +74,19 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         Pockets 42%, Mirror 39% (was 79%), Joker/Blast 37%, Lantern/Momentum 31%, Wind 27%, Stride 25% (was 80%),
         Flush 19%, Spyglass 17%, Rewind 16%, Stakes 7% (the bot can't use info or undos, so those read low).
         Peak Flags is the bot's strongest but felt weak to the tester; kept at 1 draw per peak, now marked.
-  - [ ] Next: second playtest. Watch: does the lucky draw feel fair/visible; is floor 1 still too easy for
-        people (34 draws); High Stakes is weak for survival (a score charm).
+  - [x] Second blind playtest (floors 4, 4, 7; "crisp", floors 5-7 "tense in a good way", lucky draw "fair")
+        and fixes (rules v3): draws 34,13,9,8,9,8,8,7 → 34,14,11,11,10,9,8,8 with at most 15 unused draws
+        carried (floor 4 was a cliff after big banks from floors 1-2); a draw never repeats the waste's rank
+        (a 3♣ then 3♥ slipped through refunds/swaps); the lucky draw prefers a plain card over the Joker and
+        says "No card left in the pile fits" when it can't fire; Spyglass shows the real next draws
+        (`nextDraws` simulates the rules); undo keeps seen cards face up (Rewind could peek); texts fixed
+        (Peak Flags gives 1 draw — at 2 the bot wins 61%, far above every other charm, so it stays 1; Mirror
+        "twice per deal"; Stride "three times"; help on the lucky draw and the carry cap); the end card can't
+        be dismissed by tapping beside it (☰ left a dead board), and menu/help "Back" return to a pending end
+        or charm card; Rewind chip lost its duplicate count; the charm card splits floor draws into base +
+        charms. Bot (1000 runs, two seed ranges): floor 1 98%, floor 2 93-95%, median floor 5, 14-17% wins;
+        floor-4 losses 219 → 158-181 per 1000. 34 tests.
+  - [ ] Next: third playtest. Watch: does the 15-draw carry cap feel fair; High Stakes is weak for survival.
 - [ ] **Ninefold** (seeded mini-golf). Milestones:
   - [x] Core: corridor holes on a 6×9 grid, rails, posts, bumpers, sand, water (+1, replay the spot), slopes;
         240 Hz physics, exact replays, 8-stroke pick-up, formula par. Search bot sinks everything (noise-free

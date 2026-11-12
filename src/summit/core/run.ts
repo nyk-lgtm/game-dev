@@ -13,10 +13,10 @@ import { freshDeck, rankGap, type Card } from './cards';
 import { CHARMS, type CharmId } from './charms';
 import { layoutFor, slotsOf } from './layouts';
 
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 export const FLOORS = 8;
 /** New draws added to the pile on each floor, before charms. Unused draws carry over. */
-export const DEAL_DRAWS = [34, 13, 9, 8, 9, 8, 8, 7];
+export const DEAL_DRAWS = [34, 14, 11, 11, 10, 9, 8, 8];
 /** Chance a covered card starts face down, per floor. */
 export const FACE_DOWN = [0, 0.25, 0.45, 0.6, 0.7, 0.8, 0.9, 1];
 /** Charm strengths (an object so balance probes can try other values). */
@@ -29,6 +29,8 @@ export const TUNE = {
   flags: 1,
   /** Fresh draws from Second Wind. */
   wind: 12,
+  /** Most unused draws that carry up to the next floor. */
+  carry: 15,
   /** Extra draws per deal (Lantern). */
   lantern: 1,
   /** Extra draws per deal (Deep Pockets). */
@@ -119,6 +121,8 @@ export interface Outcome {
   won?: boolean;
   /** The mercy rule swapped in a card that fits. */
   lucky?: boolean;
+  /** The mercy rule was due but no card left in the pile fits an open card. */
+  noLuck?: boolean;
   /** A Mirror play (same rank). */
   mirror?: boolean;
   /** Second Wind just blew. */
@@ -300,7 +304,7 @@ function afterRemove(r: Run, o: Outcome): void {
   const bonus = 100 + 50 * (r.floor + 1);
   r.score += bonus;
   r.cleared++;
-  r.carry = unused;
+  r.carry = Math.min(TUNE.carry, unused);
   o.cleared = true;
   o.unused = unused;
   o.bonus = bonus;
@@ -321,18 +325,63 @@ function afterRemove(r: Run, o: Outcome): void {
  * Mercy: if the card about to be drawn fits nothing that's open, swap in the
  * nearest card further down the pile that does. Returns whether it swapped.
  */
-function mercy(r: Run): boolean {
+function mercy(r: Run): 'fits' | 'lucky' | 'none' {
   const d = r.deal;
+  const t = top(d);
   const open = d.slots.filter((s, i) => !s.gone && !isCovered(d, i));
-  const fits = (c: Card) => open.some((s) => fitKind(r, s.card, c) === 'play');
+  const fits = (c: Card) => c.r !== t.r && open.some((s) => fitKind(r, s.card, c) === 'play');
   const k = d.stock.length - 1;
-  if (k < 0 || fits(d.stock[k])) return false;
+  if (k < 0 || fits(d.stock[k])) return 'fits';
+  // The nearest card that fits, a plain one before the Joker.
+  for (const joker of [false, true])
+    for (let j = k - 1; j >= 0; j--)
+      if ((d.stock[j].r === 0) === joker && fits(d.stock[j])) {
+        [d.stock[k], d.stock[j]] = [d.stock[j], d.stock[k]];
+        return 'lucky';
+      }
+  return 'none';
+}
+
+/** A draw never turns up the rank already on the waste: swap in the nearest deeper card that differs. */
+function noRepeat(d: Deal): void {
+  const t = top(d);
+  const k = d.stock.length - 1;
+  if (k < 0 || t.r === 0 || d.stock[k].r !== t.r) return;
   for (let j = k - 1; j >= 0; j--)
-    if (fits(d.stock[j])) {
+    if (d.stock[j].r !== t.r) {
       [d.stock[k], d.stock[j]] = [d.stock[j], d.stock[k]];
-      return true;
+      return;
     }
-  return false;
+}
+
+/** Turns up the next card of the pile (with the no-repeat and mercy rules); the pile must not be empty. */
+function drawStep(r: Run, o?: Outcome): void {
+  const d = r.deal;
+  d.streak = 0;
+  d.suitRun = 0;
+  d.runSuit = -1;
+  d.dry++;
+  noRepeat(d);
+  if (d.dry >= MERCY) {
+    const m = mercy(r);
+    if (o && m === 'lucky') o.lucky = true;
+    if (o && m === 'none') o.noLuck = true;
+  }
+  d.waste.push(d.stock.pop()!);
+}
+
+/**
+ * The next n cards you would turn up drawing n times in a row from here
+ * (Spyglass). Exact unless you play a card in between, which changes the rules' choices.
+ */
+export function nextDraws(r: Run, n: number): Card[] {
+  const sim = { ...r, deal: cloneDeal(r.deal) };
+  const out: Card[] = [];
+  for (let k = 0; k < n && sim.deal.stock.length; k++) {
+    drawStep(sim);
+    out.push(top(sim.deal));
+  }
+  return out;
 }
 
 function checkStuck(r: Run, o: Outcome): void {
@@ -369,6 +418,8 @@ export function act(r: Run, a: string): Outcome | null {
   } else if (a === 'U') {
     if (!(r.undos > 0) || !r.hist.length) return null;
     const s = r.hist.pop()!;
+    // Cards you have seen stay face up: undo takes back moves, not knowledge.
+    s.deal.slots.forEach((q, i) => (q.down &&= d.slots[i].down));
     r.deal = s.deal;
     r.score = s.score;
     r.bestStreak = s.bestStreak;
@@ -377,13 +428,8 @@ export function act(r: Run, a: string): Outcome | null {
   } else if (a === 'D') {
     if (!d.stock.length) return null;
     snap(r);
-    d.streak = 0;
-    d.suitRun = 0;
-    d.runSuit = -1;
-    d.dry++;
     o = { kind: 'draw' };
-    if (d.dry >= MERCY && mercy(r)) o.lucky = true;
-    d.waste.push(d.stock.pop()!);
+    drawStep(r, o);
   } else if (c === 'P' && /^P\d+$/.test(a)) {
     if (!playable(r, n)) return null;
     snap(r);

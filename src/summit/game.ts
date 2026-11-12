@@ -9,6 +9,7 @@ import { randomSeed } from '../shared/rng';
 import { reducedFx } from '../shared/settings';
 import { makeStore } from '../shared/storage';
 import {
+  DEAL_DRAWS,
   FLOORS,
   RANKS,
   RULES_VERSION,
@@ -23,11 +24,13 @@ import {
   isCovered,
   isRed,
   newRun,
+  nextDraws,
   playable,
   playableSlots,
   replay,
   shown,
   top,
+  TUNE,
   type Card,
   type Outcome,
   type Run,
@@ -247,7 +250,8 @@ export class Game {
       }
     } else if (o.kind === 'draw') {
       this.sfx.draw();
-      if (o.lucky) this.msg = '<b>Lucky draw:</b> after 3 draws in a row with no play, the pile always turns up a card that fits.';
+      if (o.lucky) this.msg = '<b>Lucky draw:</b> the 3rd draw in a row without a play (and every one after it) turns up a card that fits, while the pile still has one.';
+      else if (o.noLuck) this.msg = '<span class="warn">No card left in the pile fits an open card</span>, so no lucky draw this time.';
       else if (streakBefore >= 3) this.msg = `Streak of ${streakBefore} ended.`;
     } else if (o.kind === 'blast') {
       this.sfx.blast();
@@ -373,7 +377,8 @@ export class Game {
     $('waste').innerHTML = cardHtml(top(d));
     $('stock').classList.toggle('empty', !d.stock.length);
     $('stockN').textContent = String(d.stock.length);
-    const peek = has(r, 'spyglass') ? d.stock.slice(-3) : [];
+    // What the next three draws in a row would turn up (lucky draws included), next one last.
+    const peek = has(r, 'spyglass') && r.phase === 'play' ? nextDraws(r, 3).reverse() : [];
     $('peek').innerHTML = peek.map((c) => cardHtml(c)).join('');
     // Tools.
     const undo = $('undoBtn') as HTMLButtonElement;
@@ -389,8 +394,8 @@ export class Game {
     $('charmBar').innerHTML = r.charms
       .map((id) => {
         const c = charmDef(id);
-        const left = id === 'mirror' ? d.mirrors : id === 'stride' ? d.strides : id === 'blast' ? d.blasts : id === 'rewind' ? r.undos : null;
-        const spent = (id === 'wind' && r.windUsed) || left === 0;
+        const left = id === 'mirror' ? d.mirrors : id === 'stride' ? d.strides : id === 'blast' ? d.blasts : null;
+        const spent = (id === 'wind' && r.windUsed) || (id === 'rewind' && r.undos <= 0) || left === 0;
         return `<button data-c="${id}" class="${spent ? 'spent' : ''}" aria-label="${c.name}">${c.icon}${left !== null ? `<i>${left}</i>` : ''}</button>`;
       })
       .join('');
@@ -486,7 +491,7 @@ export class Game {
     const owned = r.charms.length ? `<p>Yours: ${r.charms.map((c) => charmDef(c).icon).join(' ')}</p>` : '';
     showCard(
       `<h2>Floor ${r.floor + 1} cleared</h2>${this.climb()}
-       <p>${o?.bonus ? `+${fmt(o.bonus)} points. ` : ''}<b>${plural(r.carry, 'unused draw')}</b> carry up; floor ${r.floor + 2} adds ${freshDraws(next)} more. Pick a charm:</p>
+       <p>${o?.bonus ? `+${fmt(o.bonus)} points. ` : ''}<b>${plural(r.carry, 'unused draw')}</b> carry up${o?.unused !== undefined && o.unused > r.carry ? ` (${o.unused} left, at most ${TUNE.carry} carry)` : ''}; floor ${r.floor + 2} adds ${freshDraws(next)} more${freshDraws(next) !== DEAL_DRAWS[r.floor + 1] ? ` (${DEAL_DRAWS[r.floor + 1]} ${freshDraws(next) > DEAL_DRAWS[r.floor + 1] ? '+' : '−'} ${Math.abs(freshDraws(next) - DEAL_DRAWS[r.floor + 1])} from your charms)` : ''}. Pick a charm:</p>
        <div class="charms">${r.offer
          .map((id) => {
            const c = charmDef(id);
@@ -536,7 +541,15 @@ export class Game {
         { label: this.daily ? 'Play the daily again' : 'Same deals again', onClick: () => this.start(this.r.seed, [], this.daily) },
         { label: 'All games', onClick: () => (location.href = '../') },
       ],
+      false,
     );
+  }
+
+  /** Leave a help or menu card: back to the end or charm card if one is due, else to the board. */
+  private back(): void {
+    if (this.r.phase === 'over') this.showEnd();
+    else if (this.r.phase === 'charm') this.showCharms();
+    else closeOverlay();
   }
 
   showHelp(): void {
@@ -546,11 +559,11 @@ export class Game {
        <p>A solitaire climb: eight deals, each a ridge of card peaks.</p>
        <ul>
          <li><b>Tap a card one higher or lower</b> than the waste card at the bottom to move it there. K and A connect. Only cards with nothing on top can move; those that fit have a <b>gold edge</b>.</li>
-         <li>No fit? <b>Tap the pile</b> to draw a new waste card. Plays in a row make a <b>streak</b> worth 10, 20, 30… points; a draw ends it. After 3 draws in a row with no play, the next draw always fits (if any card in the pile does).</li>
-         <li>Clear every card to climb. <b>Unused draws carry up</b> and each floor adds fewer, so bank them early. No plays and no draws left: the climb ends.</li>
+         <li>No fit? <b>Tap the pile</b> to draw a new waste card. Plays in a row make a <b>streak</b> worth 10, 20, 30… points; a draw ends it. A draw never repeats the waste card’s rank, and the 3rd draw in a row without a play (and each one after) is <b>lucky</b>: it turns up a card that fits, if any card left in the pile does.</li>
+         <li>Clear every card to climb. <b>Unused draws carry up</b> (at most ${TUNE.carry}) and later floors add fewer, so bank some early. No plays and no draws left: the climb ends.</li>
          <li>After each floor pick one of three <b>charms</b>. Higher floors deal more cards face down.</li>
        </ul>`,
-      [{ label: 'Start climbing', primary: true, onClick: closeOverlay }],
+      [{ label: this.r.phase === 'over' ? 'Back' : 'Start climbing', primary: true, onClick: () => this.back() }],
     );
   }
 
@@ -565,7 +578,7 @@ export class Game {
           .join('')}</div>`
       : '<p>No charms yet: you pick one after each floor.</p>';
     showCard(`<h2>Summit${this.daily ? ' · daily' : ''}</h2>${this.climb()}${owned}`, [
-      { label: 'Resume', primary: true, onClick: closeOverlay },
+      { label: r.phase === 'over' ? 'Back' : 'Resume', primary: true, onClick: () => this.back() },
       { label: 'How to play', onClick: () => this.showHelp() },
       {
         label: 'New climb',
