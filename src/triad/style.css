@@ -44,3 +44,6 @@ body #info { min-height: 38px; height: 38px; overflow-y: auto; font-size: 13.5px
   background: #1e2333; color: var(--muted); font-size: 15px; font-weight: 700;
 }
 #overlay .levels button.on { border-color: var(--accent); color: var(--accent); background: #3a3220; }
+#overlay .levels.modes { grid-template-columns: 1fr 1.6fr; }
+#overlay .tip { display: flex; align-items: center; gap: 12px; }
+#overlay .tip svg { flex: none; }

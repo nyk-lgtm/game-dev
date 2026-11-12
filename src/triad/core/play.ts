@@ -1,11 +1,19 @@
 // Checking a player's board and finding the next hint. Pure.
 
-import { ELEMENT_NAMES, bit, initialDomains, makeBoard, prey, propagate, propagateDeep, single, type Puzzle, type Step, type Trial } from './puzzle';
+import { ELEMENT_NAMES, bit, initialDomains, isLink, linkCells, makeBoard, prey, propagate, propagateDeep, single, type Puzzle, type Step, type Trial } from './puzzle';
 
-/** Clue cells that can no longer be met, given what's filled in (only counts filled cells). */
+/**
+ * Clues that can no longer be met, given what's filled in (only counts filled
+ * cells): number cells, and link ids whose two hexes are filled and differ.
+ */
 export function brokenClues(p: Puzzle, vals: number[]): number[] {
   const b = makeBoard(p.radius);
   const out: number[] = [];
+  for (let id = vals.length; id < p.clue.length; id++) {
+    if (p.clue[id] < 0) continue;
+    const [x, y] = linkCells(b, id);
+    if (vals[x] >= 0 && vals[y] >= 0 && vals[x] !== vals[y]) out.push(id);
+  }
   for (let i = 0; i < vals.length; i++) {
     const n = p.clue[i];
     if (n < 0 || vals[i] < 0) continue;
@@ -55,10 +63,15 @@ export function nextHint(p: Puzzle, vals: number[], notes?: number[]): Hint {
     // Every clue that narrowed this cell, not just the last one.
     const by = [...new Set(steps.slice(0, steps.indexOf(s) + 1).filter((t) => t.cell === s.cell).map((t) => t.clue))];
     const own = by.includes(s.cell);
-    const others = by.filter((c) => c !== s.cell).map((c) => `<b>${p.clue[c]}</b>`);
+    const links = by.filter((c) => isLink(b, c));
+    const others = by.filter((c) => c !== s.cell && !isLink(b, c)).map((c) => `<b>${p.clue[c]}</b>`);
     const name = ELEMENT_NAMES[v];
-    const who = [own ? `its own <b>${p.clue[s.cell]}</b>` : '', others.length ? `the ${others.join(' and ')} next to it` : ''].filter(Boolean).join(' and ');
-    const text = `${who[0].toUpperCase()}${who.slice(1)} only work${by.length > 1 ? '' : 's'} if this is <b>${name}</b>.`;
+    const link = links.length > 1 ? `its ${links.length} links` : 'the link';
+    const who = [own ? `its own <b>${p.clue[s.cell]}</b>` : '', others.length ? `the ${others.join(' and ')} next to it` : '', links.length ? link : ''].filter(Boolean).join(' and ');
+    const text =
+      links.length === by.length
+        ? `${link[0].toUpperCase()}${link.slice(1)} say${links.length > 1 ? '' : 's'} ${links.length > 1 ? 'they all' : 'these two'} match, so this is <b>${name}</b>.`
+        : `${who[0].toUpperCase()}${who.slice(1)} only work${by.length > 1 ? '' : 's'} if this is <b>${name}</b>.`;
     return { kind: 'step', clue: s.clue, cell: s.cell, value: v, text, notes: partial, clues: by };
   }
   // Stuck on single numbers (Hard puzzles): a "what if" rules something out.
@@ -70,7 +83,7 @@ export function nextHint(p: Puzzle, vals: number[], notes?: number[]): Hint {
     after[t.cell] &= ~bit(t.not);
     propagate(b, p.clue, after);
     const v = single(after[t.cell]);
-    const whatIf = `If this were <b>${ELEMENT_NAMES[t.not]}</b>, the highlighted <b>${p.clue[t.clue]}</b> could no longer add up`;
+    const whatIf = `If this were <b>${ELEMENT_NAMES[t.not]}</b>, ${isLink(b, t.clue) ? 'the highlighted link could no longer hold' : `the highlighted <b>${p.clue[t.clue]}</b> could no longer add up`}`;
     if (v >= 0 && vals[t.cell] < 0 && p.given[t.cell] < 0)
       return { kind: 'step', clue: t.clue, cell: t.cell, value: v, text: `${whatIf}, so it's <b>${ELEMENT_NAMES[v]}</b>.`, notes: true };
     return { kind: 'not', clue: t.clue, cell: t.cell, not: t.not, text: `${whatIf}. So it isn't ${ELEMENT_NAMES[t.not]} (added to its notes).` };

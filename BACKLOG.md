@@ -105,9 +105,15 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         Hints explain what-ifs and write them into notes; hints honour notes that allow the answer.
   - [x] Guided tutorial: a hand-made 7-hex puzzle taught in 3 steps (TUTORIAL / TUTORIAL_STEPS in
         core/puzzle.ts); offered from the first help card, the menu, and after it a Small puzzle.
-  - [ ] Next ideas (old list follows): difficulty tiers
-        (keep more clues for easy, allow two-clue deductions for hard), a short interactive
-        tutorial puzzle, a second clue type (e.g. "beaten by" counts or edge marks).
+  - [x] Links (second clue type): "Clues: Numbers / Numbers + links" in the new-puzzle sheet. A link
+        ("=" across an edge) says both hexes match; generation starts from every number plus a link on
+        every matching edge and strips both in one shuffled order (large normal: ~28 numbers + ~21 links,
+        ~1.4 givens vs 37 numbers + 10 givens). Arrows ("this beats that") were tried and dropped: they
+        reduce puzzles to chains of links (numbers-first stripping left a spanning tree, zero numbers).
+        Propagation got a work queue (same fixpoint), so Hard large is ~40 ms (numbers) / ~70 ms (links).
+        One-time tip card, help line, hints ("The link says these two match"), red broken links.
+  - [ ] Next ideas: a blind playtest of links mode (too many easy link copies?), a links daily,
+        two-clue deductions for hard.
 - [ ] **Last Light** (tap-driven interactive fiction). Milestones:
   - [x] Core (src/lastlight/core/story.ts): 8 places, 9 items, Tomas (trust, follows, carries) and
         Ada (keys, rescue, remembers being left), clock (3 min/action, midnight = 40), tide closes the

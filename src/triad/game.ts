@@ -8,6 +8,7 @@ import { pxToHex } from '../shared/hexlayout';
 import { key } from '../shared/hex';
 import { makeStore } from '../shared/storage';
 import {
+  CLUE_MODES,
   ELEMENT_NAMES,
   RULES_VERSION,
   LEVELS,
@@ -16,14 +17,16 @@ import {
   TUTORIAL_STEPS,
   brokenClues,
   generate,
+  linksAt,
   makeBoard,
   nextHint,
   solved,
+  type ClueMode,
   type Puzzle,
   type Level,
   type Size,
 } from './core';
-import { COLOR, drawBoard, iconSvg, layout, type View } from './render/draw';
+import { COLOR, drawBoard, iconSvg, layout, linkSvg, type View } from './render/draw';
 
 export const store = makeStore('triad.');
 
@@ -41,11 +44,13 @@ interface SavedRun {
   done: boolean;
   day?: string | null;
   level?: Level;
+  /** Absent in older saves: numbers. */
+  clues?: ClueMode;
 }
 
 interface Profile {
   solved: number;
-  /** Best time per size (normal) or `size-level`. */
+  /** Best time per size (normal) or `size-level`, with `+links` in links mode. */
   best: Partial<Record<string, number>>;
 }
 
@@ -58,6 +63,7 @@ export class Game {
   p!: Puzzle;
   size: Size = 'medium';
   level: Level = 'normal';
+  mode: ClueMode = 'numbers';
   seed = 0;
   vals: number[] = [];
   notes: number[] = [];
@@ -126,7 +132,8 @@ export class Game {
     this.size = size;
     this.daily = daily;
     this.level = daily ? 'normal' : (saved?.level ?? this.level);
-    this.p = generate(seed, SIZES[size].radius, this.level);
+    this.mode = daily ? 'numbers' : saved ? (saved.clues ?? 'numbers') : this.mode;
+    this.p = generate(seed, SIZES[size].radius, this.level, this.mode);
     const N = this.p.solution.length;
     this.vals = saved ? [...saved.vals].map((c) => CODE.indexOf(c) - 1) : new Array(N).fill(-1);
     this.notes = saved ? [...saved.notes].map(Number) : new Array(N).fill(0);
@@ -145,19 +152,30 @@ export class Game {
     this.refresh();
     this.save(true);
     if (this.done) setTimeout(() => this.showWin(false), 300);
+    else if (this.p.links && !store.load('seenLinks', false)) this.linkTip();
   }
 
-  newPuzzle(size: Size = this.size, level: Level = this.level): void {
+  /** One-time tip the first time a links puzzle appears. */
+  private linkTip(): void {
+    store.save('seenLinks', true);
+    showCard(`<h2>Links</h2><p class="tip">${linkSvg(48)}<span>A <b>link</b> (two short bars across an edge) means the two hexes it joins hold the <b>same</b> element.</span></p>`, [
+      { label: 'Got it', primary: true, onClick: closeOverlay },
+    ]);
+  }
+
+  newPuzzle(size: Size = this.size, level: Level = this.level, mode: ClueMode = this.mode): void {
     closeOverlay();
     leaveDaily();
     this.level = level;
+    this.mode = mode;
     store.save('level', level);
+    store.save('clues', mode);
     this.start((Math.random() * 0xffffffff) >>> 0, size);
   }
 
-  /** Key for best times: plain size for Normal (older saves), else size-level. */
-  private bestKey(size = this.size, level = this.level): string {
-    return level === 'normal' ? size : `${size}-${level}`;
+  /** Key for best times: plain size for Normal (older saves), else size-level; `+links` in links mode. */
+  private bestKey(size = this.size, level = this.level, mode = this.mode): string {
+    return `${level === 'normal' ? size : `${size}-${level}`}${mode === 'links' ? '+links' : ''}`;
   }
 
   playDaily(): void {
@@ -193,6 +211,7 @@ export class Game {
       done: this.done,
       day: this.daily,
       level: this.level,
+      clues: this.mode,
     };
     store.save(this.daily ? 'dailyRun' : 'run', run);
   }
@@ -323,7 +342,7 @@ export class Game {
           showCard(
             `<h2>That's the whole game</h2><p>Every puzzle is solved like that: find a number whose neighbors leave only one way to add up, fill it in, and look again. Bigger boards just chain more of them.</p><p>Notes help when a hex is down to two options, and Hint always shows the next step.</p>`,
             [
-              { label: 'Play a Small puzzle', primary: true, onClick: () => this.newPuzzle('small', 'normal') },
+              { label: 'Play a Small puzzle', primary: true, onClick: () => this.newPuzzle('small', 'normal', 'numbers') },
               { label: 'Try the tutorial again', onClick: () => this.startTutorial() },
             ],
           ),
@@ -379,7 +398,7 @@ export class Game {
   refresh(): void {
     if (!this.p) return;
     $('size').textContent = this.daily ? 'Daily' : SIZES[this.size].name;
-    $('levelLabel').textContent = this.daily ? 'Puzzle' : LEVELS[this.level].name;
+    $('levelLabel').textContent = this.daily ? 'Puzzle' : `${LEVELS[this.level].name}${this.p.links ? ' + links' : ''}`;
     this.showClock();
     $('notesBtn').classList.toggle('on', this.notesMode);
     $('pad').classList.toggle('notes', this.notesMode);
@@ -399,12 +418,19 @@ export class Game {
     else if (i < 0)
       this.info(
         filled === this.p.given.filter((g) => g >= 0).length
-          ? 'Fill every hex. A <b>number</b> says how many of its neighbors that hex beats.'
+          ? this.p.links
+            ? 'Fill every hex. A <b>number</b> counts the neighbors its hex beats; a <b>link</b> joins two hexes that match.'
+            : 'Fill every hex. A <b>number</b> says how many of its neighbors that hex beats.'
           : `${filled}/${total} filled. Tap a hex, then an element. Tap it again to cycle.`,
       );
-    else if (this.p.given[i] >= 0) this.info(`A given <b>${ELEMENT_NAMES[this.p.given[i]]}</b>.${this.p.clue[i] >= 0 ? ` It beats <b>${this.p.clue[i]}</b> of its neighbors.` : ''}`);
-    else if (this.p.clue[i] >= 0) this.info(`This hex beats exactly <b>${this.p.clue[i]}</b> of its neighbors.${this.notesMode ? ' Notes on.' : ''}`);
-    else this.info(this.notesMode ? 'Notes: tap elements to pencil them in.' : 'Pick an element, or tap the hex again to cycle.');
+    else {
+      const nl = this.p.links ? linksAt(makeBoard(this.p.radius), this.p.clue, i).length : 0;
+      const linked = nl ? ` Linked: ${nl === 1 ? 'the hex across the bars matches it' : `the ${nl} hexes across its bars match it`}.` : '';
+      if (this.p.given[i] >= 0) this.info(`A given <b>${ELEMENT_NAMES[this.p.given[i]]}</b>.${this.p.clue[i] >= 0 ? ` It beats <b>${this.p.clue[i]}</b> of its neighbors.` : ''}${linked}`);
+      else if (this.p.clue[i] >= 0) this.info(`This hex beats exactly <b>${this.p.clue[i]}</b> of its neighbors.${linked}${this.notesMode ? ' Notes on.' : ''}`);
+      else if (linked) this.info(`${linked.slice(1)}${this.notesMode ? ' Notes on.' : ''}`);
+      else this.info(this.notesMode ? 'Notes: tap elements to pencil them in.' : 'Pick an element, or tap the hex again to cycle.');
+    }
     this.draw();
   }
 
@@ -464,6 +490,7 @@ export class Game {
         <li>Pick <b>Easy</b>, <b>Normal</b> or <b>Hard</b> with ＋. Hard puzzles sometimes need a "what if": suppose a hex is fire and see a number break.</li>
         <li><b>Hint</b> shows the next hex you can work out, or a wrong one (each adds 30 seconds to your time).</li>
         <li>A number fades once all its neighbors are filled and it adds up.</li>
+        <li>${linkSvg(26)} In <b>Numbers + links</b> puzzles (pick it with ＋), a <b>link</b> across an edge means the two hexes it joins hold the same element.</li>
       </ul>`,
       [
         { label: 'Show me (60-second tutorial)', primary: true, onClick: () => this.startTutorial() },
@@ -473,32 +500,41 @@ export class Game {
   }
 
   private title(): string {
-    return `${this.level === 'normal' ? '' : `${LEVELS[this.level].name} `}${SIZES[this.size].name.toLowerCase()}`.replace(/^./, (c) => c.toUpperCase());
+    return `${this.level === 'normal' ? '' : `${LEVELS[this.level].name} `}${SIZES[this.size].name.toLowerCase()}${this.p?.links ? ' links' : ''}`.replace(/^./, (c) => c.toUpperCase());
   }
 
   showNew(): void {
     const prof = store.load<Profile>('profile', { solved: 0, best: {} });
     let lv: Level = this.level;
+    let md: ClueMode = this.mode;
     const levels = (Object.keys(LEVELS) as Level[])
       .map((l) => `<button data-lv="${l}" class="${l === lv ? 'on' : ''}">${LEVELS[l].name}</button>`)
       .join('');
+    const modes = (Object.keys(CLUE_MODES) as ClueMode[])
+      .map((m) => `<button data-md="${m}" class="${m === md ? 'on' : ''}">${CLUE_MODES[m].name}</button>`)
+      .join('');
     const label = (s: Size) => {
-      const b = prof.best[this.bestKey(s, lv)];
+      const b = prof.best[this.bestKey(s, lv, md)];
       return `${SIZES[s].name} · ${makeBoard(SIZES[s].radius).cells.length} hexes${b !== undefined ? ` · best ${fmt(b)}` : ''}`;
     };
+    const text = () => `${LEVELS[lv].text}${md === 'links' ? ` ${CLUE_MODES.links.text}` : ''}${prof.solved ? ` ${prof.solved} solved so far.` : ''}`;
     const sizes = Object.keys(SIZES) as Size[];
     showCard(
-      `<h2>New puzzle</h2><div class="levels">${levels}</div><p class="lvtext">${LEVELS[lv].text}${prof.solved ? ` ${prof.solved} solved so far.` : ''}</p>`,
-      sizes.map((s) => ({ label: label(s), primary: s === this.size, onClick: () => this.newPuzzle(s, lv) })),
+      `<h2>New puzzle</h2><div class="levels">${levels}</div><div class="levels modes" aria-label="Clues">${modes}</div><p class="lvtext">${text()}</p>`,
+      sizes.map((s) => ({ label: label(s), primary: s === this.size, onClick: () => this.newPuzzle(s, lv, md) })),
     );
     const card = document.querySelector('#overlay .card')!;
     const sizeBtns = [...card.querySelectorAll<HTMLButtonElement>(':scope > button')];
+    const update = () => {
+      card.querySelectorAll<HTMLButtonElement>('.levels button').forEach((x) => x.classList.toggle('on', x.dataset.lv === lv || x.dataset.md === md));
+      card.querySelector('.lvtext')!.textContent = text();
+      sizeBtns.forEach((sb, k) => (sb.textContent = label(sizes[k])));
+    };
     card.querySelectorAll<HTMLButtonElement>('.levels button').forEach((b) => {
       b.onclick = () => {
-        lv = b.dataset.lv as Level;
-        card.querySelectorAll('.levels button').forEach((x) => x.classList.toggle('on', x === b));
-        card.querySelector('.lvtext')!.textContent = LEVELS[lv].text;
-        sizeBtns.forEach((sb, k) => (sb.textContent = label(sizes[k])));
+        if (b.dataset.lv) lv = b.dataset.lv as Level;
+        if (b.dataset.md) md = b.dataset.md as ClueMode;
+        update();
       };
     });
   }
@@ -544,7 +580,8 @@ export class Game {
 
   private async copyReport(): Promise<void> {
     const v = this.vals.map((x) => CODE[x + 1]).join('');
-    const text = `TRIAD v${RULES_VERSION} seed=${this.seed} size=${this.size} vals=${v}\n${location.origin}${location.pathname}?seed=${this.seed}&size=${this.size}`;
+    const extra = `${this.level === 'normal' ? '' : `&level=${this.level}`}${this.mode === 'links' ? '&clues=links' : ''}`;
+    const text = `TRIAD v${RULES_VERSION} seed=${this.seed} size=${this.size} level=${this.level} clues=${this.mode} vals=${v}\n${location.origin}${location.pathname}?seed=${this.seed}&size=${this.size}${extra}`;
     toast((await copyText(text)) ? 'Bug report copied' : 'Copy failed');
   }
 }

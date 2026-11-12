@@ -1,7 +1,9 @@
 // Triad: a hex logic puzzle. Every cell holds one of three elements; fire burns
 // leaf, leaf drinks water, water douses fire. A number on a cell says how many
-// of its neighbors it beats. Puzzles are generated from a seed and are always
-// solvable by single-clue deductions (no guessing), which also drives hints.
+// of its neighbors it beats. In links mode, a mark on the edge between two
+// neighbors also says they hold the same element. Puzzles are generated from a
+// seed and are always solvable by single-clue deductions (no guessing), which
+// also drives hints.
 // Pure and deterministic: no DOM, no Math.random, no Date.
 
 import { DIRS, key, type Hex } from '../../shared/hex';
@@ -27,6 +29,8 @@ export interface Board {
   radius: number;
   cells: Hex[];
   adj: number[][];
+  /** Every pair of neighbors once, [lower, higher] cell index, in reading order. */
+  edges: [number, number][];
 }
 
 const boards = new Map<number, Board>();
@@ -39,7 +43,9 @@ export function makeBoard(radius: number): Board {
     for (let q = -radius; q <= radius; q++) if (Math.abs(q + r) <= radius) cells.push({ q, r });
   const index = new Map(cells.map((h, i) => [key(h), i]));
   const adj = cells.map((h) => DIRS.map((d) => index.get(key({ q: h.q + d.q, r: h.r + d.r })) ?? -1).filter((j) => j >= 0));
-  const b = { radius, cells, adj };
+  const edges: [number, number][] = [];
+  adj.forEach((ns, i) => ns.forEach((j) => j > i && edges.push([i, j])));
+  const b = { radius, cells, adj, edges };
   boards.set(radius, b);
   return b;
 }
@@ -52,8 +58,32 @@ export interface Puzzle {
   solution: Element[];
   /** Pre-filled cells (-1 = blank). */
   given: number[];
-  /** Clue numbers (-1 = none). */
+  /**
+   * Clue numbers per cell (-1 = none). In links mode, followed by one entry per
+   * board edge (`b.edges`, id = cells + edge index): -1 or SAME.
+   */
   clue: number[];
+  /** Links mode (absent: numbers only). */
+  links?: true;
+}
+
+export type ClueMode = 'numbers' | 'links';
+export const CLUE_MODES: Record<ClueMode, { name: string; text: string }> = {
+  numbers: { name: 'Numbers', text: 'Numbers only.' },
+  links: { name: 'Numbers + links', text: 'Some edges carry a link: the two hexes it joins hold the same element.' },
+};
+
+/** A link mark: the two hexes on either side hold the same element. */
+export const SAME = 0;
+
+/** Clue ids at or past the cell count are links (edge = id - cells). */
+export const isLink = (b: Board, id: number): boolean => id >= b.cells.length;
+export const linkCells = (b: Board, id: number): [number, number] => b.edges[id - b.cells.length];
+/** The link ids touching cell i. */
+export function linksAt(b: Board, clue: number[], i: number): number[] {
+  const out: number[] = [];
+  for (let id = b.cells.length; id < clue.length; id++) if (clue[id] >= 0 && linkCells(b, id).includes(i)) out.push(id);
+  return out;
 }
 
 /** How many of cell i's neighbors it beats, in a full assignment. */
@@ -78,6 +108,15 @@ export interface Step {
  * that appear in some assignment matching the clue. Exact for a single clue.
  */
 export function clueSupport(b: Board, clue: number[], dom: number[], c: number): Map<number, number> {
+  if (isLink(b, c)) {
+    // SAME: each side keeps only what the other side can still be.
+    const [x, y] = linkCells(b, c);
+    const both = dom[x] & dom[y];
+    return new Map([
+      [x, both],
+      [y, both],
+    ]);
+  }
   const n = clue[c];
   const out = new Map<number, number>([[c, 0]]);
   for (const j of b.adj[c]) out.set(j, 0);
@@ -113,6 +152,8 @@ export function clueSupport(b: Board, clue: number[], dom: number[], c: number):
  * Returns false on a contradiction. `steps` collects every narrowing in order.
  */
 export function propagate(b: Board, clue: number[], dom: number[], steps?: Step[], fail?: { clue: number }): boolean {
+  // Nothing to report: a work queue reaches the same fixpoint much faster.
+  if (!steps && !fail) return settle(b, clue, dom, watchers(b, clue));
   const clues = clue.map((n, i) => (n >= 0 ? i : -1)).filter((i) => i >= 0);
   for (let changed = true; changed; ) {
     changed = false;
@@ -133,6 +174,46 @@ export function propagate(b: Board, clue: number[], dom: number[], steps?: Step[
   return true;
 }
 
+/** The cells a clue reads: a number's hex and its neighbors, or a link's two hexes. */
+export const clueCells = (b: Board, c: number): number[] => (isLink(b, c) ? linkCells(b, c) : [c, ...b.adj[c]]);
+
+/** For each cell, the clues that read it. */
+function watchers(b: Board, clue: number[]): number[][] {
+  const w: number[][] = b.cells.map(() => []);
+  for (let c = 0; c < clue.length; c++) if (clue[c] >= 0) for (const j of clueCells(b, c)) w[j].push(c);
+  return w;
+}
+
+/**
+ * Work-queue propagation: re-reads only clues whose cells changed. Without
+ * `from` it reads every clue; with it, `dom` must already be settled except
+ * for those cells. Same fixpoint (and same contradictions) as the sweep.
+ */
+function settle(b: Board, clue: number[], dom: number[], watch: number[][], from?: number[]): boolean {
+  const queued = new Uint8Array(clue.length);
+  const queue: number[] = [];
+  const push = (c: number) => {
+    if (!queued[c]) {
+      queued[c] = 1;
+      queue.push(c);
+    }
+  };
+  if (from) for (const j of from) watch[j].forEach(push);
+  else for (let c = 0; c < clue.length; c++) if (clue[c] >= 0) push(c);
+  while (queue.length) {
+    const c = queue.pop()!;
+    queued[c] = 0;
+    for (const [j, sup] of clueSupport(b, clue, dom, c)) {
+      const nd = dom[j] & sup;
+      if (nd === dom[j]) continue;
+      if (nd === 0) return false;
+      dom[j] = nd;
+      watch[j].forEach(push);
+    }
+  }
+  return true;
+}
+
 export const initialDomains = (p: { given: number[] }): number[] => p.given.map((g) => (g >= 0 ? bit(g) : ALL));
 
 /** A "what if" deduction: assuming `not` in `cell` makes the clue at `clue` impossible. */
@@ -145,9 +226,12 @@ export interface Trial {
 /**
  * Single-clue deductions plus "what if" trials: a value is ruled out when
  * assuming it lets single-clue deductions break some clue. Mutates `dom`.
+ * `explain` = false skips finding which clue broke (trials get clue -1), which
+ * is much faster; the trials themselves are the same.
  */
-export function propagateDeep(b: Board, clue: number[], dom: number[], trials?: Trial[]): boolean {
-  if (!propagate(b, clue, dom)) return false;
+export function propagateDeep(b: Board, clue: number[], dom: number[], trials?: Trial[], explain = true): boolean {
+  const watch = watchers(b, clue);
+  if (!settle(b, clue, dom, watch)) return false;
   for (let changed = true; changed; ) {
     changed = false;
     for (let i = 0; i < dom.length; i++) {
@@ -156,11 +240,11 @@ export function propagateDeep(b: Board, clue: number[], dom: number[], trials?: 
         const t = dom.slice();
         t[i] = bit(v);
         const fail = { clue: -1 };
-        if (propagate(b, clue, t, undefined, fail)) continue;
+        if (explain ? propagate(b, clue, t, undefined, fail) : settle(b, clue, t, watch, [i])) continue;
         // Ruled out: apply it and the single-clue deductions it unlocks, then keep scanning.
         dom[i] &= ~bit(v);
         trials?.push({ cell: i, not: v, clue: fail.clue });
-        if (!propagate(b, clue, dom)) return false;
+        if (!settle(b, clue, dom, watch, [i])) return false;
         changed = true;
       }
     }
@@ -189,21 +273,27 @@ export const SIZES: Record<Size, { radius: number; name: string }> = {
 };
 
 /**
- * A puzzle for (seed, radius, level): random answer, then strip clues while it
- * stays deducible. Easy keeps at least 60% of the hexes numbered; Hard may need
- * "what if" trials. (Normal is the original generator, unchanged.)
+ * A puzzle for (seed, radius, level, mode): random answer, then strip clues
+ * while it stays deducible. Easy keeps at least 80% of the hexes numbered; Hard
+ * may need "what if" trials. (Normal is the original generator, unchanged.)
+ * Links mode starts from every number plus a SAME link on every edge whose two
+ * hexes match, and strips both; numbers mode is byte-for-byte the old generator.
  */
-export function generate(seed: number, radius: number, level: Level = 'normal'): Puzzle {
+export function generate(seed: number, radius: number, level: Level = 'normal', mode: ClueMode = 'numbers'): Puzzle {
   const deep = false;
-  const minClues = level === 'easy' ? 0.8 : 0;
+  const links = mode === 'links';
+  // Easy keeps 80% of the hexes numbered (links mode: numbers + links >= 110%).
+  const minClues = level === 'easy' ? (links ? 1.1 : 0.8) : 0;
   const b = makeBoard(radius);
   const N = b.cells.length;
-  const rng = new Rng(mixSeed(seed, 4000 + radius));
+  const rng = new Rng(mixSeed(seed, (links ? 4100 : 4000) + radius));
   for (let attempt = 0; attempt < 50; attempt++) {
     const solution = b.cells.map(() => rng.int(0, 2) as Element);
     // All three elements must appear, or the board is dull.
     if (new Set(solution).size < 3) continue;
     const clue = solution.map((_, i) => beatsCount(b, solution, i));
+    if (links) for (const [x, y] of b.edges) clue.push(solution[x] === solution[y] ? SAME : -1);
+    const M = clue.length;
     const given = new Array(N).fill(-1);
     // Rotating every element (fire→water→leaf→fire) keeps every count, so at
     // least one cell must be given; add givens until the clues pin the rest.
@@ -214,7 +304,10 @@ export function generate(seed: number, radius: number, level: Level = 'normal'):
     }
     if (!deducible(b, clue, given, deep)) continue;
     // Strip clues, then spare givens, while deductions still finish the board.
-    for (const i of rng.shuffle([...Array(N).keys()])) {
+    // Links mode strips numbers and links in one shuffled order, so some numbers
+    // give way to links (links end up ~40% of the clues).
+    for (const i of rng.shuffle([...Array(M).keys()])) {
+      if (clue[i] < 0) continue;
       if (clue.filter((c) => c >= 0).length <= minClues * N) continue;
       const keep = clue[i];
       clue[i] = -1;
@@ -233,9 +326,9 @@ export function generate(seed: number, radius: number, level: Level = 'normal'):
       const ok = () => {
         const dom = initialDomains({ given });
         const trials: Trial[] = [];
-        return propagateDeep(b, clue, dom, trials) && dom.every((d) => single(d) >= 0) && trials.length <= cap;
+        return propagateDeep(b, clue, dom, trials, false) && dom.every((d) => single(d) >= 0) && trials.length <= cap;
       };
-      for (const i of rng.shuffle([...Array(N).keys()])) {
+      for (const i of rng.shuffle([...Array(M).keys()])) {
         if (clue[i] < 0) continue;
         const keep = clue[i];
         clue[i] = -1;
@@ -249,10 +342,12 @@ export function generate(seed: number, radius: number, level: Level = 'normal'):
       }
       // A Hard puzzle should actually need a "what if" or two; otherwise try another answer.
       const trials: Trial[] = [];
-      propagateDeep(b, clue, initialDomains({ given }), trials);
+      propagateDeep(b, clue, initialDomains({ given }), trials, false);
       if (trials.length < (radius > 2 ? 2 : 1) && attempt < 30) continue;
     }
-    return level === 'normal' ? { seed, radius, solution, given, clue } : { seed, radius, level, solution, given, clue };
+    const p: Puzzle = level === 'normal' ? { seed, radius, solution, given, clue } : { seed, radius, level, solution, given, clue };
+    if (links) p.links = true;
+    return p;
   }
   throw new Error(`triad: no puzzle for seed ${seed}`);
 }

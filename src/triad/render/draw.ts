@@ -1,7 +1,8 @@
-// Drawing the Triad board: hex cells, element icons, clue numbers, notes.
+// Drawing the Triad board: hex cells, element icons, clue numbers, notes, and
+// links (an "=" of two short bars straddling the edge between two hexes).
 
 import { fitHexes, hexPath, hexToPx, type HexLayout } from '../../shared/hexlayout';
-import { makeBoard, type Puzzle } from '../core';
+import { clueCells, isLink, linkCells, makeBoard, type Board, type Puzzle } from '../core';
 
 /** Element icons as SVG paths in a 24x24 box (also used for the HTML buttons). */
 export const ICON = [
@@ -14,6 +15,7 @@ export const ICON = [
 ];
 export const COLOR = ['#ff8a3d', '#4fb3ff', '#6fd36f'];
 const FILL = ['#5a2a14', '#143a5c', '#1f4a22'];
+const LINK_COLOR = '#f4f1ea';
 const PATHS = typeof Path2D === 'undefined' ? [] : ICON.map((d) => new Path2D(d));
 
 export function iconSvg(e: number, size = 24): string {
@@ -27,6 +29,56 @@ function drawIcon(g: CanvasRenderingContext2D, e: number, x: number, y: number, 
   g.globalAlpha = alpha;
   g.fillStyle = COLOR[e];
   g.fill(PATHS[e]);
+  g.restore();
+}
+
+/** A link mark as inline SVG: two hexes sharing an edge, with the "=" across it (for cards). */
+export function linkSvg(size = 40): string {
+  const hex = (cy: number) =>
+    [...Array(6).keys()].map((k) => `${(20 + 11 * Math.cos((k * Math.PI) / 3)).toFixed(1)},${(cy + 11 * Math.sin((k * Math.PI) / 3)).toFixed(1)}`).join(' ');
+  const h = 11 * Math.sqrt(3) / 2;
+  const top = 20 - h;
+  const bot = 20 + h;
+  return `<svg viewBox="0 0 40 40" width="${size}" height="${size}" aria-hidden="true" style="vertical-align:middle">
+    <polygon points="${hex(top)}" fill="${FILL[2]}" stroke="#2c3347"/><polygon points="${hex(bot)}" fill="${FILL[2]}" stroke="#2c3347"/>
+    <g stroke="${LINK_COLOR}" stroke-width="2.4" stroke-linecap="round"><line x1="16" y1="17.6" x2="24" y2="17.6"/><line x1="16" y1="22.4" x2="24" y2="22.4"/></g></svg>`;
+}
+
+/**
+ * A link: two short bars parallel to the shared edge, one just inside each hex,
+ * so together they read as "=" across the edge.
+ */
+function drawLink(g: CanvasRenderingContext2D, v: View, b: Board, id: number, color: string, alpha: number, wide = false) {
+  const [i, j] = linkCells(b, id);
+  const A = hexToPx(v.L, b.cells[i].q, b.cells[i].r);
+  const B = hexToPx(v.L, b.cells[j].q, b.cells[j].r);
+  const size = v.L.size;
+  const mx = (A.x + B.x) / 2;
+  const my = (A.y + B.y) / 2;
+  const d = Math.hypot(B.x - A.x, B.y - A.y);
+  // Unit vector across the edge (center to center) and along it.
+  const ux = (B.x - A.x) / d;
+  const uy = (B.y - A.y) / d;
+  const half = size * (wide ? 0.26 : 0.21);
+  const off = size * 0.11;
+  g.save();
+  g.globalAlpha = alpha;
+  g.lineCap = 'round';
+  for (const [w, c] of [
+    [Math.max(4.5, size * 0.2), 'rgba(8, 10, 16, 0.85)'],
+    [Math.max(2.2, size * 0.09) * (wide ? 1.25 : 1), color],
+  ] as const) {
+    g.lineWidth = w;
+    g.strokeStyle = c;
+    g.beginPath();
+    for (const s of [-1, 1]) {
+      const cx = mx + ux * off * s;
+      const cy = my + uy * off * s;
+      g.moveTo(cx - uy * half, cy + ux * half);
+      g.lineTo(cx + uy * half, cy - ux * half);
+    }
+    g.stroke();
+  }
   g.restore();
 }
 
@@ -57,7 +109,7 @@ export function drawBoard(g: CanvasRenderingContext2D, v: View, p: Puzzle, o: Dr
   const size = v.L.size;
   g.clearRect(0, 0, v.w, v.h);
   const hintClues = o.hint ? (o.hint.clues?.length ? o.hint.clues : [o.hint.clue]) : [];
-  const hintRing = o.hint ? new Set([o.hint.cell, ...hintClues.flatMap((c) => [c, ...b.adj[c]])]) : null;
+  const hintRing = o.hint ? new Set([o.hint.cell, ...hintClues.flatMap((c) => clueCells(b, c))]) : null;
   b.cells.forEach((c, i) => {
     const { x, y } = hexToPx(v.L, c.q, c.r);
     const val = p.given[i] >= 0 ? p.given[i] : o.vals[i];
@@ -81,8 +133,10 @@ export function drawBoard(g: CanvasRenderingContext2D, v: View, p: Puzzle, o: Dr
       g.stroke();
     }
     const clue = p.clue[i];
-    // Filled numbered hexes keep a small, full-strength icon above the number.
-    if (val >= 0) clue >= 0 ? drawIcon(g, val, x, y - size * 0.5, size * 0.42) : drawIcon(g, val, x, y, size * 1.05);
+    // Filled numbered hexes keep a small, full-strength icon above the number
+    // (a bit lower and smaller in links mode, clear of a link on the top edge).
+    const lk = p.links ? 1 : 0;
+    if (val >= 0) clue >= 0 ? drawIcon(g, val, x, y - size * (0.5 - 0.08 * lk), size * (0.42 - 0.06 * lk)) : drawIcon(g, val, x, y, size * 1.05);
     else if (o.notes[i]) {
       for (let e = 0; e < 3; e++)
         if (o.notes[i] & (1 << e)) drawIcon(g, e, x + (e - 1) * size * 0.42, y + size * (clue >= 0 ? 0.5 : 0), size * 0.36);
@@ -96,7 +150,7 @@ export function drawBoard(g: CanvasRenderingContext2D, v: View, p: Puzzle, o: Dr
       g.font = `800 ${Math.round(size * (val >= 0 ? 0.62 : 0.8))}px system-ui, sans-serif`;
       g.textAlign = 'center';
       g.textBaseline = 'middle';
-      const ty = y + (val >= 0 ? size * 0.16 : val < 0 && o.notes[i] ? -size * 0.12 : 0);
+      const ty = y + (val >= 0 ? size * (0.16 + 0.04 * lk) : val < 0 && o.notes[i] ? -size * 0.12 : 0);
       g.lineWidth = 4;
       g.strokeStyle = 'rgba(8, 10, 16, 0.85)';
       g.strokeText(String(clue), x, ty);
@@ -121,8 +175,26 @@ export function drawBoard(g: CanvasRenderingContext2D, v: View, p: Puzzle, o: Dr
     g.stroke();
   };
   if (o.hint) {
-    for (const c of hintClues) outline(c, '#ffd77a', 3);
+    // A number's hex gets the gold ring; a link rings the hex across it from the hinted one.
+    for (const c of hintClues) {
+      if (!isLink(b, c)) outline(c, '#ffd77a', 3);
+      else for (const k of linkCells(b, c)) if (k !== o.hint.cell) outline(k, '#ffd77a', 3);
+    }
     if (o.hint.cell !== o.hint.clue) outline(o.hint.cell, `rgba(255, 255, 255, ${0.6 + 0.4 * Math.sin(o.time * 6)})`, 3);
   }
   if (o.selected >= 0) outline(o.selected, '#ffffff', 3.5);
+  // Links on top, so outlines never hide them.
+  const val = (k: number) => (p.given[k] >= 0 ? p.given[k] : o.vals[k]);
+  for (let id = b.cells.length; id < p.clue.length; id++) {
+    if (p.clue[id] < 0) continue;
+    const [i, j] = linkCells(b, id);
+    if (hintClues.includes(id)) drawLink(g, v, b, id, '#ffd77a', 1, true);
+    else if (o.broken.has(id)) drawLink(g, v, b, id, '#ff5d7a', 1, true);
+    else {
+      // Faded once both hexes are filled (and match), and while a hint dims the rest.
+      const settled = val(i) >= 0 && val(j) >= 0;
+      const dim = hintRing && !(hintRing.has(i) && hintRing.has(j));
+      drawLink(g, v, b, id, LINK_COLOR, settled ? 0.4 : dim ? 0.5 : 1);
+    }
+  }
 }

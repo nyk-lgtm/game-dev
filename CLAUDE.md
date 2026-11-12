@@ -66,7 +66,11 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   single-clue deductions (`propagate`, exact per clue via `clueSupport`) finish it, then strips clues and
   givens while they still do; so every puzzle is unique and guess-free, and `nextHint` replays those
   deductions. Levels: Easy keeps more numbers; Hard strips further while `propagateDeep` ("what if" trials,
-  capped at 2+2·radius) still finishes it. `npx vite-node scripts/triad/stats.ts 30` shows counts per size/level.
+  capped at 2+2·radius) still finishes it. `npx vite-node scripts/triad/stats.ts 30 [numbers|links]` shows counts and ms per size/level.
+  Links mode (`generate(seed, r, level, 'links')`, `p.links`): `p.clue` continues past the cells with one entry per
+  `b.edges` edge (clue id = cells + edge; -1 or SAME = both hexes match); links are ordinary clues in `clueSupport`/
+  `propagate`/hints/`brokenClues`, and get stripped together with numbers. Numbers mode must stay byte-identical
+  (fingerprint test in tests/triad/links.test.ts). Saves record `clues`; the daily is numbers-only.
 - Last Light: one pure module per night, night 1 (storm) src/lastlight/core/story.ts, night 2 (fog) core/night2.ts;
   core/nights.ts wraps each as a `Story` (core/types.ts) that game.ts drives. `choices(s)` lists legal action ids
   (`go:<room>`, `take:<item>`, `use:<item>:<target>`, `give:`, `say:<npc>:<topic>`, …); `act(s, id)` returns the text.
