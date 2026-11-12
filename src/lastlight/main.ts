@@ -1,20 +1,19 @@
 import { installErrorOverlay } from '../shared/debug';
-import { RULES_VERSION } from './core/story';
-import { Game, store } from './game';
+import { Game, store, storyFor } from './game';
 
 installErrorOverlay();
 
 const game = new Game();
 document.getElementById('menuBtn')!.onclick = () => game.showMenu();
 
-// ?a=go:yard,... replays a bug report (without touching the saved night).
+// ?a=go:yard,... replays a bug report (without touching the saved night); ?n=2 picks the night.
 const p = new URLSearchParams(location.search);
-const saved = store.load<{ v: number; a: string } | null>('run', null);
+// A replay without ?n is an older night 1 report.
+const night = storyFor(Number(p.get('n') ?? (p.has('a') ? 1 : store.load<number>('night', 1))) || 1).night;
 if (p.has('a')) {
-  game.start((p.get('a') ?? '').split(',').filter(Boolean));
+  game.start((p.get('a') ?? '').split(',').filter(Boolean), night);
   history.replaceState(null, '', location.pathname);
-} else if (saved && saved.v === RULES_VERSION) game.start(saved.a.split(',').filter(Boolean));
-else game.start();
+} else game.playNight(night);
 
 if (!store.load('seenHelp', false)) game.showHelp();
 

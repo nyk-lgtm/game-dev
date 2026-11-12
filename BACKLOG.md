@@ -98,7 +98,11 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         tide warning 24 min ahead on cliff/shore/boathouse, flooded exits hidden, "Wait out the night"
         when stranded, stale texts fixed, Tomas hints he's frozen (tea), "Damp matches", make tea from
         the stove, endings say where everyone is, story scrolls fully.
-  - [ ] Maybe a second night (a different story on the same engine).
+  - [x] Night 2, the fog (core/night2.ts): 8 places, 9 items, Bassett (trust: logbook, Nell, cocoa;
+        forcing the hasp costs 2) and Nell (Bramble, gifts, a promise of the horn), Bramble guides on the
+        moor, the hot-bulb engine heats 15 min, the fog shuts the moor at midnight (warned 18 min ahead;
+        the wall always leads back). Best route sounds the horn at 12:36. Menu night picker, per-night
+        saves/profile, fog sky. Not blind-playtested yet.
 
 - [x] **Nightline fixes from its blind playtest** (agent reached the goal on run 3; no errors):
   steering ~120 px to full lock; HUD on backing panels, 11 px labels, brighter TIME UP; traffic drawn

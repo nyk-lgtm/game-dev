@@ -54,12 +54,16 @@ const GAMES: GameCard[] = [
     path: './lastlight/',
     title: 'Last Light',
     tag: 'Interactive story',
-    pitch: 'A storm, a dark lighthouse, and a ship running for the rocks at midnight. Every tap costs three minutes. The tide, the rain and the people remember what you do.',
+    pitch: 'Two nights on a lighthouse island: a storm and a ship running for the rocks, then fog and a missing child. Every tap costs three minutes, and the people remember what you do.',
     accent: '#ffd77a',
     best: () => {
-      const p = lastlight.load<{ plays?: number; best?: number; endings?: string[] } | null>('profile', null);
-      if (!p?.plays) return null;
-      return `Best ${'★'.repeat(p.best ?? 0) || 'no stars'} · ${p.endings?.length ?? 0} ending${p.endings?.length === 1 ? '' : 's'} found`;
+      type N = { plays?: number; best?: number; endings?: string[] };
+      const p = lastlight.load<(N & { n2?: N }) | null>('profile', null);
+      const nights = [p, p?.n2].filter((n): n is N => !!n?.plays);
+      if (!nights.length) return null;
+      const found = nights.reduce((k, n) => k + (n.endings?.length ?? 0), 0);
+      const stars = [p, p?.n2].map((n, i) => (n?.plays ? `Night ${i + 1} ${'★'.repeat(n.best ?? 0) || '–'}` : '')).filter(Boolean);
+      return `${stars.join(' · ')} · ${found} ending${found === 1 ? '' : 's'}`;
     },
     thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#0a0f1c"/>
       <path d="M0 56 Q19 52 38 56 T76 56 V76 H0z" fill="#0c1626"/><path d="M48 76 L52 52 L76 46 V76z" fill="#05080f"/>
