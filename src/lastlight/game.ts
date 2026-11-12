@@ -150,10 +150,10 @@ export class Game {
     const isPerson = (k: string) => st.people.includes(k);
     const rank = (k: string) => (isPerson(k) ? 0 : st.carried(s, k) ? 2 : 1);
     const order = [...groups.keys()].sort((a, b) => rank(a) - rank(b));
-    const row = (title: string, els: HTMLElement[]) => {
+    const row = (title: string, els: HTMLElement[], cls = '') => {
       if (!els.length) return;
       const r = document.createElement('div');
-      r.className = 'row';
+      r.className = `row ${cls}`;
       r.innerHTML = `<span class="lab">${title}</span>`;
       const list = document.createElement('div');
       list.className = 'list';
@@ -173,7 +173,9 @@ export class Game {
         const list = groups.get(k)!;
         // Carried things always show by name, so you can see what you have.
         const carried = st.carried(s, k);
-        if (list.length === 1 && !carried) return [btn(list[0].label, 'act', () => this.do(list[0].id))];
+        // A lone action stands in for its subject; people keep their name on it.
+        const label = isPerson(k) ? `${st.subjectName(s, k)}: ${list[0].label[0].toLowerCase()}${list[0].label.slice(1)}` : list[0].label;
+        if (list.length === 1 && !carried) return [btn(label, 'act', () => this.do(list[0].id))];
         const chip = btn(st.subjectName(s, k), `chip${this.open === k ? ' on' : ''}`, () => {
           this.open = this.open === k ? null : k;
           this.render(false);
@@ -185,7 +187,7 @@ export class Game {
     row('People', subjects(isPerson));
     row('Here', subjects((k) => !isPerson(k) && !st.carried(s, k)));
     row('Carrying', subjects((k) => st.carried(s, k)));
-    row('Go', go.map((c) => btn(`→ ${c.label}`, 'go', () => this.do(c.id))));
+    row('Go', go.map((c) => btn(`→ ${c.label}`, 'go', () => this.do(c.id))), 'goes');
     if (scroll) {
       const story = $('story');
       story.scrollTop = story.scrollHeight;
@@ -232,7 +234,7 @@ export class Game {
        <p>Short stories you play by tapping. Each night on Corran Isle has its own trouble and its own clock.</p>
        <ul>
          <li>Tap a place under <b>Go</b> to move, and people or things to see what you can do with them.</li>
-         <li>Most actions take three minutes (some take longer; looking and reading are free). ${this.story.deadline}</li>
+         <li>Most actions take three minutes, talking included (some take longer; looking and reading are free). ${this.story.deadline}</li>
          <li>The weather and the people remember what you do. There are several endings.</li>
        </ul>`,
       [{ label: 'Begin', primary: true, onClick: closeOverlay }],
@@ -246,7 +248,8 @@ export class Game {
       const st = storyFor(k);
       const np = nightProfile(p, k);
       const on = k === this.story.night;
-      const badge = !np.plays && k === 2 ? '<span class="new">New</span>' : np.plays ? `<span class="best">${'★'.repeat(np.best) || '·'}</span>` : '';
+      const started = np.plays > 0 || !!store.load<{ a?: string } | null>(st.saveKey, null)?.a;
+      const badge = !started && k === 2 ? '<span class="new">New</span>' : np.plays ? `<span class="best">${'★'.repeat(np.best) || '·'}</span>` : '';
       return `<button class="night${on ? ' on' : ''}" data-night="${k}"><b>Night ${k}</b>${badge}<small>${st.name}</small></button>`;
     };
     showCard(

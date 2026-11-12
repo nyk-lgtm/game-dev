@@ -105,6 +105,72 @@ describe('Last Light, night 2', () => {
     expect(n.nell.follows).toBe(true);
   });
 
+  // Nell first, then Bassett: she can be brought to the watch room and left there.
+  const NELL_FIRST = [
+    'take:matches', 'lead', 'go:yard', 'go:moor', 'go:point', 'say:nell:horn', 'say:nell:come',
+    'go:moor', 'go:yard', 'go:tower',
+  ];
+
+  it('once Nell is found Bassett hears she’s safe, and that counts as much as her being missing', () => {
+    const s = play(NELL_FIRST);
+    const labels = choices(s).filter((c) => c.about === 'bassett').map((c) => c.label);
+    expect(labels).not.toContain('Tell him Nell is missing');
+    expect(labels).toContain('Tell him Nell’s safe');
+    const out = act(s, 'say:bassett:nell')!;
+    expect(out.join(' ')).toContain('toffee');
+    expect(s.bassett.trust).toBe(1);
+  });
+
+  it('endings put Nell where she really is', () => {
+    // Left in the watch room.
+    const w = play([...NELL_FIRST, 'say:nell:stay']);
+    while (!w.over) act(w, w.room === 'tower' ? 'go:yard' : 'go:tower');
+    expect(w.over!.stars).toBe(1);
+    expect(w.over!.text.join(' ')).toContain('watch-room floor');
+    expect(w.over!.text.join(' ')).not.toContain('Ada’s chair');
+    // Standing beside her at the cairn at one o'clock.
+    const p = play(['go:yard', 'go:moor', 'go:point']);
+    while (!p.over) act(p, 'say:nell:come');
+    expect(p.over!.text.join(' ')).toContain('beside you');
+    expect(p.over!.text.join(' ')).not.toContain('They find her at dawn');
+    // Taken home to bed.
+    const h = play(['lead', 'go:yard', 'go:moor', 'go:point', 'say:nell:horn', 'say:nell:come', 'go:moor', 'go:house']);
+    expect(h.nell.home).toBe(true);
+    while (!h.over) expect(act(h, h.room === 'house' ? 'go:moor' : 'go:house')).not.toBeNull();
+    expect(h.over!.text.join(' ')).toContain('her own bed');
+  });
+
+  it('Bramble stays with Nell once found; no stray dog buttons, and waiting is for indoors', () => {
+    const s = play(['take:matches', 'lead', 'go:yard', 'go:moor', 'go:point']);
+    expect(s.bramble.withNell).toBe(true);
+    expect(choices(s).some((c) => c.about === 'bramble')).toBe(false);
+    // Leaving Nell at the cairn leaves the dog with her.
+    const out = act(s, 'go:moor')!;
+    expect(out.join(' ')).toContain('won’t leave her');
+    expect(s.bramble.room).toBe('point');
+    const done = play(BEST.slice(0, -1));
+    expect(done.room).toBe('signal');
+    expect(choices(done).map((c) => c.id)).toContain('wait');
+    act(done, 'go:yard');
+    expect(choices(done).map((c) => c.id)).not.toContain('wait');
+  });
+
+  it('later visits get the short description, and the fog is described as it is on arrival', () => {
+    const s = play(['go:yard', 'go:cottage']);
+    const again = act(s, 'go:yard')!;
+    expect(again[0]).toBe('The yard, deep in fog. Overhead the beam swings round.');
+    s.t = FOG_T - 1;
+    const moor = act(s, 'go:moor')!.join(' ');
+    expect(moor).toContain('The fog is total');
+    expect(moor).not.toContain('thickening fast');
+  });
+
+  it('asking about the fog signal first gets an answer, not a plea', () => {
+    const s = play(['take:logbook', 'go:yard', 'go:tower', 'show:logbook:bassett']);
+    const out = act(s, 'say:bassett:signal')!;
+    expect(out[0]).toMatch(/^“Condemned,”/);
+  });
+
   it('the Story wrappers keep night 1 as it was', () => {
     expect(NIGHT1.saveKey).toBe('run');
     expect(NIGHT1.RULES_VERSION).toBe(1);

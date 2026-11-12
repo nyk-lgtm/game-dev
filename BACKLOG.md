@@ -111,7 +111,11 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         forcing the hasp costs 2) and Nell (Bramble, gifts, a promise of the horn), Bramble guides on the
         moor, the hot-bulb engine heats 15 min, the fog shuts the moor at midnight (warned 18 min ahead;
         the wall always leads back). Best route sounds the horn at 12:36. Menu night picker, per-night
-        saves/profile, fog sky. Not blind-playtested yet.
+        saves/profile, fog sky.
+  - [x] Night 2 blind playtest (2★, 2★, 3★, 1★ crowbar; clock tight but fair) and fixes (rules v2):
+        "Tell him Nell's safe" counts like "missing", endings put Nell where she is, Bramble stays with
+        Nell once found, Bassett reacts to the forced hasp, contradictions fixed, short text on repeat
+        visits (both nights), people's lone actions keep the name, Go row pinned, "New" goes once started.
 
 - [x] **Nightline fixes from its blind playtest** (agent reached the goal on run 3; no errors):
   steering ~120 px to full lock; HUD on backing panels, 11 px labels, brighter TIME UP; traffic drawn
