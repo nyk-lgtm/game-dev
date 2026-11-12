@@ -60,7 +60,8 @@ const MONSTER_LOOK: Record<MonsterKind, { hue: number; sat: number; scale: numbe
 };
 const ITEM_HUE: Record<string, [number, number]> = { potion: [0, 70], ether: [215, 70], gold: [48, 90], weapon: [200, 15], armor: [200, 15], map: [40, 45] };
 /** Map glyph and color per item kind. */
-const ITEM_GLYPH: Record<string, [string, string]> = { potion: ['!', '#ff5a6a'], ether: ['!', '#5ab4ff'], gold: ['$', '#ffd36b'], weapon: [')', '#c9d4e0'], armor: ['[', '#c9d4e0'], map: ['?', '#e8d7a8'] };
+// Red is only for foes on the maps.
+const ITEM_GLYPH: Record<string, [string, string]> = { potion: ['!', '#7fe08a'], ether: ['!', '#5ab4ff'], gold: ['$', '#ffd36b'], weapon: [')', '#c9d4e0'], armor: ['[', '#c9d4e0'], map: ['?', '#e8d7a8'] };
 
 /** Minimap letters, one per monster kind. */
 const MAP_GLYPH: Record<MonsterKind, string> = { rat: 'r', bat: 'b', slime: 'j', thief: 't', skeleton: 's', archer: 'a', ghoul: 'g', wraith: 'W', mage: 'c', golem: 'G', warden: 'X' };
@@ -372,7 +373,8 @@ export class Game {
     showCard(
       `<h2>How to play</h2><ul>
       <li><b>FWD / BACK / STEP</b> move one cell. <b>TURN</b> is free; everything else takes a turn.</li>
-      <li>Or swipe on the view: up/down to step, left/right to turn, tap to hit or open doors.</li>
+      <li>Or swipe on the view: up/down to step; swipe left/right to turn, as if dragging the view (swipe left to look right); tap to hit or open doors.</li>
+      <li>Bumping a door opens it without stepping through, so you can look before you go in. Descending the stairs restores a little HP.</li>
       <li>Walk into a monster (or press <b>HIT</b>) to attack. The bar at the top of the view shows the foe in front of you.</li>
       <li>Red arrows at the edges of the view warn of foes beside or behind you: turn to face them.</li>
       <li><b>CAST</b> spells with MP (it slowly comes back): Firebolt from the start, Frost at level 3, Mend at 5, Blink at 7.</li>
@@ -449,7 +451,7 @@ export class Game {
   private showMap(): void {
     const s = this.state;
     if (!s || s.shop) return;
-    showCard(`<h2>Depth ${s.depth}</h2><canvas id="fullMap" style="width:100%;aspect-ratio:1;display:block"></canvas><p class="meta">&gt; stairs · + door · ! potion/ether · $ gold · ) [ gear · ? scroll · red letters: foes in sight</p>`, [
+    showCard(`<h2>Depth ${s.depth}</h2><canvas id="fullMap" style="width:100%;aspect-ratio:1;display:block"></canvas><p class="meta"><b style="color:#5ee7ff">■</b> you (arrow = facing) · <b style="color:#ffb347">&gt;</b> stairs · + door · O pillar · <b style="color:#7fe08a">!</b> potion · <b style="color:#5ab4ff">!</b> ether · $ gold · ) [ gear · ? scroll · <b style="color:#ff4d4d">red letters</b>: foes in sight</p>`, [
       { label: 'Close', primary: true, onClick: closeOverlay },
     ]);
     const c = $<HTMLCanvasElement>('fullMap');
@@ -804,9 +806,9 @@ export class Game {
       ctx.fillStyle = '#ff4d4d';
       ctx.fillText(MAP_GLYPH[m.kind], ...at(m.x, m.y));
     }
-    // You: an amber square with your facing as a dark arrow (so it never reads as the stairs).
+    // You: a cyan square with your facing as a dark arrow (amber is the stairs).
     const [px0, py0] = at(p.x, p.y);
-    ctx.fillStyle = '#ffd36b';
+    ctx.fillStyle = '#5ee7ff';
     ctx.fillRect(px0 - cell / 2 + 0.5, py0 - cell / 2 + 0.5, cell - 1, cell - 1);
     ctx.fillStyle = '#000';
     ctx.fillText('^>v<'[p.dir], px0, py0);

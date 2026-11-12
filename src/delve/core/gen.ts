@@ -74,7 +74,9 @@ export function generateFloor(seed: number, depth: number): Floor {
     const entry = { x: 14, y: 24, w: 5, h: 4 };
     rooms.push(entry, hall);
   } else {
-    for (let tries = 0; tries < 200 && rooms.length < 9; tries++) {
+    // The first floor is smaller, so a new player meets something within a minute.
+    const roomCount = depth === 1 ? 6 : 9;
+    for (let tries = 0; tries < 200 && rooms.length < roomCount; tries++) {
       const w = rng.int(3, 7);
       const h = rng.int(3, 7);
       const r = { x: rng.int(1, SIZE - w - 2), y: rng.int(1, SIZE - h - 2), w, h };

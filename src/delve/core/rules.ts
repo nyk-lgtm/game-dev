@@ -315,8 +315,10 @@ function pickup(s: GameState, ev: GameEvent[]): void {
 function descend(s: GameState, ev: GameEvent[]): void {
   enterFloor(s, s.depth + 1);
   const p = s.player;
-  p.hp = Math.min(p.maxHp, p.hp + Math.ceil(p.maxHp * 0.15));
+  const healed = Math.min(p.maxHp, p.hp + Math.ceil(p.maxHp * 0.15)) - p.hp;
+  p.hp += healed;
   say(s, s.depth === MAX_DEPTH ? 'The air is cold. Something vast waits ahead.' : `You descend to depth ${s.depth}.`);
+  if (healed > 0) say(s, `You catch your breath on the stairs (+${healed} HP).`);
   ev.push({ type: 'descend', depth: s.depth });
   if (SHOP_DEPTHS.includes(s.depth)) {
     s.shop = stock(s);

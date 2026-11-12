@@ -100,6 +100,10 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Afterglow: owner is happy with it — leave alone unless they report something.
 
 ## Done (recent)
+- Delve blind playtest (agent reached depth 2) and fixes (rules v4): floor 1 has 6 rooms not 9
+  (bot floor-1 turns 199 → 155; win rate 58% → 52%, within noise); player marker cyan (stairs are amber);
+  potions green (red is foes only); legend lists pillar and you; help explains swipe direction and
+  doors; descending says how much HP it restores. Not done: corridor depth cues in the 3D view.
 - Hub "What's new" panel (src/hub/news.ts), marks changes since the last visit.
 - Hexhold credits Frost; CI stuck-queue workaround noted in CLAUDE.md.
 - Glyphwright honest dps figures and untruncated spell names.
