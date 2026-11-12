@@ -18,6 +18,14 @@ Ground rules: never break saves without bumping RULES_VERSION; never leave main 
 keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 
 ## Now
+- [ ] **Ninefold** (seeded mini-golf). Milestones:
+  - [x] Core: corridor holes on a 6×9 grid, rails, posts, bumpers, sand, water (+1, replay the spot), slopes;
+        240 Hz physics, exact replays, 8-stroke pick-up, formula par. Search bot sinks everything (noise-free
+        it beats par by ~15, so par is for thumbs). 7 tests.
+  - [x] UI: drag-anywhere slingshot aim with power arrow, playback with trail, bumper glow, splash, hole
+        banners (Birdie! etc.), first-time tips per obstacle, scorecard, round card, daily, hub card.
+  - [ ] Blind playtest: is par fair for a thumb? Is the aim precise enough? Then: windmills or moving
+        gates, chamfered corners, sounds.
 - [ ] **Hexhold** (hex maze tower defense). Milestones:
   - [x] Core (src/hexhold/core): 9x11 hex board, flow-field pathing (never sealed), 30
         seeded waves with themes, 6 towers each gifting its neighbors, 8 enemies (flyers,

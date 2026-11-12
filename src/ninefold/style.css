@@ -1,0 +1,35 @@
+/* Ninefold: night lawn, warm timber, a red flag. */
+body {
+  --bg: #0c1613;
+  --panel: #121e1a;
+  --line: #22352d;
+  --text: #f2f0e6;
+  --muted: #9fb0a6;
+  --accent: #9be15d;
+}
+#hud { gap: 14px; }
+#hud .spacer { flex: 1; }
+#hud .value { font-variant-numeric: tabular-nums; }
+#total.under, .sc td.under, b.under { color: #9be15d; }
+#total.over, .sc td.over, b.over { color: #ff8a6a; }
+#dailyTag {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #0c1613; background: var(--accent); border-radius: 6px; padding: 3px 6px;
+}
+#controls {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line); background: var(--panel);
+}
+body #info { flex: 1; min-height: 44px; font-size: 13.5px; line-height: 1.35; color: var(--muted); display: block; padding-top: 2px; }
+#info b { color: var(--text); }
+#cardBtn {
+  min-height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line);
+  background: #1a2a24; color: var(--text); font-size: 15px; font-weight: 700;
+}
+.sc { width: 100%; border-collapse: collapse; margin: 8px 0; font-variant-numeric: tabular-nums; }
+.sc th, .sc td { padding: 6px 0; text-align: center; border-bottom: 1px solid var(--line); font-size: 14px; }
+.sc th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding-right: 6px; }
+.sc tr:last-child td { font-weight: 800; }
+.card p.big { font-size: 20px; text-align: center; margin: 8px 0; }
+.card .meta2 { color: var(--muted); font-size: 13px; text-align: center; }

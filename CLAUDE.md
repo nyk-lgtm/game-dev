@@ -5,7 +5,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 `afterglow/` (survivor-like), `delve/` (first-person ASCII crawler), `nightline/`
 (pseudo-3D ASCII racer), `glyph/` (Glyphwright, spell-crafting autobattler), `rewild/`
 (ecosystem builder on a hex island), `unspoken/` (learn a procedurally invented language from pictures), `hexhold/` (hex maze tower defense),
-`triad/` (hex logic puzzle: fire/water/leaf, numbers count beaten neighbors), `lastlight/` (tap-driven interactive story).
+`triad/` (hex logic puzzle: fire/water/leaf, numbers count beaten neighbors), `lastlight/` (tap-driven interactive story),
+`ninefold/` (seeded mini-golf).
 
 - The owner plays and tests only on an Android phone (Chrome, portrait). Every UI
   change must work by touch at ~390 CSS px wide; tap targets ≥ 44px.
@@ -43,7 +44,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   with batched `fillText` runs; art lives in each game's `art.ts`.
 - Daily challenges (src/shared/daily.ts): `<game>/?daily` plays today's seed (`dailySeed(game, day)`,
   local date); each game keeps its in-progress daily under `dailyRun` and today's best under `daily`.
-  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold and Triad; the hub's Daily section links them.
+  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad and Ninefold; the hub's Daily section links them.
 - Afterglow extras: Nights 1-5 (`NIGHTS` in content.ts, unlocked by `profile.nightsWon`), arenas
   (`ARENAS`/pillars in core/arena.ts, hashed from the seed), unions (`union` on a WeaponDef: two
   maxed weapons merge in a chest), and player damage is attributed (`w.taken`, `w.killedBy`).
@@ -68,6 +69,12 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 - Last Light (src/lastlight/core/story.ts): `choices(s)` lists legal action ids (`go:<room>`, `take:<item>`,
   `use:<item>:<target>`, `give:`, `say:<npc>:<topic>`, …); `act(s, id)` returns the text. A run is the list of
   ids (saved; `?a=` replays). tests/lastlight has the best route — update it when the story changes.
+- Ninefold (src/ninefold/core): `makeHole(seed, n)` grows a corridor of 16-unit cells on a 6×9 grid (a
+  self-avoiding walk, never touching itself, plus side pockets), walls = the cells' outer edges, obstacles in
+  route cells (never tee/cup). `simulate` is a fixed 240 Hz step; shots are saved as `angle.power` in
+  thousandths, so `replay(seed, a)` is exact. Par is a formula (turns, length, hazards). Tools in
+  scripts/ninefold: `show.ts <seed>` (ASCII), `balance.ts n` (search bot, NOISE=0.04 wobble), `trace.ts`,
+  `botround.ts <seed>` (actions for `?seed=&a=`).
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)
   plus a shape in render/draw.ts and a color in palette.ts; tests in
   tests/telegraph/enemies.test.ts. Telegraphed attacks set `aim` and resolve via

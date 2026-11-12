@@ -10,6 +10,7 @@ export interface News {
 }
 
 export const NEWS: News[] = [
+  { day: '2026-11-12', path: './ninefold/', game: 'Ninefold', text: 'New game: mini-golf. Nine holes grown from a seed, with rails to bank off, sand, ponds, slopes and bumpers. Pull back and let go. There is a daily course too.' },
   { day: '2026-11-12', path: './delve/', game: 'Delve', text: 'Corners and side openings now have lit edges in the 3D view, so turns are easier to spot.' },
   { day: '2026-11-12', path: './grove/', game: 'Grove', text: 'Trapping wisps now pays (+50, double for two at once); fewer crystals and bolts, so runs are tighter and the Spirit Tree is a real achievement.' },
   { day: '2026-11-12', path: './lantern/', game: 'Lantern', text: 'Tapping far or unexplored ground walks you as close as it can; monsters you’ve met stop interrupting your walk; Wait and the shops say what happened.' },

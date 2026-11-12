@@ -29,8 +29,27 @@ const unspoken = makeStore('unspoken.');
 const hexhold = makeStore('hexhold.');
 const triad = makeStore('triad.');
 const lastlight = makeStore('lastlight.');
+const ninefold = makeStore('ninefold.');
 
 const GAMES: GameCard[] = [
+  {
+    path: './ninefold/',
+    title: 'Ninefold',
+    tag: 'Mini-golf',
+    pitch: 'Nine holes grown fresh from a seed: rails to bank off, sand, ponds, slopes and bumpers. Pull back, let go, and try to beat par.',
+    accent: '#9be15d',
+    best: () => {
+      const p = ninefold.load<{ rounds?: number; best?: number | null; aces?: number } | null>('profile', null);
+      if (!p?.rounds || p.best == null) return null;
+      const d = p.best;
+      return `Best ${d === 0 ? 'E' : d > 0 ? `+${d}` : `−${-d}`}${p.aces ? ` · ${p.aces} ace${p.aces === 1 ? '' : 's'}` : ''}`;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#0c1613"/>
+      <path d="M14 70V36h24V8h24v28H38v34z" fill="#2f8a50" stroke="#b8875a" stroke-width="3" stroke-linejoin="round"/>
+      <rect x="18" y="44" width="14" height="10" rx="3" fill="#d9c08a"/>
+      <circle cx="50" cy="20" r="4" fill="#0a0d0b"/><path d="M50 20V4" stroke="#e8e2d0" stroke-width="1.5"/><path d="M50 4l9 3-9 3z" fill="#ff5a4e"/>
+      <circle cx="26" cy="64" r="3" fill="#fafafa"/><path d="M26 60V48" stroke="#9be15d" stroke-width="1.5" stroke-dasharray="2 2"/></svg>`,
+  },
   {
     path: './lastlight/',
     title: 'Last Light',
@@ -260,6 +279,7 @@ const DAILY = [
   { path: './unspoken/?daily', title: 'Unspoken', store: unspoken, accent: '#c8643c' },
   { path: './hexhold/?daily', title: 'Hexhold', store: hexhold, accent: '#ffd77a' },
   { path: './triad/?daily', title: 'Triad', store: triad, accent: '#ff8a3d' },
+  { path: './ninefold/?daily', title: 'Ninefold', store: ninefold, accent: '#9be15d' },
 ];
 const daily = document.getElementById('daily')!;
 daily.innerHTML = `<h3>Daily challenges <span>${prettyDay()}</span></h3><p>The same run for everyone today. A new one at midnight.</p>`;
