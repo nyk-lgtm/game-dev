@@ -33,6 +33,12 @@ export class Board {
   selected = -1;
   /** Cell marked for this season's lightning. */
   fireAt = -1;
+  /** Where the fire would catch (the nearest burnable plant to the strike), or -1. */
+  catchAt = -1;
+  /** Cells this season's wildfire would burn as things stand. */
+  burnPlan = new Set<number>();
+  /** Next season's lightning strike, marked faintly a season ahead. */
+  nextFireAt = -1;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -167,6 +173,45 @@ export class Board {
     const size = this.L.size;
     const sea = seasonOf(Math.min(s.season, 19));
 
+    // Wildfire forecast: the cells that would burn, the strike, and where the fire catches.
+    if (!s.over && this.fireAt >= 0) {
+      const flick = 0.5 + 0.5 * Math.sin(time * 5);
+      g.save();
+      for (const i of this.burnPlan) {
+        const p = this.center(i);
+        hexPath(g, p.x, p.y, size * 0.9);
+        // Quieter while a card is picked, so the placement glow shows through.
+        if (!this.marks.size) {
+          g.fillStyle = `rgba(255, 96, 32, ${0.18 + flick * 0.14})`;
+          g.fill();
+        }
+        g.lineWidth = 1.5;
+        g.strokeStyle = 'rgba(255, 140, 60, 0.85)';
+        g.stroke();
+        flame(g, p.x + size * 0.42, p.y - size * 0.38, size * 0.24, flick);
+      }
+      const p = this.center(this.fireAt);
+      if (this.catchAt >= 0 && this.catchAt !== this.fireAt) {
+        const q = this.center(this.catchAt);
+        g.strokeStyle = '#ffd25e';
+        g.lineWidth = 2;
+        g.setLineDash([3, 4]);
+        g.beginPath();
+        g.moveTo(p.x, p.y);
+        g.lineTo(q.x, q.y);
+        g.stroke();
+        g.setLineDash([]);
+      }
+      g.globalAlpha = 0.7 + 0.3 * Math.sin(time * 6);
+      hexPath(g, p.x, p.y, size * 0.98);
+      g.strokeStyle = '#ffd25e';
+      g.lineWidth = 2.5;
+      g.setLineDash([4, 3]);
+      g.stroke();
+      g.setLineDash([]);
+      bolt(g, p.x, p.y, size * 0.5);
+      g.restore();
+    }
     // Placement hints.
     if (this.marks.size) {
       const pulse = 0.5 + 0.5 * Math.sin(time * 4);
@@ -188,29 +233,11 @@ export class Board {
       g.restore();
     }
 
-    // Lightning marker.
-    if (this.fireAt >= 0 && !s.over) {
-      const p = this.center(this.fireAt);
+    if (!s.over && this.nextFireAt >= 0) {
+      const p = this.center(this.nextFireAt);
       g.save();
-      g.globalAlpha = 0.65 + 0.35 * Math.sin(time * 6);
-      g.strokeStyle = '#ffd25e';
-      g.lineWidth = 2;
-      g.setLineDash([4, 4]);
-      g.beginPath();
-      g.arc(p.x, p.y, size * 1.9, 0, Math.PI * 2);
-      g.stroke();
-      g.setLineDash([]);
-      g.fillStyle = '#ffd25e';
-      g.beginPath();
-      const z = size * 0.42;
-      g.moveTo(p.x + z * 0.2, p.y - z);
-      g.lineTo(p.x - z * 0.45, p.y + z * 0.1);
-      g.lineTo(p.x, p.y + z * 0.1);
-      g.lineTo(p.x - z * 0.2, p.y + z);
-      g.lineTo(p.x + z * 0.45, p.y - z * 0.1);
-      g.lineTo(p.x, p.y - z * 0.1);
-      g.closePath();
-      g.fill();
+      g.globalAlpha = 0.45;
+      bolt(g, p.x, p.y, size * 0.4);
       g.restore();
     }
 
@@ -319,6 +346,37 @@ export class Board {
       g.restore();
     }
   }
+}
+
+function bolt(g: CanvasRenderingContext2D, x: number, y: number, z: number) {
+  g.fillStyle = '#ffd25e';
+  g.strokeStyle = 'rgba(40, 24, 0, 0.8)';
+  g.lineWidth = 1.2;
+  g.beginPath();
+  g.moveTo(x + z * 0.2, y - z);
+  g.lineTo(x - z * 0.45, y + z * 0.1);
+  g.lineTo(x, y + z * 0.1);
+  g.lineTo(x - z * 0.2, y + z);
+  g.lineTo(x + z * 0.45, y - z * 0.1);
+  g.lineTo(x, y - z * 0.1);
+  g.closePath();
+  g.stroke();
+  g.fill();
+}
+
+function flame(g: CanvasRenderingContext2D, x: number, y: number, r: number, flick: number) {
+  const h = r * (1.5 + flick * 0.25);
+  g.fillStyle = '#ff7a2f';
+  g.beginPath();
+  g.moveTo(x, y - h);
+  g.quadraticCurveTo(x + r, y - r * 0.2, x + r * 0.6, y + r * 0.6);
+  g.quadraticCurveTo(x, y + r, x - r * 0.6, y + r * 0.6);
+  g.quadraticCurveTo(x - r, y - r * 0.2, x, y - h);
+  g.fill();
+  g.fillStyle = '#ffd25e';
+  g.beginPath();
+  g.ellipse(x, y + r * 0.25, r * 0.32, r * 0.5, 0, 0, Math.PI * 2);
+  g.fill();
 }
 
 export function iconCanvas(id: SpeciesId, css: number, draw: (g: CanvasRenderingContext2D, r: number) => void): HTMLCanvasElement {

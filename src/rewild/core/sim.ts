@@ -37,7 +37,7 @@ export function weatherFor(seed: number, season: number): { weather: Weather; fi
 export const WEATHER_TEXT: Record<Weather, string> = {
   fair: 'Fair weather.',
   drought: 'Drought: every cell is one step drier.',
-  fire: 'Dry lightning: one step drier, and a wildfire may start near the marked cell. Dry grass, flowers and shrubs burn.',
+  fire: 'Dry lightning: every cell is one step drier, and late in summer lightning strikes the marked cell. Fire catches in the nearest full-grown grass, flowers or shrub within 2 cells and spreads through touching ones on bone-dry ground (moisture 0). Grazed or young plants, damp ground, water, bare cells and oaks stop it.',
   storm: 'Storm: heavy rain makes every cell one step wetter, but bees and birds stay hidden and spread nothing.',
   harsh: 'Harsh winter: animals that stay awake need twice the food.',
 };
@@ -70,7 +70,9 @@ export function moisture(cells: Cell[], weather: Weather): number[] {
   });
 }
 
-const BURNS: PlantId[] = ['grass', 'flowers', 'shrub', 'tree'];
+/** Plants that burn: only full grown (grazed or young ones are too short) and on bone-dry ground (moisture 0). */
+export const BURNS: PlantId[] = ['grass', 'flowers', 'shrub'];
+export const canBurn = (c: Cell, wet: number) => !!c.plant && BURNS.includes(c.plant.id) && c.plant.n >= 3 && wet === 0;
 
 /** Plant habitat check including the fungi's need for a woody neighbor. */
 export function plantOk(cells: Cell[], i: number, id: PlantId, wet: number): boolean {
@@ -110,51 +112,8 @@ export function simulate(s: GameState, plantsOnly = false): SimEvent[] {
   const cells = s.cells;
   const calm = s.weather !== 'storm';
 
-  // Ash from last season's fire settles.
+  // Ash from last summer's fire settles.
   for (const c of cells) if (c.burnt > 0) c.burnt--;
-
-  // --- Wildfire ---
-  if (s.weather === 'fire' && s.fireAt >= 0) {
-    const wet = moisture(cells, s.weather);
-    const burnable = (i: number) => {
-      const p = cells[i].plant;
-      return !!p && BURNS.includes(p.id) && wet[i] <= 1;
-    };
-    let start = -1;
-    for (const j of [s.fireAt, ...NEAR2[s.fireAt]]) {
-      if (burnable(j)) {
-        start = j;
-        break;
-      }
-    }
-    if (start >= 0) {
-      const seen = new Set([start]);
-      const queue = [start];
-      while (queue.length) {
-        const i = queue.shift()!;
-        const c = cells[i];
-        c.plant = null;
-        c.fert = Math.min(3, c.fert + 1);
-        c.burnt = 1;
-        s.stats.burnt++;
-        ev.push({ type: 'burn', cell: i });
-        const a = c.animal;
-        if (a && a.id !== 'bees' && a.id !== 'songbird') {
-          a.n--;
-          if (a.n <= 0) {
-            c.animal = null;
-            ev.push({ type: 'die', cell: i, id: a.id, why: 'burnt' });
-          } else ev.push({ type: 'shrink', cell: i, id: a.id, why: 'burnt' });
-        }
-        for (const j of ADJ[i]) {
-          if (!seen.has(j) && burnable(j)) {
-            seen.add(j);
-            queue.push(j);
-          }
-        }
-      }
-    }
-  }
 
   // --- Plants ---
   const wet = moisture(cells, s.weather);
@@ -307,13 +266,13 @@ export function simulate(s: GameState, plantsOnly = false): SimEvent[] {
     }
   };
 
-  const move = (from: number, to: number) => {
+  const move = (from: number, to: number, why: 'flee' | 'food') => {
     const a = cells[from].animal!;
     cells[to].animal = a;
     cells[from].animal = null;
     a.age = 0;
     acted.add(to);
-    ev.push({ type: 'move', from, to, id: a.id });
+    ev.push({ type: 'move', from, to, id: a.id, why });
   };
 
   for (const i0 of order) {
@@ -332,7 +291,7 @@ export function simulate(s: GameState, plantsOnly = false): SimEvent[] {
       if (safe.length) {
         let best = safe[0];
         for (const j of safe) if (foodAt(cells, j, 'deer', sea) > foodAt(cells, best, 'deer', sea)) best = j;
-        move(i, best);
+        move(i, best, 'flee');
         i = best;
       }
     }
@@ -340,6 +299,7 @@ export function simulate(s: GameState, plantsOnly = false): SimEvent[] {
     const need = needOf(a.id, a.n, s.weather, sea);
     const home = animalFits(a.id, cells[i]);
     const food = home ? foodAt(cells, i, a.id, sea) : 0;
+    ev.push({ type: 'feed', cell: i, id: a.id, food, need });
     if (home && food >= need) {
       if (def.consumes) eat(i, a.id, need);
       if (def.breeds.includes(sea)) {
@@ -399,7 +359,8 @@ export function simulate(s: GameState, plantsOnly = false): SimEvent[] {
       }
     }
     if (best >= 0) {
-      move(i, best);
+      move(i, best, 'food');
+      ev.push({ type: 'feed', cell: best, id: a.id, food: bestF, need });
       if (def.consumes) eat(best, a.id, need);
       continue;
     }
@@ -411,7 +372,53 @@ export function simulate(s: GameState, plantsOnly = false): SimEvent[] {
     } else ev.push({ type: 'shrink', cell: i, id: a.id, why: home ? 'hungry' : 'no home' });
   }
 
+  // --- Wildfire, late in a lightning summer (after grazing) ---
+  if (s.weather === 'fire' && s.fireAt >= 0) wildfire(s, ev);
+
   return ev;
+}
+
+/** Lightning strikes the marked cell; fire catches in the nearest burnable plant
+ * within 2 cells and spreads to touching burnable plants. */
+function wildfire(s: GameState, ev: SimEvent[]) {
+  const cells = s.cells;
+  const wet = moisture(cells, s.weather);
+  const burnable = (i: number) => canBurn(cells[i], wet[i]);
+  let start = -1;
+  for (const j of [s.fireAt, ...NEAR2[s.fireAt]]) {
+    if (burnable(j)) {
+      start = j;
+      break;
+    }
+  }
+  if (start < 0) return;
+  ev.push({ type: 'strike', cell: start });
+  const seen = new Set([start]);
+  const queue = [start];
+  while (queue.length) {
+    const i = queue.shift()!;
+    const c = cells[i];
+    ev.push({ type: 'burn', cell: i });
+    ev.push({ type: 'die', cell: i, id: c.plant!.id, why: 'burnt' });
+    c.plant = null;
+    c.fert = Math.min(3, c.fert + 1);
+    c.burnt = 1;
+    s.stats.burnt++;
+    const a = c.animal;
+    if (a && a.id !== 'bees' && a.id !== 'songbird') {
+      a.n--;
+      if (a.n <= 0) {
+        c.animal = null;
+        ev.push({ type: 'die', cell: i, id: a.id, why: 'burnt' });
+      } else ev.push({ type: 'shrink', cell: i, id: a.id, why: 'burnt' });
+    }
+    for (const j of ADJ[i]) {
+      if (!seen.has(j) && burnable(j)) {
+        seen.add(j);
+        queue.push(j);
+      }
+    }
+  }
 }
 
 /** Species alive and total life on the island. */

@@ -25,7 +25,7 @@ export interface Cell {
   fert: number;
   plant: Pop<PlantId> | null;
   animal: Pop<AnimalId> | null;
-  /** Seasons until a burnt cell stops showing ash (visual + no regrowth that season). */
+  /** Ash from a wildfire at the end of last season (shown until the next season plays). */
   burnt: number;
 }
 
@@ -104,10 +104,13 @@ export type SimEvent =
   | { type: 'spread'; from: number; to: number; id: SpeciesId }
   | { type: 'shrink'; cell: number; id: SpeciesId; why: Cause; by?: AnimalId }
   | { type: 'die'; cell: number; id: SpeciesId; why: Cause; by?: AnimalId }
-  | { type: 'move'; from: number; to: number; id: AnimalId }
+  | { type: 'move'; from: number; to: number; id: AnimalId; why: 'flee' | 'food' }
+  /** An awake animal sizing up its food where it stands (after other animals acted), or where it moves to eat. */
+  | { type: 'feed'; cell: number; id: AnimalId; food: number; need: number }
   | { type: 'eat'; cell: number; prey: number; id: AnimalId }
   | { type: 'terraform'; cell: number; from: Terrain; to: Terrain }
   | { type: 'enrich'; cell: number; fert: number }
+  | { type: 'strike'; cell: number }
   | { type: 'burn'; cell: number }
   | { type: 'goal'; id: string }
   | { type: 'unlock'; tier: number };

@@ -26,22 +26,23 @@ import {
   census,
   clone,
   encode,
-  foodAt,
   isPlant,
   moisture,
-  needOf,
   newGame,
   placeError,
+  placeReason,
   replay,
   decodeAll,
   seasonReport,
-  simulate,
   seasonOf,
+  track,
   starsFor,
   weatherFor,
   yearOf,
   type Action,
+  type BlockKind,
   type Cell,
+  type Fate,
   type GameState,
   type SeasonReport,
   type SimEvent,
@@ -76,31 +77,38 @@ interface Profile {
   runs: number;
 }
 
-function units(s: GameState, id: SpeciesId): number {
-  let n = 0;
-  for (const c of s.cells) {
-    if (c.plant?.id === id) n += c.plant.n;
-    if (c.animal?.id === id) n += c.animal.n;
-  }
-  return n;
+/** How a population placed at size `start` fares: thrives, struggles or won't last. */
+function judge(f: Fate, start: number): Mark {
+  // Full lichen crumbling its rock into soil is the point of lichen.
+  if (!f.alive) return f.id === 'lichen' && !f.hits.length && !f.shadedBy ? 'good' : 'bad';
+  if (f.fled || f.wandered || f.n < start) return 'weak';
+  return 'good';
 }
 
-/** Why a species placed on cell i would not thrive, from a trial season's events. */
-function placeWhy(id: SpeciesId, i: number, ev: SimEvent[], after: GameState): string {
-  for (const e of ev) {
-    if (e.type === 'move' && e.from === i && e.id === id) return 'it would wander off to find food';
-    if ((e.type === 'die' || e.type === 'shrink') && e.cell === i && e.id === id) {
-      if (e.why === 'hungry' || e.why === 'starved') return 'not enough food in reach';
-      return causeNow(e.why, id, e.by);
-    }
-  }
-  if (isPlant(id)) {
-    const sea = seasonOf(after.season - 1);
-    if (!PLANTS[id].grows.includes(sea)) return `it doesn't grow in ${SEASON_NAMES[sea].toLowerCase()}`;
-    if (ev.some((e) => e.type === 'eat' && e.prey === i)) return 'grazers would crop it';
-    return 'it would barely grow';
-  }
+const hungerWhy = (h: { why: string }) => h.why === 'hungry' || h.why === 'starved';
+
+/** Why a placement would struggle or fail, in the words of the cell forecast. */
+function placeWhy(f: Fate): string {
+  if (f.shadedBy) return `${lower(f.shadedBy)} would shade it out`;
+  const last = f.hits[f.hits.length - 1];
+  if (last && !f.alive) return hungerWhy(last) ? 'not enough food in reach' : causeNow(last.why, f.id, last.by);
+  if (f.fled) return 'it would flee the wolves nearby';
+  if (f.wandered) return 'it would wander off to find food';
+  const hit = f.hits[0];
+  if (hit) return hungerWhy(hit) ? 'not enough food in reach' : causeNow(hit.why, f.id, hit.by);
+  if (f.grazedBy.length) return `${f.grazedBy.map(lower).join(' and ')} would crop it`;
   return 'it would barely grow';
+}
+
+/** Seasons to look ahead when judging a placement: sleepers placed in winter and
+ * plants placed out of their growing season are judged once they get going. */
+function lookFor(s: GameState, id: SpeciesId): number {
+  const left = SEASONS - s.season;
+  if (isPlant(id)) {
+    for (let k = 0; k < 4; k++) if (PLANTS[id].grows.includes(seasonOf(s.season + k))) return Math.max(1, Math.min(left, k + 1));
+    return 1;
+  }
+  return ANIMALS[id].hibernates && seasonOf(s.season) === 3 ? Math.max(1, Math.min(left, 2)) : 1;
 }
 
 const cap = (t: string) => t.replace(/^./, (ch) => ch.toUpperCase());
@@ -139,6 +147,10 @@ export class Game {
   private markWhy = new Map<number, string>();
   /** A 'bad' cell tapped once: the next tap on it places anyway. */
   private armed = -1;
+  /** Seasons the marks look ahead (more than 1 for sleepers and resting plants). */
+  private look = 1;
+  /** Cells this season's wildfire would burn as things stand. */
+  private burnPlan: number[] = [];
   /** What the last season did, and what the next one would do if nothing is played. */
   report: SeasonReport | null = null;
   risk: SeasonReport | null = null;
@@ -165,6 +177,7 @@ export class Game {
     $('rerollBtn').onclick = () => this.reroll();
     $('weatherBtn').onclick = () => this.showWeather();
     $('goalsBtn').onclick = () => this.showGoals();
+    $('info').addEventListener('scroll', () => this.updateMore(), { passive: true });
     const loop = (t: number) => {
       this.board.draw(t / 1000);
       requestAnimationFrame(loop);
@@ -379,16 +392,30 @@ export class Game {
   private refresh(fade: boolean, ev: SimEvent[] = []) {
     this.wet = moisture(this.s.cells, this.s.weather);
     this.risk = null;
+    this.burnPlan = [];
+    let strike = -1;
     if (!this.s.over) {
       const t = clone(this.s);
       const before = clone(t);
       const tev = apply(t, { type: 'end' });
-      if (tev) this.risk = seasonReport(before, tev, t);
+      if (tev) {
+        this.risk = seasonReport(before, tev, t);
+        for (const e of tev) {
+          if (e.type === 'burn') this.burnPlan.push(e.cell);
+          if (e.type === 'strike') strike = e.cell;
+        }
+      }
     }
     const now = this.now();
     this.board.set(this.s, this.wet, fade, now);
     if (ev.length) this.board.play(ev, now);
-    this.board.fireAt = this.s.weather === 'fire' ? this.s.fireAt : -1;
+    const s = this.s;
+    this.board.fireAt = !s.over && s.weather === 'fire' ? s.fireAt : -1;
+    this.board.catchAt = strike;
+    this.board.burnPlan = new Set(this.burnPlan);
+    // Next season's lightning, marked faintly a season ahead.
+    const next = !s.over && s.season + 1 < SEASONS ? weatherFor(s.seed, s.season + 1) : null;
+    this.board.nextFireAt = next?.weather === 'fire' ? next.fireAt : -1;
     this.computeMarks();
     this.render();
   }
@@ -397,28 +424,25 @@ export class Game {
     this.marks = new Map();
     this.markWhy = new Map();
     this.armed = -1;
-    if (this.card >= 0 && this.s.hand[this.card]) {
+    if (this.card >= 0 && this.s.hand[this.card] && this.s.plays > 0) {
       const id = this.s.hand[this.card];
-      // Sleepers placed in winter are judged by how they fare once they wake.
-      const look = !isPlant(id) && ANIMALS[id].hibernates && seasonOf(this.s.season) === 3 && this.s.season < SEASONS - 1 ? 2 : 1;
+      // Each glowing cell is judged by the placed population itself, from the
+      // same exact trial season the cell readout shows once it is placed.
+      const look = (this.look = lookFor(this.s, id));
       const run = (t: GameState) => {
-        let ev: SimEvent[] = [];
-        for (let k = 0; k < look; k++) ev = apply(t, { type: 'end' }) ?? [];
+        const ev: SimEvent[] = [];
+        for (let k = 0; k < look; k++) ev.push(...(apply(t, { type: 'end' }) ?? []));
         return ev;
       };
-      const base = clone(this.s);
-      run(base);
-      const baseUnits = units(base, id);
       const start = isPlant(id) ? PLANTS[id].start : ANIMALS[id].start;
       for (let i = 0; i < this.s.cells.length; i++) {
-        if (placeError(this.s, this.card, i) !== null) continue;
+        if (placeError(this.s, this.card, i, this.wet) !== null) continue;
         const t = clone(this.s);
         apply(t, { type: 'place', card: this.card, cell: i });
-        const ev = run(t);
-        const d = units(t, id) - baseUnits;
-        const m: Mark = d >= start ? 'good' : d > 0 ? 'weak' : 'bad';
+        const f = track(run(t), i, id, t.cells);
+        const m = judge(f, start);
         this.marks.set(i, m);
-        if (m !== 'good') this.markWhy.set(i, placeWhy(id, i, ev, t));
+        if (m !== 'good') this.markWhy.set(i, placeWhy(f));
       }
     }
     this.board.marks = this.marks;
@@ -436,7 +460,11 @@ export class Game {
     $('goalsCount').textContent = `⚑${done}/${s.goals.length}`;
     $('goalsBtn').classList.toggle('done', done === s.goals.length);
     this.renderHand();
+    const info = $('info');
+    const html = info.innerHTML;
     this.renderInfo();
+    if (info.innerHTML !== html) info.scrollTop = 0;
+    this.updateMore();
     const end = $('endBtn') as HTMLButtonElement;
     end.textContent = s.plays > 0 ? 'End season' : 'End season ▶';
     end.classList.toggle('ready', s.plays === 0 && !s.over);
@@ -453,7 +481,7 @@ export class Game {
       const b = document.createElement('button');
       b.className = 'card-sp';
       if (i === this.card) b.classList.add('sel');
-      const anywhere = this.s.cells.some((_, k) => placeError(this.s, i, k) === null);
+      const anywhere = this.s.cells.some((_, k) => placeError(this.s, i, k, this.wet) === null);
       if (!anywhere) b.classList.add('nowhere');
       if (this.s.plays <= 0) b.classList.add('nowhere');
       b.appendChild(iconCanvas(id, 48, (g, r) => drawIcon(g, r, r, r * 0.92, id)));
@@ -480,6 +508,14 @@ export class Game {
     });
   }
 
+  /** Marks the panel when its text runs past the bottom, so it reads as scrollable. */
+  private updateMore() {
+    const info = $('info');
+    const more = info.scrollHeight - info.scrollTop - info.clientHeight > 4;
+    info.classList.toggle('more', more);
+    $('panel').classList.toggle('more', more);
+  }
+
   private renderInfo() {
     const s = this.s;
     const info = $('info');
@@ -504,13 +540,19 @@ export class Game {
       const weak = marks.filter((m) => m === 'weak').length;
       const doomed = marks.length - good - weak;
       const why = this.topWhy();
+      // Plants out of season and sleepers in winter are judged once they get going.
+      const sea = seasonOf(s.season);
+      const later = this.look > 1 ? SEASON_NAMES[seasonOf(s.season + this.look - 1)].toLowerCase() : '';
+      const resting = isPlant(id) ? !PLANTS[id].grows.includes(sea) : ANIMALS[id].hibernates && sea === 3;
+      const note = resting && later ? `${isPlant(id) ? `Doesn't grow in ${SEASON_NAMES[sea].toLowerCase()}` : 'Sleeps through winter'}; judged by ${later}: ` : '';
+      const thrive = later ? 'it will do well' : 'it will thrive';
       const where =
         this.marks.size === 0
           ? `<span class="warn">Nowhere to put it yet.</span> ${this.nowhereHint(id)}`
           : good
-            ? `<span class="good">${good} cell${good > 1 ? 's' : ''}</span> where it will thrive${weak ? `, <span class="warn">${weak}</span> where it will struggle${why ? ` (${why})` : ''}` : doomed ? `; on dark cells it won't last${why ? ` (${why})` : ''}` : ''}.`
-            : `<span class="warn">It would struggle anywhere right now${why ? `: ${why}` : ''}.</span>`;
-      info.innerHTML = `<div class="row"><span class="title">${SPECIES[id].name}</span><span class="tag">${needsText(id)}</span></div><div>${SPECIES[id].text}</div><div>${where}</div>`;
+            ? `${note}<span class="good">${good} cell${good > 1 ? 's' : ''}</span> where ${thrive}${weak ? `, <span class="warn">${weak}</span> where it will struggle${why ? ` (${why})` : ''}` : doomed ? `; on dark cells it won't last${why ? ` (${why})` : ''}` : ''}.`
+            : `${note}<span class="warn">It would struggle anywhere right now${why ? `: ${why}` : ''}.</span>`;
+      info.innerHTML = `<div class="row"><span class="title">${SPECIES[id].name}</span><span class="tag">${needsText(id)}</span></div><div>${where}</div><div class="desc">${SPECIES[id].text}</div>`;
       return;
     }
     if (this.cell >= 0) {
@@ -521,15 +563,26 @@ export class Game {
     const left = s.plays;
     const title = left > 0 ? `Play up to ${left} more card${left > 1 ? 's' : ''}` : 'Ready for the season';
     const rep = this.report;
-    const lines: string[] = [];
-    if (s.weather !== 'fair') {
-      lines.push(`<b style="color:${WEATHER_COLOR[s.weather]}">${WEATHER_NAME[s.weather]}:</b> ${WEATHER_TEXT[s.weather].replace(/^[^:]*: /, '')}`);
+    let weather = '';
+    if (s.weather === 'fire') {
+      const n = this.burnPlan.length;
+      weather =
+        `<b style="color:${WEATHER_COLOR.fire}">Lightning:</b> ` +
+        (n
+          ? `<span class="warn">the wildfire would burn ${n} cell${n > 1 ? 's' : ''}</span> (flames on the island).`
+          : 'nothing near the strike is tall and dry enough to burn.') +
+        ' Grazed or young plants, damp ground, water and bare cells stop fire.';
+    } else if (s.weather !== 'fair') {
+      weather = `<b style="color:${WEATHER_COLOR[s.weather]}">${WEATHER_NAME[s.weather]}:</b> ${WEATHER_TEXT[s.weather].replace(/^[^:]*: /, '')}`;
     }
-    if (rep) lines.push(...summaryLines(rep, this.risk, lines.length ? 2 : 3));
-    else lines.push(left > 0 ? 'Pick a card, then a glowing cell. Tap any cell to see what lives there.' : 'End the season to watch the island grow.');
+    // Summary lines stay one line each, except the died-out line, which wraps so no species is cut.
+    const lines = rep
+      ? summaryLines(rep, this.risk, weather ? 3 : 4).map((l) => `<div class="line${l.includes('✖') ? ' wrap' : ''}">${l}</div>`)
+      : [`<div>${left > 0 ? 'Pick a card, then a glowing cell. Tap any cell to see what lives there.' : 'End the season to watch the island grow.'}</div>`];
     info.innerHTML =
       `<div class="row head"><span class="title">${title}</span>${undo}${rep ? '<button class="act" id="repBtn">Report</button>' : ''}</div>` +
-      lines.map((l) => `<div class="${rep ? 'line' : ''}">${l}</div>`).join('');
+      (weather ? `<div>${weather}</div>` : '') +
+      lines.join('');
     $('undoBtn')?.addEventListener('click', () => this.undo());
     $('repBtn')?.addEventListener('click', () => this.showReport());
   }
@@ -541,18 +594,55 @@ export class Game {
     return [...n].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
   }
 
+  /** Names what actually stops a card going anywhere: no ground, too dry, too poor, taken… */
   private nowhereHint(id: SpeciesId): string {
-    if (!isPlant(id)) return `It lives on ${ANIMALS[id].on.map((t) => TERRAIN_NAME[t].toLowerCase()).join(', ')}.`;
-    if (id === 'fungi') return 'Grow an oak or shrub first.';
+    const s = this.s;
+    const blocks = s.cells.map((_, i) => placeReason(s, id, i, this.wet));
+    const drying = s.weather === 'drought' || s.weather === 'fire' ? ` (this season's ${s.weather === 'fire' ? 'lightning' : 'drought'} dries every cell)` : '';
+    const dampTip = `Damp ground lies beside ponds and marsh, on the coast or by a full oak${drying}.`;
+    if (!isPlant(id)) {
+      const on = ANIMALS[id].on.map((t) => TERRAIN_NAME[t].toLowerCase()).join(', ');
+      return blocks.some((b) => b?.kind === 'animal') ? `It lives on ${on}, and every such cell already has an animal.` : `It lives on ${on}.`;
+    }
     const d = PLANTS[id];
-    if (d.minFert >= 2) return 'Grass and fungi make soil richer each autumn.';
-    if (d.on.includes('soil') && !d.on.includes('rock')) return 'Lichen turns rock and sand into soil.';
-    return '';
+    let cells = s.cells.map((_, i) => i).filter((i) => d.on.includes(s.cells[i].t));
+    let where = `${d.on.map((t) => TERRAIN_NAME[t].toLowerCase()).join(' or ')} cell`;
+    if (id === 'fungi') {
+      const woody = (j: number) => s.cells[j].plant?.id === 'tree' || s.cells[j].plant?.id === 'shrub';
+      if (!s.cells.some((_, j) => woody(j))) return 'Fungi grow beside an oak or shrub: grow one first.';
+      cells = cells.filter((i) => ADJ[i].some(woody));
+      if (!cells.length) return 'None of your oaks or shrubs has soil beside it.';
+      where = 'soil cell beside an oak or shrub';
+    }
+    if (!cells.length) {
+      if (d.on.includes('soil')) return 'There is no soil yet: lichen turns rock and sand into soil.';
+      return `There is no ${d.on.map((t) => TERRAIN_NAME[t].toLowerCase()).join(' or ')} here.`;
+    }
+    const n = new Map<BlockKind, number>();
+    for (const i of cells) {
+      const k = blocks[i]?.kind;
+      if (k) n.set(k, (n.get(k) ?? 0) + 1);
+    }
+    const text: Partial<Record<BlockKind, string>> = {
+      dry: `too dry (needs moisture ${d.minWet})`,
+      poor: `too poor (needs richness ${d.minFert})`,
+      rich: 'too rich (it is crowded out)',
+      occupied: `already growing something${d.over ? ` other than ${d.over.map((o) => PLANTS[o].name.toLowerCase()).join(' or ')}` : ''}`,
+    };
+    const ranked = [...n].filter(([k]) => text[k]).sort((a, b) => b[1] - a[1]);
+    if (!ranked.length) return '';
+    const all = cells.length;
+    const parts = ranked.map(([k, c]) => `${c === all ? (all > 1 ? 'all ' : '') : `${c} `}${text[k]}`);
+    const tips: Partial<Record<BlockKind, string>> = {
+      dry: dampTip,
+      poor: 'Grass and wildflowers enrich poor soil each autumn; full oaks, fungi and wildfire ash do too.',
+    };
+    return `Of ${all} ${where}${all > 1 ? 's' : ''}: ${parts.join(', ')}. ${tips[ranked[0][0]] ?? ''}`;
   }
 
   showReport() {
     if (!this.report) return;
-    showCard(reportHtml(this.report, this.risk), [{ label: 'Close', primary: true, onClick: closeOverlay }]);
+    showCard(reportHtml(this.report, this.risk, PLAYS - this.s.plays), [{ label: 'Close', primary: true, onClick: closeOverlay }]);
   }
 
   private cellInfo(i: number): string {
@@ -566,66 +656,71 @@ export class Game {
         (land ? `<span class="tag">richness ${dots(c.fert)}</span>` : '') +
         `<span class="tag">moisture ${dots(this.wet[i])}</span>${c.burnt ? '<span class="tag">ash</span>' : ''}</div>`,
     );
+    // Everything below comes from one exact trial of the season (if nothing more is played).
     const next = clone(s);
     const ev = apply(next, { type: 'end' }) ?? [];
-    const nc = next.cells[i];
+    const fp = c.plant ? track(ev, i, c.plant.id, next.cells) : null;
+    const fa = c.animal ? track(ev, i, c.animal.id, next.cells) : null;
     const parts: string[] = [];
     if (c.plant) parts.push(`<b>${SPECIES[c.plant.id].name}</b> ${dots(c.plant.n)}`);
-    if (c.animal) {
+    if (c.animal && fa) {
       const a = c.animal;
-      const need = needOf(a.id, a.n, s.weather, sea);
-      // Animals eat after the plants have grown: count food as they will find it.
-      const grown = clone(s);
-      simulate(grown, true);
-      const food = foodAt(grown.cells, i, a.id, sea);
-      parts.push(need ? `<b>${SPECIES[a.id].name}</b> ${dots(a.n)} <span class="${food >= need ? 'good' : 'warn'}">food ${food}/${need}</span>` : `<b>${SPECIES[a.id].name}</b> ${dots(a.n)} asleep`);
+      const asleep = ANIMALS[a.id].hibernates && sea === 3;
+      parts.push(`<b>${SPECIES[a.id].name}</b> ${dots(a.n)} ${asleep ? 'asleep' : this.foodTag(fa)}`);
     }
     if (parts.length) lines.push(`<div>${parts.join(' · ')}</div>`);
-    lines.push(`<div>Next season: ${this.forecast(c, nc, i, ev)}</div>`);
+    lines.push(`<div>This season: ${this.forecast(c, next.cells[i], i, ev, fp, fa)}</div>`);
     return lines.join('');
   }
 
-  /** What next season does to cell i, with reasons, from a trial run's events. */
-  private forecast(c: Cell, n: Cell, i: number, ev: SimEvent[]): string {
+  /** Food in reach when the animal eats (after the plants grow and earlier animals act). */
+  private foodTag(f: Fate): string {
+    const tag = (x: { food: number; need: number }, word = 'food ') => `<span class="${x.food >= x.need ? 'good' : 'warn'}">${word}${x.food}/${x.need}</span>`;
+    const [a, b] = f.feeds;
+    if (!a) return '';
+    if (b) return `${tag(a)} ${f.fled ? 'after fleeing' : 'here'}, ${tag(b, '')} where they move`;
+    return `${tag(a)}${f.fled ? ' after fleeing' : ''}`;
+  }
+
+  /** What this season does to cell i, with reasons, from the trial's events and the tracked populations. */
+  private forecast(c: Cell, n: Cell, i: number, ev: SimEvent[], fp: Fate | null, fa: Fate | null): string {
     const out: string[] = [];
     const good = (t: string) => out.push(`<span class="good">${t}</span>`);
     const bad = (t: string) => out.push(`<span class="warn">${t}</span>`);
-    const crumbles = c.plant?.id === 'lichen' && !n.plant && n.t === 'soil';
-    if (n.t !== c.t && !crumbles) out.push(`becomes ${TERRAIN_NAME[n.t].toLowerCase()}`);
-    const hit = (id: SpeciesId) => ev.find((e) => (e.type === 'die' || e.type === 'shrink') && e.cell === i && e.id === id) as
-      | Extract<SimEvent, { type: 'die' | 'shrink' }>
-      | undefined;
-    const grazers = [...new Set(ev.filter((e) => e.type === 'eat' && e.prey === i && c.plant && ANIMALS[e.id].eats.includes(c.plant.id)).map((e) => (e as { id: SpeciesId }).id))];
     const p = c.plant;
-    const q = n.plant;
+    const crumbles = !!fp && p?.id === 'lichen' && !fp.alive && !fp.hits.length && !fp.shadedBy && n.t === 'soil';
+    if (n.t !== c.t && !crumbles) out.push(`becomes ${TERRAIN_NAME[n.t].toLowerCase()}`);
     const sea = seasonOf(this.s.season);
-    if (p) {
-      const h = hit(p.id);
-      const by = grazers.map(lower).join(', ');
+    if (p && fp) {
+      const last = fp.hits[fp.hits.length - 1];
+      const by = fp.grazedBy.map(lower).join(', ');
       if (crumbles) good(`lichen crumbles the ${TERRAIN_NAME[c.t].toLowerCase()} into soil`);
-      else if (q && q.id !== p.id) bad(`${say(q.id, 'shades', 'shade')} out the ${lower(p.id)}`);
-      else if (!q) bad(fate(p.id, h?.why, h?.by, true));
-      else if (q.n > p.n) good(say(p.id, 'grows', 'grow'));
-      else if (q.n < p.n) bad(h ? fate(p.id, h.why, h.by, false) : `${say(p.id, 'is', 'are')} grazed by ${by}`);
-      else if (grazers.length) bad(`${say(p.id, 'is', 'are')} kept short by ${by}`);
+      else if (fp.shadedBy) bad(`${say(fp.shadedBy, 'shades', 'shade')} out the ${lower(p.id)}`);
+      else if (!fp.alive) bad(fate(p.id, last?.why, last?.by, true));
+      else if (fp.n > p.n) good(say(p.id, 'grows', 'grow'));
+      else if (fp.n < p.n) bad(last ? fate(p.id, last.why, last.by, false) : `${say(p.id, 'is', 'are')} grazed by ${by}`);
+      else if (by) bad(`${say(p.id, 'is', 'are')} kept short by ${by}`);
       else if (p.n < 3 && !PLANTS[p.id].grows.includes(sea)) {
         const next = [1, 2, 3].map((k) => (sea + k) % 4).find((x) => PLANTS[p.id].grows.includes(x))!;
         out.push(`${say(p.id, 'rests', 'rest')} until ${SEASON_NAMES[next].toLowerCase()}`);
       }
+      if (fp.alive && fp.young) good(`${say(p.id, 'spreads', 'spread')} to ${fp.young} cell${fp.young > 1 ? 's' : ''}`);
     }
+    const q = n.plant;
     if (q && (!p || p.id !== q.id)) good(p ? say(q.id, 'takes root', 'take root') : say(q.id, 'spreads here', 'spread here'));
     const a = c.animal;
-    const b = n.animal;
-    if (a) {
-      const h = hit(a.id);
-      const moved = ev.some((e) => e.type === 'move' && e.from === i);
-      const wolves = a.id === 'deer' && ADJ[i].some((k) => this.s.cells[k].animal?.id === 'wolf');
-      if (moved) bad(`${lower(a.id)} move away ${wolves ? 'from the wolves' : 'to find food'}`);
-      else if (!b || b.n < a.n) bad(fate(a.id, h?.why, h?.by, !b));
-      else if (b.n > a.n) good(`${lower(a.id)} have young`);
-      if (ev.some((e) => e.type === 'spread' && e.from === i && e.id === a.id)) good(`${lower(a.id)} send young out`);
+    if (a && fa) {
+      const name = lower(a.id);
+      if (fa.fled) bad(`${name} flee from the wolves`);
+      if (fa.wandered) bad(`${name} move ${fa.fled ? 'on' : 'away'} to find food`);
+      if (fa.hits.length) bad(fa.hits.map((h) => fate(a.id, h.why, h.by, h.die)).join(', then ') + (fa.alive ? '' : ' (none left)'));
+      if (fa.alive && fa.grew) good(`${name} have young`);
+      if (fa.young) good(`${name} send young out`);
     }
-    if (b && ev.some((e) => (e.type === 'move' || e.type === 'spread') && e.to === i)) good(`${lower(b.id)} arrive`);
+    const b = n.animal;
+    // Newcomers: another animal (or this one's young) moving in, not the one that was here.
+    const stayed = !!fa && fa.alive && fa.at === i;
+    if (b && !stayed && ev.some((e) => (e.type === 'move' || e.type === 'spread') && e.to === i && e.id === b.id)) good(`${lower(b.id)} arrive`);
     if (n.fert > c.fert && n.t === 'soil' && c.t === 'soil') out.push('richer soil');
     return out.length ? out.join(', ') : 'no change';
   }
@@ -698,7 +793,7 @@ export class Game {
         <li>Life changes the land: <b>lichen</b> turns rock into soil, <b>grass</b> and <b>fungi</b> enrich it, <b>reeds</b> silt shallows into marsh, <b>beavers</b> dam ponds. Shrubs and oaks can be planted into grass once the soil is rich enough.</li>
         <li>Every season scores <b>species²/2 + life/5</b>: variety matters most. Grazers crop plants short so they can't spread; hunters keep grazers in check.</li>
         <li>A species alive at the end of <b>${SETTLE_AFTER} seasons in a row</b> is <b>settled</b> and earns <b>+${SETTLED_BONUS}</b> every season after. If it dies out, its streak starts over, so keep the balance rather than replanting.</li>
-        <li>Watch the weather: droughts dry the land, lightning starts wildfires in dry meadows, harsh winters starve animals.</li>
+        <li>Watch the weather: droughts dry the land, harsh winters starve animals, and summer lightning sets tall, bone-dry meadows alight. The island shows which cells would burn; grazers cropping them short, damp ground by ponds and marsh, water and bare cells stop the fire.</li>
         <li>Tap any cell to see what lives there and what will happen to it next season. After each season, <b>Report</b> shows what grew, what died and why.</li>
       </ul>`,
       [{ label: 'Play', primary: true, onClick: closeOverlay }],
@@ -751,7 +846,12 @@ export class Game {
         `<p><b style="color:${WEATHER_COLOR[w]}">${k === 0 ? 'This' : 'Next'} season (${SEASON_NAMES[seasonOf(s.season + k)]}): ${WEATHER_NAME[w]}</b><br>${WEATHER_TEXT[w]}</p>`,
       );
     }
-    if (s.weather === 'fire') rows.push('<p>The dashed ring on the island marks where lightning will strike. Wet ground, water and bare cells stop a fire.</p>');
+    if (s.weather === 'fire') {
+      const n = this.burnPlan.length;
+      rows.push(
+        `<p>The bolt in a dashed hex marks where lightning will strike${n ? `; flames mark the ${n} cell${n > 1 ? 's' : ''} that would burn as things stand` : ''}. The fire comes at the end of summer, after grazing, so you can still stop it: put rabbits or deer by a tall meadow to crop it short, or leave gaps.</p>`,
+      );
+    } else if (weatherFor(s.seed, s.season + 1).weather === 'fire' && s.season + 1 < SEASONS) rows.push('<p>The faint bolt on the island marks where next season’s lightning will strike.</p>');
     showCard(`<h2>Weather</h2>${rows.join('')}`, [{ label: 'Close', primary: true, onClick: closeOverlay }]);
   }
 

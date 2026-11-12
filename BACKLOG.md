@@ -163,6 +163,24 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
     it. Then (rules v4): goal targets retuned from 32 bot games (oaks 1/8 → 4/8, ponds 2/10 → 4/10;
     soil/species made a bit harder); winter wildflowers are straw-gold with pale seed-heads.
     (Done: goals show ⚑ in the header, stars are only score stars.)
+  - [x] Rewild second blind playtest (rules v5; 1731 and 2014 points, "forecasts are the best part"):
+    wildfire comes at the end of a lightning summer, after grazing, and only full-grown grass, flowers
+    and shrubs on bone-dry ground (moisture 0) burn; oaks never do (help, species texts and weather card
+    agree). The island shows the burn plan (flames), the strike (bolt in a dashed hex, a line to where it
+    catches) and next season's strike faintly; plants report "burnt in the wildfire". So grazers,
+    ponds/marsh, oaks and gaps are firebreaks (one deer can save a meadow). Placement glow and cell
+    readouts now both come from tracking the population through the exact trial (`track`, `feed`
+    events): food is what it finds when it eats, fleeing/wandering is never green, no "food 6/1, move
+    away" contradictions. "Nowhere to put it" names the real blocker ("Of 7 soil cells: 3 too poor,
+    2 too dry…"); out-of-season plants and winter sleepers are judged once they get going. Died-out
+    species share one wrapping line (no cap, no "deer hungry" beside "deer died out"); the report's
+    forecast says it counts cards already placed. The panel is taller on tall phones and shows a
+    "scroll" tag when text runs on. Deals weight cards with nowhere to go ×0.15 and a new hand halves
+    the old cards (dead cards dealt 8.6% → 1.6%). Greedy x32: median 2080 → 2333 (stars 0/1/26/5 →
+    0/2/21/9; ~+140 from fire counterplay, ~+110 from deals), fire burns 3.8 → 0.5 cells per lightning
+    summer for the bot; random 787 → 890. Stars kept at 900/1700/2400 since 3★ felt out of reach.
+  - [ ] Next ideas: watch whether fire is now too tame for players who graze; maybe a second strike in
+    year 4-5, or a fire that jumps one gap.
 - [x] **Unspoken art follow-ups**: held things (take/give/carry) sit beside the holder instead of
       over their body; an acting river is drawn as the river flooding its banks, not a sea wave.
       `.shots/us-gal.cjs '<frames json>' name` renders any frames side by side (needs `npx vite --port 5174`).
