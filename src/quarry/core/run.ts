@@ -9,24 +9,36 @@
 //   Q          give up
 
 import { Rng, mixSeed } from '../../shared/rng';
-import { N, NEIGHBORS, VALUES, adjacent, pickLetter, settle, spell, type Tile } from './board';
+import { N, NEIGHBORS, VALUES, VOWELS, adjacent, pickLetter, settle, spell, type Tile } from './board';
 import type { Dict } from './dict';
 import { PERKS, type PerkId } from './perks';
 import { anyWord } from './search';
 
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 2;
 export const DEPTHS = 8;
 export const DEPTH_NAMES = ['Topsoil', 'Clay', 'Sandstone', 'Limestone', 'Slate', 'Granite', 'Basalt', 'Obsidian'];
 /** Words per depth, before perks. */
 export const WORDS = [7, 7, 6, 6, 6, 6, 6, 6];
 /** Score to reach on each depth. */
-export const TARGETS = [90, 120, 160, 195, 230, 265, 300, 340];
+export const TARGETS = [90, 130, 180, 235, 295, 355, 415, 475];
 /** Rocks on a fresh face, and the chance a falling tile is a rock. */
 export const ROCKS = [0, 2, 3, 4, 4, 5, 6, 7];
 export const ROCK_RATE = [0, 0.02, 0.03, 0.035, 0.04, 0.05, 0.06, 0.07];
 export const ROCK_CAP = 9;
 /** Chance a rock is granite (two hits). */
-export const GRANITE = [0, 0, 0, 0.2, 0.3, 0.4, 0.5, 0.6];
+export const GRANITE = [0, 0, 0, 0, 0.3, 0.4, 0.5, 0.6];
+/** What a broken rock pays (with Stonebreaker). */
+export const ROCK_PAY = 5;
+export const ROCK_PAY_STONEBREAKER = 10;
+/** Long Haul: +1 length bonus per letter beyond LONG_FROM - 1 (5 letters +1, 6 +2…). */
+export const LONG_FROM = 5;
+/** Hot Seam: each word of STREAK_FROM+ letters in a row adds 1 more (this one included), up to STREAK_CAP. */
+export const STREAK_FROM = 5;
+export const STREAK_CAP = 3;
+/** Word-multiplier bonuses (they add to 1 + golds). */
+export const CHISEL = 2;
+export const OPENING = 2;
+export const ECHO = 1;
 /** Fuses from this depth (0-based) on: one on each fresh face, and they keep turning up. */
 export const FUSE_FROM = 2;
 export const FUSE_RATE = 0.05;
@@ -75,12 +87,20 @@ export interface Run {
 export interface Score {
   word: string;
   points: number;
-  /** Letter values summed. */
+  /** Letter values summed (blanks are 0). */
   base: number;
-  /** Length bonus. */
+  /** Length bonus in all: letters - 2, plus the additions below. */
   mult: number;
-  /** Extra multipliers, as labels ("gold ×2"). */
-  extras: string[];
+  /** Letters - 2. */
+  lenMult: number;
+  /** Additions to the length bonus, by perk ("Long Haul", 2). */
+  adds: [string, number][];
+  /** Word multiplier: 1, plus 1 per gold tile and per x2 perk that applies (they add, not multiply). */
+  factor: number;
+  /** What raised the word multiplier, and by how much (["gold", 1], ["Chisel", 2]). */
+  boosts: [string, number][];
+  /** Blank tiles in the word. */
+  wild: number;
 }
 
 export type Eval = Score | { error: 'short' | 'unknown' | 'path' };
@@ -126,13 +146,45 @@ function fresh(r: Run, board: (Tile | null)[]): Tile {
   if (g.next() < ROCK_RATE[r.depth] && rocks < ROCK_CAP) return rockTile(r, g);
   const t: Tile = { id: r.nextId++, ch: pickLetter(board, () => g.next()) };
   const golds = board.filter((x) => x?.gold).length;
-  if (g.next() < GOLD_RATE * (has(r, 'gold') ? 2 : 1) && golds < 3) t.gold = true;
+  if (g.next() < GOLD_RATE * (has(r, 'gold') ? 3 : 1) && golds < (has(r, 'gold') ? 5 : 3)) t.gold = true;
   else if (r.depth >= FUSE_FROM && !board.some((x) => x?.fuse) && g.next() < FUSE_RATE) t.fuse = fuseWords(r);
   return t;
 }
 
+/** A fuse wants room: 4+ letter neighbours, at least two of the other kind (vowel/consonant) or blanks. */
+export function fuseFriendly(board: Tile[], i: number): boolean {
+  const t = board[i];
+  if (!t || t.rock || t.ch === '*') return false;
+  const ns = NEIGHBORS[i].filter((n) => board[n] && !board[n].rock);
+  if (ns.length < 4) return false;
+  const v = VOWELS.includes(t.ch);
+  return ns.filter((n) => board[n].ch === '*' || VOWELS.includes(board[n].ch) !== v).length >= 2;
+}
+
 function refill(r: Run, board: (Tile | null)[]): void {
+  const first = r.nextId;
   r.board = settle(board, (b) => fresh(r, b));
+  // A fuse that drops into a cramped spot (a corner, or among letters it can't pair with)
+  // passes to the nearest tile with room.
+  const b = r.board;
+  for (let i = 0; i < N; i++) {
+    const t = b[i];
+    if (!t.fuse || t.id < first || fuseFriendly(b, i)) continue;
+    const seen = new Set([i]);
+    let ring = [i];
+    let to = -1;
+    while (ring.length && to < 0) {
+      const next: number[] = [];
+      for (const c of ring) for (const n of NEIGHBORS[c]) if (!seen.has(n)) (seen.add(n), next.push(n));
+      next.sort((x, y) => x - y);
+      to = next.find((n) => !b[n].gold && !b[n].fuse && fuseFriendly(b, n)) ?? -1;
+      ring = next;
+    }
+    if (to < 0) continue;
+    const { fuse, ...rest } = t;
+    b[i] = rest;
+    b[to] = { ...b[to], fuse };
+  }
 }
 
 /** Shakes the face for free until it holds a word (it almost always does). */
@@ -166,7 +218,7 @@ function startDepth(r: Run, d: number, dict: Dict): void {
   r.target = TARGETS[d];
   r.wordsLeft = WORDS[d] + (has(r, 'shift') ? 1 : 0);
   r.shakes = SHAKES + (has(r, 'shake') ? 2 : 0);
-  r.picks = has(r, 'pick') ? 1 : 0;
+  r.picks = has(r, 'pick') ? 2 : 0;
   r.offer = [];
   // Letters first (specials off), then the specials on cells chosen by a shuffle.
   const depth = r.depth;
@@ -188,16 +240,17 @@ function startDepth(r: Run, d: number, dict: Dict): void {
     const i = take((c) => c >= 6);
     if (i >= 0) r.board[i] = rockTile(r, g);
   }
-  const golds = 1 + (has(r, 'gold') ? 2 : 0);
+  const golds = 1 + (has(r, 'gold') ? 3 : 0);
   for (let k = 0; k < golds; k++) {
     const i = take(() => true);
     if (i >= 0) r.board[i].gold = true;
   }
-  if (d >= FUSE_FROM) {
-    const i = take(() => true);
+  const fuses = d >= FUSE_FROM ? 1 + (has(r, 'blast') ? 1 : 0) : 0;
+  for (let k = 0; k < fuses; k++) {
+    const i = take((c) => !r.board[c].rock && !r.board[c].gold && !r.board[c].fuse && fuseFriendly(r.board, c));
     if (i >= 0) r.board[i].fuse = fuseWords(r);
   }
-  if (has(r, 'wild')) {
+  for (let k = has(r, 'wild') ? 2 : 0; k > 0; k--) {
     const i = take(() => true);
     if (i >= 0) r.board[i] = { id: r.nextId++, ch: '*' };
   }
@@ -276,34 +329,33 @@ export function evaluate(r: Run, path: number[], dict: Dict): Eval {
   if (!word) return { error: 'unknown' };
   const w: string = word;
   let base = 0;
-  for (const t of tiles) {
-    const v = VALUES[t.ch] ?? 0;
-    base += has(r, 'rare') && v >= 4 ? v * 2 : v;
-  }
-  let mult = lenBonus(w.length);
-  if (has(r, 'long') && w.length >= 6) mult += 2;
-  if (has(r, 'streak') && w.length >= 5) mult += r.streak;
-  let points = base * mult;
-  const extras: string[] = [];
+  for (const t of tiles) base += tileValue(r, t);
+  const lenMult = lenBonus(w.length);
+  const adds: [string, number][] = [];
+  if (has(r, 'long') && w.length >= LONG_FROM) adds.push(['Long Haul', w.length - LONG_FROM + 1]);
+  if (has(r, 'streak') && w.length >= STREAK_FROM) adds.push(['Hot Seam', Math.min(STREAK_CAP, r.streak + 1)]);
+  const mult = lenMult + adds.reduce((k, [, n]) => k + n, 0);
+  const boosts: [string, number][] = [];
   const golds = tiles.filter((t) => t.gold).length;
-  if (golds) {
-    points *= 1 + golds;
-    extras.push(`gold ×${1 + golds}`);
-  }
-  if (has(r, 'short') && w.length <= 4) {
-    points *= 2;
-    extras.push('chisel ×2');
-  }
-  if (has(r, 'echo') && /(.)\1/.test(w)) {
-    points = Math.floor(points * 1.5);
-    extras.push('echo ×1.5');
-  }
-  if (has(r, 'first') && r.played === 0) {
-    points *= 2;
-    extras.push('opening ×2');
-  }
-  return { word: w, points, base, mult, extras };
+  if (golds) boosts.push([golds > 1 ? `${golds} gold` : 'gold', golds]);
+  if (has(r, 'short') && w.length <= 4) boosts.push(['Chisel', CHISEL]);
+  if (has(r, 'echo') && new Set(w).size < w.length) boosts.push(['Echo', ECHO]);
+  const rares = has(r, 'rare') ? tiles.filter(isRare).length : 0;
+  if (rares) boosts.push(['Prospector', rares]);
+  if (has(r, 'first') && r.played === 0) boosts.push(['Opening Strike', OPENING]);
+  const factor = 1 + boosts.reduce((k, [, n]) => k + n, 0);
+  const wild = tiles.filter((t) => t.ch === '*').length;
+  return { word: w, points: base * mult * factor, base, mult, lenMult, adds, factor, boosts, wild };
 }
+
+/** A tile's letter value (blanks 0). */
+export function tileValue(_r: Run, t: Tile): number {
+  return VALUES[t.ch] ?? 0;
+}
+
+/** Prospector: letters worth this much or more add +1 word multiplier each. */
+export const RARE_FROM = 4;
+export const isRare = (t: Tile) => (VALUES[t.ch] ?? 0) >= RARE_FROM;
 
 export const isScore = (e: Eval): e is Score => !('error' in e);
 
@@ -336,7 +388,7 @@ function playWord(r: Run, path: number[], dict: Dict): Outcome | null {
   for (const i of path)
     if (board[i]!.fuse) for (const n of NEIGHBORS[i]) if (!used.has(n) && !blasted.includes(n)) blasted.push(n);
   let blastPts = 0;
-  for (const i of blasted) blastPts += (VALUES[board[i]!.ch] ?? 0) * (has(r, 'blast') ? 4 : 2);
+  for (const i of blasted) blastPts += (VALUES[board[i]!.ch] ?? 0) * (has(r, 'blast') ? 6 : 2);
   // Rocks next to the word crack; blasted ones break outright.
   const broken = blasted.filter((i) => board[i]!.rock);
   const cracked: number[] = [];
@@ -350,7 +402,7 @@ function playWord(r: Run, path: number[], dict: Dict): Outcome | null {
       cracked.push(i);
     } else broken.push(i);
   }
-  const rockPts = broken.length * (has(r, 'rocks') ? 20 : 5);
+  const rockPts = broken.length * (has(r, 'rocks') ? ROCK_PAY_STONEBREAKER : ROCK_PAY);
   for (const i of [...path, ...blasted, ...broken]) board[i] = null;
   const total = e.points + blastPts + rockPts;
   Object.assign(o, { total, blasted, blastPts, broken, cracked, rockPts });
@@ -359,7 +411,7 @@ function playWord(r: Run, path: number[], dict: Dict): Outcome | null {
   r.wordsLeft--;
   r.played++;
   r.words++;
-  r.streak = e.word.length >= 5 ? r.streak + 1 : 0;
+  r.streak = e.word.length >= STREAK_FROM ? r.streak + 1 : 0;
   if (!r.best || total > r.best.points) r.best = { word: e.word, points: total };
   if (e.word.length > r.longest.length) r.longest = e.word;
   if (r.got >= r.target) {

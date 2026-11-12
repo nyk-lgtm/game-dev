@@ -13,6 +13,7 @@ import {
   at,
   evaluate,
   findWords,
+  fuseFriendly,
   isScore,
   newRun,
   pickLetter,
@@ -214,6 +215,72 @@ describe('scoring', () => {
     // The fuse's four other neighbors (z, worth 9 each) are blasted for double their value.
     expect(b.blasted!.sort((x, y) => x - y)).toEqual(NEIGHBORS[at(2, 3)].filter((n) => n !== at(2, 2) && n !== at(2, 4)).sort((x, y) => x - y));
     expect(b.blastPts).toBe(4 * VALUES.z * 2);
+  });
+});
+
+describe('perks', () => {
+  /** "stone" down column 0 (s t o n e: base 5), "jazz"-free board otherwise. */
+  function stoneRun(perks: string[]): { r: Run; path: number[] } {
+    const r = newRun(7, dict);
+    clean(r);
+    r.perks = perks as Run['perks'];
+    [...'stone'].forEach((ch, y) => (r.board[at(0, y)] = { id: 1 + y, ch }));
+    return { r, path: [0, 1, 2, 3, 4].map((y) => at(0, y)) };
+  }
+
+  it('word multipliers add up instead of multiplying', () => {
+    const { r, path } = stoneRun(['first', 'echo']);
+    r.board[at(0, 1)].gold = true;
+    r.board[at(0, 3)].gold = true;
+    // "stone" has no repeated letter: gold ×2 + gold + Opening Strike +2 = ×5, not 3·3.
+    const e = evaluate(r, path, dict);
+    expect(isScore(e) && e.factor).toBe(1 + 2 + 2);
+    expect(isScore(e) && e.points).toBe(5 * 3 * 5);
+    expect(isScore(e) && e.boosts).toEqual([['2 gold', 2], ['Opening Strike', 2]]);
+  });
+
+  it('Long Haul and Hot Seam add to the length bonus and are named', () => {
+    const { r, path } = stoneRun(['long', 'streak']);
+    r.streak = 1;
+    const e = evaluate(r, path, dict);
+    expect(isScore(e) && e.lenMult).toBe(3);
+    expect(isScore(e) && e.adds).toEqual([['Long Haul', 1], ['Hot Seam', 2]]);
+    expect(isScore(e) && e.points).toBe(5 * 6);
+    r.streak = 9;
+    const capped = evaluate(r, path, dict);
+    expect(isScore(capped) && capped.adds[1]).toEqual(['Hot Seam', 3]);
+  });
+
+  it('Prospector, Echo and Chisel', () => {
+    const r = newRun(8, dict);
+    clean(r);
+    r.perks = ['rare', 'echo', 'short'];
+    // "jazz" is not on a straight line here; use "keep": k (5) is rare, e repeats, 4 letters.
+    [...'keep'].forEach((ch, y) => (r.board[at(1, y)] = { id: 50 + y, ch }));
+    const e = evaluate(r, [0, 1, 2, 3].map((y) => at(1, y)), dict);
+    expect(isScore(e) && e.word).toBe('keep');
+    expect(isScore(e) && e.boosts).toEqual([['Chisel', 2], ['Echo', 1], ['Prospector', 1]]);
+    expect(isScore(e) && e.points).toBe((5 + 1 + 1 + 3) * 2 * 5);
+  });
+
+  it('a fuse never stays in a cramped spot when it drops in', () => {
+    for (let s = 0; s < 30; s++) {
+      const r = newRun(400 + s, dict);
+      for (let k = 0; k < 120 && r.phase !== 'over'; k++) {
+        if (r.phase === 'perk') {
+          act(r, `P${r.offer[0]}`, dict);
+          continue;
+        }
+        const ids = new Set(r.board.map((t) => t.id));
+        act(r, botAction(r, dict, { mode: 'best' }), dict);
+        r.board.forEach((t, i) => {
+          if (!t.fuse || ids.has(t.id)) return;
+          // A new fuse: room around it (4+ open neighbours) unless no tile anywhere had room.
+          const open = NEIGHBORS[i].filter((n) => !r.board[n].rock).length;
+          if (open < 4) expect(r.board.some((_, j) => fuseFriendly(r.board, j))).toBe(false);
+        });
+      }
+    }
   });
 });
 
