@@ -106,13 +106,14 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   phone's reduce-motion), `reducedFx()` gates shake (Telegraph, Glyphwright, Afterglow), Afterglow level flash,
   Hexhold hurt tint, Nightline streaks; html.reduced-fx makes CSS animations play once.
 - Afterglow: owner is happy with it — leave alone unless they report something.
+- Grove: owner wants it kept as is (no smaller board).
 
 ## Done (recent)
 - Grove blind playtest (agent: 24,775, Spirit Tree, 209 turns; "too forgiving, too long") and fixes
   (rules v2): trapping pays 50 per wisp (×2 for 2+ at once); crystals 5% → 4.5%, bolts 6% → 4.5%,
   wisps 20% → 22% (bot: 276 → 248 turns, Spirit Tree 49/60 → 30/60); help says wisps never merge and
   what traps pay; brighter labels; empty stash is dashed and says so. Still long for one sitting —
-  a smaller board would be the next step if the owner agrees.
+  owner said keep the board as is (no smaller board).
 - Lantern blind playtest (agent reached the Hollow at level 3) and fixes: a far/unexplored tap walks
   to the nearest reachable cell (pathToward) instead of refusing; a monster is announced once and
   later only stops a walk within 3 cells; Wait and shop actions say what happened (in the dialog);
