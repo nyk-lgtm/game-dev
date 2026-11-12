@@ -61,6 +61,13 @@ function cardHtml(c: Card | null, cls = '', attrs = ''): string {
   return `<div class="pc ${isRed(c) ? 'red' : ''} ${c.r === 0 ? 'joker' : ''} ${cls}" ${attrs}>${face(c)}</div>`;
 }
 
+/** How a playable card fits: plainly, as a Mirror play (same rank) or a Long Stride. */
+function how(r: Run, c: Card): 'play' | 'mirror' | 'stride' | null {
+  const k = fitKind(r, c);
+  const t = top(r.deal);
+  return k === 'play' && t.r > 0 && c.r === t.r ? 'mirror' : k;
+}
+
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const fmt = (n: number) => n.toLocaleString('en-US');
 
@@ -91,9 +98,9 @@ export class Game {
       this.render();
     };
     $('endBtn').onclick = () =>
-      showCard('<h2>End the climb?</h2><p>No plays and no draws left. You can still blast or undo, or end the run here.</p>', [
-        { label: 'Keep looking', primary: true, onClick: closeOverlay },
-        { label: 'End the run', onClick: () => (closeOverlay(), this.apply('X')) },
+      showCard(`<h2>End the climb?</h2><p>No plays and no draws left.${this.rescue() ? ` You could still ${this.rescue()}.` : ''}</p>`, [
+        { label: 'End the run', primary: true, onClick: () => (closeOverlay(), this.apply('X')) },
+        { label: 'Keep looking', onClick: closeOverlay },
       ]);
     $('charmBar').addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>('button');
@@ -226,10 +233,11 @@ export class Game {
       navigator.vibrate?.(8);
       if (o.stride) {
         this.sfx.play(1);
-        this.msg = 'Long stride: no points, streak over, and the next draw is burned.';
+        this.msg = `Long stride: the top card of the pile was discarded, no points, streak over. ${plural(d.strides, 'stride')} left this deal.`;
       } else {
         this.sfx.play(d.streak);
         this.float(`+${o.points}`, o.flush ? 'Flush ×2' : '');
+        if (o.mirror) this.msg = `Mirror play. ${plural(d.mirrors, 'mirror play')} left this deal.`;
         if (d.streak >= 2 && d.streak > streakBefore && !reducedFx()) {
           const st = $('combo');
           st.classList.remove('pop');
@@ -239,7 +247,8 @@ export class Game {
       }
     } else if (o.kind === 'draw') {
       this.sfx.draw();
-      if (streakBefore >= 3) this.msg = `Streak of ${streakBefore} ended.`;
+      if (o.lucky) this.msg = '<b>Lucky draw:</b> after 3 draws in a row with no play, the pile always turns up a card that fits.';
+      else if (streakBefore >= 3) this.msg = `Streak of ${streakBefore} ended.`;
     } else if (o.kind === 'blast') {
       this.sfx.blast();
       navigator.vibrate?.([20, 30, 40]);
@@ -311,14 +320,15 @@ export class Game {
     b.animate([{ opacity: 1, transform: 'scale(0.3)' }, { opacity: 0, transform: 'scale(1.6)' }], { duration: 420, easing: 'ease-out' }).onfinish = () => b.remove();
   }
 
-  /** Floating "+30" over the waste (or another element). */
+  /** Floating "+30", rising from just above the charm row (clear of the info line), over the waste or the pile. */
   private float(text: string, sub: string, blue = false, at: HTMLElement = $('wasteBox')): void {
     const r = at.getBoundingClientRect();
+    const stage = $('stage').getBoundingClientRect();
     const el = document.createElement('div');
     el.className = `float${blue ? ' blue' : ''}`;
     el.textContent = sub ? `${text} ${sub}` : text;
     el.style.left = `${r.left + r.width / 2}px`;
-    el.style.top = `${r.top + 10}px`;
+    el.style.top = `${stage.bottom - 62}px`;
     $('fx').appendChild(el);
     el.animate(
       [
@@ -379,8 +389,9 @@ export class Game {
     $('charmBar').innerHTML = r.charms
       .map((id) => {
         const c = charmDef(id);
-        const spent = (id === 'wind' && r.windUsed) || (id === 'blast' && d.blasts <= 0) || (id === 'rewind' && r.undos <= 0);
-        return `<button data-c="${id}" class="${spent ? 'spent' : ''}" aria-label="${c.name}">${c.icon}</button>`;
+        const left = id === 'mirror' ? d.mirrors : id === 'stride' ? d.strides : id === 'blast' ? d.blasts : id === 'rewind' ? r.undos : null;
+        const spent = (id === 'wind' && r.windUsed) || left === 0;
+        return `<button data-c="${id}" class="${spent ? 'spent' : ''}" aria-label="${c.name}">${c.icon}${left !== null ? `<i>${left}</i>` : ''}</button>`;
       })
       .join('');
     this.renderInfo();
@@ -413,14 +424,17 @@ export class Game {
     combo.style.top = $('banner').style.top = `${(y0 + h + H) / 2 + 6}px`;
     const next = (d.streak + 1) * 10 * (has(r, 'stakes') ? 2 : 1);
     combo.innerHTML = d.streak >= 2 && r.phase === 'play' ? `<b>×${d.streak}</b><span>streak · next card +${next}</span>` : '';
+    if (combo.innerHTML) $('banner').hidden = true;
     t.style.setProperty('--cw', `${cw}px`);
     t.style.setProperty('--ch', `${ch}px`);
     const can = new Set(playableSlots(r));
+    const flags = has(r, 'flags');
     t.innerHTML = d.slots
       .map((s, i) => {
         if (s.gone) return '';
         const cov = isCovered(d, i);
-        const cls = [cov ? 'covered' : '', can.has(i) && !this.blastMode ? 'can' : '', this.blastMode ? 'target' : ''].join(' ');
+        const fit = can.has(i) && !this.blastMode ? how(r, s.card) : '';
+        const cls = [cov ? 'covered' : '', fit === 'play' ? 'can' : fit, this.blastMode ? 'target' : '', flags && s.row === 0 ? 'peak' : ''].join(' ');
         const style = `style="left:${Math.round(left + ((s.x - minX) / 2) * cw)}px;top:${Math.round(y0 + s.row * step)}px;z-index:${s.row + 1}"`;
         return cardHtml(shown(r, i) ? s.card : null, cls, `data-i="${i}" ${style}`);
       })
@@ -433,17 +447,27 @@ export class Game {
     let html = this.msg ?? '';
     this.msg = null;
     if (!html && r.phase === 'play') {
-      if (cornered(r)) html = '<span class="warn">Out of plays and draws.</span> Blast a card or undo if you can, or end the run.';
+      if (cornered(r)) html = `<span class="warn">Out of plays and draws.</span> ${this.rescue() ? `You can still ${this.rescue()}, or end the run.` : 'End the run.'}`;
       else if (!playableSlots(r).length) html = 'No card fits. <b>Tap the pile</b> to draw a new waste card.';
       else if (!d.stock.length) html = '<span class="warn">No draws left.</span> Only plays now: make them count.';
       else if (r.floor === 0 && d.waste.length <= 2 && !d.slots.some((s) => s.gone)) html = 'Tap a <b>gold-edged</b> card: one higher or lower than the waste card below. K and A connect.';
       else {
-        const fits = playableSlots(r);
-        const strides = fits.filter((i) => fitKind(r, d.slots[i].card) === 'stride').length;
-        html = `${plural(fits.length, 'card')} ${fits.length === 1 ? 'fits' : 'fit'} on ${label(top(d))}.${strides ? ` ${strides} only by a long stride.` : ''}`;
+        const fits = playableSlots(r).map((i) => d.slots[i].card);
+        const plain = fits.filter((c) => how(r, c) === 'play');
+        const names = (k: string) => fits.filter((c) => how(r, c) === k).map(label).join(', ');
+        html = plain.length ? `${plural(plain.length, 'card')} ${plain.length === 1 ? 'fits' : 'fit'} on ${label(top(d))}.` : `Nothing fits ${label(top(d))} the usual way.`;
+        if (names('mirror')) html += ` <b class="mi">${names('mirror')}</b>: mirror play (${d.mirrors} left).`;
+        if (names('stride')) html += ` <b class="st">${names('stride')}</b>: long stride, discards the top card of the pile and ends the streak (${d.strides} left).`;
       }
     }
     $('info').innerHTML = html || '&nbsp;';
+  }
+
+  /** What the player still owns to get unstuck, in words ("blast a card or undo"). */
+  private rescue(): string {
+    const r = this.r;
+    const ways = [r.deal.blasts > 0 ? 'blast a card' : '', r.undos > 0 && r.hist.length ? 'undo' : ''].filter(Boolean);
+    return ways.join(' or ');
   }
 
   // ---------------------------------------------------------------- cards
@@ -522,7 +546,7 @@ export class Game {
        <p>A solitaire climb: eight deals, each a ridge of card peaks.</p>
        <ul>
          <li><b>Tap a card one higher or lower</b> than the waste card at the bottom to move it there. K and A connect. Only cards with nothing on top can move; those that fit have a <b>gold edge</b>.</li>
-         <li>No fit? <b>Tap the pile</b> to draw a new waste card. Plays in a row make a <b>streak</b> worth 10, 20, 30… points; a draw ends it.</li>
+         <li>No fit? <b>Tap the pile</b> to draw a new waste card. Plays in a row make a <b>streak</b> worth 10, 20, 30… points; a draw ends it. After 3 draws in a row with no play, the next draw always fits (if any card in the pile does).</li>
          <li>Clear every card to climb. <b>Unused draws carry up</b> and each floor adds fewer, so bank them early. No plays and no draws left: the climb ends.</li>
          <li>After each floor pick one of three <b>charms</b>. Higher floors deal more cards face down.</li>
        </ul>`,

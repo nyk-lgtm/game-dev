@@ -5,14 +5,18 @@ import {
   FLOORS,
   LARGE,
   MEDIUM,
+  MERCY,
   SMALL,
+  TUNE,
   act,
   cardsLeft,
+  fitKind,
   freshDraws,
   isCovered,
   legal,
   newRun,
   playable,
+  playableSlots,
   rankGap,
   replay,
   shown,
@@ -172,15 +176,21 @@ describe('charms', () => {
   });
   it('Deep Pockets, High Stakes and Lantern change the draws', () => {
     expect(startAt(2, 3, ['pockets']).deal.stock.length).toBe(DEAL_DRAWS[3] + 3);
-    expect(startAt(2, 3, ['stakes']).deal.stock.length).toBe(DEAL_DRAWS[3] - 2);
-    expect(startAt(2, 3, ['lantern']).deal.stock.length).toBe(DEAL_DRAWS[3] - 1);
+    expect(startAt(2, 3, ['stakes']).deal.stock.length).toBe(DEAL_DRAWS[3] - 1);
+    expect(startAt(2, 3, ['lantern']).deal.stock.length).toBe(DEAL_DRAWS[3] + TUNE.lantern);
   });
-  it('Mirror plays the same rank; Long Stride plays two away but burns a draw and the streak', () => {
+  it('Mirror plays the same rank a few times per deal; Long Stride plays two away but discards a draw and the streak', () => {
     const m = newRun(8);
     const i = setup(m, { r: 7, s: 0 }, { r: 7, s: 1 });
     expect(playable(m, i)).toBe(false);
     m.charms.push('mirror');
+    m.deal.mirrors = 1;
     expect(playable(m, i)).toBe(true);
+    expect(act(m, `P${i}`)!.mirror).toBe(true);
+    expect(m.deal.mirrors).toBe(0);
+    const i2 = setup(m, { r: 9, s: 0 }, { r: 9, s: 2 });
+    expect(playable(m, i2)).toBe(false);
+    expect(startAt(8, 0, ['mirror']).deal.mirrors).toBe(TUNE.mirrors);
     const s = startAt(8, 0, ['stride']);
     const j = setup(s, { r: 7, s: 0 }, { r: 5, s: 1 });
     s.deal.streak = 3;
@@ -229,7 +239,7 @@ describe('charms', () => {
       break;
     }
   });
-  it('Flush doubles same-suit plays and gives back a draw on the third; Momentum on every 5th', () => {
+  it('Flush doubles plays on their own suit and gives back a draw on the third in a row; Momentum on every 5th', () => {
     const r = startAt(12, 0, ['flush', 'momentum']);
     const d = r.deal;
     const bottom = d.slots.map((_, k) => k).filter((k) => !isCovered(d, k));
@@ -256,16 +266,56 @@ describe('charms', () => {
     const r = startAt(3, 7, ['lantern']);
     expect(r.deal.slots.every((_, i) => shown(r, i))).toBe(true);
   });
-  it('Second Wind gives 6 draws once when you run out', () => {
+  it('Second Wind gives its draws once when you run out', () => {
     const r = startAt(4, 0, ['wind']);
     r.deal.stock = [{ r: 1, s: 0 }];
     r.deal.waste.push({ r: 7, s: 0 });
     r.deal.slots.forEach((s) => (s.card = { r: 1, s: 1 }));
     const o = act(r, 'D')!;
     expect(o.wind).toBe(true);
-    expect(r.deal.stock.length).toBe(6);
-    for (let k = 0; k < 6; k++) act(r, 'D');
+    expect(r.deal.stock.length).toBe(TUNE.wind);
+    for (let k = 0; k < TUNE.wind; k++) act(r, 'D');
     if (!playable(r, r.deal.slots.findIndex((_, k) => !isCovered(r.deal, k)))) expect(r.phase).toBe('over');
+  });
+});
+
+describe('dead draws', () => {
+  it('a fresh pile never has two cards of one rank back to back', () => {
+    for (let seed = 1; seed <= 60; seed++)
+      for (const f of [0, 4, 7]) {
+        const st = startAt(seed, f).deal.stock;
+        for (let i = 1; i < st.length; i++) expect(st[i].r === st[i - 1].r).toBe(false);
+      }
+  });
+  it(`the ${MERCY}rd draw in a row without a play fits an open card when the pile has one`, () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const r = startAt(seed, 3);
+      for (let k = 0; k < MERCY && r.phase === 'play' && r.deal.stock.length; k++) {
+        const pileHasFit = r.deal.stock.some((c) => r.deal.slots.some((s, i) => !s.gone && !isCovered(r.deal, i) && fitKind(r, s.card, c)));
+        const o = act(r, 'D')!;
+        if (k === MERCY - 1 && pileHasFit) expect(playableSlots(r).length).toBeGreaterThan(0);
+        if (o.lucky) expect(k).toBe(MERCY - 1);
+      }
+    }
+  });
+  it('Second Wind blows when draws run out even with an undo or blast left', () => {
+    const r = startAt(4, 0, ['wind', 'blast']);
+    r.deal.stock = [{ r: 1, s: 0 }];
+    r.deal.waste.push({ r: 7, s: 0 });
+    r.deal.slots.forEach((s) => (s.card = { r: 1, s: 1 }));
+    expect(act(r, 'D')!.wind).toBe(true);
+    expect(r.deal.blasts).toBe(1);
+  });
+  it('Flush counts cards of one suit played in a row, whatever was on the waste', () => {
+    const r = startAt(12, 0, ['flush']);
+    const d = r.deal;
+    const bottom = d.slots.map((_, k) => k).filter((k) => !isCovered(d, k));
+    d.waste.push({ r: 6, s: 0 });
+    bottom.forEach((k, n) => (d.slots[k].card = { r: 5 - n, s: 2 }));
+    const a = act(r, `P${bottom[0]}`)!;
+    expect(a.flush).toBeFalsy();
+    act(r, `P${bottom[1]}`);
+    expect(act(r, `P${bottom[2]}`)!.refund).toBe(1);
   });
 });
 
