@@ -157,7 +157,8 @@ body .icon-btn { background: transparent; border-color: var(--line); color: var(
 #sheet .grab { align-self: center; width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin-bottom: 2px; }
 #sheet .top { display: flex; gap: 14px; align-items: center; }
 #sheet .top canvas { flex: none; background: var(--bg); border-radius: 16px; }
-#sheet .top .say { font: italic 16px var(--serif); color: var(--muted); }
+#sheet .top .say { font: italic 16px var(--serif); color: var(--muted); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#sheet .top .say .hear { width: 44px; height: 44px; border-radius: 22px; border: 1px solid var(--line); background: transparent; font-size: 18px; font-style: normal; flex: none; }
 #sheet .top .status { font-size: 15px; font-weight: 700; margin-top: 2px; }
 #sheet .top .status.known { color: var(--good); }
 #sheet .top .status.guessed { color: var(--accent); }

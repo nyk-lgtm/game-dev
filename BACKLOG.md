@@ -1,7 +1,7 @@
 # Game Lab backlog
 
-Claude works through this list on its own, a chunk at a time (a scheduled check-in
-resumes the work every couple of hours). The owner can add, reorder or strike items
+Claude works through this list on its own, continuously, until the usage limit runs out (an hourly scheduled check-in
+resumes it after a limit reset). The owner can add, reorder or strike items
 at any time; their word beats this list.
 
 ## How each work session goes
@@ -107,8 +107,8 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   road (the middle is gentle); start clock 65 → 70 s. Bot still finishes 10/10 left, 8/10 right.
 
 ## Ideas (unscheduled)
-- Unspoken: more story templates so the village tale varies; spoken pronunciation via
-  speech synthesis; a harder "second village" with case markers or verb agreement.
+- Unspoken: more story templates so the village tale varies; (done: 🔊 speaks a word with the phone's
+  voice, Italian when available); a harder "second village" with case markers or verb agreement.
 - [x] Hub: shared Sound / Vibration switches (src/shared/settings.ts; audio never starts when off,
   navigator.vibrate becomes a no-op). Reduced effects done 2026-11-12: hub "Effects" switch (defaults to the
   phone's reduce-motion), `reducedFx()` gates shake (Telegraph, Glyphwright, Afterglow), Afterglow level flash,

@@ -3,6 +3,7 @@
 // picker), challenges, the notebook and the ending. Rules live in core/.
 
 import { Sfx } from '../afterglow/audio';
+import { soundOn } from '../shared/settings';
 import { closeOverlay, showCard } from '../shared/cards';
 import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey } from '../shared/daily';
 import { copyText, toast } from '../shared/debug';
@@ -605,7 +606,14 @@ export class Game {
     top.appendChild(glyphCanvas(lang, id, 84));
     const info = el('div');
     const st = this.status(id);
-    info.appendChild(el('div', 'say', `“${lang.words[id]}”${lang.glyphs[id].mark ? ` · a mark ${lang.glyphs[id].mark} a word` : ''}`));
+    const say = el('div', 'say', `“${lang.words[id]}”${lang.glyphs[id].mark ? ` · a mark ${lang.glyphs[id].mark} a word` : ''}`);
+    if (canSpeak()) {
+      const hear = el('button', 'hear', '🔊');
+      hear.setAttribute('aria-label', 'Hear it');
+      hear.onclick = () => speak(lang.words[id]);
+      say.prepend(hear);
+    }
+    info.appendChild(say);
     const statusText =
       st === 'known'
         ? `✓ ${short(s.notebook[id])}: proven`
@@ -855,4 +863,21 @@ function hash(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
   return h >>> 0;
+}
+
+// Spoken pronunciation: the phone's own voice reading the romanized word, slowly,
+// with an Italian voice when there is one (it reads consonant-vowel spellings plainly).
+const canSpeak = () => typeof speechSynthesis !== 'undefined' && soundOn();
+function speak(word: string): void {
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(word);
+    const v = speechSynthesis.getVoices().find((x) => x.lang.startsWith('it')) ?? null;
+    if (v) u.voice = v;
+    u.lang = v?.lang ?? 'it-IT';
+    u.rate = 0.8;
+    speechSynthesis.speak(u);
+  } catch {
+    // no voice: stay silent
+  }
 }

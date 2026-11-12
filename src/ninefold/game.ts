@@ -7,6 +7,7 @@ import { copyText, toast } from '../shared/debug';
 import { randomSeed } from '../shared/rng';
 import { makeStore } from '../shared/storage';
 import { HOLES, RULES_VERSION, encodeShot, fmtPar, newRound, play, replay, scoreName, toPar, type Hole, type PlayResult, type Round } from './core';
+import { Sounds } from './audio';
 import { draw, fitView, type Aim, type Scene, type View } from './render/draw';
 
 export const store = makeStore('ninefold.');
@@ -56,6 +57,7 @@ export class Game {
   private time = 0;
   private last = 0;
   private banner: { text: string; t: number } | null = null;
+  private sfx = new Sounds();
 
   constructor() {
     new ResizeObserver(() => this.resize()).observe(this.canvas);
@@ -116,6 +118,7 @@ export class Game {
   }
 
   private down(e: PointerEvent): void {
+    this.sfx.unlock();
     if (this.anim || this.r.over || this.drag) return;
     this.canvas.setPointerCapture(e.pointerId);
     const p = this.toWorld(e);
@@ -141,6 +144,7 @@ export class Game {
       this.tip();
       return;
     }
+    this.sfx.putt(aim.power);
     this.shoot(encodeShot(aim));
   }
 
@@ -201,7 +205,8 @@ export class Game {
           });
           this.glow.set(bi, 1);
           navigator.vibrate?.(8);
-        }
+          this.sfx.boing();
+        } else this.sfx.knock(hit.v);
       }
       if (pb.f >= n - 1) {
         if (pb.res.outcome === 'sunk') {
@@ -241,6 +246,7 @@ export class Game {
     if (pb.res.outcome === 'water') {
       this.splash = { x: pb.res.x, y: pb.res.y, t: 0 };
       toast('Splash! One stroke penalty');
+      this.sfx.splash();
       navigator.vibrate?.([20, 40, 20]);
     }
     if (pb.res.finished) {
@@ -252,7 +258,10 @@ export class Game {
         p.aces++;
         store.save('profile', p);
       }
-      if (!pb.res.pickedUp) navigator.vibrate?.(strokes < pb.hole.par ? [30, 50, 30] : 25);
+      if (!pb.res.pickedUp) {
+        navigator.vibrate?.(strokes < pb.hole.par ? [30, 50, 30] : 25);
+        this.sfx.cup(strokes < pb.hole.par);
+      }
       setTimeout(() => {
         this.sink = 0;
         this.trail = [];
