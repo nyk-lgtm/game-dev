@@ -48,6 +48,8 @@ const STAIRS = ramp(42, 80);
 const FLOOR_EDGE = ramp(30, 12);
 const FLOOR = ramp(30, 10);
 const BEAM = ramp(220, 10);
+/** Lit edges of walls where the depth jumps (corners, openings). */
+const EDGE = ramp(40, 55);
 
 const hash = (x: number, y: number) => {
   let h = (x * 374761393 + y * 668265263) | 0;
@@ -198,6 +200,25 @@ export function castView(g: Grid, s: GameState, pose: Pose, aspect: number, flic
           g.color[i] = shadeOf(BEAM, light(d, flicker) * 0.35);
         }
       }
+    }
+  }
+
+  // Edges where the depth jumps (a corner, a side opening, the mouth of a corridor):
+  // outline the nearer wall's edge so openings stand out from the brick texture.
+  for (let c = 1; c < cols; c++) {
+    const a = zbuf[c - 1];
+    const b = zbuf[c];
+    if (Math.abs(a - b) < 0.75 + 0.12 * Math.min(a, b)) continue;
+    const near = a < b ? c - 1 : c;
+    const d = zbuf[near];
+    const h = H / d;
+    const top = Math.max(0, Math.ceil(horizon - h / 2 - 0.5));
+    const bot = Math.min(rows - 1, Math.floor(horizon + h / 2 - 0.5));
+    const col = shadeOf(EDGE, Math.min(1, light(d, flicker) * 1.35 + 0.08));
+    for (let r = top; r <= bot; r++) {
+      const i = r * cols + near;
+      g.ch[i] = r === top || r === bot ? '+' : '|';
+      g.color[i] = col;
     }
   }
 
