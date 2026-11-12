@@ -10,6 +10,7 @@ export interface News {
 }
 
 export const NEWS: News[] = [
+  { day: '2026-11-12', path: './triad/', game: 'Triad', text: 'Fixed: after a hint, tapping the hex and then an element now fills it. Links are clearer pills on the edge, Normal links puzzles lean less on copying along links, and hints skip steps a link just copies.' },
   { day: '2026-11-12', path: './ninefold/', game: 'Ninefold', text: 'Windmills are fair now: single bars that never stop turning, so you can watch and time your putt, with room to slip past at the walls.' },
   { day: '2026-11-12', path: './summit/', game: 'Summit', text: 'New game: a solitaire climb. Eight deals of card peaks: play cards one up or down, chain streaks, and pick one of three charms after every floor (wild Jokers, blasts, undos, a spyglass…). Unused draws carry up the mountain. There is a daily climb too.' },
   { day: '2026-11-12', path: './triad/', game: 'Triad', text: 'New clue type: links. Pick “Numbers + links” with ＋ and some edges carry an “=”: the two hexes it joins hold the same element. Fewer numbers, fewer givens, a different kind of chain.' },

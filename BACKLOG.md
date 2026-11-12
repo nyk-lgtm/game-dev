@@ -133,8 +133,15 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         reduce puzzles to chains of links (numbers-first stripping left a spanning tree, zero numbers).
         Propagation got a work queue (same fixpoint), so Hard large is ~40 ms (numbers) / ~70 ms (links).
         One-time tip card, help line, hints ("The link says these two match"), red broken links.
-  - [ ] Next ideas: a blind playtest of links mode (too many easy link copies?), a links daily,
-        two-clue deductions for hard.
+  - [x] Links blind playtest ("Hard links was the best puzzle of the session"; Normal links felt more
+        mechanical than numbers) and fixes: tapping an empty selected/hinted hex no longer cycles it
+        and pressing the element a hex holds no longer clears it (the hint → tap → element flow placed
+        nothing); links are small pills along the edge with a light rim (red rim when broken);
+        Easy/Normal links never touch givens and join at most 3 hexes (LINKS_VERSION 2; normal large:
+        ~33 numbers + ~12 links + 4 givens, links settle ~17% of hexes vs ~35%); hints skip pure link
+        copies; sheet says "one clue" in links mode and counts solves per level+mode; ＋ works in one
+        tap over a card; the help card fits without scrolling.
+  - [ ] Next ideas: a links daily, two-clue deductions for hard.
 - [ ] **Last Light** (tap-driven interactive fiction). Milestones:
   - [x] Core (src/lastlight/core/story.ts): 8 places, 9 items, Tomas (trust, follows, carries) and
         Ada (keys, rescue, remembers being left), clock (3 min/action, midnight = 40), tide closes the

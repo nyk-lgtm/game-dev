@@ -1,5 +1,5 @@
 // Drawing the Triad board: hex cells, element icons, clue numbers, notes, and
-// links (an "=" badge on the edge between two hexes).
+// links (a small "=" pill lying on the edge between two hexes).
 
 import { fitHexes, hexPath, hexToPx, type HexLayout } from '../../shared/hexlayout';
 import { clueCells, isLink, linkCells, makeBoard, type Board, type Puzzle } from '../core';
@@ -32,53 +32,64 @@ function drawIcon(g: CanvasRenderingContext2D, e: number, x: number, y: number, 
   g.restore();
 }
 
-/** A link mark as inline SVG: two hexes sharing an edge, with the "=" across it (for cards). */
+/** A link mark as inline SVG: two hexes sharing an edge, with the badge on it (for cards). */
 export function linkSvg(size = 40): string {
   const hex = (cy: number) =>
     [...Array(6).keys()].map((k) => `${(20 + 11 * Math.cos((k * Math.PI) / 3)).toFixed(1)},${(cy + 11 * Math.sin((k * Math.PI) / 3)).toFixed(1)}`).join(' ');
-  const h = 11 * Math.sqrt(3) / 2;
-  const top = 20 - h;
-  const bot = 20 + h;
+  const h = (11 * Math.sqrt(3)) / 2;
   return `<svg viewBox="0 0 40 40" width="${size}" height="${size}" aria-hidden="true" style="vertical-align:middle">
-    <polygon points="${hex(top)}" fill="${FILL[2]}" stroke="#2c3347"/><polygon points="${hex(bot)}" fill="${FILL[2]}" stroke="#2c3347"/>
-    <g stroke="${LINK_COLOR}" stroke-width="2.4" stroke-linecap="round"><line x1="16" y1="17.6" x2="24" y2="17.6"/><line x1="16" y1="22.4" x2="24" y2="22.4"/></g></svg>`;
+    <polygon points="${hex(20 - h)}" fill="${FILL[2]}" stroke="#2c3347"/><polygon points="${hex(20 + h)}" fill="${FILL[2]}" stroke="#2c3347"/>
+    <line x1="16" y1="20" x2="24" y2="20" stroke="${LINK_RIM}" stroke-width="7.6" stroke-linecap="round"/>
+    <line x1="16" y1="20" x2="24" y2="20" stroke="${LINK_BADGE}" stroke-width="5.6" stroke-linecap="round"/>
+    <g stroke="${LINK_COLOR}" stroke-width="1.6" stroke-linecap="round"><line x1="17.4" y1="18.8" x2="22.6" y2="18.8"/><line x1="17.4" y1="21.2" x2="22.6" y2="21.2"/></g></svg>`;
 }
 
-/** A link: an upright "=" on a dark badge over the middle of the shared edge. */
-function drawLink(g: CanvasRenderingContext2D, v: View, b: Board, id: number, color: string, alpha: number, wide = false) {
+const LINK_RIM = '#a3acc4';
+const LINK_BADGE = '#0b0e15';
+
+/**
+ * A link: a small dark pill lying along the shared edge (light rim), holding
+ * an "=" whose bars run along the edge, so the edge passes between them.
+ * `state`: normal, hint (gold) or broken (red, larger, thick rim).
+ */
+function drawLink(g: CanvasRenderingContext2D, v: View, b: Board, id: number, state: 'normal' | 'hint' | 'broken', alpha: number) {
   const [i, j] = linkCells(b, id);
   const A = hexToPx(v.L, b.cells[i].q, b.cells[i].r);
   const B = hexToPx(v.L, b.cells[j].q, b.cells[j].r);
   const size = v.L.size;
   const mx = (A.x + B.x) / 2;
   const my = (A.y + B.y) / 2;
-  // Always an upright "=" on a small dark badge at the edge's middle, so it reads the same on every edge.
-  const ux = 0;
-  const uy = 1;
-  const half = size * (wide ? 0.2 : 0.16);
-  const off = size * 0.085;
+  const d = Math.hypot(B.x - A.x, B.y - A.y);
+  // Across the edge (center to center) and along it.
+  const ax = (B.x - A.x) / d;
+  const ay = (B.y - A.y) / d;
+  const ex = -ay;
+  const ey = ax;
+  const big = state === 'normal' ? 1 : 1.18;
+  const len = size * 0.15 * big; // pill half-length along the edge (to the cap centers)
+  const thick = Math.max(7, size * 0.3) * big; // pill width across the edge
+  const rim = state === 'broken' ? 3 : state === 'hint' ? 2.5 : 1.5;
+  const color = state === 'broken' ? '#ff5d7a' : state === 'hint' ? '#ffd77a' : LINK_COLOR;
+  const line = (ox: number, oy: number, half: number) => {
+    g.beginPath();
+    g.moveTo(mx + ox - ex * half, my + oy - ey * half);
+    g.lineTo(mx + ox + ex * half, my + oy + ey * half);
+    g.stroke();
+  };
   g.save();
   g.globalAlpha = alpha;
-  g.fillStyle = 'rgba(8, 10, 16, 0.9)';
-  g.beginPath();
-  g.arc(mx, my, size * (wide ? 0.3 : 0.26), 0, Math.PI * 2);
-  g.fill();
   g.lineCap = 'round';
-  for (const [w, c] of [
-    [Math.max(4.5, size * 0.2), 'rgba(8, 10, 16, 0.85)'],
-    [Math.max(2.2, size * 0.09) * (wide ? 1.25 : 1), color],
-  ] as const) {
-    g.lineWidth = w;
-    g.strokeStyle = c;
-    g.beginPath();
-    for (const s of [-1, 1]) {
-      const cx = mx + ux * off * s;
-      const cy = my + uy * off * s;
-      g.moveTo(cx - uy * half, cy + ux * half);
-      g.lineTo(cx + uy * half, cy - ux * half);
-    }
-    g.stroke();
-  }
+  g.lineWidth = thick + rim * 2;
+  g.strokeStyle = state === 'normal' ? LINK_RIM : color;
+  line(0, 0, len);
+  g.lineWidth = thick;
+  g.strokeStyle = LINK_BADGE;
+  line(0, 0, len);
+  // The "=": two short, thick bars along the edge, one each side of it.
+  const gap = thick * 0.2;
+  g.lineWidth = Math.max(1.8, thick * 0.17);
+  g.strokeStyle = color;
+  for (const sgn of [-1, 1]) line(ax * gap * sgn, ay * gap * sgn, len + thick * 0.12);
   g.restore();
 }
 
@@ -188,13 +199,13 @@ export function drawBoard(g: CanvasRenderingContext2D, v: View, p: Puzzle, o: Dr
   for (let id = b.cells.length; id < p.clue.length; id++) {
     if (p.clue[id] < 0) continue;
     const [i, j] = linkCells(b, id);
-    if (hintClues.includes(id)) drawLink(g, v, b, id, '#ffd77a', 1, true);
-    else if (o.broken.has(id)) drawLink(g, v, b, id, '#ff5d7a', 1, true);
+    if (hintClues.includes(id)) drawLink(g, v, b, id, 'hint', 1);
+    else if (o.broken.has(id)) drawLink(g, v, b, id, 'broken', 1);
     else {
       // Faded once both hexes are filled (and match), and while a hint dims the rest.
       const settled = val(i) >= 0 && val(j) >= 0;
       const dim = hintRing && !(hintRing.has(i) && hintRing.has(j));
-      drawLink(g, v, b, id, LINK_COLOR, settled ? 0.4 : dim ? 0.5 : 1);
+      drawLink(g, v, b, id, 'normal', settled ? 0.4 : dim ? 0.5 : 1);
     }
   }
 }
