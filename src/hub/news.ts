@@ -10,7 +10,7 @@ export interface News {
 }
 
 export const NEWS: News[] = [
-  { day: '2026-11-12', path: './ninefold/', game: 'Ninefold', text: 'Aiming shows a ring where the ball will stop; pull length now matches distance. Softer sand, gentler slopes, kinder corners, and par counts obstacles.' },
+  { day: '2026-11-12', path: './ninefold/', game: 'Ninefold', text: 'Aiming shows a ring where the ball will stop; pull length now matches distance. Softer sand, gentler slopes, kinder corners, bigger holes on screen, and fairer par.' },
   { day: '2026-11-12', path: './lastlight/', game: 'Last Light', text: 'Night 2: fog. The doctor’s girl is missing, the foghorn is “condemned”, and the Merrow is feeling her way in blind. Pick it from the menu.' },
   { day: '2026-11-12', path: './unspoken/', game: 'Unspoken', text: 'Tap 🔊 on a word to hear it spoken (uses your phone’s voice; off when sound is off).' },
   { day: '2026-11-12', path: './ninefold/', game: 'Ninefold', text: 'Sounds, and windmills from hole 4: they turn while the ball rolls, from the same pose every shot, so time your putt through the gaps.' },

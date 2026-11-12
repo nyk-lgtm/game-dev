@@ -34,7 +34,9 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         par counts obstacles on the route (+½ each, posts and mills too); picked-up holes dotted on the
         scorecard and the ball stays put; result line in the hint bar, longer banner; a toast when an
         update resets a round. Bot (NOISE=0.06) now median E.
-  - [ ] Next: second playtest of the new aim; maybe bigger holes on screen (COLS 5?).
+  - [x] Holes keep to a 4-column band (taller, ~25% bigger on screen); par fitted to the bot with wobble
+        (round(0.335·len + 0.284·obstacles + 0.1·turns), 2-5); bot NOISE=0.06 median −2 (rules v5).
+  - [ ] Next: second playtest of the new aim.
 - [ ] **Hexhold** (hex maze tower defense). Milestones:
   - [x] Core (src/hexhold/core): 9x11 hex board, flow-field pathing (never sealed), 30
         seeded waves with themes, 6 towers each gifting its neighbors, 8 enemies (flyers,

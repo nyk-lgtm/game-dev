@@ -4,7 +4,7 @@
 import { HOLES, makeCourse, type Hole } from './course';
 import { simulate, type Shot, type ShotResult } from './physics';
 
-export const RULES_VERSION = 4;
+export const RULES_VERSION = 5;
 /** Strokes after which the ball is picked up (penalties count). */
 export const MAX_STROKES = 8;
 

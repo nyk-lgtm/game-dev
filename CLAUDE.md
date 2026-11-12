@@ -76,7 +76,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 - Ninefold (src/ninefold/core): `makeHole(seed, n)` grows a corridor of 16-unit cells on a 6×9 grid (a
   self-avoiding walk, never touching itself, plus side pockets), walls = the cells' outer edges, obstacles in
   route cells (never tee/cup). `simulate` is a fixed 240 Hz step; shots are saved as `angle.power` in
-  thousandths, so `replay(seed, a)` is exact. Par is a formula (turns, length, hazards). Tools in
+  thousandths, so `replay(seed, a)` is exact; power is a share of MAX_ROLL on open grass. Par is a formula
+  fitted to the bot (length, obstacles on the route, turns); `NOISE=0.06 balance.ts 8` median ≈ −2. Tools in
   scripts/ninefold: `show.ts <seed>` (ASCII), `balance.ts n` (search bot, NOISE=0.04 wobble), `trace.ts`,
   `botround.ts <seed>` (actions for `?seed=&a=`).
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)

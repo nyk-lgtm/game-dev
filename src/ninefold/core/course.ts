@@ -77,8 +77,11 @@ function neighbor(c: number, d: number): number {
 const dirBetween = (a: number, b: number) => [0, 1, 2, 3].find((d) => neighbor(a, d) === b)!;
 
 /** A self-avoiding walk that never touches itself except at consecutive cells. */
-function walk(rng: Rng, len: number): number[] | null {
-  const start = (ROWS - 1) * COLS + rng.int(0, COLS - 1);
+/** Holes keep to a band of BAND columns, so they stay tall and narrow and fill a portrait screen. */
+const BAND = 4;
+
+function walk(rng: Rng, len: number, band: number): number[] | null {
+  const start = (ROWS - 1) * COLS + band + rng.int(0, BAND - 1);
   const path = [start];
   const on = new Set(path);
   let dir = 0;
@@ -88,7 +91,7 @@ function walk(rng: Rng, len: number): number[] | null {
     const opts: [number, number][] = [];
     for (let d = 0; d < 4; d++) {
       const n = neighbor(cur, d);
-      if (n < 0 || on.has(n)) continue;
+      if (n < 0 || on.has(n) || n % COLS < band || n % COLS >= band + BAND) continue;
       // Must not touch any earlier cell but cur.
       let ok = true;
       for (let e = 0; e < 4; e++) {
@@ -159,7 +162,8 @@ export function makeHole(seed: number, n: number): Hole {
   const rng = new Rng(mixSeed(seed, n + 1));
   const [lo, hi] = n < 3 ? [5, 8] : n < 6 ? [7, 11] : [9, 14];
   let path: number[] | null = null;
-  for (let tries = 0; !path; tries++) path = walk(rng, tries > 200 ? 4 : rng.int(lo, hi));
+  const band = rng.int(0, COLS - BAND);
+  for (let tries = 0; !path; tries++) path = walk(rng, tries > 200 ? 4 : rng.int(lo, hi), band);
   const cells = Array<boolean>(COLS * ROWS).fill(false);
   path.forEach((c) => (cells[c] = true));
   const index = new Map(path.map((c, i) => [c, i]));
@@ -169,7 +173,7 @@ export function makeHole(seed: number, n: number): Hole {
   for (let k = 0; k < widen * 4 && extra.length < widen; k++) {
     const base = path[rng.int(1, path.length - 2)];
     const c = neighbor(base, rng.int(0, 3));
-    if (c < 0 || cells[c]) continue;
+    if (c < 0 || cells[c] || c % COLS < band || c % COLS >= band + BAND) continue;
     const touch: number[] = [];
     for (let d = 0; d < 4; d++) {
       const m = neighbor(c, d);
@@ -245,14 +249,14 @@ export function makeHole(seed: number, n: number): Hole {
   }
 
   const turns = turnsOf(path);
-  // Par: two putts, plus half a stroke per bend and per thing in the way.
   const onRoute = new Set(path);
   const cellOf = (x: number, y: number) => Math.floor(y / CELL) * COLS + Math.floor(x / CELL);
   const inWay =
     zones.filter((z) => onRoute.has(cellOf(z.x + z.w / 2, z.y + z.h / 2))).length +
     posts.filter((p) => !p.bumper).length +
     mills.length;
-  const par = Math.max(2, Math.min(5, 2 + Math.floor((turns + (path.length > 8 ? 1 : 0) + inWay) / 2)));
+  // Fitted to a search bot with a thumb-sized wobble (strokes ≈ 0.34·length + 0.28·obstacles); people land a little over.
+  const par = Math.max(2, Math.min(5, Math.round(0.335 * path.length + 0.284 * inWay + 0.1 * turns)));
   // Angle the outer corner of every closed bend (unless a bumper sits there) so banks play cleanly.
   const walls = buildWalls(cells);
   const wedges: number[][] = [];
