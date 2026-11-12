@@ -7,7 +7,8 @@ at any time; their word beats this list.
 ## How each work session goes
 1. Read this file and CLAUDE.md. Pick the top unfinished item (or finish one in progress).
 2. Do one meaningful, shippable chunk. Big items are split into milestones below.
-3. `npm test && npm run build`, check it on a Pixel 7 screenshot, push the work branch,
+3. `npm test && npm run build`, check it on a Pixel 7 screenshot, add a hub NEWS line if the owner
+   would notice it, push the work branch,
    deploy to `main` only when it's finished and verified live.
 4. Update this file: tick what's done, add what you learned or found, note the next step.
 5. Tell the owner in a few lines what changed and what to try. Only ask a question if
@@ -97,6 +98,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Afterglow: owner is happy with it — leave alone unless they report something.
 
 ## Done (recent)
+- Hub "What's new" panel (src/hub/news.ts), marks changes since the last visit.
 - Hexhold credits Frost; CI stuck-queue workaround noted in CLAUDE.md.
 - Glyphwright honest dps figures and untruncated spell names.
 - Triad guided tutorial.

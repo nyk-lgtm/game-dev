@@ -79,3 +79,5 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   If a push's CI run sits "queued" for long (it happened once for 2h), start `deploy.yml` by hand
   (workflow_dispatch on `main`); it can't be cancelled while stuck.
 - Autonomous work: read BACKLOG.md first; it holds the queue, the per-session routine and what's done.
+- When shipping something the owner would notice, add a line at the top of `NEWS` in src/hub/news.ts
+  (the hub's "What's new", which marks items newer than their last visit).

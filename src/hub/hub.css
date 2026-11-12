@@ -45,3 +45,14 @@ header p { margin: 6px 0 0; color: var(--muted); }
 .daily-row a.done span { color: #ffd166; }
 .daily-row a:active { transform: scale(0.97); }
 #build { color: var(--muted); font-size: 12px; text-align: center; }
+#news { padding: 14px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); }
+#news h3 { margin: 0 0 8px; font-size: 17px; display: flex; justify-content: space-between; align-items: baseline; }
+#news h3 span { font-size: 12px; font-weight: 600; color: #7bd88f; }
+#news ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+#news li a { display: flex; gap: 10px; align-items: baseline; padding: 9px 0; min-height: 44px; color: inherit; text-decoration: none; border-top: 1px solid var(--line); }
+#news li:first-child a { border-top: 0; }
+#news li b { flex: none; width: 92px; font-size: 13px; }
+#news li span { color: var(--muted); font-size: 13.5px; }
+#news li.new b::after { content: ' ●'; color: #7bd88f; font-size: 10px; vertical-align: 2px; }
+#news li.new span { color: var(--text); }
+#news button { margin-top: 6px; width: 100%; min-height: 44px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 14px; font-weight: 600; }

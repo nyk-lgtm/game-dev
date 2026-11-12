@@ -3,6 +3,7 @@
 import { BUILD } from '../shared/debug';
 import { makeStore } from '../shared/storage';
 import { loadDaily, prettyDay } from '../shared/daily';
+import { NEWS } from './news';
 
 interface GameCard {
   path: string;
@@ -275,3 +276,19 @@ for (const d of DAILY) {
 daily.appendChild(row);
 
 document.getElementById('build')!.textContent = `build ${BUILD}`;
+
+// What's new: everything since the last visit (or the latest few), then remember this visit.
+const hubStore = makeStore('hub.');
+// Before this list existed, count everything in it as new.
+const seen = hubStore.load<string>('seenNews', '2026-11-09');
+const fresh = NEWS.filter((n) => n.day > seen);
+const news = document.getElementById('news')!;
+const renderNews = (all: boolean) => {
+  const list = all ? NEWS : fresh.length ? fresh.slice(0, 8) : NEWS.slice(0, 3);
+  news.innerHTML = `<h3>What's new${fresh.length && seen ? `<span>${fresh.length} since your last visit</span>` : ''}</h3><ul>${list
+    .map((n) => `<li class="${seen && n.day > seen ? 'new' : ''}"><a href="${n.path}"><b>${n.game}</b><span>${n.text}</span></a></li>`)
+    .join('')}</ul>${!all && list.length < NEWS.length ? '<button id="newsAll">Show all changes</button>' : ''}`;
+  document.getElementById('newsAll')?.addEventListener('click', () => renderNews(true));
+};
+renderNews(false);
+hubStore.save('seenNews', NEWS[0].day);
