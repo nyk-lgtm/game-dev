@@ -9,14 +9,15 @@ import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey } fr
 import { copyText, toast } from '../shared/debug';
 import { makeStore } from '../shared/storage';
 import {
+  ALL_CONCEPTS,
   CONCEPT,
-  CONCEPTS,
   RULES_VERSION,
   apply,
   contexts,
   encode,
   english,
   grammarNotes,
+  grammarRules,
   morphemes,
   newGame,
   progress,
@@ -49,6 +50,9 @@ const SHORT: Record<string, string> = {
   FUT: 'later',
   Q: 'what?',
   TO: 'to',
+  SUBJ: 'doer',
+  OBJ: 'done-to',
+  PLV: 'many do',
 };
 const short = (id: string) => SHORT[id] ?? CONCEPT.get(id)!.en;
 
@@ -65,12 +69,31 @@ const TABS: { label: string; cats: Category[] }[] = [
 
 type Page = { kind: 'intro' } | { kind: 'panel'; p: Panel } | { kind: 'riddle'; c: Challenge; i: number } | { kind: 'next' };
 type Backdrop = State['world']['chapters'][number]['backdrop'];
-const PLACE: Record<Backdrop, string> = { shore: 'Shore', market: 'Market', houses: 'Houses', murals: 'Murals', mountain: 'Mountain' };
+const PLACE: Record<Backdrop, string> = { shore: 'Shore', market: 'Market', houses: 'Houses', murals: 'Murals', mountain: 'Mountain', lake: 'Lake', hamlet: 'Hamlet', terraces: 'Terraces' };
 
 interface Profile {
   finished: number;
   best: number;
+  /** The mountain village (village 2): runs finished and best share. */
+  finished2?: number;
+  best2?: number;
 }
+
+/** A saved run; `village` is absent on village-1 saves made before the mountain village existed. */
+export interface SavedRun {
+  v: number;
+  seed: number;
+  a: string;
+  day?: string | null;
+  village?: number;
+}
+
+/** Where each village's run is saved (village 1 keeps its original key). */
+export const runKey = (village: number) => (village === 2 ? 'run2' : 'run');
+/** The mountain village opens once the river village has been finished. */
+export const village2Open = () => (store.load<Profile>('profile', { finished: 0, best: 0 }).finished ?? 0) > 0;
+
+const VILLAGE_NAME: Record<number, string> = { 1: 'the river village', 2: 'the mountain village' };
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', html = ''): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -84,6 +107,7 @@ export class Game {
   seed = 0;
   actions: string[] = [];
   daily: string | null = null;
+  village = 1;
   replayOnly = false;
   view = 0;
   sfx = new Sfx();
@@ -119,18 +143,21 @@ export class Game {
 
   // ---------------------------------------------------------------- run
 
-  start(seed: number, actions = '', fromLink = false, daily: string | null = null): void {
+  start(seed: number, actions = '', fromLink = false, daily: string | null = null, village = 1): void {
     this.seed = seed;
     this.daily = daily;
+    this.village = daily ? 1 : village;
     this.replayOnly = fromLink;
     try {
-      this.s = replay(seed, actions);
+      this.s = replay(seed, actions, this.village);
       this.actions = actions ? actions.split(',') : [];
     } catch (e) {
       if (fromLink) toast(`Replay failed: ${(e as Error).message}`);
-      this.s = newGame(seed);
+      this.s = newGame(seed, this.village);
       this.actions = [];
     }
+    document.body.classList.toggle('v2', this.village === 2);
+    if (!fromLink && !daily) store.save('village', this.village);
     this.sceneCache.clear();
     this.compose.clear();
     this.composeMarks.clear();
@@ -145,8 +172,9 @@ export class Game {
 
   private persist(): void {
     if (this.replayOnly) return;
-    const run = this.s.over ? null : { v: RULES_VERSION, seed: this.seed, a: this.actions.join(','), day: this.daily };
-    store.save(this.daily ? 'dailyRun' : 'run', run);
+    const run: SavedRun | null = this.s.over ? null : { v: RULES_VERSION, seed: this.seed, a: this.actions.join(','), day: this.daily };
+    if (run && this.village === 2) run.village = 2;
+    store.save(this.daily ? 'dailyRun' : runKey(this.village), run);
   }
 
   private act(a: Action): Result | null {
@@ -160,8 +188,18 @@ export class Game {
   newLanguage(): void {
     closeOverlay();
     leaveDaily();
-    this.start((Math.random() * 0xffffffff) >>> 0);
+    this.start((Math.random() * 0xffffffff) >>> 0, '', false, null, this.village);
     this.persist();
+  }
+
+  /** Go to a village: its saved run if there is one, else a fresh language (the river village's seed, carried up, for a first climb). */
+  goVillage(village: number, seed?: number): void {
+    closeOverlay();
+    leaveDaily();
+    const saved = store.load<SavedRun | null>(runKey(village), null);
+    if (saved && saved.v === RULES_VERSION) this.start(saved.seed, saved.a, false, null, village);
+    else this.start(seed ?? (Math.random() * 0xffffffff) >>> 0, '', false, null, village);
+    if (village === 2 && this.actions.length === 0) setTimeout(() => this.showVillage2Intro(), 250);
   }
 
   playDaily(fresh = false): void {
@@ -174,11 +212,8 @@ export class Game {
   }
 
   resumeOwn(): void {
-    closeOverlay();
-    leaveDaily();
-    const saved = store.load<{ v: number; seed: number; a: string } | null>('run', null);
-    if (saved && saved.v === RULES_VERSION) this.start(saved.seed, saved.a);
-    else this.start((Math.random() * 0xffffffff) >>> 0);
+    const village = store.load<number>('village', 1) === 2 && village2Open() ? 2 : 1;
+    this.goVillage(village);
   }
 
   // ---------------------------------------------------------------- scenes
@@ -189,7 +224,7 @@ export class Game {
 
   private scene(key: string, frame: Frame, w: number, h: number, backdrop: State['world']['chapters'][number]['backdrop']): HTMLCanvasElement {
     // Murals are memories: only past scenes are painted on the wall.
-    if (backdrop === 'murals' && frame.tense !== 'past') backdrop = 'houses';
+    if (backdrop === 'murals' && frame.tense !== 'past') backdrop = this.village === 2 ? 'hamlet' : 'houses';
     const k = `${key}@${Math.round(w)}x${Math.round(h)}`;
     let c = this.sceneCache.get(k);
     if (!c) {
@@ -304,7 +339,7 @@ export class Game {
   render(): void {
     const s = this.s;
     const pr = progress(s);
-    $('langName').textContent = s.lang.name + (this.daily ? ' · today' : '');
+    $('langName').textContent = s.lang.name + (this.daily ? ' · today' : this.village === 2 ? ' · mountain' : '');
     $('words').textContent = `${pr.confirmed} of ${pr.total} glyphs read`;
     ($('wordsBar').firstElementChild as HTMLElement).style.width = `${(100 * pr.confirmed) / pr.total}%`;
 
@@ -314,7 +349,7 @@ export class Game {
     s.world.chapters.forEach((ch, i) => {
       const b = el('button');
       const done = ch.challenges.every((c) => s.solved.includes(c.id));
-      b.innerHTML = `${i > s.chapter ? '<span class="lock">◦</span>' : done ? '<span class="tick">✓</span>' : ''}${PLACE[ch.backdrop]}`;
+      b.innerHTML = `${i > s.chapter ? '<span class="lock">◦</span>' : done ? '<span class="tick">✓</span>' : ''}${this.placeName(i)}`;
       b.disabled = i > s.chapter;
       if (i === this.view) b.classList.add('on');
       if (i === this.freshChapter) b.classList.add('new');
@@ -359,6 +394,12 @@ export class Game {
     $('nextBtn').classList.toggle('pulse', page.kind === 'panel' && s.understood.includes(page.p.id) && this.page < pages.length - 1);
   }
 
+  /** Short name of a place for the tabs and the way-on button. */
+  private placeName(i: number): string {
+    const ch = this.s.world.chapters[i];
+    return this.village === 2 ? ch.title.replace(/^The /, '') : PLACE[ch.backdrop];
+  }
+
   private kicker(text: string): HTMLElement {
     return el('div', 'kicker', text);
   }
@@ -379,7 +420,15 @@ export class Game {
       ),
     );
     if (this.view === 0 && Object.keys(s.notebook).length === 0 && s.confirmed.length === 0)
-      box.appendChild(el('p', 'tip', 'Each scene has a sign. Tap a glyph on the sign to study it and write down what you think it means.'));
+      box.appendChild(
+        el(
+          'p',
+          'tip',
+          this.village === 2
+            ? 'A new language, with new glyphs. Here the words move around: compare scenes that look the same, and look for the little words that travel with each animal.'
+            : 'Each scene has a sign. Tap a glyph on the sign to study it and write down what you think it means.',
+        ),
+      );
     const go = el('button', 'primary wide');
     go.textContent = clear === 0 && solved === 0 ? 'Begin reading' : 'Continue';
     go.onclick = () => this.goPage(this.firstOpenPage(), 1);
@@ -420,9 +469,11 @@ export class Game {
   private nextPage(box: HTMLElement): void {
     const s = this.s;
     if (s.over && this.view === s.world.chapters.length - 1) {
-      box.appendChild(this.kicker('The end of the path'));
+      box.appendChild(this.kicker(this.village === 2 ? 'The end of the climb' : 'The end of the path'));
       box.appendChild(el('h1', 'chapter-title', 'You answered the elder'));
-      box.appendChild(el('p', 'journal', 'The village has told you all it will. Read back what you understood.'));
+      box.appendChild(
+        el('p', 'journal', this.village === 2 ? 'The mountain village has told you all it will. Read back what you understood.' : 'The village has told you all it will. Read back what you understood.'),
+      );
       const b = el('button', 'primary wide');
       b.textContent = 'What you understood';
       b.onclick = () => this.showEnding();
@@ -434,7 +485,7 @@ export class Game {
     box.appendChild(el('h1', 'chapter-title', next.title));
     box.appendChild(el('p', 'journal', next.intro.split('. ')[0] + '.'));
     const b = el('button', 'primary wide');
-    b.textContent = `Go to ${PLACE[next.backdrop]}`;
+    b.textContent = `Go to ${this.placeName(this.view + 1)}`;
     b.onclick = () => this.goChapter(this.view + 1);
     box.appendChild(b);
   }
@@ -464,7 +515,16 @@ export class Game {
         picks.appendChild(b);
       });
       box.appendChild(picks);
-      if (!solved) box.appendChild(el('p', 'tip', wrong.size ? 'Not that one. Look at what differs between the scenes.' : 'The three scenes differ in just one thing.'));
+      if (!solved) {
+        const hint = wrong.size
+          ? this.village === 2 && c.tests === 'roles'
+            ? 'Not that one. Who has the doer word, and who the done-to word?'
+            : 'Not that one. Look at what differs between the scenes.'
+          : c.tests === 'roles'
+            ? 'Careful: the order of the words may not tell you who does what.'
+            : 'The three scenes differ in just one thing.';
+        box.appendChild(el('p', 'tip', hint));
+      }
       return;
     }
 
@@ -475,7 +535,7 @@ export class Game {
       cap.classList.add('compact');
       q.appendChild(cap);
       box.appendChild(q);
-      box.appendChild(el('p', 'tip', 'Answer with what the murals told you.'));
+      box.appendChild(el('p', 'tip', this.village === 2 ? 'Answer with what the carvings told you.' : 'Answer with what the murals told you.'));
     } else {
       const frame = el('div', 'frame');
       const sc = this.scene(c.id, c.frame, w, Math.round(w * 0.56), backdrop);
@@ -503,6 +563,7 @@ export class Game {
     });
     box.appendChild(slots);
     if (chosen.length) box.appendChild(el('p', 'tip', 'Tap a placed glyph to take it back.'));
+    else if (this.village === 2 && c.alts?.length) box.appendChild(el('p', 'tip', 'Doer and done-to may come in either order, as long as each keeps its little word.'));
     const tiles = el('div', 'tiles');
     c.tiles.forEach((t, ti) => {
       const b = this.tokenButton(t, 44, () => {
@@ -676,7 +737,7 @@ export class Game {
       const showTab = () => {
         tabs.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === this.tab));
         chips.innerHTML = '';
-        for (const c of CONCEPTS.filter((x) => TABS[this.tab].cats.includes(x.cat))) {
+        for (const c of ALL_CONCEPTS.filter((x) => TABS[this.tab].cats.includes(x.cat))) {
           if (c.cat === 'grammar' && !writtenGrammar(lang).includes(c.id)) continue;
           const b = el('button');
           b.textContent = c.cat === 'name' || c.cat === 'grammar' ? short(c.id) : c.en;
@@ -743,15 +804,25 @@ export class Game {
     const seen = new Set<string>();
     for (const ch of s.world.chapters.slice(0, s.chapter + 1)) for (const p of ch.panels) for (const m of morphemes(p.tokens)) seen.add(m);
     const guessed = [...seen].filter((m) => s.notebook[m] && !s.confirmed.includes(m)).length;
+    // The mountain village's grammar is written down here as you prove the glyphs that carry it.
+    const rules = grammarRules(s.lang);
+    const found = rules.filter((r) => r.needs.every((m) => s.confirmed.includes(m)));
+    const notes = rules.length
+      ? `<h3>Grammar notes</h3>${found.length ? `<ul class="rules">${found.map((r) => `<li><b>${r.title}.</b> ${r.text}</li>`).join('')}</ul>` : ''}<p class="nb-more">${
+          found.length === rules.length
+            ? 'You have worked out every rule.'
+            : `${rules.length - found.length} rule${rules.length - found.length > 1 ? 's' : ''} still to work out. Prove the little words and marks that carry ${found.length ? 'them' : 'one'}, and it is written here.`
+        }</p>`
+      : '';
     showCard(
-      `<h2>Notebook</h2><div class="nb-legend"><span><b>${seen.size}</b> seen</span><span class="g"><b>${guessed}</b> guessed</span><span class="k"><b>${s.confirmed.filter((m) => seen.has(m)).length}</b> proven</span></div><div class="nb-grid" id="nbGrid"></div>`,
-      [
-      { label: 'Close', primary: true, onClick: closeOverlay },
-    ]);
+      `<h2>Notebook</h2><div class="nb-legend"><span><b>${seen.size}</b> seen</span><span class="g"><b>${guessed}</b> guessed</span><span class="k"><b>${s.confirmed.filter((m) => seen.has(m)).length}</b> proven</span></div><div class="nb-grid" id="nbGrid"></div>${notes}`,
+      [{ label: 'Close', primary: true, onClick: closeOverlay }],
+    );
     const grid = $('nbGrid');
-    for (const m of [...seen].sort((a, b) => CONCEPTS.findIndex((c) => c.id === a) - CONCEPTS.findIndex((c) => c.id === b))) {
+    const order = (id: string) => ALL_CONCEPTS.findIndex((c) => c.id === id);
+    for (const m of [...seen].sort((a, b) => order(a) - order(b))) {
       const isMark = !!s.lang.glyphs[m].mark;
-      const t: Token = { m: isMark ? m : m, marks: [] };
+      const t: Token = { m, marks: [] };
       const b = isMark ? this.markButton(m) : this.tokenButton(t, 44, () => (closeOverlay(), this.openSheet(m)));
       grid.appendChild(b);
     }
@@ -769,10 +840,12 @@ export class Game {
 
   showMenu(): void {
     const muted = this.sfx.muted;
-    showCard(`<h2>Unspoken</h2><p>The language of this village: <b>${this.s.lang.name}</b>${this.daily ? ` · today's language` : ''}.</p>`, [
+    const where = this.daily ? ` · today's language` : this.village === 2 ? ' · the mountain village' : '';
+    showCard(`<h2>Unspoken</h2><p>The language of this village: <b>${this.s.lang.name}</b>${where}.</p>`, [
       { label: 'Resume', primary: true, onClick: closeOverlay },
       { label: 'How to play', onClick: () => this.showHelp() },
       { label: 'Notebook', onClick: () => this.showNotebook() },
+      { label: village2Open() ? 'Villages' : 'Villages · the second is locked', onClick: () => this.showVillages() },
       this.daily ? { label: 'Back to my language', onClick: () => this.resumeOwn() } : { label: `Today's language · ${loadDaily(store)?.label ?? 'not played'}`, onClick: () => this.playDaily() },
       {
         label: muted ? 'Sound: off' : 'Sound: on',
@@ -786,13 +859,56 @@ export class Game {
       {
         label: 'A new language',
         onClick: () =>
-          showCard('<h2>Leave this village?</h2><p>You will start over with a language no one has seen.</p>', [
+          showCard(`<h2>Leave this village?</h2><p>You will start ${VILLAGE_NAME[this.village]} over, with a language no one has seen.</p>`, [
             { label: 'New language', primary: true, onClick: () => this.newLanguage() },
             { label: 'Cancel', onClick: () => this.showMenu() },
           ]),
       },
       { label: 'Back to Game Lab', onClick: () => (location.href = '../') },
     ]);
+  }
+
+  /** Choose between the river village and (once it is finished) the mountain village. */
+  showVillages(): void {
+    const open = village2Open();
+    const status = (v: number) => {
+      if (v === 2 && !open) return 'Locked: finish the river village first.';
+      if (!this.daily && v === this.village) return this.s.over ? 'Finished. Here now.' : `Here now · place ${this.s.chapter + 1} of ${this.s.world.chapters.length}`;
+      const saved = store.load<SavedRun | null>(runKey(v), null);
+      return saved && saved.v === RULES_VERSION && saved.a ? 'A language in progress' : 'A new language';
+    };
+    showCard(
+      `<h2>Villages</h2><div class="villages">
+        <button id="vil1" class="village"><span class="vthumb" id="vth1"></span><span class="vtext"><b>The river village</b><span>Word order tells who does what. Five places, from the shore to the mountain path.</span><em>${status(1)}</em></span></button>
+        <button id="vil2" class="village${open ? '' : ' locked'}"><span class="vthumb" id="vth2"></span><span class="vtext"><b>The mountain village</b><span>Harder: little words mark who acts, so words move around, and the action changes when many act.</span><em>${status(2)}</em></span></button>
+      </div>`,
+      [{ label: 'Back', onClick: () => this.showMenu() }],
+    );
+    const thumb = (id: string, frame: Frame, backdrop: Backdrop) => {
+      const c = this.scene(`village-${id}`, frame, 96, 64, backdrop).cloneNode(true) as HTMLCanvasElement;
+      c.getContext('2d')!.drawImage(this.scene(`village-${id}`, frame, 96, 64, backdrop), 0, 0);
+      $(id).appendChild(c);
+    };
+    thumb('vth1', { v: 'go', s: { n: 'person', pl: true }, d: { n: 'mountain' }, tense: 'now' }, 'shore');
+    thumb('vth2', { v: 'see', s: { n: 'goat' }, o: { n: 'dog' }, tense: 'now' }, 'mountain');
+    $('vil1').onclick = () => (this.village === 1 && !this.daily ? closeOverlay() : this.goVillage(1));
+    ($('vil2') as HTMLButtonElement).disabled = !open;
+    $('vil2').onclick = () => (this.village === 2 && !this.daily ? closeOverlay() : this.goVillage(2));
+  }
+
+  /** First arrival in the mountain village. */
+  showVillage2Intro(): void {
+    showCard(
+      `<h2>The mountain village</h2>
+      <p>The river people climbed the mountain after the flood. Up there they live among the mountain folk, and speak their tongue: a <b>new language</b>, new glyphs.</p>
+      <ul>
+        <li>Here the words <b>move around</b>. The same scene can be written in more than one order.</li>
+        <li>Little words travel with the one who acts and the one it is done to. Find them, and you know who did what.</li>
+        <li>When many act, watch the action too.</li>
+        <li>As you prove the little words, the notebook ✎ writes down the rules.</li>
+      </ul>`,
+      [{ label: 'Climb on', primary: true, onClick: closeOverlay }],
+    );
   }
 
   showHelp(): void {
@@ -807,6 +923,7 @@ export class Game {
         <li>Little <b>marks</b> above or below a glyph change its meaning. Watch what changes in the pictures.</li>
         <li><b>Riddles</b> close each place: pick the scene a sign describes, or write a scene yourself. Solving one proves your right guesses and clears your wrong ones.</li>
         <li>Notice the order of words. Notice what repeats. Nobody will tell you.</li>
+        <li>Finish the village and a <b>second village</b> opens up the mountain (menu ☰ › Villages), with a harder language.</li>
       </ul>`,
       [{ label: 'Begin', primary: true, onClick: closeOverlay }],
     );
@@ -817,8 +934,13 @@ export class Game {
     const p = progress(this.s);
     const pct = Math.round((100 * p.confirmed) / p.total);
     const prof = store.load<Profile>('profile', { finished: 0, best: 0 });
-    prof.finished++;
-    prof.best = Math.max(prof.best, pct);
+    if (this.village === 2) {
+      prof.finished2 = (prof.finished2 ?? 0) + 1;
+      prof.best2 = Math.max(prof.best2 ?? 0, pct);
+    } else {
+      prof.finished++;
+      prof.best = Math.max(prof.best, pct);
+    }
     store.save('profile', prof);
     if (this.daily) recordDaily(store, pct * 100 - this.s.mistakes, `${pct}% · ${this.s.mistakes} slip${this.s.mistakes === 1 ? '' : 's'}`, this.daily);
     this.persist();
@@ -830,16 +952,24 @@ export class Game {
     const pct = Math.round((100 * p.confirmed) / p.total);
     this.sfx.victory();
     const gloss = (id: string) => (s.notebook[id] ? short(s.notebook[id]) : '⟨?⟩');
+    const v2 = this.village === 2;
+    // After the river village, the path leads on up the mountain (unless this was a replay link).
+    const climb = !v2 && !this.replayOnly && village2Open();
+    const buttons = [
+      ...(climb ? [{ label: 'Climb to the mountain village', primary: true, onClick: () => this.goVillage(2, this.seed) }] : []),
+      { label: 'A new language', primary: !climb, onClick: () => this.newLanguage() },
+      ...(v2 ? [{ label: 'Villages', onClick: () => this.showVillages() }] : []),
+      { label: 'Stay in the village', onClick: closeOverlay },
+      { label: 'Back to Game Lab', onClick: () => (location.href = '../') },
+    ];
     showCard(
       `<div class="ending"><h2>What you understood</h2>
       <p>You proved <b>${p.confirmed}</b> of the ${p.total} glyphs of ${s.lang.name} (${pct}%), with ${s.mistakes} slip${s.mistakes === 1 ? '' : 's'} along the way.</p>
-      <h3>The village's story, as you read it</h3><div id="story"></div>
+      ${climb ? '<p class="onward">A path leads on up the mountain, where the river people went. <b>A second village is open</b>, with a harder language.</p>' : ''}
+      ${v2 ? '<p>The river people are safe among the mountain folk, and the boy in the cap has found them. The feast goes on late; someone teaches you a song you can almost read.</p>' : ''}
+      <h3>${v2 ? 'The mountain’s story' : 'The village’s story'}, as you read it</h3><div id="story"></div>
       <h3>How ${s.lang.name} works</h3><ul class="notes">${grammarNotes(s.lang).map((n) => `<li>${n}</li>`).join('')}</ul></div>`,
-      [
-        { label: 'A new language', primary: true, onClick: () => this.newLanguage() },
-        { label: 'Stay in the village', onClick: closeOverlay },
-        { label: 'Back to Game Lab', onClick: () => (location.href = '../') },
-      ],
+      buttons,
     );
     const box = $('story');
     for (const f of s.world.story) {
@@ -854,8 +984,9 @@ export class Game {
 
   async copyReport(): Promise<void> {
     const a = this.actions.join(',');
-    const url = `${location.origin}${location.pathname}?seed=${this.seed}&a=${a || '-'}`;
-    toast((await copyText(`UNSPOKEN v${RULES_VERSION} seed=${this.seed} a=${a}\n${url}`)) ? 'Bug report copied' : 'Copy failed');
+    const v = this.village === 2 ? '&v=2' : '';
+    const url = `${location.origin}${location.pathname}?seed=${this.seed}${v}&a=${a || '-'}`;
+    toast((await copyText(`UNSPOKEN v${RULES_VERSION}${this.village === 2 ? ' village=2' : ''} seed=${this.seed} a=${a}\n${url}`)) ? 'Bug report copied' : 'Copy failed');
   }
 }
 

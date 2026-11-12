@@ -10,6 +10,7 @@ export interface News {
 }
 
 export const NEWS: News[] = [
+  { day: '2026-11-12', path: './unspoken/', game: 'Unspoken', text: 'A second village: finish the first and follow the river people up the mountain (menu › Villages). A new, harder language where little words mark who acts and who is acted on, so words move around, and the action changes when many act. Five new places; the notebook writes down the rules as you prove them.' },
   { day: '2026-11-12', path: './quarry/', game: 'Quarry', text: 'Fairer perks: gold and perk multipliers now add up instead of snowballing, the length perks got stronger, later depths ask a bit more. Every bonus is named under the word, and many perks fold into a “+n” button.' },
   { day: '2026-11-12', path: './', game: 'Game Lab', text: 'A Continue button at the top takes you straight back to the game you played last.' },
   { day: '2026-11-12', path: './summit/', game: 'Summit', text: 'Fewer draws early, more on high floors; no more back-to-back same ranks, and the 3rd dry draw in a row always fits. Mirror and Long Stride have a few uses per deal and their own colours; Lantern, Second Wind, High Stakes and Flush reworked; peak tops marked for Peak Flags.' },

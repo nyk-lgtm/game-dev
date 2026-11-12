@@ -65,7 +65,13 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 - Unspoken: `makeLanguage(seed)` (core/lang.ts) invents grammar, sounds and glyphs; `makeWorld` builds
   5 chapters of authored scenes (every word in 2+ scenes; tests enforce it) plus generated riddles; state
   actions are `G<glyph>=<guess>` and `A<challenge>~p<n>` / `~<tile.tile…>`. Scene art: render/scene.ts.
-  `npx vite-node scripts/unspoken/inspect.ts <seed>` prints a language and its world.
+  `npx vite-node scripts/unspoken/inspect.ts <seed> [village]` prints a language and its world.
+  Village 2 (the mountain village, core/world2.ts `CHAPTERS2`, `makeLanguage(seed, 2)`, `newGame(seed, 2)`): case
+  particles `SUBJ`/`OBJ` (`grammar.cased`: verb first/middle/last, particle before/after), so `Frame.ofirst` may put
+  the done-to first; the verb carries the `PLV` mark when the subject is plural. Its extra concepts live in `GRAMMAR2`
+  (not `CONCEPTS`) so village 1 never changes; tests/unspoken/village2.test.ts pins village-1 world hashes. Compose
+  riddles accept either order (`Challenge.alts`). Opens once `profile.finished > 0`; saves under `run2`, last village
+  in `village`; bug links add `&v=2`. Notebook shows `grammarRules` as their glyphs are proven.
 - Hexhold runs are a seed + tick-stamped actions (`<tick>:B<cell>.<tower>`, `U`, `S`, `W`); enemies follow a
   flow field (src/hexhold/core/board.ts) rebuilt on every build/sell; `buildError` forbids sealing any portal. Flyers use `FLY_DIST`, burrowers
   `s.dig` (the tower-less field); `distFor` picks. ~1/3 of maps have two portals (`s.portals`).

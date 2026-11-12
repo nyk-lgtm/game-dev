@@ -20,6 +20,8 @@ export interface Frame {
   d?: NP;
   tense: Tense;
   neg?: boolean;
+  /** Second village: the done-to is written before the doer (the meaning is the same). */
+  ofirst?: boolean;
 }
 
 /** One written word: a glyph plus any marks attached to it. */
@@ -46,7 +48,38 @@ function writeDest(lang: Language, np: NP): Token[] {
   return lang.grammar.adpos === 'pre' ? [tok('TO'), ...inner] : [...inner, tok('TO')];
 }
 
+/** Second village: case particles on doer and done-to, free order between them, and the
+ *  action agreeing with a plural doer. Everything else as in the first village. */
+function realizeCased(lang: Language, f: Frame): Token[] {
+  const g = lang.grammar;
+  const c = g.cased!;
+  const verbMarks = g.tense === 'mark' && f.tense !== 'now' ? [f.tense === 'past' ? 'PAST' : 'FUT'] : [];
+  if (g.agree && f.s.pl) verbMarks.push('PLV');
+  let verb: Token[] = [tok(f.v, verbMarks)];
+  if (f.neg && g.neg === 'preverb') verb = [tok('NEG'), ...verb];
+  if (f.neg && g.neg === 'postverb') verb = [...verb, tok('NEG')];
+  const cased = (np: NP, k: string) => (c.side === 'after' ? [...writeNP(lang, np), tok(k)] : [tok(k), ...writeNP(lang, np)]);
+  const S = cased(f.s, 'SUBJ');
+  const O = f.o ? cased(f.o, 'OBJ') : [];
+  const [A, B] = f.o && f.ofirst ? [O, S] : [S, O];
+  const D = f.d ? writeDest(lang, f.d) : [];
+  let out: Token[];
+  if (c.verb === 'first') out = [...verb, ...A, ...B, ...D];
+  else if (c.verb === 'middle') out = [...A, ...verb, ...B, ...D];
+  else out = [...A, ...B, ...D, ...verb];
+  if (f.neg && g.neg === 'final') out.push(tok('NEG'));
+  if (g.tense === 'initial' && f.tense !== 'now') out.unshift(tok(f.tense === 'past' ? 'PAST' : 'FUT'));
+  return out;
+}
+
+/** Every correct way to write a frame: with case particles, both orders of doer and done-to. */
+export function writings(lang: Language, f: Frame): Token[][] {
+  if (!lang.grammar.cased || !f.o) return [realize(lang, f)];
+  return [realize(lang, f), realize(lang, { ...f, ofirst: !f.ofirst })];
+}
+
 export function realize(lang: Language, f: Frame): Token[] {
+  if (lang.grammar.cased) return realizeCased(lang, f);
   const g = lang.grammar;
   const verbMarks = g.tense === 'mark' && f.tense !== 'now' ? [f.tense === 'past' ? 'PAST' : 'FUT'] : [];
   let verb: Token[] = [tok(f.v, verbMarks)];

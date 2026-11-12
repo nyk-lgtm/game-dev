@@ -5,7 +5,7 @@
 // each category so related words look related.
 
 import { Rng, mixSeed } from '../../shared/rng';
-import { CONCEPTS, CONCEPT, type Category } from './concepts';
+import { ALL_CONCEPTS, CONCEPTS, CONCEPT, type Category } from './concepts';
 
 export type Order = 'SVO' | 'SOV' | 'VSO' | 'VOS';
 
@@ -23,6 +23,15 @@ export interface Grammar {
   tense: 'mark' | 'initial';
   /** Direction word before (preposition) or after (postposition) its noun. */
   adpos: 'pre' | 'post';
+  /** Second village only: who-does-what is marked by particles, so the doer and the
+   *  done-to may come in either order; the action keeps its place. */
+  cased?: {
+    verb: 'first' | 'middle' | 'last';
+    /** Case particle before or after its noun phrase. */
+    side: 'before' | 'after';
+  };
+  /** Second village only: the action carries a mark (PLV) when many do it. */
+  agree?: boolean;
 }
 
 /** A glyph is a list of strokes in a unit box (0..1, y down). */
@@ -53,6 +62,8 @@ export interface Style {
 
 export interface Language {
   seed: number;
+  /** Set (to 2) only for the second village's language; the first village's has none. */
+  village?: number;
   name: string;
   grammar: Grammar;
   style: Style;
@@ -180,8 +191,11 @@ const key = (strokes: Stroke[]) =>
 
 const INKS = ['#2b2118', '#3a1f4a', '#123b3a', '#4a1d1d', '#1d2f4a'];
 
-export function makeLanguage(seed: number): Language {
-  const rng = new Rng(mixSeed(seed, 1701));
+/** The language of a village. Village 1 is the original game (unchanged by village 2's
+ *  additions: everything new happens only when village === 2, after a different seed mix). */
+export function makeLanguage(seed: number, village = 1): Language {
+  const v2 = village === 2;
+  const rng = new Rng(mixSeed(seed, v2 ? 2702 : 1701));
 
   // Grammar. Direction words tend to follow word order (as in real languages).
   const order = rng.pick<Order>(['SVO', 'SVO', 'SOV', 'SOV', 'VSO', 'VOS']);
@@ -195,6 +209,13 @@ export function makeLanguage(seed: number): Language {
     tense: rng.next() < 0.55 ? 'mark' : 'initial',
     adpos: rng.next() < 0.85 ? (verbFirstish ? 'pre' : 'post') : verbFirstish ? 'post' : 'pre',
   };
+  if (v2) {
+    // The doer comes first in the plain order; the particles let it swap with the done-to.
+    const verb = order === 'SVO' ? 'middle' : order === 'SOV' ? 'last' : 'first';
+    grammar.order = verb === 'middle' ? 'SVO' : verb === 'last' ? 'SOV' : 'VSO';
+    grammar.cased = { verb, side: rng.next() < 0.7 ? 'after' : 'before' };
+    grammar.agree = true;
+  }
 
   const style: Style = {
     curvy: rng.pick([0.1, 0.35, 0.6, 0.85]),
@@ -210,7 +231,7 @@ export function makeLanguage(seed: number): Language {
   const coda = rng.next() < 0.5;
   const words: Record<string, string> = {};
   const used = new Set<string>();
-  for (const c of CONCEPTS) {
+  for (const c of v2 ? ALL_CONCEPTS : CONCEPTS) {
     let w = '';
     for (let t = 0; t < 30; t++) {
       const syl = c.cat === 'grammar' ? 1 : c.cat === 'name' ? rng.int(2, 3) : rng.int(1, 2) + (rng.next() < 0.25 ? 1 : 0);
@@ -297,13 +318,19 @@ export function makeLanguage(seed: number): Language {
   glyphs.TO = { strokes: particle(), frame: false, mark: null };
   // With doubling, PL has no glyph of its own; keep a placeholder for completeness.
   if (grammar.plural === 'double') glyphs.PL = { strokes: [], frame: false, mark: null };
+  if (v2) {
+    glyphs.SUBJ = { strokes: particle(), frame: false, mark: null };
+    glyphs.OBJ = { strokes: particle(), frame: false, mark: null };
+    glyphs.PLV = mark('under');
+    return { seed, village: 2, name: langName, grammar, style, glyphs, words };
+  }
 
   return { seed, name: langName, grammar, style, glyphs, words };
 }
 
 /** Grammar concepts that are actually written in this language. */
 export function writtenGrammar(lang: Language): string[] {
-  return ['PL', 'NEG', 'PAST', 'FUT', 'Q', 'TO'].filter((g) => lang.glyphs[g].strokes.length > 0);
+  return ['PL', 'NEG', 'PAST', 'FUT', 'Q', 'TO', 'SUBJ', 'OBJ', 'PLV'].filter((g) => (lang.glyphs[g]?.strokes.length ?? 0) > 0);
 }
 
 export const isMark = (lang: Language, id: string) => !!lang.glyphs[id]?.mark;

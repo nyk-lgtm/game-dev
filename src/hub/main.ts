@@ -147,9 +147,10 @@ const GAMES: GameCard[] = [
     pitch: 'A village whose language no one has written down for you, invented fresh each time. Learn it from its pictures, then answer the elder.',
     accent: '#c8643c',
     best: () => {
-      const p = unspoken.load<{ finished?: number; best?: number } | null>('profile', null);
+      const p = unspoken.load<{ finished?: number; best?: number; finished2?: number } | null>('profile', null);
       if (!p?.finished) return null;
-      return `Best: ${p.best}% understood · ${p.finished} language${p.finished > 1 ? 's' : ''} learned`;
+      const n = p.finished + (p.finished2 ?? 0);
+      return `Best: ${p.best}% understood · ${n} language${n > 1 ? 's' : ''} learned${p.finished2 ? ' · mountain village ✓' : ''}`;
     },
     thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#efe6d2"/>
       <rect x="10" y="10" width="56" height="34" rx="5" fill="#e3d3b0"/><circle cx="24" cy="24" r="6" fill="#c8643c"/><path d="M14 40l14-12 10 8 8-6 14 10z" fill="#9c8a62"/>

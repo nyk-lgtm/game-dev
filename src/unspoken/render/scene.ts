@@ -1017,6 +1017,70 @@ function backdrop(r: R, b: Backdrop) {
       }
       break;
     }
+    case 'lake': {
+      // A high lake: snowy peaks behind still, cold water, a pebbled shore.
+      sky(r, '#e6eef2', '#f1efe4'); peaks(r, hz - 14, '#d3dbe2', true); c.fillStyle = '#9fc4d2'; c.fillRect(0, hz - 16, W, 18);
+      c.fillStyle = '#b9d6df'; c.fillRect(0, hz - 16, W, 4); ground(r, hz, '#e6dfca');
+      if (det) {
+        c.strokeStyle = '#e8f4f7'; c.lineWidth = 1.4;
+        for (let i = 0; i < 7; i++) {
+          const x = R1(i) * W, y = hz - 11 + R1(i + 9) * 9; c.beginPath(); c.moveTo(x, y); c.lineTo(x + 8 + R1(i + 3) * 8, y); c.stroke();
+        }
+        for (let i = 0; i < 10; i++) {
+          c.fillStyle = ['#cfc6b0', '#d9d1bd', '#c4bba6'][i % 3]; c.beginPath();
+          c.ellipse(R1(20 + i) * W, hz + 6 + R1(30 + i) * (r.H - hz - 8), 3 + R1(40 + i) * 3, 1.8 + R1(50 + i) * 1.5, 0, 0, TAU); c.fill();
+        }
+      }
+      break;
+    }
+    case 'hamlet': {
+      // Stone houses on the slope, rocks weighing down their slate roofs; lit doorways.
+      sky(r, '#e4e0ea', '#efe5d2'); peaks(r, hz - 22, '#dcdbe3', true);
+      if (det) {
+        let x = -8 + R1(0) * 16; let i = 0;
+        while (x < W + 8) {
+          const w = 36 + R1(i + 1) * 14, h = 22 + R1(i + 2) * 14, y = hz - h;
+          c.fillStyle = '#d3cbbf'; c.fillRect(x, y, w, h + 2); c.strokeStyle = '#c2b9ab'; c.lineWidth = 0.8;
+          for (let k = 1; k < 4; k++) {
+            c.beginPath(); c.moveTo(x, y + (h * k) / 4); c.lineTo(x + w, y + (h * k) / 4); c.stroke();
+          }
+          c.fillStyle = '#9f968f'; c.beginPath(); c.moveTo(x - 4, y + 1); c.lineTo(x + w / 2, y - 9); c.lineTo(x + w + 4, y + 1); c.closePath(); c.fill();
+          c.fillStyle = '#b8b0a6';
+          for (let k = 0; k < 2; k++) {
+            c.beginPath(); c.arc(x + w * (0.3 + k * 0.4), y - 4 + k, 2.4, 0, TAU); c.fill();
+          }
+          c.fillStyle = R1(i + 3) > 0.4 ? '#f2d58e' : '#8a7f78'; c.fillRect(x + w * 0.4, hz - h * 0.55, 7, h * 0.55);
+          x += w + 8 + R1(i + 4) * 12; i += 5;
+        }
+      }
+      ground(r, hz, '#ddd4bf');
+      if (det) {
+        c.fillStyle = '#cdc3ac';
+        for (let i = 0; i < 8; i++) {
+          c.beginPath(); c.ellipse(R1(60 + i) * W, hz + 8 + R1(70 + i) * (r.H - hz - 10), 4, 2, 0, 0, TAU); c.fill();
+        }
+      }
+      break;
+    }
+    case 'terraces': {
+      // Dawn over stepped green fields cut into the slope.
+      sky(r, '#f7e3cf', '#f2ecd9'); peaks(r, hz - 40, '#e3d9d6', false);
+      const bands = ['#bfd29a', '#aac58a', '#c6d6a2'];
+      for (let k = 0; k < 3; k++) {
+        const y = hz - 40 + k * 13; c.fillStyle = bands[k]; c.beginPath(); c.moveTo(0, y + 4);
+        c.quadraticCurveTo(W * 0.5, y - 4, W, y + 2); c.lineTo(W, y + 15); c.lineTo(0, y + 15); c.closePath(); c.fill();
+        c.strokeStyle = '#8fa66e'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(0, y + 4); c.quadraticCurveTo(W * 0.5, y - 4, W, y + 2); c.stroke();
+      }
+      ground(r, hz, '#dfdcb6');
+      if (det) {
+        c.strokeStyle = '#a8b878'; c.lineWidth = 1.3;
+        for (let i = 0; i < 10; i++) {
+          const x = R1(20 + i) * W, y = hz + 8 + R1(30 + i) * (r.H - hz - 10);
+          c.beginPath(); c.moveTo(x, y); c.lineTo(x - 2, y - 4); c.moveTo(x, y); c.lineTo(x + 2, y - 4); c.stroke();
+        }
+      }
+      break;
+    }
     case 'murals': {
       c.fillStyle = '#e4d3b4'; c.fillRect(0, 0, W, r.H);
       if (det) {
@@ -1026,6 +1090,21 @@ function backdrop(r: R, b: Backdrop) {
         }
       }
       c.save(); muralPath(r); c.clip(); sky(r, '#efdcb6', '#ead2a4'); ground(r, hz, '#d9b88a'); c.restore(); break;
+    }
+  }
+}
+/** A row of distant peaks along y (with snow caps when asked). */
+function peaks(r: R, y: number, col: string, snow: boolean) {
+  const c = r.c, W = r.W; const R1 = (i: number) => rnd(r, 200 + i); const tops: Pt[] = [];
+  c.fillStyle = col; c.beginPath(); c.moveTo(0, y + 20);
+  for (let i = 0; i < 5; i++) {
+    const x = W * (0.05 + i * 0.23) + (R1(i) - 0.5) * 18, h = 26 + R1(i + 5) * 22; c.lineTo(x - 22, y + 4); c.lineTo(x, y - h); tops.push([x, y - h]);
+  }
+  c.lineTo(W, y + 2); c.lineTo(W, y + 20); c.closePath(); c.fill();
+  if (snow && !r.small) {
+    c.fillStyle = '#f7f8f8';
+    for (const [x, ty] of tops) {
+      c.beginPath(); c.moveTo(x, ty); c.lineTo(x - 7, ty + 9); c.lineTo(x - 2, ty + 7); c.lineTo(x + 2, ty + 10); c.lineTo(x + 6, ty + 8); c.closePath(); c.fill();
     }
   }
 }
