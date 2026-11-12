@@ -106,6 +106,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   reproduce with that game's `replay(seed, a)` or `<game>/?seed=…&a=…`.
 - The live site deploys only from `main` (CI pushes `dist/` to `gh-pages`);
   other branches just build and test.
+  After pushing to main, confirm the CI run succeeded (a red run deploys nothing); CI is ~3x slower than
+  this machine, so heavy generator/bot tests rely on the 30 s `testTimeout` in vite.config.ts.
   If a push's CI run sits "queued" for long (it happened once for 2h), start `deploy.yml` by hand
   (workflow_dispatch on `main`); it can't be cancelled while stuck.
 - Autonomous work: read BACKLOG.md first; it holds the queue, the per-session routine and what's done.
