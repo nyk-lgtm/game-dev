@@ -47,6 +47,7 @@ export default defineConfig({
         brink: resolve(__dirname, 'brink/index.html'),
         loomsong: resolve(__dirname, 'loomsong/index.html'),
         simmer: resolve(__dirname, 'simmer/index.html'),
+        gleam: resolve(__dirname, 'gleam/index.html'),
       },
     },
   },
