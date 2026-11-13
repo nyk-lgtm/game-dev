@@ -4,6 +4,7 @@
 import { closeOverlay, showCard } from '../shared/cards';
 import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey } from '../shared/daily';
 import { copyText, toast } from '../shared/debug';
+import { reducedFx } from '../shared/settings';
 import { makeStore } from '../shared/storage';
 import { DEATH_ART, LOGO, MONSTER_ART, ITEM_ART, VICTORY_ART } from './art';
 import {
@@ -22,7 +23,9 @@ import {
   applyAction,
   attackOf,
   canBuy,
+  cornerFoe,
   defenceOf,
+  doorNoises,
   encodeAction,
   idx,
   isLegal,
@@ -39,6 +42,7 @@ import {
   type GameState,
   type Monster,
   type MonsterKind,
+  type SpellId,
 } from './core';
 import { castView, makeGrid, paintGrid, type Grid, type Pose, type Sprite } from './view';
 
@@ -67,6 +71,8 @@ const ITEM_GLYPH: Record<string, [string, string]> = { potion: ['!', '#7fe08a'],
 const MAP_GLYPH: Record<MonsterKind, string> = { rat: 'r', bat: 'b', slime: 'j', thief: 't', skeleton: 's', archer: 'a', ghoul: 'g', wraith: 'W', mage: 'c', golem: 'G', warden: 'X' };
 
 const angleOf = (dir: number) => ((dir - 1) * Math.PI) / 2;
+/** The spell menu's fixed slots: each spell keeps its place, new ones are added below. */
+const SPELL_ORDER: SpellId[] = ['fire', 'frost', 'heal', 'blink'];
 
 interface SavedRun {
   seed: number;
@@ -108,6 +114,8 @@ export class Game {
   private swing = 0;
   private bolt: { t: number; color: string } | null = null;
   private bump = 0;
+  /** A short sideways shake (bumping a wall), skipped with reduced effects. */
+  private shake = 0;
   private last = 0;
   /** Viewing a ?seed=&a= replay link: never touches the saved run or records. */
   private replaying = false;
@@ -224,7 +232,7 @@ export class Game {
       const map: Record<string, Action['type']> = {
         arrowup: 'forward', w: 'forward', arrowdown: 'back', s: 'back',
         arrowleft: 'left', arrowright: 'right', q: 'strafeL', e: 'strafeR', a: 'strafeL', d: 'strafeR',
-        ' ': 'use', enter: 'use', '.': 'wait', p: 'potion',
+        ' ': 'use', enter: 'use', '.': 'wait', p: 'potion', r: 'read',
       };
       const t = map[e.key.toLowerCase()];
       if (t) this.act({ type: t } as Action);
@@ -242,6 +250,7 @@ export class Game {
     if (!isLegal(this.state, a)) {
       if (a.type === 'potion' || a.type === 'ether') toast(this.state.player[a.type === 'potion' ? 'potions' : 'ethers'] ? (a.type === 'potion' ? 'Already at full health' : 'MP is already full') : `No ${a.type}s left`);
       else if (a.type === 'cast') toast('Not enough MP');
+      else if (a.type === 'read') toast(this.state.player.scrolls ? 'This floor is already mapped' : 'No scrolls of seeing');
       return;
     }
     const before = this.state;
@@ -306,7 +315,17 @@ export class Game {
           setTimeout(() => this.state.shop && this.showShop(), 350);
           break;
         case 'bump':
-          this.bump = 1;
+          if (e.what === 'air') this.swing = 1;
+          else if (e.what === 'wall') {
+            if (!reducedFx()) {
+              this.bump = 1;
+              this.shake = 1;
+              navigator.vibrate?.(12);
+            }
+          }
+          break;
+        case 'reveal':
+          toast('The floor unfolds in your mind');
           break;
         case 'bolt':
           if (e.spell === 'heal') break;
@@ -333,7 +352,8 @@ export class Game {
 
   private showSpells(): void {
     const p = this.state.player;
-    const opts = p.spells.map((id) => ({
+    const known = SPELL_ORDER.filter((id) => p.spells.includes(id));
+    const opts = known.map((id) => ({
       label: `${SPELLS[id].name} (${SPELLS[id].cost} MP) - ${SPELLS[id].desc}`,
       onClick: () => {
         closeOverlay();
@@ -342,7 +362,7 @@ export class Game {
     }));
     showCard(`<h2>Spells</h2><p>MP ${p.mp}/${p.maxMp}. New spells come with levels.</p>`, [...opts, { label: 'Cancel', onClick: closeOverlay }]);
     document.querySelectorAll<HTMLButtonElement>('#overlay .card button').forEach((b, i) => {
-      const id = p.spells[i];
+      const id = known[i];
       if (id) b.disabled = !isLegal(this.state, { type: 'cast', spell: id });
     });
   }
@@ -355,13 +375,15 @@ export class Game {
     const saved = store.load<SavedRun | null>('run', null);
     const canResume = saved && saved.v === RULES_VERSION;
     const daily = loadDaily(store);
+    const dailyRun = store.load<SavedRun | null>('dailyRun', null);
+    const dailyOn = dailyRun && dailyRun.day === todayKey() && dailyRun.v === RULES_VERSION;
     const records = [best ? `Deepest: ${best}` : '', bestScore ? `Best score: ${bestScore}` : '', wins ? `Wins: ${wins}` : ''].filter(Boolean).join(' · ');
     showCard(
       `<pre>${LOGO.join('\n')}</pre><p style="text-align:center">Ten floors down, the Warden waits.</p>${records ? `<p class="meta">${records}</p>` : ''}`,
       [
         ...(canResume ? [{ label: saved!.depth ? `Continue (depth ${saved!.depth})` : 'Continue', primary: true, onClick: () => (closeOverlay(), this.start(saved!.seed, saved!.actions)) }] : []),
         { label: 'New descent', primary: !canResume, onClick: () => (closeOverlay(), this.start(randomSeed())) },
-        { label: `Daily descent · ${daily ? daily.label : 'not played'}`, onClick: () => this.playDaily() },
+        { label: dailyOn ? `Continue daily descent (depth ${dailyRun!.depth ?? 1})` : `Daily descent · ${daily ? `best ${daily.label}` : 'not played'}`, onClick: () => this.playDaily() },
         { label: 'How to play', onClick: () => this.showHelp() },
         { label: 'All games', onClick: () => (location.href = '../') },
       ],
@@ -375,13 +397,14 @@ export class Game {
       <li><b>FWD / BACK / STEP</b> move one cell. <b>TURN</b> is free; everything else takes a turn.</li>
       <li>Or swipe on the view: up/down to step; swipe left/right to turn, as if dragging the view (swipe left to look right); tap to hit or open doors.</li>
       <li>Bumping a door opens it without stepping through, so you can look before you go in. Descending the stairs restores a little HP.</li>
-      <li>Walk into a monster (or press <b>HIT</b>) to attack. The bar at the top of the view shows the foe in front of you.</li>
-      <li>Red arrows at the edges of the view warn of foes beside or behind you: turn to face them.</li>
+      <li>Walk into a monster (or press <b>HIT</b>) to attack. The bar at the top of the view shows the foe in front of you. HIT also reaches a foe in a front corner (marked HIT on the arrows).</li>
+      <li>Red arrows at the edges of the view warn of foes beside or behind you: turn to face them. Monsters only strike from straight beside you, and lose a turn when they first notice you.</li>
+      <li>A <b style="color:#ffb347">?</b> on a door means you hear something behind it. Cultists gather flame for a turn after each firebolt: step out of line.</li>
       <li><b>CAST</b> spells with MP (it slowly comes back): Firebolt from the start, Frost at level 3, Mend at 5, Blink at 7.</li>
       <li>Monsters act only when you do. Archers and cultists shoot down straight corridors.</li>
       <li>Find the stairs (<b>&gt;</b>) on each floor. Floor 10 holds the Warden.</li>
       <li>Gather gold: a merchant waits on floors ${SHOP_DEPTHS.join(' and ')} with potions, gear and vigor.</li>
-      <li><b>MAP</b> (or tap the minimap) shows the whole floor you've seen. A scroll of seeing reveals it all.</li></ul>`,
+      <li><b>MAP</b> (or tap the minimap) shows the whole floor you've seen. Scrolls of seeing are kept: read one from the map to reveal the floor.</li></ul>`,
       [{ label: 'Back', primary: true, onClick: () => (fromMenu ? this.showMenu() : this.showTitle()) }],
       false,
     );
@@ -451,9 +474,16 @@ export class Game {
   private showMap(): void {
     const s = this.state;
     if (!s || s.shop) return;
-    showCard(`<h2>Depth ${s.depth}</h2><canvas id="fullMap" style="width:100%;aspect-ratio:1;display:block"></canvas><p class="meta"><b style="color:#5ee7ff">■</b> you (arrow = facing) · <b style="color:#ffb347">&gt;</b> stairs · + door · O pillar · <b style="color:#7fe08a">!</b> potion · <b style="color:#5ab4ff">!</b> ether · $ gold · ) [ gear · ? scroll · <b style="color:#ff4d4d">red letters</b>: foes in sight</p>`, [
-      { label: 'Close', primary: true, onClick: closeOverlay },
-    ]);
+    const scrolls = s.player.scrolls;
+    const canRead = isLegal(s, { type: 'read' });
+    showCard(
+      `<h2>Depth ${s.depth}</h2><canvas id="fullMap" style="width:100%;aspect-ratio:1;display:block"></canvas><p class="meta"><b style="color:#5ee7ff">@</b> you (the notch shows your facing) · <b style="color:#ffb347">&gt;</b> stairs · + door (<b style="color:#ffb347">?</b> something behind it) · O pillar · <b style="color:#7fe08a">!</b> potion · <b style="color:#5ab4ff">!</b> ether · $ gold · ) [ gear · ? scroll · <b style="color:#ff4d4d">red letters</b>: foes in sight</p>`,
+      [
+        ...(scrolls ? [{ label: canRead ? `Read a scroll of seeing (${scrolls})` : `Scrolls of seeing: ${scrolls} (this floor is mapped)`, onClick: () => (closeOverlay(), this.act({ type: 'read' })) }] : []),
+        { label: 'Close', primary: true, onClick: closeOverlay },
+      ],
+    );
+    if (scrolls && !canRead) (document.querySelector('#overlay .card button') as HTMLButtonElement).disabled = true;
     const c = $<HTMLCanvasElement>('fullMap');
     const css = c.clientWidth || 300;
     const dpr = Math.min(2, devicePixelRatio || 1);
@@ -495,13 +525,14 @@ export class Game {
     $('depth').textContent = `D${s.depth}`;
     $('potCount').textContent = String(p.potions);
     $('ethCount').textContent = String(p.ethers);
+    $('scrollCount').textContent = p.scrolls ? ` ?${p.scrolls}` : '';
     $('hpFill').parentElement!.classList.toggle('low', p.hp < p.maxHp * 0.3);
     document.querySelector('#pad [data-a=potion]')!.classList.toggle('dim', !isLegal(s, { type: 'potion' }));
     document.querySelector('#pad [data-a=ether]')!.classList.toggle('dim', !isLegal(s, { type: 'ether' }));
     document.querySelector('#pad [data-a=magic]')!.classList.toggle('dim', !s.player.spells.some((id) => isLegal(s, { type: 'cast', spell: id })));
     this.refreshFoe();
     const next = XP_TABLE[p.level];
-    $('stats').innerHTML = `LV <b>${p.level}</b> XP ${p.xp}${next ? '/' + next : ''} · ATK <b>${attackOf(s)}</b> DEF <b>${defenceOf(s)}</b><br>${WEAPONS[p.weapon]} · ${ARMORS[p.armor]} · <b>${p.gold}</b>g`;
+    $('stats').innerHTML = `LV <b>${p.level}</b> XP ${p.xp}${next ? '/' + next : ''} · ATK <b>${attackOf(s)}</b> DEF <b>${defenceOf(s)}</b><br>${WEAPONS[p.weapon]} · ${ARMORS[p.armor]} · <b>${p.gold}</b>g${p.scrolls ? ` · ${p.scrolls} scroll${p.scrolls > 1 ? 's' : ''}` : ''}`;
     $('log').innerHTML = s.log
       .slice(-4)
       .map((l) => `<div>${l.replace(/</g, '&lt;')}</div>`)
@@ -579,7 +610,7 @@ export class Game {
     if (!this.state) return;
     // Redraw every frame only while something moves; otherwise at the torch's
     // flicker rate (10 Hz), which is all an idle view changes by.
-    const busy = !!this.anim || this.flash.size > 0 || this.hurtFlash > 0 || this.swing > 0 || this.bump > 0 || !!this.bolt || this.popups.length > 0;
+    const busy = !!this.anim || this.flash.size > 0 || this.hurtFlash > 0 || this.swing > 0 || this.bump > 0 || this.shake > 0 || !!this.bolt || this.popups.length > 0;
     if (this.lastFoe && (this.lastFoe.t -= dt) <= 0) {
       this.lastFoe = null;
       this.refreshFoe();
@@ -609,6 +640,7 @@ export class Game {
     this.hurtFlash = Math.max(0, this.hurtFlash - dt * 3);
     this.swing = Math.max(0, this.swing - dt * 5);
     this.bump = Math.max(0, this.bump - dt * 6);
+    this.shake = Math.max(0, this.shake - dt * 4);
     if (this.bolt) {
       this.bolt.t += dt * 4;
       if (this.bolt.t >= 1) this.bolt = null;
@@ -623,7 +655,7 @@ export class Game {
     const out: Sprite[] = [];
     for (const m of s.monsters) {
       const look = MONSTER_LOOK[m.kind];
-      out.push({ x: m.x + 0.5, y: m.y + 0.5, art: MONSTER_ART[m.kind], scale: look.scale, hue: look.hue, sat: look.sat, lift: look.lift, flash: this.flash.has(m.id), frozen: m.stun > 0 });
+      out.push({ x: m.x + 0.5, y: m.y + 0.5, art: MONSTER_ART[m.kind], scale: look.scale, hue: look.hue, sat: look.sat, lift: look.lift, flash: this.flash.has(m.id), frozen: m.stun > 0, foe: true });
     }
     for (const it of s.items) {
       const [hue, sat] = ITEM_HUE[it.kind] ?? [0, 0];
@@ -643,10 +675,13 @@ export class Game {
     castView(grid, this.state, pose, this.cw / this.chh, flicker, this.sprites());
     this.overlayHands(time);
     this.overlayThreats(time);
+    this.overlayNoise(time);
     this.overlayPopups();
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, this.vw, this.vh);
-    const x0 = Math.floor((this.vw - grid.cols * this.cw) / 2);
+    // A wall bump: a quick sideways shake that dies out.
+    const jolt = this.shake > 0 ? Math.round(Math.sin(this.shake * 28) * 4 * this.shake) : 0;
+    const x0 = Math.floor((this.vw - grid.cols * this.cw) / 2) + jolt;
     paintGrid(ctx, grid, x0, 0, this.cw, this.chh, this.font);
     if (this.hurtFlash > 0) {
       ctx.fillStyle = `rgba(160,0,0,${0.35 * this.hurtFlash})`;
@@ -694,6 +729,7 @@ export class Game {
     let left = '';
     let right = '';
     let back = '';
+    const corner = cornerFoe(s);
     for (const m of s.monsters) {
       if (m.hp <= 0 || !m.awake) continue;
       const dx = m.x - p.x;
@@ -705,8 +741,12 @@ export class Game {
       const def = MONSTERS[m.kind];
       const aimed = def.range > 0 && (dx === 0 || dy === 0) && d <= def.range;
       if (d > 2 && !aimed) continue;
-      const name = def.name.replace(/^(Giant|Cave|Bone|Stone|The) /, '').toUpperCase();
-      if (f > 0 || Math.abs(r) > Math.abs(f)) {
+      // A foe in a front corner can be struck with HIT: say so, so the arrow isn't a dead end.
+      const name = def.name.replace(/^(Giant|Cave|Bone|Stone|The) /, '').toUpperCase() + (corner?.id === m.id ? ' (HIT)' : '');
+      if (corner?.id === m.id) {
+        if (r < 0) left = name;
+        else right = name;
+      } else if (f > 0 || Math.abs(r) > Math.abs(f)) {
         if (r < 0) left ||= name;
         else right ||= name;
       } else back ||= name;
@@ -741,6 +781,27 @@ export class Game {
       const label = `vv ${back} BEHIND vv`;
       put(g.rows - 7, Math.floor((g.cols - label.length) / 2), label);
     }
+  }
+
+  /** A closed door straight ahead with something behind it: a "?" on the door. */
+  private overlayNoise(time: number): void {
+    const s = this.state;
+    if (s.status !== 'playing' || this.anim) return;
+    const p = s.player;
+    const ahead = doorNoises(s).some((d) => d.x === p.x + DX[p.dir] && d.y === p.y + DY[p.dir]);
+    if (!ahead) return;
+    const g = this.grid;
+    const col = Math.floor(time * 3) % 2 ? '#ffb347' : '#ffd9a0';
+    const label = ' ? SOMETHING BEHIND ? ';
+    const r = Math.floor(g.rows * 0.42);
+    const c = Math.floor((g.cols - label.length) / 2);
+    for (const rr of [r - 1, r, r + 1])
+      for (let i = 0; i < label.length; i++) {
+        const cc = c + i;
+        if (rr < 0 || rr >= g.rows || cc < 0 || cc >= g.cols) continue;
+        g.ch[rr * g.cols + cc] = rr === r ? label[i] : ' ';
+        g.color[rr * g.cols + cc] = col;
+      }
   }
 
   private overlayPopups(): void {
@@ -799,6 +860,14 @@ export class Game {
         ctx.fillStyle = col;
         ctx.fillText(ch, ...at(x, y));
       }
+    // Doors with something heard behind them.
+    for (const d of s.status === 'playing' ? doorNoises(s) : []) {
+      if (!within(d.x, d.y)) continue;
+      ctx.fillStyle = '#4a2d08';
+      ctx.fillRect((d.x - x0) * cell, (d.y - y0) * cell, cell, cell);
+      ctx.fillStyle = '#ffb347';
+      ctx.fillText('?', ...at(d.x, d.y));
+    }
     for (const it of s.items) {
       if (!within(it.x, it.y) || !s.level.seen[idx(it.x, it.y)]) continue;
       const [ch, col] = ITEM_GLYPH[it.kind] ?? ['*', '#ffd36b'];
@@ -812,12 +881,25 @@ export class Game {
       ctx.fillStyle = '#ff4d4d';
       ctx.fillText(MAP_GLYPH[m.kind], ...at(m.x, m.y));
     }
-    // You: a cyan square with your facing as a dark arrow (amber is the stairs).
+    // You: a cyan "@" (never ">", which is the stairs) with a notch on the side you face.
     const [px0, py0] = at(p.x, p.y);
-    ctx.fillStyle = '#5ee7ff';
+    ctx.fillStyle = '#062a33';
     ctx.fillRect(px0 - cell / 2 + 0.5, py0 - cell / 2 + 0.5, cell - 1, cell - 1);
-    ctx.fillStyle = '#000';
-    ctx.fillText('^>v<'[p.dir], px0, py0);
+    ctx.fillStyle = '#5ee7ff';
+    ctx.fillText('@', px0, py0);
+    const fx = DX[p.dir];
+    const fy = DY[p.dir];
+    const tipX = px0 + fx * cell * 0.85;
+    const tipY = py0 + fy * cell * 0.85;
+    const baseX = px0 + fx * cell * 0.5;
+    const baseY = py0 + fy * cell * 0.5;
+    const w = cell * 0.32;
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(baseX - fy * w, baseY + fx * w);
+    ctx.lineTo(baseX + fy * w, baseY - fx * w);
+    ctx.closePath();
+    ctx.fill();
   }
 
   private inSight(m: Monster): boolean {

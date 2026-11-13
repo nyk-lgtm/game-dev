@@ -189,6 +189,8 @@ export function botAction(s: GameState, mem: BotMemory): Action {
     if (isLegal(s, { type: 'potion' })) return { type: 'potion' };
   }
   if (!awakeNear.length && p.hp < p.maxHp * 0.6 && can(s, 'heal') && p.mp >= p.maxMp - 1) return { type: 'cast', spell: 'heal' };
+  // A scroll of seeing as soon as nothing threatens (the floor shows where the stairs are).
+  if (!awakeNear.length && isLegal(s, { type: 'read' })) return { type: 'read' };
   if (p.mp <= 1 && p.ethers > 0 && awakeNear.some((m) => DANGEROUS.has(m.kind)) && isLegal(s, { type: 'ether' })) return { type: 'ether' };
 
   // Adjacent foes: spell or blade, weakest / most dangerous first.
@@ -316,7 +318,8 @@ export function botAction(s: GameState, mem: BotMemory): Action {
   return wait;
 }
 
-export function playDescent(seed: number, maxActions = 8000): BotResult {
+/** Play a run; `stopDepth` ends it early once the bot reaches that depth (for quick tests). */
+export function playDescent(seed: number, maxActions = 8000, stopDepth = Infinity): BotResult {
   let s = newGame(seed);
   let actions = '';
   const floors: FloorStat[] = [];
@@ -325,7 +328,7 @@ export function playDescent(seed: number, maxActions = 8000): BotResult {
   const mem: BotMemory = { floorStart: 0, waited: 0, target: -1, targetSince: 0 };
   let killer: MonsterKind | null = null;
   let idle = 0;
-  while (s.status === 'playing' && actions.length < maxActions) {
+  while (s.status === 'playing' && actions.length < maxActions && s.depth < stopDepth) {
     const a = botAction(s, mem);
     const r = applyAction(s, a);
     const depth = s.depth;

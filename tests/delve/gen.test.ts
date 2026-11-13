@@ -72,6 +72,25 @@ describe('floor generation', () => {
     expect(count(8)).toBeGreaterThan(count(2));
   });
 
+  it('caps the heavy foes per floor and keeps golems out of corridors and dead ends', () => {
+    let golems = 0;
+    for (const seed of SEEDS)
+      for (const depth of [6, 7, 8, 9]) {
+        const f = generateFloor(seed, depth);
+        const n = (k: string) => f.monsters.filter((m) => m.kind === k).length;
+        expect(n('golem'), `seed ${seed} depth ${depth}`).toBeLessThanOrEqual(1);
+        expect(n('wraith')).toBeLessThanOrEqual(2);
+        expect(n('mage')).toBeLessThanOrEqual(2);
+        for (const g of f.monsters.filter((m) => m.kind === 'golem')) {
+          golems++;
+          let open = 0;
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && f.level.tiles[at(g.x + dx, g.y + dy)] !== 'wall') open++;
+          expect(open, `golem at ${g.x},${g.y} seed ${seed} depth ${depth}`).toBeGreaterThanOrEqual(5);
+        }
+      }
+    expect(golems).toBeGreaterThan(100);
+  });
+
   it("the boss floor is the Warden's pillared hall with its guard", () => {
     const f = generateFloor(5, MAX_DEPTH);
     expect(f.monsters.map((m) => m.kind).sort()).toEqual(['skeleton', 'skeleton', 'skeleton', 'skeleton', 'warden']);

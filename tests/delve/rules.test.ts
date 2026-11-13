@@ -9,8 +9,13 @@ import {
   SIGHT,
   SPELLS,
   XP_TABLE,
+  NOISE_RANGE,
   applyAction,
+  article,
   attackOf,
+  cornerFoe,
+  doorNoises,
+  isRevealed,
   defenceOf,
   fireDamage,
   generateFloor,
@@ -32,6 +37,7 @@ const W = 3;
 const mon = (s: GameState, kind: string) => s.monsters.find((m) => m.kind === kind)!;
 const pos = (s: GameState) => ({ x: s.player.x, y: s.player.y });
 const tile = (s: GameState, x: number, y: number) => s.level.tiles[idx(x, y)];
+const xy = (c: { x: number; y: number }): [number, number] => [c.x, c.y];
 /** Make a monster effectively unkillable and harmless-to-assert-on. */
 const tough = (m: Monster, hp = 999) => {
   m.hp = m.maxHp = hp;
@@ -77,8 +83,12 @@ describe('movement', () => {
       const r = act(t, 'forward');
       expect(pos(r.state)).toEqual(pos(s));
       expect(r.state.turn).toBe(0);
-      expect(r.events).toEqual([{ type: 'bump' }]);
+      expect(r.events).toEqual([{ type: 'bump', what: 'wall' }]);
+      expect(r.state.log.at(-1)).toBe(dir === E ? 'You bump into a pillar.' : 'You bump into the wall.');
     }
+    // Bumping again doesn't repeat the line.
+    const twice = act(s, 'forward', 'forward').state;
+    expect(twice.log.filter((l) => l === 'You bump into a pillar.')).toHaveLength(1);
     // Back / strafe into a wall too.
     expect(act(s, 'back').state.turn).toBe(0);
     expect(act(s, 'strafeL').state.turn).toBe(0);
@@ -119,7 +129,44 @@ describe('movement', () => {
     const r = act(s, 'back');
     expect(r.state.turn).toBe(0);
     expect(mon(r.state, 'rat').hp).toBe(MONSTERS.rat.hp);
-    expect(r.events).toEqual([{ type: 'bump' }]);
+    expect(r.events).toEqual([{ type: 'bump', what: 'foe' }]);
+    expect(r.state.log.at(-1)).toMatch(/rat is in the way/);
+  });
+
+  it('HIT at nothing says so and costs no turn', () => {
+    const r = act(setup(['@..'], { dir: E }), 'use');
+    expect(r.state.turn).toBe(0);
+    expect(r.events).toEqual([{ type: 'bump', what: 'air' }]);
+    expect(r.state.log.at(-1)).toBe('You swing at nothing.');
+  });
+
+  it('HIT never shuts a door with a foe beside you or in the doorway', () => {
+    // Free: shuts.
+    expect(tile(act(setup(["@'.."], { dir: E }), 'use').state, ...xy(cell(1, 0)))).toBe('door');
+    // A rat behind you, beside you, or past the door: it stays open, no turn passes, and you're told why.
+    for (const rows of [["r@'.."], ['.r...', ".@'..", '.....'], ["@'r."]]) {
+      const s = setup(rows, { dir: E });
+      tough(mon(s, 'rat'));
+      const door = rows.length === 1 ? cell(rows[0].indexOf("'"), 0) : cell(2, 1);
+      const r = act(s, 'use');
+      expect(tile(r.state, door.x, door.y), rows.join('/')).toBe('open');
+      expect(r.state.turn).toBe(0);
+      expect(r.state.log.at(-1)).toMatch(/rat is (right beside you|in the doorway)/);
+    }
+  });
+
+  it('HIT strikes a foe in a front corner when nothing is straight ahead', () => {
+    const s = setup(['..g', '.@.'], { dir: N });
+    tough(mon(s, 'ghoul'));
+    const r = act(reroll(s, 0), 'use');
+    expect(r.state.turn).toBe(1);
+    expect(r.events.some((e) => e.type === 'hit' || e.type === 'miss')).toBe(true);
+    // Not around a solid corner.
+    const t = setup(['#g', '@#'], { dir: N });
+    expect(cornerFoe(t)).toBeNull();
+    // Something straight ahead comes first.
+    const u = setup(['rg', '@.'], { dir: N });
+    expect(act(reroll(u, 0), 'use').events.find((e) => e.type === 'hit' || e.type === 'miss')).toMatchObject({ target: mon(u, 'rat').id });
   });
 });
 
@@ -444,6 +491,59 @@ describe('items', () => {
 });
 
 describe('monsters', () => {
+  it('spend the turn they notice you (no instant ambush through a door)', () => {
+    const s = setup(['@+m'], { dir: E, awake: false });
+    s.player.hp = s.player.maxHp = 9999;
+    const r = act(s, 'forward');
+    expect(tile(r.state, ...xy(cell(1, 0)))).toBe('open');
+    expect(mon(r.state, 'mage').awake).toBe(true);
+    expect(r.events.some((e) => e.type === 'hurt' || e.type === 'shot')).toBe(false);
+  });
+
+  it('cultists gather flame for a turn after each firebolt', () => {
+    let s = setup(['@...m'], { dir: E });
+    s.player.hp = s.player.maxHp = 9999;
+    let last = -9;
+    for (let i = 0; i < 40; i++) {
+      const r = act(s, 'wait');
+      if (r.events.some((e) => e.type === 'shot')) {
+        expect(i - last, `turn ${i}`).toBeGreaterThanOrEqual(2);
+        last = i;
+      }
+      s = r.state;
+    }
+    expect(last).toBeGreaterThan(0);
+    expect(s.log).toContain('The cultist gathers flame.');
+  });
+
+  it('a blocked hunter takes another equally short step (no idling on a diagonal)', () => {
+    // Two wraiths: one takes the cell beside you, the other comes round the other way.
+    const s = setup(['#w#', 'w@.', '...'], { dir: E });
+    for (const m of s.monsters) tough(m);
+    s.player.hp = s.player.maxHp = 9999;
+    const r = act(s, 'wait');
+    const near = r.state.monsters.filter((m) => Math.abs(m.x - s.player.x) + Math.abs(m.y - s.player.y) === 1);
+    expect(near).toHaveLength(2);
+    // A ghost on the diagonal whose usual axis is taken steps in along the other one.
+    const t = setup(['..w', '.@.', '...'], { dir: E });
+    t.player.hp = t.player.maxHp = 9999;
+    const w = mon(t, 'wraith');
+    const blocker = { ...w, id: 99, kind: 'rat' as const, x: t.player.x + 1, y: t.player.y, stun: 99 };
+    t.monsters.push(blocker);
+    const m2 = mon(act(t, 'wait').state, 'wraith');
+    expect(m2).toMatchObject({ x: t.player.x, y: t.player.y - 1 });
+  });
+
+  it('you hear what lurks behind a closed door when you step up to it', () => {
+    const s = setup(['@.+..g', '######'], { dir: E, awake: false });
+    const r = act(s, 'forward');
+    expect(doorNoises(r.state)).toEqual([cell(2, 0)]);
+    expect(r.state.log.at(-1)).toBe('You hear something behind the door.');
+    // Nothing there (or too far): silence.
+    expect(doorNoises(act(setup(['@.+' + '.'.repeat(NOISE_RANGE + 1) + 'g'], { dir: E, awake: false }), 'forward').state)).toEqual([]);
+    expect(doorNoises(act(setup(['@.+...'], { dir: E }), 'forward').state)).toEqual([]);
+  });
+
   it('sleep until they see you', () => {
     // Behind a wall: never wakes, never moves.
     const s = setup(['@...', '###.', 'r...'], { dir: E, awake: false });
@@ -673,12 +773,35 @@ describe('the merchant', () => {
 });
 
 describe('scrolls, deaths and score', () => {
-  it('a scroll of seeing reveals every walkable cell of the floor', () => {
+  it('a scroll of seeing is carried, and read on demand reveals every walkable cell of the floor', () => {
     const s = setup(['@?.....', '#####.#', '....>..'], { dir: E });
     s.items[0].kind = 'map';
-    const r = act(s, 'forward').state;
+    const got = act(s, 'forward').state;
+    expect(got.player.scrolls).toBe(1);
+    expect(got.level.seen[idx(1 + 4, 1 + 2)]).toBe(false);
+    expect(isLegal(got, { type: 'read' })).toBe(true);
+    const r = act(got, 'read').state;
+    expect(r.player.scrolls).toBe(0);
+    expect(r.turn).toBe(got.turn + 1);
     for (let k = 0; k < SIZE * SIZE; k++) if (r.level.tiles[k] !== 'wall') expect(r.level.seen[k]).toBe(true);
-    expect(r.level.seen[idx(1 + 4, 1 + 2)]).toBe(true);
+    // Already mapped: not legal (the scroll is kept for the next floor).
+    r.player.scrolls = 1;
+    expect(isRevealed(r)).toBe(true);
+    expect(isLegal(r, { type: 'read' })).toBe(false);
+  });
+
+  it('item lines use a/an and tell an identical item from a worse one', () => {
+    expect(article('Axe')).toBe('an Axe');
+    expect(article('Sword')).toBe('a Sword');
+    const s = setup(['@))'], { dir: E, itemValue: 2 });
+    s.items[1].value = 1;
+    let r = act(s, 'forward');
+    expect(r.state.log.at(-1)).toBe('You find an Axe (equipped).');
+    r = act(r.state, 'forward');
+    expect(r.state.log.at(-1)).toBe('You find a Sword (you have better).');
+    const t = setup(['@['], { dir: E, itemValue: 2 });
+    t.player.armor = 2;
+    expect(act(t, 'forward').state.log.at(-1)).toBe('You find Chain mail (same as yours).');
   });
 
   it('remembers what killed you', () => {

@@ -35,7 +35,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     diagonal steps can't squeeze between two blocked cells, so never connect areas
     only diagonally.
   - Afterglow: `npx vite-node scripts/afterglow/balance.ts` (bot survival per character).
-  - Delve: `npx vite-node scripts/delve/balance.ts`; Nightline: `npx vite-node scripts/nightline/balance.ts`
+  - Delve: `npx vite-node scripts/delve/balance.ts 100` (descent bot, rules v5: ~58% wins, d10 reached ~78%,
+    deaths mostly at the Warden and depth 5; per-floor caps `FLOOR_CAP` in gen.ts); Nightline: `npx vite-node scripts/nightline/balance.ts`
     (rules v2: bot finishes ~40/40 always-left, ~38/40 always-right; it dodges with perfect information, so
     human-facing fixes are about seeing traffic and curves sooner). Nightline's camera height follows the
     horizon (`camHeight` in render.ts) so the road at the car stays as wide as CAR_HIT_W was measured for.
@@ -55,6 +56,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   - Rewild: `npx vite-node scripts/rewild/balance.ts 16 greedy 1` (score, species, stars; compare
     with `random`; rules v5: greedy median ~2330 (32 games), stars at 900/1700/2400, ~1/4 of bot games 3★),
     `scripts/rewild/upto.ts <seed> <n>` (a bot game's actions to season n, for `?seed=&a=`), `scripts/rewild/probe.ts` (plays and causes of death), `trace.ts <seed>`.
+- Delve rules v5 (src/delve/core/rules.ts): a sleeping monster spends the turn it notices you; cultists rest a turn
+  (`cd`) after each firebolt; blocked hunters try another equally short step; `use` (HIT) hits ahead, then a front
+  corner (`cornerFoe`), opens/shuts doors (never with a foe beside you or in the doorway), else "You swing at nothing"
+  (no turn); `doorNoises` drives the "?" on doors; scrolls of seeing are carried (`player.scrolls`, action `read`, code `v`).
 - ASCII games (Delve, Nightline) draw into a character `Grid` (src/shared/ascii.ts) painted
   with batched `fillText` runs; art lives in each game's `art.ts`.
 - Daily challenges (src/shared/daily.ts): `<game>/?daily` plays today's seed (`dailySeed(game, day)`,

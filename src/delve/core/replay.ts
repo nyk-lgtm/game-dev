@@ -3,7 +3,7 @@
 import { applyAction, newGame } from './rules';
 import type { Action, GameState, SpellId } from './types';
 
-export const RULES_VERSION = 4;
+export const RULES_VERSION = 5;
 
 const CODES: Record<string, Action> = {
   f: { type: 'forward' },
@@ -16,6 +16,7 @@ const CODES: Record<string, Action> = {
   w: { type: 'wait' },
   p: { type: 'potion' },
   m: { type: 'ether' },
+  v: { type: 'read' },
   F: { type: 'cast', spell: 'fire' },
   I: { type: 'cast', spell: 'frost' },
   H: { type: 'cast', spell: 'heal' },

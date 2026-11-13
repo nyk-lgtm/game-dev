@@ -48,6 +48,8 @@ const STAIRS = ramp(42, 80);
 const FLOOR_EDGE = ramp(30, 12);
 const FLOOR = ramp(30, 10);
 const BEAM = ramp(220, 10);
+/** Lowest lightness of a monster billboard (walls fade much darker). */
+const FOE_MIN = 0.62;
 /** Lit edges of walls where the depth jumps (corners, openings). */
 const EDGE = ramp(40, 55);
 
@@ -75,6 +77,8 @@ export interface Sprite {
   frozen?: boolean;
   /** Vertical lift relative to the floor, in wall heights (bats fly). */
   lift?: number;
+  /** A monster: kept bright at a distance so it stands out from the dim walls. */
+  foe?: boolean;
 }
 
 function wallChar(t: Tile, u: number, v: number, d: number, side: number): string {
@@ -247,7 +251,9 @@ export function castView(g: Grid, s: GameState, pose: Pose, aspect: number, flic
     const r0 = Math.round(floorY - outR);
     const c0 = Math.round(screenX - outC / 2);
     const L = light(ty, flicker);
-    const base = sp.flash ? '#ffffff' : sp.frozen ? shade(190, 70, Math.max(0.5, L)) : shade(sp.hue, sp.sat, Math.max(0.12, L));
+    // Foes never fade below FOE_MIN lightness (and gain a little saturation far off), so a distant one is easy to spot.
+    const far = sp.foe ? Math.min(1, Math.max(0, (ty - 2) / 4)) : 0;
+    const base = sp.flash ? '#ffffff' : sp.frozen ? shade(190, 70, Math.max(0.5, L)) : shade(sp.hue, Math.min(90, sp.sat + 25 * far), Math.max(sp.foe ? FOE_MIN : 0.12, L));
     for (let rr = 0; rr < outR; rr++) {
       const r = r0 + rr;
       if (r < 0 || r >= rows) continue;

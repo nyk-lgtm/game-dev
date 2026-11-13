@@ -6,6 +6,10 @@ import { MAX_DEPTH, MONSTERS } from './content';
 import type { Item, ItemKind, Level, Monster, MonsterKind, Tile } from './types';
 
 export const SIZE = 33;
+/** At most this many of a kind on one floor. */
+const FLOOR_CAP: Partial<Record<MonsterKind, number>> = { golem: 1, wraith: 2, mage: 2 };
+/** Kinds that only spawn on open ground. */
+const ROOMY = new Set<MonsterKind>(['golem']);
 
 interface Room {
   x: number;
@@ -146,16 +150,35 @@ export function generateFloor(seed: number, depth: number): Floor {
     for (const [dx, dy] of [[-4, 0], [4, 0], [-4, 3], [4, 3]]) monsters.push(mk('skeleton', c.x + dx, c.y + dy));
   } else {
     const n = Math.min(spots.length, Math.round(2 + depth * 2.3));
-    for (let i = 0; i < n; i++) {
-      const total = kinds.reduce((s, k) => s + MONSTERS[k].weight, 0);
+    // Open ground: at least 5 of the 8 neighbours walkable (a room, not a corridor or dead end).
+    const roomy = (p: { x: number; y: number }) => {
+      let open = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && tiles[idx(p.x + dx, p.y + dy)] !== 'wall') open++;
+      return open >= 5;
+    };
+    for (let i = 0; i < n && spots.length; i++) {
+      // The heaviest foes are capped per floor, so a floor never stacks them.
+      const pool = kinds.filter((k) => monsters.filter((m) => m.kind === k).length < (FLOOR_CAP[k] ?? Infinity));
+      const total = pool.reduce((s, k) => s + MONSTERS[k].weight, 0);
       let r = rng.next() * total;
-      let kind = kinds[0];
-      for (const k of kinds) {
+      let kind = pool[0];
+      for (const k of pool) {
         r -= MONSTERS[k].weight;
         if (r <= 0) {
           kind = k;
           break;
         }
+      }
+      // A golem waits in a room, never in a one-wide corridor you can't get around it in.
+      if (ROOMY.has(kind)) {
+        let at = spots.length - 1;
+        while (at >= 0 && !roomy(spots[at])) at--;
+        if (at >= 0) {
+          const [s] = spots.splice(at, 1);
+          monsters.push(mk(kind, s.x, s.y));
+          continue;
+        }
+        kind = pool.find((k) => !ROOMY.has(k)) ?? kind;
       }
       const s = spots.pop()!;
       monsters.push(mk(kind, s.x, s.y));
