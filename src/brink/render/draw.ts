@@ -60,6 +60,8 @@ export interface Scene {
   hint: { from: number; to: number } | null;
   /** Cells to ring red (where a stone would go over). */
   danger: number[];
+  /** Your stones the other side could shove off next move (thin red outline). */
+  threats: number[];
   time: number;
   /** Screen shake offset in px. */
   shake: number;
@@ -253,6 +255,14 @@ export function drawScene(g: CanvasRenderingContext2D, v: View, sc: Scene): void
     drawStone(g, p.x, p.y, s * 0.6, v0 as Side);
   }
   for (const sp of sc.sprites) drawStone(g, sp.x, sp.y, s * 0.6 * sp.scale, sp.side, sp.alpha);
+  for (const c of sc.threats) {
+    const p = cellPx(v, c);
+    g.strokeStyle = 'rgba(255,77,77,0.9)';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.arc(p.x, p.y, s * 0.63, 0, Math.PI * 2);
+    g.stroke();
+  }
   // The next tiles to fall: a numbered badge (1 = right after this move), and a
   // dashed ring round any stone standing on one, so it shows on top of the stone.
   for (const [i, k] of sc.doom) {

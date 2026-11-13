@@ -11,11 +11,13 @@ export type Level = 'easy' | 'normal' | 'hard';
 
 export const LEVELS: Record<Level, { name: string; depth: number; nodes: number; noise: number; text: string }> = {
   easy: { name: 'Easy', depth: 2, nodes: 3000, noise: 160, text: 'Sees your reply coming, but often settles for a weaker move.' },
-  normal: { name: 'Normal', depth: 2, nodes: 8000, noise: 0, text: 'Sees your reply coming and never takes a loose step.' },
+  normal: { name: 'Normal', depth: 2, nodes: 8000, noise: 60, text: 'Sees your reply coming, now and then picks a lesser move.' },
   hard: { name: 'Hard', depth: 12, nodes: 70000, noise: 0, text: 'Reads five or six moves deep, watches the falling tiles and punishes loose stones.' },
 };
 
 const WIN = 100000;
+/** How far back recreated layouts count. */
+export const REPEAT_PLIES = 8;
 
 // ------------------------------------------------------------------ evaluation
 
@@ -40,6 +42,8 @@ export const W = {
   brace: 8,
   /** Root penalty for undoing the opponent's last shove (half for stepping back). */
   loop: 70,
+  /** Recreating a stone layout seen in the last REPEAT_PLIES plies (any depth, searching side only). */
+  repeat: 300,
 };
 
 /** Steps to the void from cell i going in dir d (1 = the next tile is the void). */
@@ -202,10 +206,31 @@ interface SearchCtx {
   ttMove: Int16Array;
   killers: Int16Array;
   history: Int32Array;
+  /** The side searching, and stone layouts it shouldn't recreate (recent game positions). */
+  root: Side;
+  seen: Set<number>;
 }
 
-function makeCtx(cap: number): SearchCtx {
+/**
+ * The stones' layout and the side to move as one number (holes and the ply left
+ * out, so a shove-and-shove-back cycle repeats even while tiles keep falling).
+ */
+export function stoneKey(s: State): number {
+  let a = s.turn === LIGHT ? 0x2545f491 : 0x9e3779b9;
+  for (let i = 0; i < N; i++) {
+    const v = s.cells[i];
+    if (v === LIGHT || v === DARK) a ^= Z[(i * 4 + v) * 2];
+  }
+  return a >>> 0;
+}
+
+/** How much a move that recreates a recent layout costs the searching side. */
+const repeatCost = (ctx: SearchCtx, s: State, t: State): number => (s.turn === ctx.root && !t.winner && ctx.seen.has(stoneKey(t)) ? W.repeat : 0);
+
+function makeCtx(cap: number, root: Side = LIGHT, seen: Set<number> = new Set()): SearchCtx {
   return {
+    root,
+    seen,
     nodes: 0,
     cap,
     stop: false,
@@ -289,8 +314,12 @@ function negamax(s: State, depth: number, alpha: number, beta: number, ctx: Sear
   for (const m of moves) {
     const t = clone(s);
     play(t, m);
-    // A pass gives the same side the next move.
-    const sc = t.turn === s.turn ? negamax(t, depth - 1, alpha, beta, ctx, fromRoot + 1) : -negamax(t, depth - 1, -beta, -alpha, ctx, fromRoot + 1);
+    // A pass gives the same side the next move. A recreated layout costs the searcher
+    // `rc`: search the child with the window shifted by it, then take it off.
+    const rc = repeatCost(ctx, s, t);
+    const a = alpha + rc;
+    const b = beta + rc;
+    const sc = (t.turn === s.turn ? negamax(t, depth - 1, a, b, ctx, fromRoot + 1) : -negamax(t, depth - 1, -b, -a, ctx, fromRoot + 1)) - rc;
     if (ctx.stop) return 0;
     if (sc > best) {
       best = sc;
@@ -345,8 +374,8 @@ export function loopPenalty(recent: readonly number[]): (m: number) => number {
   return (m) => (m === undoShove ? W.loop : 0) + (m === stepBack ? W.loop / 2 : 0);
 }
 
-export function search(s: State, maxDepth: number, cap: number, exact = false, penalty: (m: number) => number = () => 0): Choice {
-  const ctx = makeCtx(cap);
+export function search(s: State, maxDepth: number, cap: number, exact = false, penalty: (m: number) => number = () => 0, seen: readonly number[] = []): Choice {
+  const ctx = makeCtx(cap, s.turn, new Set(seen));
   const moves = legalMoves(s);
   let ranked = moves.map((move) => ({ move, score: 0 }));
   let depth = 0;
@@ -362,7 +391,7 @@ export function search(s: State, maxDepth: number, cap: number, exact = false, p
       let sc: number;
       const sign = t.turn === s.turn ? 1 : -1;
       const run = (a: number, b: number) => (sign === 1 ? negamax(t, d - 1, a, b, ctx, 1) : -negamax(t, d - 1, -b, -a, ctx, 1));
-      const pen = penalty(m);
+      const pen = penalty(m) + repeatCost(ctx, s, t);
       if (alpha === -Infinity || exact) sc = run(-Infinity, Infinity);
       else {
         sc = run(alpha + pen - 1, alpha + pen);
@@ -385,9 +414,14 @@ export function search(s: State, maxDepth: number, cap: number, exact = false, p
 }
 
 /** The AI's move at a level. Deterministic: Easy's slips come from the game seed and ply. */
-export function chooseMove(s: State, level: Level, recent: readonly number[] = []): Choice {
+/**
+ * The AI's move. `recent` is the game's moves so far and `seen` the stone layouts
+ * (`stoneKey`) after each of them: recreating a layout from the last few plies is
+ * taxed in the search, so the AI breaks shove-back cycles even when your reply is forced.
+ */
+export function chooseMove(s: State, level: Level, recent: readonly number[] = [], seen: readonly number[] = []): Choice {
   const L = LEVELS[level];
-  const ch = search(s, L.depth, L.nodes, L.noise > 0, loopPenalty(recent));
+  const ch = search(s, L.depth, L.nodes, L.noise > 0, loopPenalty(recent), seen.slice(-REPEAT_PLIES));
   if (L.noise > 0 && ch.ranked.length > 1) {
     const rng = new Rng(mixSeed(s.seed ^ 0xea5e, s.ply));
     // Pick among moves within `noise` of the best (never one that throws away a stone outright).

@@ -54,8 +54,17 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         90k → 70k nodes. Self-play (80 games): Hard–Normal 63% → 80%, Hard–Easy 100%, Normal–Easy 95% → 90%; first
         mover Easy 39%, Normal 63%, Hard ~40% (was 58/58/43). Hard ~130-155 ms a move (p90 ~200) on a laptop.
         The daily pool was generated with the v1 Normal (still verified exact; regenerating would change it).
-  - [ ] Next: owner playtest. Watch: does Hard's waiting while the rim crumbles feel dull? Is Normal now the right
-        middle step? First-mover rates swing 39-63% by level in AI mirrors: watch for a side bias with people.
+  - [x] Second blind pass (lost all four: Normal 1-3, 1-3, Hard 2-3, 2-3; badges and rings "clear") and fixes (AI v3,
+        rules and replays unchanged): shove-back cycles survived the root penalty because the player's shove-back was
+        forced → the search now taxes recreating any stone layout (stones + side to move, holes ignored, `stoneKey`)
+        from the last 8 plies, at every depth, for the searching side (`W.repeat` 300); Normal gets Easy-style seeded
+        noise (60) so it is a real middle step; red outlines on your stones the AI can shove off next; "The AI
+        stepped"; the daily says "Win in N now" after a move; crumble countdowns all count moves of either side
+        ("Tiles start falling in 7 moves", "First tile falls after the AI's reply", badges 1/2/3, help "after move 7").
+        Self-play: Hard–Normal 80% → 90%, Normal–Easy 90% → 86%, Hard–Easy 100%; first mover Easy 50%, Normal 56%, Hard
+        33%/50% on two seed sets (≈42%); shove-backs 0.4-1.1 a game with the longest run 1-3 (players saw 5-7).
+  - [ ] Next: owner playtest. Watch: can a person now beat Normal? Is Hard's ~42% first-mover rate a side bias for
+        people? Do the red threat outlines make the game too easy to read?
 - [ ] **Kitbag** (dice-placement roguelite: roll dice, slot them into gear cards, 12 floors to The House). Milestones:
   - [x] Core (src/kitbag/core, rules v1): 19 gear cards with conditioned slots (any / even / odd / ≤2 / ≤3 / 2+ / 4+ /
         5+ / 6 / pair / any two) and effects (deal, pierce, block, spike, heal, poison, reroll, split, flip, +1/+2,

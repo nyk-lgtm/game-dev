@@ -21,6 +21,8 @@ import {
   chooseMove,
   clone,
   crumbleAfter,
+  legalMoves,
+  stoneKey,
   dirTo,
   lineCount,
   HOLE,
@@ -112,6 +114,8 @@ export class Game {
   moves: number[] = [];
   /** Who made each move. */
   who: Side[] = [];
+  /** Stone layouts (`stoneKey`) from the start and after each move, so the AI can avoid cycles. */
+  keys: number[] = [];
   mode: 'game' | 'puzzle' = 'game';
   puzzle: Puzzle | null = null;
   /** The day of a daily puzzle being played. */
@@ -126,6 +130,7 @@ export class Game {
   thinking = false;
   private targets: Target[] = [];
   private danger: number[] = [];
+  private threats: number[] = [];
   private hint: { from: number; to: number } | null = null;
   private last: Scene['last'] = null;
   private anim: Anim | null = null;
@@ -204,12 +209,14 @@ export class Game {
     this.moves = [];
     this.who = [];
     this.last = null;
+    this.keys = [stoneKey(this.s)];
     for (const m of moves) {
       if (!isLegal(this.s, m)) break;
       const mover = this.s.turn;
       this.who.push(mover);
       this.last = lastOf(m, play(this.s, m), mover, this.s);
       this.moves.push(m);
+      this.keys.push(stoneKey(this.s));
     }
   }
 
@@ -266,6 +273,7 @@ export class Game {
       this.who.push(mover);
       this.last = lastOf(m, play(this.s, m), mover, this.s);
       this.moves.push(m);
+      this.keys.push(stoneKey(this.s));
       if (mover === LIGHT) this.puzzleLeft--;
     }
     this.resetUi();
@@ -279,6 +287,7 @@ export class Game {
     this.s = clone(this.puzzle.state);
     this.moves = [];
     this.who = [];
+    this.keys = [stoneKey(this.s)];
     this.last = null;
     this.puzzleLeft = this.puzzle.n;
     this.puzzleFailed = false;
@@ -431,6 +440,7 @@ export class Game {
     const ev = play(this.s, m);
     this.moves.push(m);
     this.who.push(mover);
+    this.keys.push(stoneKey(this.s));
     this.last = lastOf(m, ev, mover, this.s, before);
     this.save();
     // Sounds and haptics.
@@ -454,6 +464,7 @@ export class Game {
       if (ev.shovedOff.side === DARK) parts.push(you ? `<b class="good">${where}</b>` : 'The AI shoved its own stone off!');
       else parts.push(you ? '<b class="bad">You shoved your own stone off.</b>' : '<b class="bad">The AI shoved one of yours off.</b>');
     } else if (ev.slid.length > 1 && !you) parts.push('The AI shoved.');
+    else if (!you) parts.push('The AI stepped (dotted trail).');
     if (ev.crumbleTook) parts.push(ev.crumbleTook === LIGHT ? '<b class="bad">A tile crumbled under your stone.</b>' : '<b class="good">A tile crumbled under an AI stone.</b>');
     void lostBefore;
     this.lastSay = parts.join(' ');
@@ -486,7 +497,7 @@ export class Game {
     setTimeout(() => {
       if (g !== this.gen) return;
       const t0 = performance.now();
-      const ch = chooseMove(this.s, this.level, this.moves);
+      const ch = chooseMove(this.s, this.level, this.moves, this.keys);
       const wait = Math.max(0, 420 - (performance.now() - t0));
       setTimeout(() => {
         if (g !== this.gen) return;
@@ -504,7 +515,7 @@ export class Game {
     setTimeout(() => {
       if (g !== this.gen) return;
       // On track: the defence that holds out longest; off track: the AI's best move.
-      const m = this.puzzleFailed ? chooseMove(this.s, 'normal', this.moves).move : bestDefence(this.s, this.puzzleLeft);
+      const m = this.puzzleFailed ? chooseMove(this.s, 'normal', this.moves, this.keys).move : bestDefence(this.s, this.puzzleLeft);
       setTimeout(() => {
         if (g !== this.gen) return;
         this.thinking = false;
@@ -699,19 +710,36 @@ export class Game {
     else left = s.turn === LIGHT ? '<b>Your move</b>' : 'AI to move';
     let right = '';
     if (!s.winner) {
-      const until = TUNE.crumbleStart - s.ply;
-      if (until > 0) right = `Crumbling in ${Math.ceil(until / 2)} move${Math.ceil(until / 2) === 1 ? '' : 's'}`;
+      // Counted in moves of either side, like the badges: 1 = after this move, 2 = after the reply.
+      const first = TUNE.crumbleStart - s.ply + 1;
+      const you = s.turn === LIGHT;
+      if (first > 3) right = `Tiles start falling in ${first} moves`;
+      else if (first === 3) right = `First tile falls after ${you ? 'your next move' : 'its next move'}`;
+      else if (first === 2) right = `First tile falls after ${you ? 'the AI’s reply' : 'your reply'}`;
       else if (crumbleAfter(s, s.ply) >= 0) right = '<span class="badge">1</span> falls after this move';
     }
     $('status').innerHTML = `<span>${left}</span><span>${right}</span>`;
+    // Your stones the AI could shove off with its next move (a light hint for planning).
+    this.threats = [];
+    if (!s.winner && s.turn === LIGHT && !this.thinking) {
+      const them = clone(s);
+      them.turn = DARK;
+      const set = new Set<number>();
+      for (const m of legalMoves(them)) {
+        const ev = play(clone(them), m);
+        if (ev.shovedOff?.side === LIGHT) set.add(ev.shovedOff.from);
+      }
+      this.threats = [...set];
+    }
     // Info line.
     if (this.selected < 0) {
-      if (this.mode === 'puzzle' && !s.winner) this.info(this.lastSay && this.moves.length ? `${this.lastSay} ${this.puzzle!.text}` : this.puzzle!.text);
+      if (this.mode === 'puzzle' && !s.winner)
+        this.info(this.moves.length ? `${this.lastSay} ${this.puzzleFailed ? '' : `Win in ${this.puzzleLeft} now.`}` : this.puzzle!.text);
       else if (s.winner) this.info(this.lastSay || (s.winner === LIGHT ? 'You win.' : 'The AI wins.'));
       else if (this.thinking) this.info(this.lastSay || 'The AI is reading the board…');
       else if (!this.moves.length || this.moves.length < 2 && this.first === DARK)
         this.info(`${this.lastSay ? `${this.lastSay} ` : ''}Tap one of your ${stoneSvg(LIGHT, 16)} stones to see where it can go. Shove ${TUNE.target} coral stones off to win.`);
-      else this.info(this.lastSay || 'Your move.');
+      else this.info(`${this.lastSay || 'Your move.'}${this.threats.length ? ' <span class="bad">Red rings: the AI can shove those off next.</span>' : ''}`);
     }
     $('undoBtn').innerHTML = this.mode === 'puzzle' ? '↺ Retry' : '↶ Undo';
     ($('undoBtn') as HTMLButtonElement).disabled = this.mode === 'game' ? !this.who.includes(LIGHT) || !!s.winner : !this.moves.length;
@@ -750,6 +778,7 @@ export class Game {
       last: this.anim ? null : this.last,
       hint: this.hint,
       danger: this.danger,
+      threats: this.anim ? [] : this.threats,
       time: this.time,
       shake: this.shake,
       reduced: this.reduced,
@@ -821,7 +850,7 @@ export class Game {
         <li><b>Move</b> one of your stones one step to a neighbouring tile.</li>
         <li><b>Shove</b> by stepping into a stone: the line in front moves one tile on. You can shove up to <b>two</b> stones (either colour); <b>three in a row won’t budge</b>.</li>
         <li>A stone shoved off the edge or into a hole is <b>gone</b>. You can never step off yourself.</li>
-        <li>From move ${Math.floor(TUNE.crumbleStart / 2) + 1} the island <b>crumbles</b>: after every move one tile falls, with any stone on it. Numbered badges show the order: <b style="color:#ff5a4a">1</b> falls right after this move, then <b style="color:#ff9a4a">2</b>, then <b style="color:#ffd27a">3</b>; a dashed ring marks a stone standing on one.</li>
+        <li>After move ${TUNE.crumbleStart + 1} (yours and the AI’s both count) the island <b>crumbles</b>: one tile falls after every move, with any stone on it. Badges count moves too: <b style="color:#ff5a4a">1</b> falls after this move, <b style="color:#ff9a4a">2</b> after the reply, <b style="color:#ffd27a">3</b> after the move after that; a dashed ring marks a stone standing on one.</li>
         <li>Shove <b>${TUNE.target} coral stones</b> off to win.</li>
       </ul>
       <p>Tap a stone to see its moves: dots step, arrows shove, a red arrow pushes a stone off. <b>Puzzles</b> has five short lessons and a daily win-in-2 or 3.</p>`,

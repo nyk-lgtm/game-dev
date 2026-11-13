@@ -243,7 +243,7 @@ export const LESSONS: Lesson[] = [
   {
     id: 'crumble',
     title: 'Crumble',
-    text: 'From move 4 a tile falls after every move. The one marked 1 falls right after yours, with whatever stands on it: shove a coral stone onto it.',
+    text: 'After move 7 (both sides count) a tile falls after every move. The one marked 1 falls right after yours, with whatever stands on it: shove a coral stone onto it.',
     n: 1,
     light: [[0, 1], [1, 1]],
     dark: [[-1, 2], [1, -1]],

@@ -17,6 +17,7 @@ import {
   boardText,
   clone,
   loopPenalty,
+  stoneKey,
   W,
   cellAt,
   chooseMove,
@@ -216,6 +217,26 @@ describe('AI', () => {
     // Stepping your own last stone straight back costs half.
     expect(loopPenalty([mv([1, 1], [1, 0]), last])(mv([1, 0], [1, 1]))).toBe(W.loop / 2);
     void s;
+  });
+
+  it('the AI won’t recreate a stone layout it has just seen (shove-back cycles)', () => {
+    // A cycle: whatever the AI would play here, pretend that layout already happened
+    // a few plies ago; it must pick something else (in a quiet position the cost outweighs the gain).
+    for (const level of ['normal', 'hard'] as const) {
+      const s = newGame(2);
+      for (let k = 0; k < 4; k++) play(s, chooseMove(s, 'easy').move);
+      const m1 = chooseMove(s, level).move;
+      const key = stoneKey(after(s, m1));
+      const m2 = chooseMove(s, level, [], [key]).move;
+      expect(isLegal(s, m2)).toBe(true);
+      expect(stoneKey(after(s, m2))).not.toBe(key);
+    }
+    // The layout key ignores holes, so a cycle still repeats while tiles keep falling.
+    const s = newGame(3);
+    const k0 = stoneKey(s);
+    const t = clone(s);
+    t.cells[s.order[0]] = HOLE;
+    expect(stoneKey(t)).toBe(k0);
   });
 
   it('AI games end in a sensible number of moves', () => {
