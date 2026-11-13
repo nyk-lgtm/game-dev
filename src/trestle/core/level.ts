@@ -2,7 +2,7 @@
 // anchor pegs and a goal: roll the beetle's cart across, or hold a lantern up
 // at a ring. Pure data; gen.ts makes them from a seed, tutorials.ts by hand.
 
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 
 /** Grid size in points: x 0..COLS-1, y 0..ROWS-1 (y grows downward). */
 export const COLS = 13;
@@ -16,8 +16,9 @@ export interface Rock {
   x1: number;
   y1: number;
   /** Look only: a bank with grass on top, a stone spire, a cliff wall, a fallen
-   *  log over the gap, a stony floor close under the road. */
-  kind: 'bank' | 'rock' | 'wall' | 'log' | 'floor';
+   *  log over the gap, a stony floor close under the road, a lane kept clear for boats
+   *  (no building there, but nothing collides with it). */
+  kind: 'bank' | 'rock' | 'wall' | 'log' | 'floor' | 'clear';
 }
 
 export type Goal =
@@ -30,8 +31,9 @@ export type Goal =
       startX: number;
       startY: number;
       goalX: number;
-      /** Cart mass (the beetle's load). */
+      /** Cart mass (the beetle's load), and how many carts roll in a row (default 1). */
       cart: number;
+      carts?: number;
     }
   | {
       kind: 'reach';
@@ -59,6 +61,9 @@ export interface Level {
   ref?: string;
   /** Wind push per unit of catch at full gust (+ blows to the right); absent = calm. */
   wind?: number;
+  /** Generated levels: the layout type (see gen.ts) and a 0..1 difficulty from the surveyor. */
+  type?: string;
+  diff?: number;
 }
 
 export const pt = (x: number, y: number) => y * COLS + x;

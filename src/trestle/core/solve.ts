@@ -19,6 +19,8 @@ export interface Survey {
   parts: number;
   /** Test runs it took. */
   sims: number;
+  /** Share of its textbook shapes that held (1 = anything obvious works). */
+  ease: number;
 }
 
 class Builder {
@@ -335,5 +337,5 @@ export function survey(l: Level, effort = 1, cap = 160 + 120 * effort): Survey |
     const s = tidy(l, stripOnce(l, start, k % 2 ? 'shuffle' : 'cost', rng, n), n);
     if (better(s, best)) best = s;
   }
-  return { members: best!, cost: costOf(best!), parts: best!.length, sims: n.sims };
+  return { members: best!, cost: costOf(best!), parts: best!.length, sims: n.sims, ease: good.length / Math.max(1, cands.length) };
 }

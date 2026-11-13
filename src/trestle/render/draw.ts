@@ -197,6 +197,38 @@ function rocks(ctx: CanvasRenderingContext2D, v: View, l: Level): void {
     const [x1, y1] = toScreen(v, r.x1, Math.min(r.y1, WATER + 1));
     const wpx = x1 - x0;
     const hpx = y1 - y0;
+    if (r.kind === 'clear') {
+      // The boat lane: a dashed outline and a little sail on the water.
+      const yb = toScreen(v, 0, WATER)[1];
+      ctx.fillStyle = 'rgba(140,200,255,0.07)';
+      ctx.fillRect(x0, y0, wpx, yb - y0);
+      ctx.strokeStyle = 'rgba(160,210,255,0.55)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 5]);
+      ctx.strokeRect(x0, y0, wpx, yb - y0);
+      ctx.setLineDash([]);
+      const bx = x0 + wpx / 2;
+      const s = v.s;
+      ctx.fillStyle = '#6b4a33';
+      ctx.beginPath();
+      ctx.moveTo(bx - s * 0.7, yb - s * 0.1);
+      ctx.lineTo(bx + s * 0.7, yb - s * 0.1);
+      ctx.lineTo(bx + s * 0.5, yb + s * 0.15);
+      ctx.lineTo(bx - s * 0.5, yb + s * 0.15);
+      ctx.fill();
+      ctx.strokeStyle = '#3a2a1c';
+      ctx.beginPath();
+      ctx.moveTo(bx, yb - s * 0.1);
+      ctx.lineTo(bx, yb - s * 1.5);
+      ctx.stroke();
+      ctx.fillStyle = '#efe2c2';
+      ctx.beginPath();
+      ctx.moveTo(bx + 1, yb - s * 1.45);
+      ctx.lineTo(bx + s * 0.6, yb - s * 0.3);
+      ctx.lineTo(bx + 1, yb - s * 0.3);
+      ctx.fill();
+      continue;
+    }
     if (r.kind === 'log') {
       // A fallen trunk across the gap: bark, rings at the ends.
       const lg = ctx.createLinearGradient(0, y0, 0, y1);
@@ -387,8 +419,7 @@ function stroke(ctx: CanvasRenderingContext2D, ax: number, ay: number, bx: numbe
   }
 }
 
-function drawCart(ctx: CanvasRenderingContext2D, v: View, sim: Sim): void {
-  const c = sim.cart!;
+function drawCart(ctx: CanvasRenderingContext2D, v: View, sim: Sim, c: [number, number, number]): void {
   const [ax, ay] = toScreen(v, sim.x[c[0]], sim.y[c[0]]);
   const [bx, by] = toScreen(v, sim.x[c[1]], sim.y[c[1]]);
   const [tx, ty] = toScreen(v, sim.x[c[2]], sim.y[c[2]]);
@@ -658,7 +689,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, v: View, sc: Scene): vo
       }
       lanternAt(ctx, lx, ly, v.s, sc.time, 1);
     });
-  if (sim?.cart) drawCart(ctx, v, sim);
+  if (sim) for (const c of sim.carts) drawCart(ctx, v, sim, c);
   // Splinters.
   for (const p of sc.sparks) {
     ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2));

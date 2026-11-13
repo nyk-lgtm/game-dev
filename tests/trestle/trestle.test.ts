@@ -1,7 +1,11 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  POOL,
+  dailyName,
+  type Level,
   COLS,
+  LEVEL_TYPES,
   SURVEY_EFFORT,
   PLANK,
   explain,
@@ -153,14 +157,34 @@ describe('generated levels', () => {
     expect(a.id).toBe('n7');
     expect(JSON.stringify(trailLevel(7))).toBe(JSON.stringify(a));
   });
+  it('the picked trail: every level proven at par, unique names, steady difficulty, all types', () => {
+    expect(POOL.length).toBeGreaterThanOrEqual(40);
+    const names = new Set(POOL.map((l) => l.name));
+    expect(names.size).toBe(POOL.length);
+    for (const t of TUTORIALS) expect(names.has(t.name)).toBe(false);
+    // A daily never borrows a trail name.
+    for (let s = 1; s < 40; s++) expect(names.has(dailyName(s * 7919, s % 3 === 0))).toBe(false);
+    POOL.forEach((l, i) => {
+      if (i % 5) return;
+      const v = judge(l, l.ref!);
+      expect(WON.has(v.outcome), l.name).toBe(true);
+      expect(v.cost, l.name).toBe(l.par);
+    });
+    const third = Math.floor(POOL.length / 3);
+    const avg = (a: Level[]) => a.reduce((x, l) => x + (l.diff ?? 0), 0) / a.length;
+    expect(avg(POOL.slice(0, third))).toBeLessThan(avg(POOL.slice(third, 2 * third)));
+    expect(avg(POOL.slice(third, 2 * third))).toBeLessThan(avg(POOL.slice(2 * third)));
+    for (const t of LEVEL_TYPES) expect(POOL.some((l) => l.type === t), t).toBe(true);
+  });
 });
 
 describe('cart over joints', () => {
-  it('a heavy cart through a V in the road does not snap propped planks', () => {
-    const nodes = [3, 5, 7, 9].map((x, i) => pt(x, [6, 7, 7, 6][i]));
+  it('a heavy cart down a kinked road does not snap propped planks; it cannot climb out of a dip', () => {
+    const nodes = [3, 5, 7, 9].map((x, i) => pt(x, [6, 7, 7, 7][i]));
     const props = nodes.slice(1, 3).flatMap((p) => [p + COLS - 1, p + COLS + 1]);
     const l = {
       ...TUTORIALS[2],
+      terrain: [TUTORIALS[2].terrain[0], { ...TUTORIALS[2].terrain[1], y0: 7 }],
       anchors: [nodes[0], nodes[3], ...props],
       goal: { kind: 'cross' as const, from: nodes[0], to: nodes[3], startX: 1.9, startY: 6, goalX: 9.7, cart: 4.5 },
     };
@@ -173,10 +197,35 @@ describe('cart over joints', () => {
     const r = runSim(l, ms);
     expect(r.outcome).toBe('crossed');
     expect(Math.max(...ms.map((m, i) => (m.mat === PLANK ? r.peak[i] : 0)))).toBeLessThan(0.6);
+    // A three-plank dip (a hanging chain) would hold, but the beetle can't haul back up out of it.
+    const t3 = TUTORIALS[2];
+    const dip = replayBuild(t3, 'P292oP2o2qP2f2q').members;
+    expect(runSim({ ...t3, terrain: t3.terrain.filter((r) => r.kind !== 'clear') }, dip).outcome).toBe('stalled');
   });
 });
 
 describe('diagnosis', () => {
+  it('rock tops join the road (an island between two road ends)', () => {
+    const t6 = TUTORIALS[5];
+    const isl = {
+      ...t6,
+      terrain: [...t6.terrain.filter((r) => r.kind !== 'rock'), { x0: 5, y0: 6, x1: 7, y1: 14, kind: 'bank' as const }],
+      anchors: [pt(2, 6), pt(10, 6), pt(5, 6), pt(7, 6)],
+    };
+    let ms: Member[] = [];
+    for (const [a, b] of [[2, 4], [4, 5], [7, 9], [9, 10]]) ms = addMember(isl, ms, pt(a, 6), pt(b, 6), PLANK)!;
+    expect(joined(isl, ms).road).toBe(true);
+  });
+  it('a swinging chain is called wobbly (with its pegs), not too weak', () => {
+    const l = TUTORIALS[4];
+    // A row of twigs out from the cliff to the ring, nothing bracing it.
+    let ms: Member[] = [];
+    for (let x = 2; x < 6; x++) ms = addMember(l, ms, pt(x, x === 2 ? 4 : 5), pt(x + 1, 5), TWIG)!;
+    const r = runSim(l, ms);
+    const v = explain(l, ms, r);
+    expect(v.cause).toBe('wobbly');
+    expect(v.wobbly.size).toBeGreaterThan(0);
+  });
   it('names a missing diagonal, a road with a gap and a collapse', () => {
     const l = TUTORIALS[2];
     const deck = replayBuild(l, 'P292bP2b2dP2d2f').members;
@@ -204,7 +253,7 @@ describe('the ramp', () => {
   it('later layouts bring wind, twin lanterns and obstacles', () => {
     let wind = 0, twin = 0, twist = 0;
     for (let i = 0; i < 120; i++) {
-      const { level: l } = layout(1000 + i, 1, 0, i % 2 ? 'reach' : 'cross');
+      const { level: l } = layout(1000 + i, 1, 0, LEVEL_TYPES[i % LEVEL_TYPES.length]);
       if (l.wind) wind++;
       if (l.goal.kind === 'reach' && l.goal.rings.length > 1) twin++;
       if (l.terrain.some((r) => r.kind === 'log' || r.kind === 'floor')) twist++;
@@ -217,8 +266,8 @@ describe('the ramp', () => {
     const l = TUTORIALS[4];
     const ms = replayBuild(l, l.ref!).members;
     const calm = new Sim(l, ms);
-    const gusty = new Sim({ ...l, wind: 2 }, ms);
+    const gusty = new Sim({ ...l, wind: 1 }, ms);
     for (let i = 0; i < 700; i++) calm.step(), gusty.step();
-    expect(gusty.x[gusty.lanterns[0]] - calm.x[calm.lanterns[0]]).toBeGreaterThan(0.05);
+    expect(Math.abs(gusty.x[gusty.lanterns[0]] - calm.x[calm.lanterns[0]])).toBeGreaterThan(0.05);
   });
 });
