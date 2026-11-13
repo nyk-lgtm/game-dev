@@ -204,7 +204,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   only from close shaves (NEAR, NEAR_CINDER; cinders hit at CINDER_HIT of their drawn size) and sungrazes (letting go < SUNGRAZE from the surface); links keep it alive for
   LINK_TICKS of free flight. A run is seed + mode + toggle ticks (`replay(seed, mode, inputs)`); `cloneRun` shares
   the world. The page shows a release preview by stepping a clone. `?seed=&m=&a=&t=` plays a recording back
-  (`__game.seek(tick)` fast-forwards it); tools: `trace.ts <seed> [skill]`, `botrun.ts <seed> [skill]`.
+  (`__game.seek(tick)` fast-forwards it); tools: `trace.ts <seed> [skill]`, `botrun.ts <seed> [skill]`, `bench.ts` (µs per
+  sim tick). Frame budget: the sky is the stage's CSS gradient, stars/glows/void are cached sprites (render/draw.ts),
+  the canvas is capped at 2× DPR, the HUD is written only on change, nothing redraws under a card, and the path
+  look-ahead runs every 8 ticks (the yellow check every 16, looking 0.5 s ahead) — keep per-frame sims out of render.
 - Kitbag (src/kitbag/core): gear.ts (19 gear cards: each has slots `{need, fx, mult, add, uses, perFight?, fuse?}` and
   an `up` version; 6 dice kinds with face lists), enemies.ts (hp + a cycle of intents `{atk, hits, block, hex, wither,
   poison, heal, buff, charge}`; the fight starts at a seeded step, never on a wind-up), run.ts. A turn: block resets,

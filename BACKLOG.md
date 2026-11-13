@@ -184,6 +184,9 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         burn pulse; the tether and the star's edge pulse red (plus a beep and buzz) in the last 0.5 s before a burn;
         a pulsar going dark lets a finger still down catch the next star; coach pills sit low over the void and fade
         when the comet comes near; plurals; the end card says what the next mode needs vs your best. Bot numbers as v3.
+  - [x] Frame cost (4× CPU throttle, Pixel 7 profile, headless): mid-run frames were ~64-70 ms mean vs ~34 idle;
+        now ~18-26 vs ~17 (sky as CSS, star/glow/void sprites, DPR ≤ 2, HUD writes on change only, no redraw under
+        cards, look-ahead every 8/16 ticks, fewer allocations in `step`). The cost was raster, not the sims.
   - [ ] Next: owner playtest. Watch: is the opening friendly enough now? Are pulsars readable? Is the release preview
         too generous? Good-bot deaths are mostly cinders brushed right after a grab: maybe fewer cinders near stars.
 - [ ] **Quarry** (word roguelite on a hex letter wall). Milestones:

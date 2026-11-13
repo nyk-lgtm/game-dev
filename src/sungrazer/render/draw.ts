@@ -3,7 +3,7 @@
 // sparks and floating points, and the void glowing at the bottom.
 // World y grows upward; the bottom of the screen is the run's camY.
 
-import { COMET_R, LOCK, MOTE_R, NEAR, NEAR_CINDER, REGRAB, VIEW_H, W, ZONES, altitude, cinderX, isLit, lowerY, type Run, type Star } from '../core';
+import { COMET_R, LOCK, MOTE_R, NEAR, NEAR_CINDER, REGRAB, VIEW_H, W, ZONES, cinderX, isLit, lowerY, type Run, type Star } from '../core';
 
 export interface View {
   scale: number;
@@ -89,7 +89,8 @@ function mix(a: string, b: string, t: number): string {
   return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
 }
 
-function sky(alt: number): [string, string] {
+/** The sky's top and bottom colours at an altitude (zones blend into each other). */
+export function skyColors(alt: number): [string, string] {
   let z = 0;
   for (let i = 1; i < ZONES.length; i++) if (alt >= ZONES[i].at - 120) z = i;
   const into = Math.max(0, Math.min(1, (alt - (ZONES[z].at - 120)) / 160));
@@ -117,29 +118,27 @@ export function draw(g: CanvasRenderingContext2D, v: View, sc: Scene): void {
   const X = (x: number) => ox + x * k;
   const Y = (y: number) => h - (y - cam) * k;
   const topY = cam + h / k;
-  const alt = altitude(r);
 
+  // The sky gradient is the stage's CSS background (skyColors), so a frame starts from a clear canvas.
+  g.clearRect(0, 0, w, h);
   g.save();
   if (sc.shake > 0) g.translate((hash(Math.floor(sc.time * 60)) - 0.5) * sc.shake * 2, (hash(Math.floor(sc.time * 60) + 7) - 0.5) * sc.shake * 2);
 
-  // Sky.
-  const [c0, c1] = sky(alt);
-  const bg = g.createLinearGradient(0, 0, 0, h);
-  bg.addColorStop(0, c0);
-  bg.addColorStop(1, c1);
-  g.fillStyle = bg;
-  g.fillRect(-20, -20, w + 40, h + 40);
-
-  // Distant dust, drifting slower than the world.
-  for (let i = 0; i < 70; i++) {
-    const depth = 0.15 + hash(i * 3) * 0.35;
-    const px = hash(i * 3 + 1) * w;
-    const span = h + 20;
-    const py = ((((hash(i * 3 + 2) * span + cam * k * depth) % span) + span) % span) - 10;
-    g.globalAlpha = 0.25 + depth * 0.9;
-    g.fillStyle = '#cfd8ff';
-    const s = depth > 0.4 ? 1.6 : 1;
-    g.fillRect(px, py, s, s);
+  // Distant dust, drifting slower than the world: two batches (near and far), one fill each.
+  g.fillStyle = '#cfd8ff';
+  for (const near of [false, true]) {
+    g.globalAlpha = near ? 0.72 : 0.42;
+    g.beginPath();
+    for (let i = 0; i < 70; i++) {
+      const depth = 0.15 + hash(i * 3) * 0.35;
+      if (depth > 0.32 !== near) continue;
+      const px = hash(i * 3 + 1) * w;
+      const span = h + 20;
+      const py = ((((hash(i * 3 + 2) * span + cam * k * depth) % span) + span) % span) - 10;
+      const sz = depth > 0.4 ? 1.6 : 1;
+      g.rect(px, py, sz, sz);
+    }
+    g.fill();
   }
   g.globalAlpha = 1;
 
@@ -163,19 +162,22 @@ export function draw(g: CanvasRenderingContext2D, v: View, sc: Scene): void {
   const lo = cam - 12, hi = topY + 12;
   const tick = r.tick;
 
-  // Motes.
+  // Motes: small turning diamonds, as plain paths (no save/rotate per mote).
   const ms = r.world.motes;
+  const spin = Math.PI / 4 + sc.time * 0.8;
+  const ca = Math.cos(spin) * MOTE_R * k * 0.67, sa = Math.sin(spin) * MOTE_R * k * 0.67;
   for (let i = lowerY(ms, lo); i < ms.length && ms[i].y < hi; i++) {
     const m = ms[i];
     if (r.got.has(m.id)) continue;
-    const tw = 0.75 + 0.25 * Math.sin(sc.time * 5 + m.id);
-    const s = MOTE_R * k * 0.95;
-    g.save();
-    g.translate(X(m.x), Y(m.y));
-    g.rotate(Math.PI / 4 + sc.time * 0.8);
-    g.fillStyle = `rgba(150,245,255,${tw})`;
-    g.fillRect(-s / 2, -s / 2, s, s);
-    g.restore();
+    const mx = X(m.x), my = Y(m.y);
+    g.fillStyle = `rgba(150,245,255,${0.75 + 0.25 * Math.sin(sc.time * 5 + m.id)})`;
+    g.beginPath();
+    g.moveTo(mx + ca, my + sa);
+    g.lineTo(mx - sa, my + ca);
+    g.lineTo(mx - ca, my - sa);
+    g.lineTo(mx + sa, my - ca);
+    g.closePath();
+    g.fill();
   }
 
   // Stars: glow, corona (the graze band), core.
@@ -188,33 +190,17 @@ export function draw(g: CanvasRenderingContext2D, v: View, sc: Scene): void {
     const [core, glow] = STAR_COL[s.kind];
     const dim = s.kind === 'pulsar' && !lit;
     const left = s.id === r.last && !r.tether && r.since < 144;
-    g.globalCompositeOperation = 'lighter';
-    const gr = g.createRadialGradient(sx, sy, sr * 0.6, sx, sy, sr + (s.band + 6) * k);
-    gr.addColorStop(0, dim ? 'rgba(80,120,160,0.25)' : glow + 'aa');
-    gr.addColorStop(0.45, dim ? 'rgba(60,90,130,0.06)' : glow + '30');
-    gr.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = gr;
-    g.beginPath();
-    g.arc(sx, sy, sr + (s.band + 6) * k, 0, Math.PI * 2);
-    g.fill();
-    g.globalCompositeOperation = 'source-over';
-    // Corona edge: graze inside this ring.
-    g.strokeStyle = dim ? 'rgba(120,160,200,0.18)' : tethered === s && r.grazing ? 'rgba(255,190,110,0.85)' : 'rgba(255,220,170,0.28)';
-    g.lineWidth = tethered === s && r.grazing ? 2 : 1;
-    g.setLineDash([3, 4]);
-    g.beginPath();
-    g.arc(sx, sy, sr + (s.band + COMET_R) * k, 0, Math.PI * 2);
-    g.stroke();
-    g.setLineDash([]);
-    // Core.
-    g.fillStyle = dim ? '#3a4a60' : left ? '#c9b48a' : core;
-    g.beginPath();
-    g.arc(sx, sy, sr, 0, Math.PI * 2);
-    g.fill();
-    if (!dim) {
-      g.strokeStyle = glow;
-      g.lineWidth = 1.5;
+    // Glow, dashed corona edge (graze inside it) and core come from one cached sprite per look.
+    const R = sr + (s.band + 6) * k;
+    blit(g, starSprite(g, sr, s.band * k, COMET_R * k, dim ? 'dim' : left ? 'left' : 'lit', core, glow), sx, sy, R);
+    if (tethered === s && r.grazing) {
+      g.strokeStyle = 'rgba(255,190,110,0.85)';
+      g.lineWidth = 2;
+      g.setLineDash([3, 4]);
+      g.beginPath();
+      g.arc(sx, sy, sr + (s.band + COMET_R) * k, 0, Math.PI * 2);
       g.stroke();
+      g.setLineDash([]);
     }
     if (s.kind === 'pulsar') {
       // How long until it goes dark (lit) or lights up (dark).
@@ -275,15 +261,7 @@ export function draw(g: CanvasRenderingContext2D, v: View, sc: Scene): void {
   for (let i = lowerY(cs, lo); i < cs.length && cs[i].y < hi; i++) {
     const c = cs[i];
     const cx = X(cinderX(c, tick)), cy = Y(c.y), cr = c.r * k;
-    g.globalCompositeOperation = 'lighter';
-    const gr = g.createRadialGradient(cx, cy, cr * 0.5, cx, cy, cr * 2.6);
-    gr.addColorStop(0, 'rgba(255,90,40,0.45)');
-    gr.addColorStop(1, 'rgba(255,60,20,0)');
-    g.fillStyle = gr;
-    g.beginPath();
-    g.arc(cx, cy, cr * 2.6, 0, Math.PI * 2);
-    g.fill();
-    g.globalCompositeOperation = 'source-over';
+    blit(g, glowSprite(g, cr * 2.6, cr * 0.5, ['rgba(255,90,40,0.5)']), cx, cy, cr * 2.6);
     g.beginPath();
     const n = 7;
     const rot = sc.time * (hash(c.id) - 0.5) * 2;
@@ -409,29 +387,27 @@ export function draw(g: CanvasRenderingContext2D, v: View, sc: Scene): void {
   const tr = sc.trail;
   const hot = r.grazing;
   const tailCol = hot ? [255, 170, 90] : r.mult >= 4 ? [255, 225, 120] : [160, 230, 255];
-  for (let i = 2; i < tr.length; i += 2) {
-    const f = i / tr.length;
+  // In six bands, each one stroke (fading and thinning toward the end), not one stroke per segment.
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  const pts = tr.length / 2;
+  const bands = 6;
+  for (let b = 0; b < bands; b++) {
+    const i0 = Math.floor((b * (pts - 1)) / bands), i1 = Math.floor(((b + 1) * (pts - 1)) / bands);
+    if (i1 <= i0) continue;
+    const f = (b + 1) / bands;
     g.strokeStyle = `rgba(${tailCol[0]},${tailCol[1]},${tailCol[2]},${f * 0.8})`;
     g.lineWidth = Math.max(1, f * COMET_R * k * 1.7);
-    g.lineCap = 'round';
     g.beginPath();
-    g.moveTo(X(tr[i - 2]), Y(tr[i - 1]));
-    g.lineTo(X(tr[i]), Y(tr[i + 1]));
+    g.moveTo(X(tr[i0 * 2]), Y(tr[i0 * 2 + 1]));
+    for (let i = i0 + 1; i <= i1; i++) g.lineTo(X(tr[i * 2]), Y(tr[i * 2 + 1]));
     g.stroke();
   }
 
   // Comet.
   if (r.alive) {
     const cx = X(r.x), cy = Y(r.y);
-    g.globalCompositeOperation = 'lighter';
-    const gr = g.createRadialGradient(cx, cy, 0, cx, cy, COMET_R * k * 4);
-    gr.addColorStop(0, hot ? 'rgba(255,200,140,0.9)' : 'rgba(190,240,255,0.9)');
-    gr.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = gr;
-    g.beginPath();
-    g.arc(cx, cy, COMET_R * k * 4, 0, Math.PI * 2);
-    g.fill();
-    g.globalCompositeOperation = 'source-over';
+    blit(g, glowSprite(g, COMET_R * k * 4, 0, [hot ? 'rgba(255,200,140,0.9)' : 'rgba(190,240,255,0.9)']), cx, cy, COMET_R * k * 4);
     g.fillStyle = '#ffffff';
     g.beginPath();
     g.arc(cx, cy, COMET_R * k, 0, Math.PI * 2);
@@ -461,12 +437,8 @@ export function draw(g: CanvasRenderingContext2D, v: View, sc: Scene): void {
   // The void.
   const near = Math.max(0, Math.min(1, 1 - (r.y - cam) / 45));
   const vh = (22 + near * 18) * k;
-  const vg = g.createLinearGradient(0, h, 0, h - vh);
-  vg.addColorStop(0, `rgba(255,50,100,${0.55 + near * 0.35})`);
-  vg.addColorStop(0.35, `rgba(150,20,90,${0.25 + near * 0.25})`);
-  vg.addColorStop(1, 'rgba(60,0,60,0)');
-  g.fillStyle = vg;
-  g.fillRect(-20, h - vh, w + 40, vh + 20);
+  // A 1-pixel-wide gradient strip per tenth of nearness, stretched across (cheaper than a gradient fill each frame).
+  g.drawImage(voidStrip(Math.round(near * 10)), -20, h - vh, w + 40, vh + 20);
   g.strokeStyle = `rgba(255,120,150,${0.6 + near * 0.4})`;
   g.lineWidth = 2;
   g.beginPath();
@@ -547,6 +519,95 @@ export function draw(g: CanvasRenderingContext2D, v: View, sc: Scene): void {
     g.fillRect(0, 0, w, h);
   }
 }
+
+// Glows are radial gradients rendered once into small sprites (keyed by size and colours) and stamped
+// with drawImage: much cheaper per frame than building a gradient for every star.
+const sprites = new Map<string, HTMLCanvasElement>();
+function glowSprite(g: CanvasRenderingContext2D, R: number, r0: number, stops: string[]): HTMLCanvasElement {
+  const scale = g.getTransform().a || 1;
+  const px = Math.max(2, Math.round(R * scale));
+  const key = `${px}|${Math.round(r0 * scale)}|${stops.join('|')}`;
+  let c = sprites.get(key);
+  if (!c) {
+    if (sprites.size > 400) sprites.clear();
+    c = document.createElement('canvas');
+    c.width = c.height = px * 2;
+    const q = c.getContext('2d')!;
+    const gr = q.createRadialGradient(px, px, Math.min(px - 1, r0 * scale), px, px, px);
+    if (stops.length === 2) {
+      gr.addColorStop(0, stops[0]);
+      gr.addColorStop(0.45, stops[1]);
+    } else gr.addColorStop(0, stops[0]);
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    q.fillStyle = gr;
+    q.fillRect(0, 0, px * 2, px * 2);
+    sprites.set(key, c);
+  }
+  return c;
+}
+function starSprite(g: CanvasRenderingContext2D, sr: number, band: number, cr: number, look: 'lit' | 'dim' | 'left', core: string, glow: string): HTMLCanvasElement {
+  const scale = g.getTransform().a || 1;
+  const R = sr + band + 6 * (cr / COMET_R);
+  const px = Math.max(2, Math.ceil(R * scale));
+  const key = `star|${px}|${Math.round(sr * scale * 4)}|${Math.round(band * scale)}|${look}|${core}`;
+  let c = sprites.get(key);
+  if (!c) {
+    if (sprites.size > 400) sprites.clear();
+    c = document.createElement('canvas');
+    c.width = c.height = px * 2;
+    const q = c.getContext('2d')!;
+    q.setTransform(scale, 0, 0, scale, px, px);
+    const dim = look === 'dim';
+    const gr = q.createRadialGradient(0, 0, sr * 0.6, 0, 0, R);
+    gr.addColorStop(0, dim ? 'rgba(80,120,160,0.25)' : glow + 'b8');
+    gr.addColorStop(0.45, dim ? 'rgba(60,90,130,0.06)' : glow + '38');
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    q.fillStyle = gr;
+    q.fillRect(-R, -R, R * 2, R * 2);
+    q.strokeStyle = dim ? 'rgba(120,160,200,0.18)' : 'rgba(255,220,170,0.28)';
+    q.lineWidth = 1;
+    q.setLineDash([3, 4]);
+    q.beginPath();
+    q.arc(0, 0, sr + band + cr, 0, Math.PI * 2);
+    q.stroke();
+    q.setLineDash([]);
+    q.fillStyle = dim ? '#3a4a60' : look === 'left' ? '#c9b48a' : core;
+    q.beginPath();
+    q.arc(0, 0, sr, 0, Math.PI * 2);
+    q.fill();
+    if (!dim) {
+      q.strokeStyle = glow;
+      q.lineWidth = 1.5;
+      q.stroke();
+    }
+    sprites.set(key, c);
+  }
+  return c;
+}
+
+function voidStrip(n10: number): HTMLCanvasElement {
+  const key = `void|${n10}`;
+  let c = sprites.get(key);
+  if (!c) {
+    const near = n10 / 10;
+    c = document.createElement('canvas');
+    c.width = 1;
+    c.height = 128;
+    const q = c.getContext('2d')!;
+    // Drawn over vh + 20 px: the bottom 20/(vh+20) is solid, as the old fill below the screen edge was.
+    const vg = q.createLinearGradient(0, 128, 0, 0);
+    vg.addColorStop(0, `rgba(255,50,100,${0.55 + near * 0.35})`);
+    vg.addColorStop(0.2, `rgba(255,50,100,${0.55 + near * 0.35})`);
+    vg.addColorStop(0.2 + 0.8 * 0.35, `rgba(150,20,90,${0.25 + near * 0.25})`);
+    vg.addColorStop(1, 'rgba(60,0,60,0)');
+    q.fillStyle = vg;
+    q.fillRect(0, 0, 1, 128);
+    sprites.set(key, c);
+  }
+  return c;
+}
+
+const blit = (g: CanvasRenderingContext2D, c: HTMLCanvasElement, x: number, y: number, R: number) => g.drawImage(c, x - R, y - R, R * 2, R * 2);
 
 function pill(g: CanvasRenderingContext2D, text: string, x0: number, y: number, bg: string, fg: string, w: number): void {
   const tw = g.measureText(text).width;

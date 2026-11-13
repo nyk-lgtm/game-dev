@@ -34,6 +34,9 @@ const MAX_FALL = 95;
 /** Where the camera keeps the comet (share of VIEW_H from the bottom). */
 const CAM_AT = 0.45;
 
+/** Shared empty list (never mutated: nears are replaced, not pushed to). */
+const NO_NEARS: number[] = [];
+
 export const PTS = { link: 10, graze: 50, near: 25, sungraze: 40, mote: 10 };
 
 /** Orbit speed at an altitude. */
@@ -115,7 +118,7 @@ export function newRun(seed: number, mode: Mode = 'n', world?: World): Run {
 
 /** A copy that shares the (immutable, lazily grown) world. */
 export function cloneRun(r: Run): Run {
-  return { ...r, tether: r.tether && { ...r.tether }, nears: r.nears.slice(), got: new Set(r.got), stats: { ...r.stats } };
+  return { ...r, tether: r.tether && { ...r.tether }, nears: r.nears, got: new Set(r.got), stats: { ...r.stats } };
 }
 
 export const altitude = (r: Run) => Math.max(0, r.maxY - START_Y);
@@ -259,7 +262,8 @@ export function step(r: Run, held: boolean, out?: Ev[]): void {
   }
 
   // Stars and cinders: touch = burn; a close pass = a close shave once you're clear.
-  const nowNear: number[] = [];
+  // Allocated only when something is near (most ticks nothing is).
+  let nowNear: number[] | null = null;
   const stars = w.stars;
   for (let i = lowerY(stars, r.y - 16); i < stars.length && stars[i].y <= r.y + 16; i++) {
     const s = stars[i];
@@ -269,7 +273,7 @@ export function step(r: Run, held: boolean, out?: Ev[]): void {
       die(r, r.tether ? 'burn' : 'star', out);
       return;
     }
-    if (clear < NEAR && (s.id !== r.last || r.since >= REGRAB)) nowNear.push(s.id);
+    if (clear < NEAR && (s.id !== r.last || r.since >= REGRAB)) (nowNear ??= []).push(s.id);
   }
   const cs = w.cinders;
   for (let i = lowerY(cs, r.y - 9); i < cs.length && cs[i].y <= r.y + 9; i++) {
@@ -280,17 +284,17 @@ export function step(r: Run, held: boolean, out?: Ev[]): void {
       die(r, 'cinder', out);
       return;
     }
-    if (clear < NEAR_CINDER) nowNear.push(1e6 + c.id);
+    if (clear < NEAR_CINDER) (nowNear ??= []).push(1e6 + c.id);
   }
   for (const id of r.nears)
-    if (!nowNear.includes(id)) {
+    if (!nowNear || !nowNear.includes(id)) {
       const p = PTS.near * r.mult * m.points;
       r.score += p;
       bump(r);
       r.stats.nears++;
       emit(out, { k: 'near', x: r.x, y: r.y, pts: p, mult: r.mult, n: id });
     }
-  r.nears = nowNear;
+  r.nears = nowNear ?? NO_NEARS;
 
   // Motes.
   const ms = w.motes;

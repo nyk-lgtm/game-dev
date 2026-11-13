@@ -13,7 +13,7 @@ import {
   type Cause, type Ev, type Mode, type Run, type Star,
 } from './core';
 import { Sounds } from './audio';
-import { BANNER_S, draw, fitView, type Floater, type Particle, type Scene, type View } from './render/draw';
+import { BANNER_S, draw, fitView, skyColors, type Floater, type Particle, type Scene, type View } from './render/draw';
 
 export const store = makeStore('sungrazer.');
 const $ = (id: string) => document.getElementById(id)!;
@@ -66,6 +66,14 @@ function soonStar(r: Run): Star | null {
   return best;
 }
 
+interface Ahead {
+  preview: number[] | null;
+  hit: { x: number; y: number } | null;
+  warn: boolean;
+  hitStar: boolean;
+}
+const NO_AHEAD: Ahead = { preview: null, hit: null, warn: false, hitStar: false };
+
 const fmtTime = (ticks: number) => {
   const s = Math.floor(ticks / TPS);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -102,6 +110,8 @@ export class Game {
   /** What the last frame warned about (for screenshots and checks). */
   shown = { warn: false, hit: false };
   private buzzed: unknown = null;
+  /** Runs played (cached: the profile isn't read every frame). */
+  private runs = loadProfile().runs;
 
   constructor() {
     new ResizeObserver(() => this.resize()).observe(this.canvas);
@@ -184,6 +194,9 @@ export class Game {
   }
 
   private resetFx(): void {
+    this.aheadKey = '';
+    this.warnKey = '';
+    this.ahead = { ...NO_AHEAD };
     this.trail = [];
     this.particles = [];
     this.floaters = [];
@@ -245,7 +258,8 @@ export class Game {
   // ------------------------------------------------------------ loop
 
   private resize(): void {
-    const dpr = Math.min(3, devicePixelRatio || 1);
+    // At most 2× pixels: the canvas is full-screen, and 3× costs half again as much to fill for little gain.
+    const dpr = Math.min(2, devicePixelRatio || 1);
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(h * dpr);
@@ -284,7 +298,10 @@ export class Game {
       this.endCard();
     }
     this.tickFx(dt);
-    this.render();
+    // Under a card (end of run, menu, help) the sky is hidden: draw it once, then let the page rest.
+    const covered = !$('overlay').hidden;
+    if (!covered || !this.coveredDrawn) this.render();
+    this.coveredDrawn = covered;
     requestAnimationFrame((tt) => this.frame(tt));
   }
 
@@ -316,38 +333,12 @@ export class Game {
     const r = this.run;
     const playing = this.state === 'play' || this.state === 'ready' || this.state === 'watch' || this.state === 'paused';
     const tgt = r.alive && !r.tether ? target(r) : null;
-    // While swinging: where letting go now would fly (~0.45 s). In free flight: only a collision course,
-    // looked for ~0.6 s ahead (as you're holding now), so there's time to react.
-    let preview: number[] | null = null;
-    let hit: { x: number; y: number } | null = null;
-    let warn = false;
-    let hitStar = false;
-    if (r.alive && playing && this.state !== 'ready') {
-      const c = cloneRun(r);
-      const path = [c.x, c.y];
-      const n = r.tether ? 110 : 150;
-      const hold = !r.tether && (this.state === 'watch' ? r.held : this.held);
-      for (let i = 1; i <= n && c.alive; i++) {
-        step(c, hold);
-        if (!c.alive && c.cause !== 'void') {
-          hit = { x: c.x, y: c.y };
-          hitStar = c.cause === 'star';
-        }
-        else if (i % 10 === 0) path.push(c.x, c.y);
-      }
-      if (r.tether || hit) preview = path;
-      if (hit) path.push(hit.x, hit.y);
-      // Amber when letting go a little later (up to ~0.45 s, about two reaction times) would hit something.
-      if (r.tether && !hit) {
-        const h = cloneRun(r);
-        for (let k = 1; k <= 108 && h.alive && !warn; k++) {
-          step(h, true);
-          if (k % 12) continue;
-          const f = cloneRun(h);
-          for (let i = 0; i < 110 && f.alive; i++) step(f, false);
-          if (!f.alive && f.cause !== 'void') warn = true;
-        }
-      }
+    const { preview, hit, warn, hitStar } = this.lookAhead(playing);
+    const [c0, c1] = skyColors(altitude(r));
+    const skyCss = `linear-gradient(${c0}, ${c1})`;
+    if (skyCss !== this.skyCss) {
+      this.skyCss = skyCss;
+      $('stage').style.background = skyCss;
     }
     this.shown = { warn, hit: !!hit };
     // The last half second before a tether burns: it pulses red (and a small buzz, once).
@@ -361,15 +352,68 @@ export class Game {
       run: r, time: this.time, trail: this.trail, particles: this.particles, floaters: this.floaters,
       target: tgt ?? (this.state === 'ready' ? soonStar(r) : null), soon: !tgt && r.alive && !r.tether ? soonStar(r) : null, preview, hit, warn, burnSoon, reaching: this.state === 'play' && this.held && !r.tether && !r.used && !tgt,
       shake: this.fx ? this.shake : 0, flash: this.fx ? this.flash : 0, banner: this.banner,
-      coach: hitStar && !r.tether && !this.held && this.state === 'play' && loadProfile().runs < 6 ? 'Heading into a star: hold to catch it!' : this.coach(), prompt: this.state === 'ready' ? 'Hold anywhere to grab' : null, grabT: this.grabT,
+      coach: hitStar && !r.tether && !this.held && this.state === 'play' && this.runs < 6 ? 'Heading into a star: hold to catch it!' : this.coach(), prompt: this.state === 'ready' ? 'Hold anywhere to grab' : null, grabT: this.grabT,
       replay: this.state === 'watch',
     });
   }
 
+  /**
+   * What the path ahead holds. While swinging: where letting go now would fly (~0.45 s), and whether letting go
+   * up to 0.5 s later would hit something (yellow). In free flight: a collision course ~0.6 s ahead, as you're
+   * holding now. Not every frame: the path every 8 ticks (two frames), the yellow check every 16 (it looks a bit
+   * further ahead to make up for that), and both at once when the input or the tether changes.
+   */
+  private lookAhead(playing: boolean): Ahead {
+    const r = this.run;
+    if (!r.alive || !playing || this.state === 'ready') return NO_AHEAD;
+    const hold = !r.tether && (this.state === 'watch' ? r.held : this.held);
+    const base = `${hold}|${r.tether ? r.tether.star.id : -1}`;
+    const key = `${r.tick >> 3}|${base}`;
+    if (key !== this.aheadKey) {
+      this.aheadKey = key;
+      const c = cloneRun(r);
+      const path = this.ahead.preview && this.ahead.preview.length < 64 ? this.ahead.preview : [];
+      path.length = 0;
+      path.push(c.x, c.y);
+      let hit: Ahead['hit'] = null;
+      let hitStar = false;
+      const n = r.tether ? 110 : 150;
+      for (let i = 1; i <= n && c.alive; i++) {
+        step(c, hold);
+        if (!c.alive && c.cause !== 'void') {
+          hit = { x: c.x, y: c.y };
+          hitStar = c.cause === 'star';
+        } else if (i % 10 === 0) path.push(c.x, c.y);
+      }
+      if (hit) path.push(hit.x, hit.y);
+      this.ahead = { preview: r.tether || hit ? path : null, hit, warn: this.ahead.warn, hitStar };
+    }
+    const wkey = `${r.tick >> 4}|${base}`;
+    if (wkey !== this.warnKey) {
+      this.warnKey = wkey;
+      let warn = false;
+      if (r.tether && !this.ahead.hit) {
+        // Let go 0.1 … 0.5 s later: would any of those hit? (Each try stops at its first hit.)
+        const h = cloneRun(r);
+        for (let k = 1; k <= 120 && h.alive && !warn; k++) {
+          step(h, true);
+          if (k % 24) continue;
+          const f = cloneRun(h);
+          for (let i = 0; i < 110 && f.alive; i++) step(f, false);
+          if (!f.alive && f.cause !== 'void') warn = true;
+        }
+      }
+      this.ahead.warn = warn;
+    }
+    return this.ahead;
+  }
+  private warnKey = '';
+  private aheadKey = '';
+  private ahead: Ahead = { ...NO_AHEAD };
+
   /** First-run coaching, shown until the player has done each thing a few times. */
   private coach(): string | null {
-    const p = loadProfile();
-    if (p.runs >= 3 || this.state !== 'play') return null;
+    if (this.runs >= 3 || this.state !== 'play') return null;
     const r = this.run;
     if (r.tether && r.grazing) return 'In the corona: points! Let go soon';
     if (r.tether && burnIn(r) < 0.8) return 'Let go before you burn!';
@@ -477,16 +521,26 @@ export class Game {
 
   // ------------------------------------------------------------ HUD
 
+  /** The header, touched only when a value changes (a DOM write every frame costs a relayout and repaint). */
   private hud(): void {
     const r = this.run;
-    $('score').textContent = finalScore(r).toLocaleString('en-US');
-    const m = $('mult');
-    m.textContent = `×${r.mult}`;
-    m.className = `value mult m${Math.min(9, r.mult)}`;
-    $('alt').textContent = String(Math.floor(altitude(r)));
-    $('modeTag').textContent = this.daily ? 'Daily' : this.mode !== 'n' ? MODES[this.mode].name : '';
-    $('modeTag').hidden = !this.daily && this.mode === 'n';
+    const set = (id: string, v: string, prop: 'textContent' | 'className' = 'textContent') => {
+      const k = `${id}.${prop}`;
+      if (this.hudShown.get(k) === v) return;
+      this.hudShown.set(k, v);
+      $(id)[prop] = v;
+    };
+    set('score', finalScore(r).toLocaleString('en-US'));
+    set('mult', `×${r.mult}`);
+    set('mult', `value mult m${Math.min(9, r.mult)}`, 'className');
+    set('alt', String(Math.floor(altitude(r))));
+    set('modeTag', this.daily ? 'Daily' : this.mode !== 'n' ? MODES[this.mode].name : '');
+    const hide = !this.daily && this.mode === 'n';
+    if ($('modeTag').hidden !== hide) $('modeTag').hidden = hide;
   }
+  private hudShown = new Map<string, string>();
+  private coveredDrawn = false;
+  private skyCss = '';
 
   // ------------------------------------------------------------ ends
 
@@ -500,6 +554,7 @@ export class Game {
     const score = finalScore(r);
     const before = p.best;
     p.runs++;
+    this.runs = p.runs;
     p.time += r.tick / TPS;
     p.bestAlt = Math.max(p.bestAlt, Math.floor(altitude(r)));
     if (score > p.best) {
