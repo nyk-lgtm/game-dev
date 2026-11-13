@@ -35,8 +35,7 @@ const load = (levels: number[]) => {
 const ALLOW = new Set(
   `pawn escort cox flange knob snatch suck sucks poop bloody dogging playboy swinger bum bums butt butts willies scat hell god gods
    damn lust lusting nude nudity bestial bondage grope kinky eunuch fecal voyeur topless crap balls screwing breasts muff
-   bareback prick pricks sex sexual sexually rectum anus nipple nipples sadism sadist
-   poof`.split(/\s+/),
+   bareback prick pricks sex sexual sexually rectum anus nipple nipples sadism sadist`.split(/\s+/),
 );
 // Slurs and vulgar words the lists miss, spelled out with their inflections
 // (no automatic suffixing: short roots would catch "spices" or "assess").
@@ -62,7 +61,8 @@ const BLOCK = new Set(
 );
 
 // Everyday informal words SCOWL leaves out at these sizes (players try them; a playtest missed POOF).
-const INFORMAL = `poof yay yikes phew nah bam oof eek whee ooh aww ciao oomph ick eww boing ribbit cuppa telly wifi
+// ("poof" stays out: it doubles as a slur.)
+const INFORMAL = `yay yikes phew nah bam oof eek whee ooh aww ciao oomph ick eww boing ribbit cuppa telly wifi
   app hiya vlog yeah yep yup nope okay oops meh duh comfy yummy zap zing`.split(/\s+/).filter(Boolean);
 const common = load(COMMON_LEVELS);
 for (const w of INFORMAL) if (ok(w)) common.add(w);

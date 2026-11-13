@@ -51,7 +51,8 @@ describe('dictionary', () => {
       expect(dict.has(w), w).toBe(true);
     for (const w of ['cat', 'stone', 'house', 'water']) expect(dict.common.has(w), w).toBe(true);
     // Informal words people try (a playtest missed POOF).
-    for (const w of ['poof', 'yeah', 'okay', 'wow', 'oops', 'yay', 'meh', 'yikes', 'phew']) expect(dict.has(w), w).toBe(true);
+    expect(dict.has('poof')).toBe(false);
+    for (const w of ['yeah', 'okay', 'wow', 'oops', 'yay', 'meh', 'yikes', 'phew']) expect(dict.has(w), w).toBe(true);
   });
 
   it('keeps out junk, names, abbreviations and offensive words', () => {

@@ -20,7 +20,7 @@ export const DEPTH_NAMES = ['Topsoil', 'Clay', 'Sandstone', 'Limestone', 'Slate'
 /** Words per depth, before perks. */
 export const WORDS = [7, 7, 6, 6, 6, 6, 6, 6];
 /** Score to reach on each depth. */
-export const TARGETS = [90, 130, 180, 235, 295, 355, 415, 475];
+export const TARGETS = [90, 130, 180, 235, 295, 365, 430, 495];
 /** Rocks on a fresh face, and the chance a falling tile is a rock. */
 export const ROCKS = [0, 2, 3, 4, 4, 5, 6, 7];
 export const ROCK_RATE = [0, 0.02, 0.03, 0.035, 0.04, 0.05, 0.06, 0.07];
