@@ -3,7 +3,8 @@
 //   Every caster × every ordered triple of modifiers (all at `tier`), the same
 //   row on all three rows; ranks builds by HP leaked (lower is better).
 import { Evaluator, profileFor } from './smart';
-import { CASTERS, MOD, MODS, casterBase, finishBattle, newGame, startBattle, type CasterId, type ModId, type Rune } from '../../src/glyph/core';
+import { CASTERS, MODS, finishBattle, newGame, startBattle, type CasterId, type ModId, type Rune } from '../../src/glyph/core';
+import { applyTweaks } from './tweak';
 
 export function leakTest(rows: (Rune | null)[][], waves: number[], seeds: number[]): { leak: number; t: number } {
   let leak = 0;
@@ -22,16 +23,8 @@ export function leakTest(rows: (Rune | null)[][], waves: number[], seeds: number
   return { leak, t: t / (seeds.length * waves.length) };
 }
 
-// Try numbers without editing the rules: TWEAK='beam.dmg=20,orb.cooldown=2' (caster base stats);
-// modifier numbers as MOD.<key>=<number or expression in t>, e.g. 'MOD.pierceThrough=t'.
-for (const kv of (process.env.TWEAK ?? '').split(',').filter(Boolean)) {
-  const [path, v] = kv.split('=');
-  const [c, k] = path.split('.');
-  if (c === 'MOD') {
-    const m = MOD as unknown as Record<string, unknown>;
-    m[k] = typeof m[k] === 'function' ? new Function('t', `return ${v}`) : Number(v);
-  } else (casterBase(c as CasterId) as unknown as Record<string, number>)[k] = Number(v);
-}
+// Try numbers without editing the rules: TWEAK='beam.dmg=20,MOD.pierceThrough=t,drake.hp=100' (see tweak.ts).
+applyTweaks();
 
 {
   // "2" = everything tier 2; "2/1" = tier-2 casters with tier-1 modifiers.

@@ -48,9 +48,15 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     (rules v2: bot finishes ~40/40 always-left, ~38/40 always-right; it dodges with perfect information, so
     human-facing fixes are about seeing traffic and curves sooner). Nightline's camera height follows the
     horizon (`camHeight` in render.ts) so the road at the car stays as wide as CAR_HIT_W was measured for.
-  - Glyphwright: `npx vite-node scripts/glyph/balance.ts 100 smart,favor` (rules v3: smart bot ~37% wins, median wave 15;
-    `favor` pushes it toward each caster). `scripts/glyph/probe.ts 2` ranks every caster × modifier build by real leaks
-    with a per-caster best/top-10 line (`TWEAK='beam.dmg=17,MOD.pierceThrough=t'` tries numbers without editing rules).
+  - Glyphwright: `npx vite-node scripts/glyph/balance.ts 100 smart,favor` (rules v3, bot model refit 2026-11-13: smart bot
+    ~83% wins (85% on 200 seeds), every loss at the Lich; favor runs 71-91%, Nova 91%. The old model's ~37% came from
+    the bot stacking Novas/Fire with nothing for Drakes; the game didn't change). `favor` pushes it toward each caster.
+    `scripts/glyph/probe.ts 2` ranks every caster × modifier row by real leaks (beside two plain bolts) with a per-caster
+    best/top-10 line; `looms.ts [3/2] [waves]` plays whole looms of the best rows (per caster: best loom using it 1/2/3
+    times and what leaks, by foe); `leaks.ts` splits bot leaks by primary caster, wave band and foe; `fit.ts` refits the
+    bot's model `W` in smart.ts (row sets + 1500 random late looms, Spearman rho; `--fresh` after rule changes).
+    `TWEAK='beam.dmg=17,MOD.pierceThrough=t,drake.hp=100,BUDGET.square=0.5'` (tweak.ts; probe/looms/balance) tries rule
+    numbers, `BOTW='cover=1,novaStack=1'` bot weights.
   - Summit: `npx vite-node scripts/summit/balance.ts 1000` (greedy bot with chain lookahead, rules v4: floor 1
     ~100%, floor 2 ~98%, median floor 5, ~14-15% win all 8); `DRAWS=34,13,…` tries other allotments, `TUNE=mirrors:1`
     other charm strengths, and `CHARM=mirror` starts every run holding one charm (the fair way to compare charms:
@@ -116,7 +122,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 - Glyphwright runs are a seed + build actions (`B`uy/`M`ove/`S`ell/`E`mpower/`R`eroll/`F`reeze/`G`o; a trailing
   `k` on B/M/E keeps a set unmerged, and merges only take sets that include a rune the action placed);
   battles are deterministic, so `replay(seed, a)` rebuilds the run. Modifier order only matters for Echo and the
-  element (last wins); burn is a fraction of the finished hit.
+  element (last wins); burn is a fraction of the finished hit. Novas only hit walkers near the tower (by design: Wisps
+  and Drakes fly over), so a Nova loom needs one other row for flyers; that is enough (looms.ts), two Novas aren't.
+  The smart bot scores a loom by a power mean of its damage per foe kind (`W.cover` 0.15, so a kind it can't hurt
+  is a hole) and counts a second Nova row at `W.novaStack` (0.07).
 - Rewild runs are a seed + actions (`P<card>.<cell>` place, `R` new hand, `E` end season). The
   season sim (src/rewild/core/sim.ts) visits cells in index order with one Rng per season, so
   the UI's forecasts (clone + end season) are exact. `track(ev, cell, id, after)` (core/forecast.ts) follows one

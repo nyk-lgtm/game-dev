@@ -23,6 +23,8 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 2. Loomsong: needs a real-phone check of sound and timing (headless has no audio); then a second playtest.
 3. Third playtests done (2026-11-13) and shipped: Summit v4, Kitbag v4, Sungrazer v4 (+ frame cost cut ~3x), Brink AI v4
    (combo-aware rings, softer Normal), Quarry v4. Loomsong second playtest: fixes in progress. A cozy management sim is being built.
+4. Hexhold gold sink (honing specialized towers) if hoarding persists. Glyphwright: bot model refit (done; the refit bot
+   wins ~83%, not 37%: owner to decide whether the game should get harder, see its item); late Nova vs flyers: no hole. (Delve depth 5: done, rules v6. Rewild fire was too tame: rules v6 gives it teeth; watch playtests.)
 4. Hexhold gold sink: checked, not needed (gold is always spendable on new towers; see its item). Glyphwright: refit the bot model (fit.ts),
    late Nova vs flyers. (Delve depth 5: done, rules v6. Rewild fire was too tame: rules v6 gives it teeth; watch playtests.)
 5. Grove: owner said keep it as is (board and balance); only bugs/clarity. Afterglow: leave alone unless asked.
@@ -451,8 +453,21 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
     bolt 42/58, beam 120/138, nova 55/64, rain 99/107, orb 67/74 → 54/73, 49/60, 54/62, 53/68,
     46/53; tier 3/2 waves 12,14: bolt 0/1, beam 97/112, nova 66/79, rain 67/76, orb 9/16 → 0/5,
     3/13, 61/75, 12/25, 0/3 (late Nova lags: it can't hit the flyers).
-  - [ ] Next: does Bolt still feel dominant late? Nova is weak against late flyer-heavy waves in the
-    probe, but buffing it (cd 1.6) made the bot lean on it and lose more; refit `W` (fit.ts) first.
+  - [x] Bot model refit (2026-11-13, no rules change). fit.ts now also fits 1500 random whole looms on waves 10/12/14
+    (counts half), and the loom value is a power mean over foe kinds (`W.cover` 0.15) with a second Nova row at
+    `W.novaStack` 0.07; arcs use MOD.stormDmg. Spearman rho per set (rows t1/1, t2/1, t2/2, looms): 0.911/0.764/0.764/
+    0.639 → 0.904/0.809/0.768/0.782; probe.ts 2 rho 0.913 → 0.895. Smart bot 37% → 83% wins (200 seeds 85%; seeds
+    101-200 87%), median wave 15 → won, every loss at the Lich (was spread over waves 10-15); favor bolt/beam/nova/
+    rain/orb 46/43/24/35/36 → 90/75/91/84/71%. Drake leaks in 100 runs 1212 → 51 HP: the old bot stacked Novas and
+    Fire (Drakes are fire-immune flyers) and never covered them. New tools: looms.ts, leaks.ts, tweak.ts (TWEAK in
+    balance.ts too, plus foes/BUDGET/WAVE_TIME), BOTW for bot weights. Each part alone gives ~74-76%.
+  - [x] Late Nova vs flyers: not a real hole. probe.ts's tier 3/2 nova 61/75 is its setup (one row beside two tier-1
+    bolts; Novas never hit flyers, by design). Whole looms (looms.ts 3/2 12,14): the best loom with one Nova leaks 0
+    like every caster's; only all-Nova looms leak (72: Drakes 57, Wisps 15). At 2/2 waves 12,14,15 one Nova + two
+    bolts leaks Drakes 3 (as the best loom), its gap is the Lich. smart+nova wins 91%. Rules unchanged.
+  - [ ] Owner decision: Glyphwright is much easier than the 37% figure said. If it should be harder, the refit bot's
+    only wall is the Lich (BUDGET.square 0.5 → 71%, 0.6 → 67%; perWave 7 → 82%): look at late HP growth or the Lich.
+    Also re-run sweep.ts (economy knobs were tuned with the old model). Does Bolt feel dominant late (owner)?
   - [x] Telegraph: depths 2-3 get +2 enemy budget (depth 1 stays the tutorial; rules v4). Greedy bot
     median depth 8 → 7 (back on target), more of its runs end on depth 3. A bomb someone stands on
     is now drawn under them (a lit ring) with a "💣 n" fuse tag below, not a badge on top.
