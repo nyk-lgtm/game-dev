@@ -12,7 +12,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 `brink/` (push duel on a crumbling hex island vs an alpha-beta AI, plus win-in-N puzzles),
 `loomsong/` (rhythm game: seeded synth songs, notes charted from the song's own onsets, 4 lanes),
 `simmer/` (cozy management sim: a night-market food stall for 20 nights, critter guests on a watchable evening),
-`gleam/` (light-and-mirrors logic puzzle: place mirrors/splitters/filters so every crystal gets its exact colour).
+`gleam/` (light-and-mirrors logic puzzle: place mirrors/splitters/filters so every crystal gets its exact colour),
+`lull/` (musical garden sandbox: plants sing a pentatonic loop, creatures carry notes, no fail state).
 
 - The owner plays and tests only on an Android phone (Chrome, portrait). Every UI
   change must work by touch at ~390 CSS px wide; tap targets ≥ 44px.
@@ -101,6 +102,11 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     `show.ts <seed> [size]` prints a puzzle, its light and the model's eliminations; `hints.ts <seed> [size]` the hint
     texts in order (`hints.ts longest 150`: the longest; #info is 76 px = 4 lines at 360 px and must hold them); `stress.ts 200` checks the model never rules out an answer piece from part-filled boards and
     hints always finish.
+  - Lull: `npx vite-node scripts/lull/probe.ts [seed] [plants]` (weather spells, then a full garden's day: rules v1 ~1.6 notes
+    a step / ~26 a bar, busiest step capped at 6 (`MAX_PER_STEP`), Harpfern runs are the bulk; bees/fireflies/frog out per phase).
+    Frame cost (Playwright, Pixel 7, 30 grown plants): desktop 60 fps (draw JS ~0.4 ms); CPU ×4 throttled ~30-36 fps at DPR 2,
+    ~50 fps after the page steps down to DPR 1.5 on its own (`Scene.slower`). Headless canvas is software: every full-canvas
+    blit costs ~13 ms at ×4, so keep full-size layers off the per-frame path.
   - Hexhold: `npx vite-node scripts/hexhold/balance.ts 32` (heuristic bot, rules v5: median wave ~27, ~7/32 wins);
     `scripts/hexhold/probe.ts 32` lists each loss with its wave and map shape (one or two portals) and the
     lives lost per band of waves (the difficulty curve: v5 is gentle to wave 10, steady pressure from 15 on,
@@ -375,6 +381,26 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   route over the rings from a lamp of its colour), Medium a filter (white lamp always); seeds hash `mixSeed(mixSeed(mixSeed(seed, tag), n), attempt)`. A run is seed + actions
   (`<sock b36><code>`, `H…` hint, `M<a><b>` swap, `U`, `R`); `replay(p, a)`. Reports `GLEAM v… seed=… size=… a=…`,
   `?seed=&size=&a=`. Bump `RULES_VERSION` when the generator or rules change puzzles.
+- Lull (src/lull/core): a sandbox garden, no fail state. x 0..999 = pitch (10 columns of the garden's major pentatonic,
+  `colOf`, low left), y 0..35 rows = depth (8 lanes = which 8th of the bar it sings, `laneOf`, back row first); time is
+  16th steps (84 BPM, `DAY` = 84 bars ≈ 4 min; dawn/day/dusk/night in sky.ts, weather in half-day spells `spellKind`,
+  first morning clear). Six species (`SPECIES`: Chimebell bell, Harpfern pluck run, Whistlereed reed (pond or shore),
+  Moonlily glass (water only), Glowcap wood knock, Humwillow bass) with spacing radii, grow times, `every` bars, phrases;
+  growth = (now − born) / grow, watering (`W`) moves `born` back by BOOST (growing) or sets `flourish` (grown: twice as
+  often for 8 bars). `notesAt(g, step)` is pure (plant phrases, creature landings, breezy strums every 8 bars, rain drips),
+  loudest first, ≤ 6 a step, all in the scale (notes above `TOP` fold an octave down). Creatures (`BEE`/`FLY`/`FROG`) hop on
+  fixed schedules: `target(g, kind, k, hop)` picks from `eligible` plants with `Rng(mixSeed(seed^salt, k), hop)`, so the page
+  draws them with `crittersAt(g, step)` and schedules their notes ahead. Plants stay sorted by (x, y) (creatures pick by
+  index). A garden = seed + timestamped actions (`P<sp>`, `W`, `X` dig by exact x,y; `apply`/`replay`); `encode` writes the
+  live plants as planting actions with ages (6 chars a plant; flourish is dropped), `decode` replays them, so saves
+  (`lull.garden` {code, at}) and share links (`?g=CODE`, opened as a visit until "Keep") are the same thing; time away
+  grows the garden on by up to half a day. Wishes (wishes.ts) are pure tests of the garden at its step, remembered in the
+  profile once met (dusk chord, night lights…). Page: two canvases (#land: sky/hills/meadow/pond shaded for the light,
+  re-drawn ≤ 2-3×/s; #board: transparent, cleared each frame), plants are cached sprites re-drawn per growth notch (1/48)
+  and light notch (tone), swayed by a skew; audio.ts has six synth voices + reverb + rain/wind beds; the garden clock is the
+  AudioContext clock once sound runs (perf clock before/without), notes scheduled 0.22 s ahead; `?seed=N` opens a fresh
+  garden as a visit, `__game.fill(n)` / `__game.jump(step)` for screenshots. Bump `RULES_VERSION` if old codes would grow
+  or sing differently.
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)
   plus a shape in render/draw.ts and a color in palette.ts; tests in
   tests/telegraph/enemies.test.ts. Telegraphed attacks set `aim` and resolve via

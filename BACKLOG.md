@@ -29,12 +29,29 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
    late Nova vs flyers. (Delve depth 5: done, rules v6. Rewild fire was too tame: rules v6 gives it teeth; watch playtests.)
 5. Grove: owner said keep it as is (board and balance); only bugs/clarity. Afterglow: leave alone unless asked.
 6. New games are welcome when the queue is quiet (recent additions: Ninefold, Summit, Quarry, Sungrazer, Kitbag,
-   Brink, Loomsong, Simmer, Gleam). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle.
-7. Simmer: second blind playtest (see its item below). Gleam (new light puzzle): first blind playtest.
+   Brink, Loomsong, Simmer, Gleam, Lull). Ideas: a co-op-free social/daily puzzle. (The creative/sandbox toy is Lull.)
+7. Simmer: second blind playtest (see its item below). Gleam (new light puzzle): first blind playtest. Lull: first blind
+   playtest and a real-phone sound check.
    Brink, Loomsong, Simmer). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle.
 7. Simmer: third blind playtest (see its item below).
 
 ## Now
+- [ ] **Lull** (original musical garden sandbox: plant singing plants, no fail state, shareable as a link). Milestones:
+  - [x] Core (src/lull/core, rules v1): seeded pond (2-3 ellipses), six species with terrain rules and spacing, growth from
+        `born`, watering (boost / flourish), dig; x = pentatonic column, y = lane (8th of the bar); `notesAt` (≤ 6 a step,
+        always in scale), bees/fireflies/frog on fixed hop schedules, day/night, weather spells (breezy strums, rain drips);
+        codes = live plants as planting actions with ages (6 chars a plant), exact round trip; 9 wishes. 18 tests.
+  - [x] UI: two-layer canvas (cached landscape shaded for the light; live layer with sprite plants, skew sway, creatures,
+        glows, particles, rain/mist), the bar's light band sweeping back to front, planting ghost with note + beat label and
+        a preview note per column, water (can + drops), strum (harp across plants), dig, undo by gesture, species row with
+        icons drawn from the plant shapes, info line, wishes card, menu (share link / keep a visited garden / new garden /
+        sound / bug report), help, hub card (new "Calm" filter) + NEWS. Synths: bell, pluck, reed, glass, wood, bass, reverb
+        wetter at night and in mist, rain/wind beds; scheduled on the AudioContext clock. Pixel 7 + 360×640 checked.
+        Perf (30 grown plants): 60 fps desktop; CPU ×4: ~30-36 fps at DPR 2, ~50 fps once it steps down to DPR 1.5.
+  - [ ] Next: first blind playtest + owner's phone (sound!). Watch: is "left = note, back-to-front = beat" discoverable
+        from the ghost label and the sweeping band? Is a full garden too busy (Harpfern runs dominate; MAX_PER_STEP 6)? Do
+        seedlings read at the back rows? Is half a day of growth while away welcome? Does the DPR step-down ever fire on
+        a real phone (it never steps back up)? Maybe: a gentle master volume, more species (a bass drone moss?), seasons.
 - [ ] **Gleam** (original light-and-mirrors logic puzzle, daily). Milestones:
   - [x] Core (src/gleam/core, rules v1): N×N tiles (6/7/8); lamps on the rim shine R/G/B/white beams (bitmasks, added
         at crystals); pieces only go on brass rings (sockets): mirror / \, splitter / \ (pass + turn), R/G/B filter;

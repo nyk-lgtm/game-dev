@@ -1,0 +1,62 @@
+/* Lull: a dusky teal shell around a bright little terrarium. */
+body {
+  --bg: #121c24;
+  --panel: #18242c;
+  --line: #2a3b44;
+  --text: #f1f4ea;
+  --muted: #9fb0a8;
+  --accent: #b9e48c;
+  background: var(--bg);
+}
+#hud { gap: 8px; padding: 6px 10px; }
+#hud .spacer { flex: 1; }
+#hud .stat { flex: 1; min-width: 0; overflow: hidden; }
+#dayLabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#phase { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hud .icon-btn { flex: none; font-size: 18px; }
+#hud .icon-btn.wide { width: auto; padding: 0 9px; font-size: 14px; font-weight: 700; color: #ffe08a; white-space: nowrap; }
+#stage { background: #0e1a20; }
+/* Two layers: the slow landscape under the live garden. */
+#land { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+#controls {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 6px 10px max(10px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line); background: var(--panel);
+}
+/* A fixed box so a long message never moves the garden. */
+body #info { flex: none; height: 38px; max-height: 38px; overflow-y: auto; font-size: 13px; line-height: 1.38; color: var(--muted); }
+#species { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; transition: opacity 0.2s; }
+#species.dim { opacity: 0.55; }
+#species .sp {
+  min-width: 0; min-height: 54px; padding: 2px 0 3px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  border-radius: 12px; border: 1px solid var(--line); background: #1f2e36; color: var(--muted);
+  font-size: 11px; font-weight: 700;
+}
+#species .sp img { width: 30px; height: 30px; pointer-events: none; }
+#species .sp span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#species .sp.on { border-color: var(--accent); color: var(--text); background: #2a3d34; box-shadow: inset 0 0 0 1px var(--accent); }
+#tools { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 0.9fr; gap: 5px; }
+#tools button {
+  min-height: 48px; border-radius: 12px; border: 1px solid var(--line);
+  background: #1f2e36; color: var(--text); font-size: 13px; font-weight: 700;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1;
+}
+#tools button span { font-size: 17px; }
+#tools button.on { border-color: var(--accent); background: #2a3d34; box-shadow: inset 0 0 0 1px var(--accent); }
+#tools button:disabled { opacity: 0.4; }
+#controls button:active { transform: scale(0.97); }
+.card ul.wishes { list-style: none; padding: 0; gap: 8px; }
+.card ul.wishes li { padding: 8px 10px; border-radius: 10px; background: #1f2e36; }
+.card ul.wishes li b { color: var(--text); }
+.card ul.wishes li.done { background: #2b3a26; }
+.card ul.wishes li.done b { color: #ffe08a; }
+@media (max-width: 370px) {
+  #hud .icon-btn.wide { padding: 0 6px; font-size: 13px; }
+  #phase { font-size: 15px; }
+}
+@media (max-height: 700px) {
+  #species .sp { min-height: 46px; }
+  #species .sp img { width: 24px; height: 24px; }
+  #tools button { min-height: 44px; }
+}

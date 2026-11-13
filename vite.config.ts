@@ -48,6 +48,7 @@ export default defineConfig({
         loomsong: resolve(__dirname, 'loomsong/index.html'),
         simmer: resolve(__dirname, 'simmer/index.html'),
         gleam: resolve(__dirname, 'gleam/index.html'),
+        lull: resolve(__dirname, 'lull/index.html'),
       },
     },
   },

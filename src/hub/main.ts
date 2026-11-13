@@ -38,8 +38,37 @@ const brink = makeStore('brink.');
 const loomsong = makeStore('loomsong.');
 const simmer = makeStore('simmer.');
 const gleam = makeStore('gleam.');
+const lull = makeStore('lull.');
 
 const GAMES: GameCard[] = [
+  {
+    path: './lull/',
+    title: 'Lull',
+    tag: 'Musical garden',
+    pitch: 'A little garden that sings. Plant chimebells, ferns, reeds, lilies, glowcaps and willows: left to right is the note, back to front is the beat. Bees and fireflies carry the tune while days, rain and mist drift by. Nothing can go wrong.',
+    accent: '#b9e48c',
+    best: () => {
+      const p = lull.load<{ wishes?: string[]; planted?: number } | null>('profile', null);
+      if (!p?.planted) return null;
+      return `${p.planted} planted${p.wishes?.length ? ` · ★ ${p.wishes.length} wish${p.wishes.length === 1 ? '' : 'es'}` : ''}`;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><defs><linearGradient id="lullsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b3a7c"/><stop offset="1" stop-color="#ffa274"/></linearGradient></defs>
+      <rect width="76" height="76" fill="url(#lullsky)"/>
+      <circle cx="58" cy="22" r="6" fill="#ffd09a"/>
+      <path d="M0 40Q18 28 38 36T76 32V76H0z" fill="#6a7fa0"/>
+      <rect y="44" width="76" height="32" fill="#5a8a4e"/>
+      <rect y="52" width="76" height="6" fill="#ffffff" opacity="0.06"/>
+      <ellipse cx="46" cy="60" rx="20" ry="6" fill="#b7ab78"/><ellipse cx="46" cy="60" rx="17" ry="4.6" fill="#3f86a0"/>
+      <path d="M14 66C14 52 18 44 28 40" stroke="#4f7a3a" stroke-width="1.6" fill="none"/>
+      <path d="M26 41l-3 0.5-1 5 6-1z" fill="#c4b0ff"/><path d="M19 47l-3 0.5-1 5 6-1z" fill="#c4b0ff"/>
+      <circle cx="22" cy="50" r="5" fill="#fff6c8" opacity="0.35"/>
+      <path d="M50 58c-3-4 1-6 0-9M52 58c3-3 1-6 4-8" stroke="#6aa85a" stroke-width="1.4" fill="none"/>
+      <ellipse cx="44" cy="58.5" rx="4.5" ry="1.6" fill="#3f8a4a"/><path d="M42.5 57.5l1.5-3 1.5 3z" fill="#ffd0e6"/>
+      <path d="M62 68v-6" stroke="#e8e2d0" stroke-width="2"/><path d="M57 62a5 3.5 0 0 1 10 0z" fill="#3fc8c0"/>
+      <circle cx="62" cy="61" r="7" fill="#9ff0e8" opacity="0.25"/>
+      <ellipse cx="34" cy="30" rx="3" ry="2" fill="#ffcc33"/><path d="M33 28.5l1-1.6M34.5 28.5l1.5-1.6" stroke="#fff" stroke-width="1"/>
+      <path d="M8 26v-9l6-2v9" stroke="#fff6dc" stroke-width="1.3" fill="none"/><circle cx="6.5" cy="26" r="2" fill="#fff6dc"/><circle cx="12.5" cy="24" r="2" fill="#fff6dc"/></svg>`,
+  },
   {
     path: './gleam/',
     title: 'Gleam',
@@ -445,6 +474,7 @@ const KINDS: Record<string, string[]> = {
   Action: ['loomsong', 'sungrazer', 'afterglow', 'nightline', 'hexhold'],
   Strategy: ['simmer', 'brink', 'kitbag', 'glyph', 'telegraph', 'rewild', 'hexhold', 'summit'],
   Story: ['lastlight', 'lantern', 'delve', 'unspoken'],
+  Calm: ['lull', 'simmer', 'grove', 'ninefold'],
 };
 const slug = (path: string) => path.replace(/[./]/g, '');
 const list = document.getElementById('games')!;
