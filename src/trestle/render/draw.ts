@@ -39,6 +39,8 @@ export interface Ghost {
   b: number;
   mat: number;
   ok: boolean;
+  /** The finger is past the material's reach: the end stops at the last peg in reach. */
+  clamped: boolean;
 }
 
 export interface Spark {
@@ -58,8 +60,11 @@ export interface Scene {
   ghost: Ghost | null;
   /** Peak stress per member from the last run (keyed a:b), shown while building. */
   hot: Map<string, number> | null;
-  /** Member under a press (about to be removed). */
+  /** Member under a press, and the one picked for removal (−1 none). */
   pressed: number;
+  selected: number;
+  /** Pegs that swing freely in the build (shown after a wobbly failure). */
+  wobbly: Set<number> | null;
   /** Peg a drag starts from. */
   from: number;
   time: number;
@@ -167,14 +172,64 @@ function background(ctx: CanvasRenderingContext2D, v: View, l: Level, t: number)
   ctx.globalAlpha = 1;
 }
 
+/** Drifting streaks across the sky in the wind's direction. */
+function windStreaks(ctx: CanvasRenderingContext2D, v: View, wind: number, t: number, k: number): void {
+  const dir = wind > 0 ? 1 : -1;
+  ctx.strokeStyle = `rgba(230,240,255,${0.12 + 0.25 * k})`;
+  ctx.lineWidth = 1.4;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 9; i++) {
+    const len = v.s * (0.8 + (i % 3) * 0.4);
+    const speed = v.s * (3 + (i % 4));
+    const x = (((i * 131 + t * speed) % (v.w + len * 2)) + v.w + len * 2) % (v.w + len * 2) - len;
+    const X = dir > 0 ? x : v.w - x;
+    const Y = v.h * (0.12 + ((i * 37) % 60) / 100);
+    ctx.beginPath();
+    ctx.moveTo(X, Y);
+    ctx.lineTo(X - dir * len, Y + Math.sin(t * 2 + i) * 2);
+    ctx.stroke();
+  }
+}
+
 function rocks(ctx: CanvasRenderingContext2D, v: View, l: Level): void {
   for (const r of l.terrain) {
     const [x0, y0] = toScreen(v, r.x0, r.y0);
     const [x1, y1] = toScreen(v, r.x1, Math.min(r.y1, WATER + 1));
     const wpx = x1 - x0;
     const hpx = y1 - y0;
+    if (r.kind === 'log') {
+      // A fallen trunk across the gap: bark, rings at the ends.
+      const lg = ctx.createLinearGradient(0, y0, 0, y1);
+      lg.addColorStop(0, '#7a5a3e');
+      lg.addColorStop(1, '#3e2a1c');
+      ctx.fillStyle = lg;
+      ctx.beginPath();
+      ctx.roundRect(x0 - hpx * 0.3, y0, wpx + hpx * 0.6, hpx, hpx / 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+      ctx.lineWidth = 1;
+      for (let x = x0 + 6; x < x1 - 4; x += 9) {
+        ctx.beginPath();
+        ctx.moveTo(x, y0 + hpx * 0.25);
+        ctx.lineTo(x + 5, y0 + hpx * 0.3);
+        ctx.stroke();
+      }
+      for (const ex of [x0 - hpx * 0.3 + hpx / 2, x1 + hpx * 0.3 - hpx / 2]) {
+        ctx.fillStyle = '#c9a272';
+        ctx.beginPath();
+        ctx.ellipse(ex, y0 + hpx / 2, hpx * 0.32, hpx * 0.46, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#8a6a44';
+        ctx.beginPath();
+        ctx.ellipse(ex, y0 + hpx / 2, hpx * 0.16, hpx * 0.24, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#5f9e4f';
+      ctx.fillRect(x0 + wpx * 0.2, y0 - 1, wpx * 0.25, 3);
+      continue;
+    }
     const g = ctx.createLinearGradient(0, y0, 0, y1);
-    if (r.kind === 'rock') {
+    if (r.kind === 'rock' || r.kind === 'floor') {
       g.addColorStop(0, '#7d7d8c');
       g.addColorStop(1, '#3d3d4c');
     } else if (r.kind === 'wall') {
@@ -460,18 +515,20 @@ export function drawScene(ctx: CanvasRenderingContext2D, v: View, sc: Scene): vo
     ctx.lineTo(fx + v.s * 0.55, fy - v.s * 1.02 + wave);
     ctx.lineTo(fx, fy - v.s * 0.84);
     ctx.fill();
-  } else {
-    const [rx, ry] = toScreen(v, px(g.ring), py(g.ring));
-    ctx.strokeStyle = 'rgba(255,214,120,0.9)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 4]);
-    ctx.lineDashOffset = -sc.time * 8;
-    ctx.beginPath();
-    ctx.arc(rx, ry, RING_TOL * v.s, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    if (!sim) lanternAt(ctx, rx, ry + v.s * 0.95, v.s, sc.time, 0.35);
-  }
+  } else
+    for (const ring of g.rings) {
+      const [rx, ry] = toScreen(v, px(ring), py(ring));
+      ctx.strokeStyle = 'rgba(255,214,120,0.9)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      ctx.lineDashOffset = -sc.time * 8;
+      ctx.beginPath();
+      ctx.arc(rx, ry, RING_TOL * v.s, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (!sim) lanternAt(ctx, rx, ry + v.s * 0.95, v.s, sc.time, 0.35);
+    }
+  if (l.wind) windStreaks(ctx, v, l.wind, sc.time, sim ? sim.windNow() / l.wind : 0.5);
   // Grid dots where pegs can go.
   if (sc.grid) {
     ctx.fillStyle = 'rgba(255,240,215,0.28)';
@@ -507,7 +564,18 @@ export function drawScene(ctx: CanvasRenderingContext2D, v: View, sc: Scene): vo
     let col = MAT_COL[m.mat];
     let edge: string | null = MAT_EDGE[m.mat];
     if (sim) col = stressCol(Math.abs(sim.force[i]) / MATS[m.mat].strength);
-    if (sc.pressed === i) (col = '#ff7a6a'), (edge = '#4a1010');
+    if (sc.pressed === i) (col = '#ffe7a6'), (edge = '#6a4a10');
+    if (sc.selected === i) {
+      // Picked for removal: a pulsing red halo.
+      ctx.strokeStyle = `rgba(255,90,70,${0.55 + 0.25 * Math.sin(sc.time * 8)})`;
+      ctx.lineWidth = w + 10;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.stroke();
+      (col = '#ff7a6a'), (edge = '#4a1010');
+    }
     if (!sim && sc.hot) {
       const h = sc.hot.get(`${m.a}:${m.b}`);
       if (h !== undefined && h >= 0.7) {
@@ -522,11 +590,20 @@ export function drawScene(ctx: CanvasRenderingContext2D, v: View, sc: Scene): vo
     }
     stroke(ctx, ax, ay, bx, by, w, col, edge, m.mat);
   }
-  // Ghost member while dragging.
+  // Ghost member while dragging (with the material's reach when the finger is past it).
   if (sc.ghost) {
-    const { a, b, mat, ok } = sc.ghost;
+    const { a, b, mat, ok, clamped } = sc.ghost;
     const [ax, ay] = toScreen(v, px(a), py(a));
     const [bx, by] = toScreen(v, px(b), py(b));
+    if (clamped) {
+      ctx.strokeStyle = 'rgba(255,214,120,0.75)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 5]);
+      ctx.beginPath();
+      ctx.arc(ax, ay, MATS[mat].maxLen * v.s, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
     ctx.globalAlpha = 0.85;
     stroke(ctx, ax, ay, bx, by, Math.max(mat === 2 ? 1.6 : 2.5, MAT_W[mat] * v.s), ok ? MAT_COL[mat] : '#ff5a4a', ok ? '#fff6dc' : '#3a0a0a', mat);
     ctx.globalAlpha = 1;
@@ -553,20 +630,34 @@ export function drawScene(ctx: CanvasRenderingContext2D, v: View, sc: Scene): vo
       freePeg(ctx, X, Y, v.s, p === sc.from);
     }
   for (const a of l.anchors) anchorPeg(ctx, v, a, a === sc.from);
-  // The lantern on its cord.
-  if (sim && sim.lantern >= 0) {
-    const [lx, ly] = toScreen(v, sim.x[sim.lantern], sim.y[sim.lantern]);
-    if (sim.ringPeg >= 0) {
-      const [qx, qy] = toScreen(v, sim.x[sim.ringPeg], sim.y[sim.ringPeg]);
-      ctx.strokeStyle = '#3a2a1c';
-      ctx.lineWidth = 1.5;
+  // Pegs that can swing freely (a missing diagonal), after a failed run.
+  if (!sim && sc.wobbly)
+    for (const p of sc.wobbly) {
+      const [X, Y] = toScreen(v, px(p), py(p));
+      ctx.strokeStyle = `rgba(120,200,255,${0.6 + 0.3 * Math.sin(sc.time * 6)})`;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([3, 3]);
       ctx.beginPath();
-      ctx.moveTo(qx, qy);
-      ctx.lineTo(lx, ly - v.s * 0.3);
+      ctx.arc(X, Y, Math.max(10, v.s * 0.36), 0, Math.PI * 2);
       ctx.stroke();
+      ctx.setLineDash([]);
     }
-    lanternAt(ctx, lx, ly, v.s, sc.time, 1);
-  }
+  // The lanterns on their cords.
+  if (sim)
+    sim.lanterns.forEach((li, k) => {
+      const [lx, ly] = toScreen(v, sim.x[li], sim.y[li]);
+      const rp = sim.ringPegs[k];
+      if (rp >= 0) {
+        const [qx, qy] = toScreen(v, sim.x[rp], sim.y[rp]);
+        ctx.strokeStyle = '#3a2a1c';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(qx, qy);
+        ctx.lineTo(lx, ly - v.s * 0.3);
+        ctx.stroke();
+      }
+      lanternAt(ctx, lx, ly, v.s, sc.time, 1);
+    });
   if (sim?.cart) drawCart(ctx, v, sim);
   // Splinters.
   for (const p of sc.sparks) {
@@ -578,14 +669,15 @@ export function drawScene(ctx: CanvasRenderingContext2D, v: View, sc: Scene): vo
   ctx.globalAlpha = 1;
 }
 
-/** A round magnifier above the finger: the scene at 2× around the drag point. */
-export function drawLoupe(ctx: CanvasRenderingContext2D, v: View, sc: Scene, fx: number, fy: number): void {
+/** A round magnifier above the finger: the scene at 2× around the drag's landing point. */
+export function drawLoupe(ctx: CanvasRenderingContext2D, v: View, sc: Scene, fx: number, fy: number, tx = fx, ty = fy): void {
   const R = 52;
   const cx = Math.min(v.w - R - 4, Math.max(R + 4, fx));
   let cy = fy - 96;
   if (cy < R + 4) cy = fy + 96;
   const z = 2;
-  const lv: View = { s: v.s * z, ox: cx - (fx - v.ox) * z, oy: cy - (fy - v.oy) * z, w: v.w, h: v.h };
+  // Centred on where the piece ends (tx, ty), which may be short of the finger.
+  const lv: View = { s: v.s * z, ox: cx - (tx - v.ox) * z, oy: cy - (ty - v.oy) * z, w: v.w, h: v.h };
   ctx.save();
   ctx.beginPath();
   ctx.arc(cx, cy, R, 0, Math.PI * 2);

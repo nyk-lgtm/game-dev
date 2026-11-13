@@ -1,11 +1,13 @@
-// Trestle controller: building by touch (drag peg to peg, tap to remove,
-// pinch or the zoom button), undo/clear, test runs played live from the fixed-
-// step sim, stars, the trail of levels, the daily, saves and cards.
+// Trestle controller: building by touch (drag peg to peg, tap a piece to pick
+// it and again to remove it, pinch or the zoom button), undo/clear, test runs
+// played live from the fixed-step sim, failure diagnosis, stars, the trail of
+// levels (generated in a worker, the next one ahead of time), the daily,
+// saves and cards.
 
 import { closeOverlay, showCard } from '../shared/cards';
 import { copyText, toast } from '../shared/debug';
 import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey, wantsDaily } from '../shared/daily';
-import { reducedFx } from '../shared/settings';
+import { loadSettings, reducedFx } from '../shared/settings';
 import { makeStore } from '../shared/storage';
 import {
   COLS,
@@ -21,6 +23,8 @@ import {
   addToken,
   costOf,
   delToken,
+  explain,
+  joined,
   lenOf,
   makeLevel,
   memberCost,
@@ -29,6 +33,7 @@ import {
   px,
   py,
   replayBuild,
+  ringsOf,
   starsFor,
   trailLevel,
   whyNot,
@@ -39,6 +44,7 @@ import {
 } from './core';
 import { Sounds } from './audio';
 import { clampView, drawLoupe, drawScene, fitView, matSvg, toWorld, type Scene, type Spark, type View } from './render/draw';
+import type { GenJob, GenSpec } from './gen.worker';
 
 export const store = makeStore('trestle.');
 
@@ -65,9 +71,20 @@ interface Press {
   member: number;
   dragging: boolean;
   target: number;
+  clamped: boolean;
   why: string | null;
   /** View when a pan started. */
   view: View | null;
+}
+
+/** What a failed run left behind, kept per level so a reload shows it again. */
+interface Debrief {
+  v: number;
+  /** The build's actions (test runs left out) it applies to. */
+  a: string;
+  text: string;
+  hot: [string, number][];
+  wobbly: number[];
 }
 
 const stars = (n: number) => `${'★'.repeat(n)}${'☆'.repeat(3 - n)}`;
@@ -76,11 +93,25 @@ const OUTCOME_TEXT: Record<Outcome, string> = {
   crossed: 'Made it across!',
   held: 'The lantern holds!',
   fell: 'The cart fell into the stream.',
-  stalled: 'The cart got stuck. Is the road joined up all the way, and not too steep?',
+  stalled: 'The cart got stuck.',
   dropped: 'The lantern fell.',
   sagged: 'The lantern sagged out of its ring.',
   nohook: 'Put a peg on the ring first.',
 };
+const MAXLEN = ['2.2', '2.2', '4.5'];
+const builtOnly = (a: string) => a.replace(/G/g, '');
+
+/** A short buzz, only when vibration is on and the page has had a tap (Chrome blocks it before). */
+function buzz(p: number | number[]): void {
+  try {
+    if (!loadSettings().vibrate) return;
+    const ua = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation;
+    if (ua && !ua.hasBeenActive) return;
+    navigator.vibrate?.(p);
+  } catch {
+    // no vibration here
+  }
+}
 
 export class Game {
   mode: Mode = 'trail';
@@ -96,6 +127,10 @@ export class Game {
   private after = -1;
   private finished = false;
   private hot: Map<string, number> | null = null;
+  private wobbly: Set<number> | null = null;
+  private debrief: string | null = null;
+  /** Piece picked for removal (−1 none). */
+  private selected = -1;
   private canvas = $('board') as HTMLCanvasElement;
   private ctx = this.canvas.getContext('2d')!;
   private view!: View;
@@ -116,6 +151,11 @@ export class Game {
   private busy = false;
   private linkSeed = 0;
   private linkD = 0;
+  private worker: Worker | null = null;
+  private jobs = new Map<number, (l: Level | null) => void>();
+  private jobId = 0;
+  /** Cache keys being generated (so a prefetch and a visit share one job). */
+  private pending = new Map<string, Promise<Level>>();
 
   constructor() {
     this.canvas.addEventListener('pointerdown', (e) => this.down(e));
@@ -130,13 +170,33 @@ export class Game {
     document.querySelectorAll<HTMLButtonElement>('#mats button').forEach((b) => {
       const m = Number(b.dataset.m) as Mat;
       b.querySelector('.ic')!.innerHTML = matSvg(m, 26);
+      b.querySelector('.pr')!.textContent = `${MATS[m].cost}/u · ≤${MAXLEN[m]}`;
       b.onclick = () => {
         this.mat = m;
         this.sounds.unlock();
         this.refresh();
       };
     });
+    $('info').addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('#removeBtn')) this.removeSelected();
+    });
     addEventListener('pointerdown', () => this.sounds.unlock(), { once: true });
+    try {
+      this.worker = new Worker(new URL('./gen.worker.ts', import.meta.url), { type: 'module' });
+      this.worker.onmessage = (e: MessageEvent<{ id: number; level: Level | null }>) => {
+        const done = this.jobs.get(e.data.id);
+        this.jobs.delete(e.data.id);
+        done?.(e.data.level);
+      };
+      this.worker.onerror = () => {
+        // Fall back to generating on the page.
+        this.worker = null;
+        for (const done of this.jobs.values()) done(null);
+        this.jobs.clear();
+      };
+    } catch {
+      this.worker = null;
+    }
     requestAnimationFrame((t) => this.frame(t));
   }
 
@@ -148,7 +208,7 @@ export class Game {
     leaveDaily();
     if (!link) store.save('mode', 'trail');
     this.load(
-      () => this.trailCached(n),
+      this.trailLevelAsync(n),
       (l) => {
         this.mode = link ? 'link' : 'trail';
         this.n = n;
@@ -156,6 +216,8 @@ export class Game {
         if (!link) store.save('n', n);
         const saved = store.load<{ v: number; a: string } | null>(`b${n}`, null);
         this.begin(l, actions ?? (saved && saved.v === RULES_VERSION ? saved.a : ''));
+        // Survey the next level while this one is played.
+        if (!link) this.prefetch(n + 1);
       },
     );
   }
@@ -165,30 +227,24 @@ export class Game {
     const day = todayKey();
     store.save('mode', 'daily');
     if (!wantsDaily()) history.replaceState(null, '', `${location.pathname}?daily`);
-    this.load(
-      () => this.genCached(`gd${day}`, () => ({ ...makeLevel(dailySeed('trestle', day), DAILY_D), id: `d${day}` })),
-      (l) => {
-        this.mode = 'daily';
-        this.day = day;
-        const saved = store.load<{ v: number; day: string; a: string } | null>('dailyRun', null);
-        this.begin(l, saved && saved.v === RULES_VERSION && saved.day === day ? saved.a : '');
-      },
-    );
+    this.load(this.cached(`gd${day}`, { kind: 'seed', seed: dailySeed('trestle', day), d: DAILY_D, levelId: `d${day}` }), (l) => {
+      this.mode = 'daily';
+      this.day = day;
+      const saved = store.load<{ v: number; day: string; a: string } | null>('dailyRun', null);
+      this.begin(l, saved && saved.v === RULES_VERSION && saved.day === day ? saved.a : '');
+    });
   }
 
   /** A generated level straight from a seed (bug reports). */
   openSeed(seed: number, d: number, actions: string): void {
     closeOverlay();
-    this.load(
-      () => makeLevel(seed, d),
-      (l) => {
-        this.mode = 'link';
-        this.linkSeed = seed;
-        this.linkD = d;
-        this.day = null;
-        this.begin(l, actions);
-      },
-    );
+    this.load(this.generate({ kind: 'seed', seed, d, levelId: `s${seed}` }), (l) => {
+      this.mode = 'link';
+      this.linkSeed = seed;
+      this.linkD = d;
+      this.day = null;
+      this.begin(l, actions);
+    });
   }
 
   resumeTrail(): void {
@@ -196,54 +252,108 @@ export class Game {
     this.openTrail(Math.min(p.top, store.load<number>('n', p.top)));
   }
 
-  private trailCached(n: number): Level {
-    if (n <= TUTORIALS.length) return trailLevel(n);
-    return this.genCached(`g${n}`, () => trailLevel(n));
+  private trailLevelAsync(n: number): Promise<Level> {
+    if (n <= TUTORIALS.length) return Promise.resolve(trailLevel(n));
+    return this.cached(`g${n}`, { kind: 'trail', n });
   }
 
-  private genCached(key: string, make: () => Level): Level {
+  private prefetch(n: number): void {
+    if (n <= TUTORIALS.length || !this.worker) return;
+    const go = () => void this.trailLevelAsync(n).catch(() => undefined);
+    const idle = (window as Window & { requestIdleCallback?: (f: () => void) => void }).requestIdleCallback;
+    if (idle) idle(go);
+    else setTimeout(go, 500);
+  }
+
+  /** A cached generated level, or a worker job that fills the cache. */
+  private cached(key: string, job: GenSpec): Promise<Level> {
     const c = store.load<{ v: number; l: Level } | null>(key, null);
-    if (c && c.v === RULES_VERSION && c.l?.goal) return c.l;
-    const l = make();
-    store.save(key, { v: RULES_VERSION, l });
-    return l;
+    if (c && c.v === RULES_VERSION && c.l?.goal) return Promise.resolve(c.l);
+    const p = this.pending.get(key);
+    if (p) return p;
+    const q = this.generate(job).then((l) => {
+      store.save(key, { v: RULES_VERSION, l });
+      this.pending.delete(key);
+      return l;
+    });
+    this.pending.set(key, q);
+    return q;
   }
 
-  /** Runs a (maybe slow) level maker after the "surveying" note has painted. */
-  private load(make: () => Level, then: (l: Level) => void): void {
+  private generate(job: GenSpec): Promise<Level> {
+    const local = () => (job.kind === 'trail' ? trailLevel(job.n) : { ...makeLevel(job.seed, job.d), id: job.levelId });
+    const w = this.worker;
+    if (!w) return new Promise((res) => setTimeout(() => res(local()), 30));
+    return new Promise((res) => {
+      const id = ++this.jobId;
+      this.jobs.set(id, (l) => res(l ?? local()));
+      w.postMessage({ ...job, id } as GenJob);
+    });
+  }
+
+  /** Waits for a level with a "surveying" screen up. */
+  private load(p: Promise<Level>, then: (l: Level) => void): void {
     if (this.busy) return;
     this.busy = true;
-    this.info('<i>Surveying the gap…</i>');
-    setTimeout(() => {
-      try {
-        then(make());
-      } finally {
-        this.busy = false;
-      }
-    }, 30);
+    const t = setTimeout(() => {
+      $('loading').hidden = false;
+      this.info('<i>Surveying the gap…</i>');
+    }, 60);
+    p.then((l) => {
+      clearTimeout(t);
+      $('loading').hidden = true;
+      this.busy = false;
+      then(l);
+    }).catch((err) => {
+      clearTimeout(t);
+      $('loading').hidden = true;
+      this.busy = false;
+      toast(`Couldn't make that level: ${String(err)}`);
+    });
   }
 
   private begin(l: Level, actions: string): void {
     this.level = l;
     this.a = actions;
-    this.stopRun();
-    this.hot = null;
+    this.sim = null;
+    this.finished = false;
+    this.sparks = [];
+    this.selected = -1;
     this.zoomed = false;
     this.rebuild();
+    this.restoreDebrief();
     this.resize();
-    this.info(this.intro());
+    this.info(this.debrief ?? this.intro());
     this.save();
   }
 
   private intro(): string {
     const l = this.level;
-    const tip = l.tip ? `${l.tip} ` : l.goal.kind === 'cross' ? 'Get the cart over to the flag. ' : 'Hold the lantern up at the ring. ';
+    const many = ringsOf(l).length > 1;
+    const tip = l.tip ? `${l.tip} ` : l.goal.kind === 'cross' ? 'Get the cart over to the flag. ' : `Hold the lantern${many ? 's' : ''} up at the ring${many ? 's' : ''}. `;
     return `${tip}<br><span class="th">${this.thresholds()}</span>`;
   }
 
   private thresholds(): string {
     const l = this.level;
     return `★ cost ≤ ${l.budget} · ★★ ≤ ${l.par} · ★★★ also ≤ ${plural(l.parParts, 'part')}`;
+  }
+
+  private debriefKey(): string | null {
+    return this.mode === 'trail' ? `f${this.n}` : this.mode === 'daily' ? `fd${this.day}` : null;
+  }
+
+  private restoreDebrief(): void {
+    this.hot = null;
+    this.wobbly = null;
+    this.debrief = null;
+    const k = this.debriefKey();
+    if (!k) return;
+    const d = store.load<Debrief | null>(k, null);
+    if (!d || d.v !== RULES_VERSION || d.a !== builtOnly(this.a)) return;
+    this.hot = new Map(d.hot);
+    this.wobbly = d.wobbly.length ? new Set(d.wobbly) : null;
+    this.debrief = d.text;
   }
 
   private save(): void {
@@ -263,27 +373,30 @@ export class Game {
   private act(tok: string): void {
     this.a += tok;
     this.hot = null;
+    this.wobbly = null;
+    this.debrief = null;
+    this.selected = -1;
     this.rebuild();
     this.save();
   }
 
+  /** Leaves a finished run for the editor (Undo/Clear after a run do this first). */
+  private leaveRun(): boolean {
+    if (!this.sim) return true;
+    if (!this.finished) return false;
+    this.stopRun();
+    return true;
+  }
+
   private undo(): void {
-    if (this.sim) {
-      if (!this.finished) return;
-      this.stopRun();
-    }
-    if (!this.undoDepth) return;
+    if (!this.leaveRun() || !this.undoDepth) return;
     this.act('U');
     this.sounds.remove();
-    this.info(this.intro());
+    this.info(this.costLine());
   }
 
   private askClear(): void {
-    if (this.sim) {
-      if (!this.finished) return;
-      this.stopRun();
-    }
-    if (!this.members.length) return;
+    if (!this.leaveRun() || !this.members.length) return;
     showCard('<h2>Clear the build?</h2><p>Everything you built comes down (Undo puts it back).</p>', [
       { label: 'Keep it', primary: true, onClick: closeOverlay },
       {
@@ -298,17 +411,28 @@ export class Game {
   }
 
   private toggleZoom(): void {
+    if (!this.level) return;
     if (this.zoomed) {
       this.zoomed = false;
       this.view = this.fit;
     } else {
       this.zoomed = true;
       const g = this.level.goal;
-      const [cx, cy] = g.kind === 'cross' ? [(px(g.from) + px(g.to)) / 2, py(g.from) + 0.5] : [px(g.ring) - 1, py(g.ring) + 0.5];
+      const r0 = ringsOf(this.level)[0];
+      const [cx, cy] = g.kind === 'cross' ? [(px(g.from) + px(g.to)) / 2, py(g.from) + 0.5] : [px(r0) - 1, py(r0) + 0.5];
       const r = this.canvas.getBoundingClientRect();
       this.view = clampView(fitView(r.width, r.height, 1.7, cx, cy), this.fit);
     }
     this.refresh();
+  }
+
+  private removeSelected(): void {
+    const m = this.members[this.selected];
+    if (!m) return;
+    this.act(delToken(m.a, m.b));
+    this.sounds.remove();
+    buzz(6);
+    this.info(`${MATS[m.mat].name} removed (Undo puts it back). ${this.costLine()}`);
   }
 
   // ---------------------------------------------------------------- input
@@ -331,7 +455,7 @@ export class Game {
     return best;
   }
 
-  /** Member closest to a screen point (within 14 px), or −1. */
+  /** Member whose middle part is closest to a screen point (within ~14 px), or −1. */
   private memberAt(X: number, Y: number): number {
     const [x, y] = toWorld(this.view, X, Y);
     const lim = Math.max(14, this.view.s * 0.32) / this.view.s;
@@ -349,8 +473,8 @@ export class Game {
     return best;
   }
 
-  /** The grid point a drag from `from` lands on: nearest to the finger within the material's reach. */
-  private targetFor(from: number, X: number, Y: number): number {
+  /** Where a drag from `from` lands: the grid point nearest the finger within the material's reach. */
+  private targetFor(from: number, X: number, Y: number): { p: number; clamped: boolean } {
     const [x, y] = toWorld(this.view, X, Y);
     const max = MATS[this.mat].maxLen;
     let best = -1;
@@ -363,7 +487,8 @@ export class Game {
         const d = (gx - x) ** 2 + (gy - y) ** 2;
         if (d < bd) (bd = d), (best = p);
       }
-    return best;
+    // Past the reach: the finger is further than half a step beyond the nearest point in reach.
+    return { p: best, clamped: Math.hypot(x - fx, y - fy) > max + 0.25 && bd > 0.3 };
   }
 
   private down(e: PointerEvent): void {
@@ -372,7 +497,7 @@ export class Game {
     const [X, Y] = this.local(e);
     this.touches.set(e.pointerId, [X, Y]);
     if (this.touches.size === 2) {
-      // Pinch: drop whatever one finger was doing.
+      // Two fingers: pinch to zoom and pan together; drop whatever one finger was doing.
       this.press = null;
       this.finger = null;
       const [[x1, y1], [x2, y2]] = [...this.touches.values()];
@@ -381,15 +506,16 @@ export class Game {
       return;
     }
     if (this.touches.size > 2 || this.sim) {
-      if (this.sim && this.finished) this.info(`${this.outcomeLine()} Tap <b>✎ Edit</b> to change the build.`);
+      if (this.sim && this.finished) this.info(`${this.debrief ?? OUTCOME_TEXT[this.sim.outcome!]} <b>✎ Edit</b> to change it.`);
       return;
     }
     const peg = this.pegAt(X, Y);
     const member = this.memberAt(X, Y);
     // A tap right on a peg is the peg; a tap along a piece (away from its pegs) is the piece.
-    const dPeg = peg >= 0 ? Math.hypot((px(peg) - toWorld(this.view, X, Y)[0]) * this.view.s, (py(peg) - toWorld(this.view, X, Y)[1]) * this.view.s) : Infinity;
+    const [wx, wy] = toWorld(this.view, X, Y);
+    const dPeg = peg >= 0 ? Math.hypot((px(peg) - wx) * this.view.s, (py(peg) - wy) * this.view.s) : Infinity;
     const kind = member >= 0 && dPeg > 11 ? 'member' : peg >= 0 ? 'peg' : this.zoomed ? 'pan' : 'none';
-    this.press = { id: e.pointerId, x: X, y: Y, kind, peg, member, dragging: false, target: -1, why: null, view: this.view };
+    this.press = { id: e.pointerId, x: X, y: Y, kind, peg, member, dragging: false, target: -1, clamped: false, why: null, view: this.view };
     this.draw();
   }
 
@@ -403,13 +529,13 @@ export class Game {
       const cx = (x1 + x2) / 2;
       const cy = (y1 + y2) / 2;
       const p = this.pinch;
+      // Zoom in (never out past the whole view) about the pinch centre, which the fingers carry along.
       const s = Math.max(this.fit.s, Math.min(this.fit.s * 2.6, p.view.s * (d / Math.max(20, p.d))));
-      // Keep the world point under the pinch centre under it.
       const wx = (p.cx - p.view.ox) / p.view.s;
       const wy = (p.cy - p.view.oy) / p.view.s;
       this.view = clampView({ ...p.view, s, ox: cx - wx * s, oy: cy - wy * s }, this.fit);
       this.zoomed = this.view.s > this.fit.s * 1.01;
-      this.draw();
+      this.refresh();
       return;
     }
     const pr = this.press;
@@ -417,6 +543,7 @@ export class Game {
     if (!pr.dragging && Math.hypot(X - pr.x, Y - pr.y) < 9) return;
     // A drag that began on a piece next to a peg builds from that peg.
     if (!pr.dragging && pr.kind === 'member' && pr.peg >= 0) pr.kind = 'peg';
+    if (!pr.dragging && this.selected >= 0) this.selected = -1;
     pr.dragging = true;
     if (pr.kind === 'pan' && pr.view) {
       this.view = clampView({ ...pr.view, ox: pr.view.ox + X - pr.x, oy: pr.view.oy + Y - pr.y }, this.fit);
@@ -425,18 +552,20 @@ export class Game {
     }
     if (pr.kind !== 'peg') return;
     this.finger = [X, Y];
-    const t = this.targetFor(pr.peg, X, Y);
-    if (t !== pr.target) {
+    const { p: t, clamped } = this.targetFor(pr.peg, X, Y);
+    if (t !== pr.target || clamped !== pr.clamped) {
       pr.target = t;
+      pr.clamped = clamped;
       pr.why = t < 0 ? 'nowhere' : whyNot(this.level, this.members, pr.peg, t, this.mat);
-      if (t >= 0) navigator.vibrate?.(3);
+      if (t >= 0) buzz(3);
       const len = t >= 0 ? lenOf(pr.peg, t) : 0;
+      const cue = clamped ? ` <span class="warn">max length: ${MATS[this.mat].name.toLowerCase()} reaches ${MAXLEN[this.mat]}</span>` : '';
       if (t < 0) this.info('');
-      else if (pr.why) this.info(`<span class="bad">${pr.why}</span>`);
+      else if (pr.why) this.info(`<span class="bad">${pr.why}</span>${cue}`);
       else {
         const c = memberCost({ a: pr.peg, b: t, mat: this.mat });
         const total = costOf(this.members) + c;
-        this.info(`<b>${MATS[this.mat].name}</b> ${len.toFixed(1)} long · <b>${c}</b> → cost ${total}/${this.level.budget}${total > this.level.budget ? ' <span class="bad">over budget</span>' : ''}`);
+        this.info(`<b>${MATS[this.mat].name}</b> ${len.toFixed(1)} long · <b>${c}</b> → cost ${total}/${this.level.budget}${total > this.level.budget ? ' <span class="bad">over budget</span>' : ''}${cue}`);
       }
     }
     this.draw();
@@ -459,8 +588,8 @@ export class Game {
         if (next) {
           this.act(addToken(pr.peg, pr.target, this.mat));
           this.sounds.place(this.mat);
-          navigator.vibrate?.(8);
-          this.info(this.costLine());
+          buzz(8);
+          this.info(`${pr.clamped ? `<span class="warn">Stopped at the ${MATS[this.mat].name.toLowerCase()}’s max length (${MAXLEN[this.mat]}).</span> ` : ''}${this.costLine()}`);
         } else this.info('That piece is already there.');
       } else if (pr.why && pr.why !== 'nowhere') toast(pr.why);
       this.draw();
@@ -468,13 +597,22 @@ export class Game {
     }
     if (pr.dragging) return;
     if (pr.kind === 'member') {
-      const m = this.members[pr.member];
-      this.act(delToken(m.a, m.b));
-      this.sounds.remove();
-      navigator.vibrate?.(6);
-      this.info(`${MATS[m.mat].name} removed. ${this.costLine()}`);
-    } else if (pr.kind === 'peg') this.info(`Drag from a peg to another point to add a <b>${MATS[this.mat].name.toLowerCase()}</b>. Tap a piece to remove it.`);
-    else this.info(this.intro());
+      if (this.selected === pr.member) {
+        this.removeSelected();
+      } else {
+        // First tap picks the piece; a second tap (or ✕) removes it.
+        this.selected = pr.member;
+        const m = this.members[pr.member];
+        this.info(`<button id="removeBtn" class="rm">✕ Remove</button><b>${MATS[m.mat].name}</b> ${lenOf(m.a, m.b).toFixed(1)} long · ${memberCost(m)}. Tap it again to remove it.`);
+        buzz(4);
+      }
+    } else {
+      const had = this.selected >= 0;
+      this.selected = -1;
+      if (pr.kind === 'peg') this.info(`Drag from a peg to another point to add a <b>${MATS[this.mat].name.toLowerCase()}</b>. Tap a piece to pick it, again to remove it.`);
+      else if (had) this.info(this.costLine());
+      else this.info(this.debrief ?? this.intro());
+    }
     this.draw();
   }
 
@@ -486,10 +624,22 @@ export class Game {
     this.draw();
   }
 
+  /** Parts and cost, and whether the build is joined up yet. */
   private costLine(): string {
     const c = costOf(this.members);
     const over = c - this.level.budget;
-    return `${plural(this.members.length, 'part')}, cost ${c}${over > 0 ? ` <span class="bad">${over} over budget</span>` : c <= this.level.par ? ' <span class="good">at par or under</span>' : ''}.`;
+    const j = joined(this.level, this.members);
+    const many = ringsOf(this.level).length > 1;
+    const notYet =
+      this.level.goal.kind === 'cross' && !j.road
+        ? 'the road isn’t joined from bank to bank yet'
+        : !j.rings
+          ? `not joined to the ring${many ? 's' : ''} yet`
+          : j.loose
+            ? `${plural(j.loose, 'piece')} not joined to the rock`
+            : '';
+    const state = over > 0 ? ` <span class="bad">${over} over budget</span>` : notYet ? ` <span class="warn">${notYet}</span>` : c <= this.level.par ? ' <span class="good">at par or under</span>' : '';
+    return `${plural(this.members.length, 'part')}, cost ${c}.${state}`;
   }
 
   // ---------------------------------------------------------------- runs
@@ -498,21 +648,22 @@ export class Game {
     if (this.busy || !this.level) return;
     if (this.sim) {
       this.stopRun();
-      this.info(this.hot ? `${this.lastOutcome ? `${OUTCOME_TEXT[this.lastOutcome]} ` : ''}Glowing pieces were close to snapping (red: snapped).` : this.intro());
+      this.info(this.debrief ?? this.intro());
       return;
     }
     if (!this.members.length) {
       this.info('Build something first: drag from a peg to another point.');
       return;
     }
-    const g = this.level.goal;
-    if (g.kind === 'reach' && !this.members.some((m) => m.a === g.ring || m.b === g.ring)) {
-      this.info('<span class="bad">Put a peg on the ring first:</span> build out until a piece ends on it.');
+    const rings = ringsOf(this.level);
+    if (rings.some((r) => !this.members.some((m) => m.a === r || m.b === r))) {
+      this.info(`<span class="bad">Put a peg on ${rings.length > 1 ? 'every' : 'the'} ring first:</span> build out until a piece ends on it.`);
       return;
     }
     this.sounds.go();
     this.a += 'G';
     this.save();
+    this.selected = -1;
     this.sim = new Sim(this.level, this.members);
     this.after = -1;
     this.finished = false;
@@ -524,23 +675,16 @@ export class Game {
     this.refresh();
   }
 
-  private lastOutcome: Outcome | null = null;
-
+  /** Back to building; a failed run leaves its glow (and its words) behind. */
   private stopRun(): void {
-    if (this.sim) {
-      const s = this.sim;
-      this.hot = new Map(this.members.map((m, i) => [`${m.a}:${m.b}`, s.broken[i] ? 2 : s.peak[i]]));
-      this.lastOutcome = s.outcome;
-    }
+    const s = this.sim;
+    if (s && this.finished && !WON.has(s.outcome!)) {
+      this.hot = new Map(this.members.map((m, i) => [`${m.a}:${m.b}`, s.broken[i] && i === s.firstBreak ? 2 : s.broken[i] ? 1.05 : s.peak[i]]));
+    } else if (s) this.hot = null;
     this.sim = null;
     this.finished = false;
     this.sparks = [];
     this.refresh();
-  }
-
-  private outcomeLine(): string {
-    const o = this.sim?.outcome;
-    return o ? OUTCOME_TEXT[o] : '';
   }
 
   private stepRun(dt: number): void {
@@ -562,7 +706,7 @@ export class Game {
       }
       this.seenBreaks = s.breaks;
       this.sounds.snap();
-      navigator.vibrate?.(30);
+      buzz(30);
     }
     this.creakT -= dt;
     if (this.creakT <= 0) {
@@ -595,12 +739,22 @@ export class Game {
     store.save('profile', prof);
     if (!won) {
       this.sounds.fail();
-      this.info(`<span class="bad">${OUTCOME_TEXT[s.outcome!]}</span>${s.breaks ? ` ${plural(s.breaks, 'piece')} snapped (red stubs).` : ''} Tap <b>✎ Edit</b> to fix it: pieces near snapping will glow.`);
+      const v = explain(this.level, this.members, { ...s, outcome: s.outcome! });
+      this.debrief = `<span class="bad">${v.text}</span>`;
+      this.wobbly = v.wobbly.size ? v.wobbly : null;
+      // Keep the words and the glow for this exact build, across a reload.
+      const k = this.debriefKey();
+      if (k) {
+        const hot: [string, number][] = this.members.map((m, i) => [`${m.a}:${m.b}`, s.broken[i] && i === s.firstBreak ? 2 : s.broken[i] ? 1.05 : s.peak[i]]);
+        store.save(k, { v: RULES_VERSION, a: builtOnly(this.a), text: this.debrief, hot, wobbly: [...v.wobbly] } satisfies Debrief);
+      }
+      this.info(this.debrief);
       this.refresh();
       return;
     }
+    this.debrief = null;
     this.sounds.win(st);
-    navigator.vibrate?.([20, 60, 30]);
+    buzz([20, 60, 30]);
     let improved = false;
     if (this.mode === 'trail' && st > 0) {
       const k = String(this.n);
@@ -621,7 +775,7 @@ export class Game {
     const why =
       st === 0
         ? `<p>It works, but it costs <b>${cost}</b> and the budget is <b>${l.budget}</b>. Trim it to earn stars.</p>`
-        : `<p>Cost <b>${cost}</b> of ${l.budget} · ${plural(parts, 'part')}.</p><p class="th">${st < 2 ? `★★ needs a cost of ${l.par} or less.` : st < 3 ? `★★★ needs ${plural(l.parParts, 'part')} or fewer at that cost.` : 'As lean as the surveyor’s own build, or leaner.'}</p>`;
+        : `<p>Cost <b>${cost}</b> of ${l.budget} · ${plural(parts, 'part')}.</p><p class="th">${st < 2 ? `★★ needs the surveyor’s cost: ${l.par} or less.` : st < 3 ? `★★★ needs ${plural(l.parParts, 'part')} or fewer at that cost.` : 'As lean as the surveyor’s own build, or leaner.'}</p>`;
     setTimeout(() => {
       if (!this.sim || !this.finished) return;
       const next = this.mode === 'trail' && st > 0;
@@ -660,10 +814,11 @@ export class Game {
     const c = costOf(this.members);
     const cost = $('cost');
     cost.innerHTML = `${c}<small>/${l.budget}</small>`;
-    cost.className = `value ${c > l.budget ? 'over' : c <= l.par && c > 0 ? 'par' : ''}`;
+    const j = joined(l, this.members);
+    const whole = (l.goal.kind !== 'cross' || j.road) && j.rings && !j.loose;
+    cost.className = `value ${c > l.budget ? 'over' : whole && c <= l.par && c > 0 ? 'par' : ''}`;
     const prof = loadProfile();
     $('best').textContent = this.mode === 'trail' ? stars(prof.stars[String(this.n)] ?? 0) : this.mode === 'daily' ? (loadDaily(store, this.day ?? todayKey())?.label.split(' ')[0] ?? '☆☆☆') : '';
-    ($('best').parentElement as HTMLElement).hidden = this.mode === 'link';
     document.querySelectorAll<HTMLButtonElement>('#mats button').forEach((b) => b.classList.toggle('on', Number(b.dataset.m) === this.mat));
     const running = !!this.sim;
     ($('undoBtn') as HTMLButtonElement).disabled = (running && !this.finished) || (!running && !this.undoDepth);
@@ -698,9 +853,11 @@ export class Game {
       level: this.level,
       members: this.members,
       sim: this.sim,
-      ghost: pr && pr.kind === 'peg' && pr.dragging && pr.target >= 0 ? { a: pr.peg, b: pr.target, mat: this.mat, ok: !pr.why } : null,
+      ghost: pr && pr.kind === 'peg' && pr.dragging && pr.target >= 0 ? { a: pr.peg, b: pr.target, mat: this.mat, ok: !pr.why, clamped: pr.clamped } : null,
       hot: this.hot,
       pressed: pr && pr.kind === 'member' && !pr.dragging ? pr.member : -1,
+      selected: this.selected,
+      wobbly: this.wobbly,
       from: pr && pr.kind === 'peg' ? pr.peg : -1,
       time: this.time,
       sparks: this.sparks,
@@ -713,7 +870,11 @@ export class Game {
     const ctx = this.ctx;
     const sc = this.scene();
     drawScene(ctx, this.view, sc);
-    if (this.finger && sc.ghost) drawLoupe(ctx, this.view, sc, this.finger[0], this.finger[1]);
+    if (this.finger && sc.ghost) {
+      // The magnifier sits above the finger and looks at where the piece will end.
+      const [tx, ty] = [this.view.ox + px(sc.ghost.b) * this.view.s, this.view.oy + py(sc.ghost.b) * this.view.s];
+      drawLoupe(ctx, this.view, sc, this.finger[0], this.finger[1], tx, ty);
+    }
   }
 
   private frame(t: number): void {
@@ -738,13 +899,13 @@ export class Game {
     store.save('seenHelp', true);
     showCard(
       `<h2>Trestle</h2>
-      <p>Help the beetle haul its acorn cart over the stream, or hang a lantern where the path needs light, with a few sticks and some string.</p>
+      <p>Help the beetle haul its acorn cart over the stream, or hang lanterns where the path needs light, with a few sticks and some string.</p>
       <ul>
-        <li><b>Drag from a peg</b> to another point to add a piece. The gold rings are fixed to the rock; every piece you add makes new pegs. A magnifier shows where it lands.</li>
-        <li>${matSvg(0, 20)} <b>Planks</b> are the road: the cart only rolls on planks (and rock). ${matSvg(1, 20)} <b>Twigs</b> push and pull. ${matSvg(2, 20)} <b>Twine</b> is cheap and reaches far, but only pulls.</li>
+        <li><b>Drag from a peg</b> to another point to add a piece. The gold rings are fixed to the rock; every piece you add makes new pegs. A magnifier shows where the piece will end.</li>
+        <li>${matSvg(0, 20)} <b>Planks</b> (10 a unit, up to 2.2 long) are the road: the cart only rolls on planks and rock. ${matSvg(1, 20)} <b>Twigs</b> (5 a unit, up to 2.2) push and pull. ${matSvg(2, 20)} <b>Twine</b> (3 a unit, up to 4.5) reaches far but only pulls. Drag past a piece’s reach and it stops at the last point in reach (a dashed circle shows it).</li>
         <li>Pegs bend freely, so a lone row of planks sags: brace it into <b>triangles</b>.</li>
-        <li><b>Tap a piece</b> to remove it. Pinch or ⤢ to zoom. Undo takes back anything.</li>
-        <li><b>▶ Go</b> runs a test: pieces turn yellow, then red as they strain, and snap past their limit.</li>
+        <li><b>Tap a piece</b> to pick it, tap again (or ✕) to remove it. Pinch or ⤢ to zoom; two fingers pan. Undo takes back anything.</li>
+        <li><b>▶ Go</b> runs a test: pieces turn yellow, then red as they strain, and snap past their limit. After a failed run the line below says why, the piece that snapped first glows red and pegs that can swing are ringed.</li>
         <li>★ clear it within the budget, ★★ at the surveyor's cost (par) or less, ★★★ also with no more parts than the surveyor.</li>
       </ul>`,
       [{ label: 'Build', primary: true, onClick: closeOverlay }],
@@ -762,7 +923,7 @@ export class Game {
     const total = Object.values(prof.stars).reduce((a, b) => a + b, 0);
     const d = loadDaily(store, todayKey());
     showCard(
-      `<h2>The trail</h2><p>${plural(total, 'star')} so far. Clear a level to open the next; the first six teach the tricks.</p><div class="levels">${cells.join('')}</div>`,
+      `<h2>The trail</h2><p>${plural(total, 'star')} so far. Clear a level to open the next; the first six teach the tricks, then gaps widen, pegs get scarcer, loads heavier, and wind and twin lanterns join in.</p><div class="levels">${cells.join('')}</div>`,
       [
         { label: `Daily level${d ? ` (${d.label})` : ''}`, onClick: () => this.playDaily() },
         { label: 'Close', primary: true, onClick: closeOverlay },

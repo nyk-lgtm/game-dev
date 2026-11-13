@@ -30,7 +30,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 5. Grove: owner said keep it as is (board and balance); only bugs/clarity. Afterglow: leave alone unless asked.
 6. New games are welcome when the queue is quiet (recent additions: Ninefold, Summit, Quarry, Sungrazer, Kitbag,
    Brink, Loomsong, Simmer, Gleam, Lull, Trestle). Ideas: a co-op-free social/daily puzzle. (The creative/sandbox toy is Lull.)
-   Trestle (new physics builder): first blind playtest next (see its item).
+   Trestle (new physics builder): first playtest fixes done (rules v2); second blind playtest next (see its item).
 7. Simmer: second blind playtest (see its item below). Gleam (new light puzzle): first blind playtest. Lull: first playtest fixes shipped;
    second blind playtest and a real-phone sound check next.
    Brink, Loomsong, Simmer). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle.
@@ -56,10 +56,23 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         pinch and ⤢ zoom (pan when zoomed), live runs coloured by stress with snaps (stubs, splinters, sound), pieces that
         peaked ≥ 70% glow afterwards, result card with stars, levels card (the trail), daily (`?daily`), bug reports,
         hub card (Puzzle) + Daily link + NEWS. Pixel 7 and 360×640 checked (a mouse-driven build of level 2 gets ★★★).
-  - [ ] Next: first blind playtest. Watch: is the loupe enough to aim at 31 px pegs, or is zoom needed by default on
-        small screens? Do tutorials 3-4 teach trusses and twine well enough for generated levels? Are budgets (×1.25-1.45
-        of the surveyor) too generous for ★, and is ★★★ (surveyor's part count) reachable by people? Do dynamic snaps at
-        bumps (cart landing on a slope change) read as fair? Maybe: a "show the surveyor's build" after a few failed runs,
+  - [x] First blind playtest (real CDP touch, Pixel 7: ★★★ on most levels first try, often far under par; ★ only on
+        tutorials 3 and 6 where the obvious truss at par collapsed or cost more; repetitive after ~8 levels) and fixes
+        (rules v2): a much stronger surveyor (both road alignments, struts/hooks with small triangles, strut+cord Vs,
+        several strip orders, twine swaps, plank merges, local search; `par.ts`: a 4× search beats its par on ~18% of
+        levels, p90 9%); the ramp (spans to 8, face pegs 70%→10%, carts to 4.2, wind 27% of levels, twin lanterns, logs
+        low over the gap and rock floors under it, islands; every third trail level a lantern; budgets ×1.4→1.15);
+        tutorial par = the obvious lesson build (t3 all-twig Warren 122, t6 132, t2 two struts 62); the cart rides on
+        damped springs with light wheels and forces are smoothed ~140 ms, so a heavy cart through a V road no longer snaps
+        planks (`bumps.ts`: worst plank 1.03 → 0.29 at cart 4.5); failure notes name the cause (unjoined / own weight / wobbly, with
+        swinging pegs ringed / too weak, naming the piece / off the road / sag) and stay with the glow after a reload;
+        drags past reach show a dashed reach circle + "max length" and the loupe looks at the landing point; tray and
+        help give reaches; "not joined yet" in the cost line; tap picks a piece (✕ Remove), second tap removes; header
+        icon buttons 44 px at 360-390 (stars beside the level label); levels generated in a worker with a loading card,
+        the next one prefetched; vibration guarded. 17 tests.
+  - [ ] Next: second blind playtest. Watch: is ★★★ now a real target (par from the stronger surveyor) without being
+        impossible on some levels? Do wind and twin lanterns read clearly? Is two-finger pan at the fitted view missed
+        (it only pans when zoomed)? Is the loading card ever seen after level 7 (prefetch)? Maybe: a "show the surveyor's build" after a few failed runs,
         springs, two-cart or moving-load levels, a ghost of the last run's sag.
 - [ ] **Lull** (original musical garden sandbox: plant singing plants, no fail state, shareable as a link). Milestones:
   - [x] Core (src/lull/core, rules v1): seeded pond (2-3 ellipses), six species with terrain rules and spacing, growth from

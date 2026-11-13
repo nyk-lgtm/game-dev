@@ -1,7 +1,14 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  COLS,
+  SURVEY_EFFORT,
   PLANK,
+  explain,
+  joined,
+  layout,
+  survey,
+  wobbly,
   RULES_VERSION,
   Sim,
   TUTORIALS,
@@ -104,6 +111,10 @@ describe('tutorials', () => {
       expect(v.parts, l.id).toBe(l.parParts);
       expect(v.stars, l.id).toBe(3);
       expect(l.par, l.id).toBeLessThan(l.budget);
+      // The obvious build holds with room to spare, and the surveyor never needs more than par.
+      const r = runSim(l, replayBuild(l, l.ref!).members);
+      expect(Math.max(...r.peak), l.id).toBeLessThan(0.85);
+      expect(survey(l, SURVEY_EFFORT)!.cost, l.id).toBeLessThanOrEqual(l.par);
     }
   });
   it('stars: budget, par, parts', () => {
@@ -133,8 +144,7 @@ describe('generated levels', () => {
       // The proof replays to the same build it was priced on.
       expect(toActions(l, replayBuild(l, l.ref!).members).length).toBe(l.ref!.length);
       if (l.goal.kind === 'reach') {
-        const r = l.goal.ring;
-        expect(l.anchors.some((a) => px(a) === px(r) && py(a) < py(r))).toBe(false);
+        for (const r of l.goal.rings) expect(l.anchors.some((a) => px(a) === px(r) && py(a) < py(r))).toBe(false);
       }
     }
   });
@@ -142,5 +152,73 @@ describe('generated levels', () => {
     const a = trailLevel(7);
     expect(a.id).toBe('n7');
     expect(JSON.stringify(trailLevel(7))).toBe(JSON.stringify(a));
+  });
+});
+
+describe('cart over joints', () => {
+  it('a heavy cart through a V in the road does not snap propped planks', () => {
+    const nodes = [3, 5, 7, 9].map((x, i) => pt(x, [6, 7, 7, 6][i]));
+    const props = nodes.slice(1, 3).flatMap((p) => [p + COLS - 1, p + COLS + 1]);
+    const l = {
+      ...TUTORIALS[2],
+      anchors: [nodes[0], nodes[3], ...props],
+      goal: { kind: 'cross' as const, from: nodes[0], to: nodes[3], startX: 1.9, startY: 6, goalX: 9.7, cart: 4.5 },
+    };
+    let ms: Member[] = [];
+    for (let i = 0; i < 3; i++) ms = addMember(l, ms, nodes[i], nodes[i + 1], PLANK)!;
+    nodes.slice(1, 3).forEach((p, k) => {
+      ms = addMember(l, ms, p, props[2 * k], TWIG)!;
+      ms = addMember(l, ms, p, props[2 * k + 1], TWIG)!;
+    });
+    const r = runSim(l, ms);
+    expect(r.outcome).toBe('crossed');
+    expect(Math.max(...ms.map((m, i) => (m.mat === PLANK ? r.peak[i] : 0)))).toBeLessThan(0.6);
+  });
+});
+
+describe('diagnosis', () => {
+  it('names a missing diagonal, a road with a gap and a collapse', () => {
+    const l = TUTORIALS[2];
+    const deck = replayBuild(l, 'P292bP2b2dP2d2f').members;
+    // The two middle road pegs can swing.
+    expect([...wobbly(l, deck)].sort()).toEqual([pt(5, 6), pt(7, 6)].sort());
+    expect(wobbly(l, replayBuild(l, l.ref!).members).size).toBe(0);
+    const v = explain(l, deck, runSim(l, deck));
+    expect(['weight', 'wobbly']).toContain(v.cause);
+    const half = deck.slice(0, 2);
+    expect(joined(l, half).road).toBe(false);
+    expect(explain(l, half, runSim(l, half)).cause).toBe('unjoined');
+    expect(joined(l, deck).road).toBe(true);
+  });
+  it('a twine pushed under a lantern goes slack; one pulled too hard is called too weak', () => {
+    const l = TUTORIALS[4];
+    // A single cord from the top of the cliff to the ring can't hold it out there.
+    const ms = addMember(l, [], pt(2, 4), pt(6, 5), TWINE)!;
+    const r = runSim(l, ms);
+    expect(WON.has(r.outcome)).toBe(false);
+    expect(['wobbly', 'weak', 'sag']).toContain(explain(l, ms, r).cause);
+  });
+});
+
+describe('the ramp', () => {
+  it('later layouts bring wind, twin lanterns and obstacles', () => {
+    let wind = 0, twin = 0, twist = 0;
+    for (let i = 0; i < 120; i++) {
+      const { level: l } = layout(1000 + i, 1, 0, i % 2 ? 'reach' : 'cross');
+      if (l.wind) wind++;
+      if (l.goal.kind === 'reach' && l.goal.rings.length > 1) twin++;
+      if (l.terrain.some((r) => r.kind === 'log' || r.kind === 'floor')) twist++;
+    }
+    expect(wind).toBeGreaterThan(20);
+    expect(twin).toBeGreaterThan(5);
+    expect(twist).toBeGreaterThan(5);
+  });
+  it('wind pushes a hanging lantern sideways', () => {
+    const l = TUTORIALS[4];
+    const ms = replayBuild(l, l.ref!).members;
+    const calm = new Sim(l, ms);
+    const gusty = new Sim({ ...l, wind: 2 }, ms);
+    for (let i = 0; i < 700; i++) calm.step(), gusty.step();
+    expect(gusty.x[gusty.lanterns[0]] - calm.x[calm.lanterns[0]]).toBeGreaterThan(0.05);
   });
 });
