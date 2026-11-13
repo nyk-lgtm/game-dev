@@ -94,8 +94,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     lives lost per band of waves (the difficulty curve: v5 is gentle to wave 10, steady pressure from 15 on,
     no spike at 27-30); `scripts/hexhold/waves.ts` shows wave sizes and the biggest pile of one kind.
   - Rewild: `npx vite-node scripts/rewild/balance.ts 16 greedy 1` (score, species, stars; compare
-    with `random`; rules v5: greedy median ~2330 (32 games), stars at 900/1700/2400, ~1/4 of bot games 3★),
-    `scripts/rewild/upto.ts <seed> <n>` (a bot game's actions to season n, for `?seed=&a=`), `scripts/rewild/probe.ts` (plays and causes of death), `trace.ts <seed>`.
+    with `random`; rules v6: greedy median ~2280 (32 games; random ~940), stars at 900/1700/2400, ~1/4 of bot games 3★),
+    `scripts/rewild/upto.ts <seed> <n>` (a bot game's actions to season n, for `?seed=&a=`), `scripts/rewild/probe.ts` (plays and causes of death), `trace.ts <seed>`,
+    `fire.ts 64 1 [random]` (per lightning summer: burns, the idle burn plan, whether the bot plays differently than in a
+    drought, and the score vs the same game with lightning turned into drought; v6 greedy: something burns in ~29/64, mean −13).
 - Delve rules v5 (src/delve/core/rules.ts): a sleeping monster spends the turn it notices you; cultists rest a turn
   (`cd`) after each firebolt; blocked hunters try another equally short step; `use` (HIT) hits ahead, then a front
   corner (`cornerFoe`), opens/shuts doors (never with a foe beside you or in the doorway), else "You swing at nothing"
@@ -118,7 +120,9 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   the UI's forecasts (clone + end season) are exact. `track(ev, cell, id, after)` (core/forecast.ts) follows one
   population through those events (`feed` events carry food/need when it eats, `move` says flee/food), so the
   placement glow and the cell readout come from the same trial. Wildfire burns last in a lightning summer
-  (after grazing): only full-grown grass/flowers/shrubs on moisture-0 ground; the board draws the burn plan.
+  (after grazing; rules v6): it catches in the nearest burnable cell within 3 of the strike (`NEAR3`) and leaps to burnable
+  cells up to 2 away (`NEAR2`); burnable = grass/flowers/shrub at size ≥ 2 on moisture-0 ground, not cropped by a grazer
+  this season (`cropped` in simulate); animals on burning cells die (bees/songbirds escape). The board draws the burn plan.
   Deals favour cards that can be placed somewhere (`placeReason` gives the blocker kind for hints).
 - Unspoken: `makeLanguage(seed)` (core/lang.ts) invents grammar, sounds and glyphs; `makeWorld` builds
   5 chapters of authored scenes (every word in 2+ scenes; tests enforce it) plus generated riddles; state

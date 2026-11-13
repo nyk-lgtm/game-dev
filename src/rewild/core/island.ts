@@ -30,6 +30,11 @@ export const RING2: number[][] = HEXES.map((h, i) =>
 );
 /** Cells within distance 1 or 2 (not the cell itself). */
 export const NEAR2: number[][] = ADJ.map((a, i) => [...a, ...RING2[i]]);
+/** Cells within distance 3, nearest first (not the cell itself). */
+export const NEAR3: number[][] = HEXES.map((h, i) => [
+  ...NEAR2[i],
+  ...HEXES.map((_, j) => j).filter((j) => distance(h, HEXES[j]) === 3),
+]);
 
 export const isCoast = (i: number): boolean => ADJ6[i].includes(-1);
 

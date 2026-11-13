@@ -4,7 +4,7 @@
 // order, so a season always plays out the same way.
 
 import { Rng, mixSeed } from '../../shared/rng';
-import { ADJ, ADJ6, NEAR2, RING, N } from './island';
+import { ADJ, ADJ6, NEAR2, NEAR3, RING, N } from './island';
 import { ANIMALS, PLANTS, WATER, animalFits, canRootOver, plantFits } from './species';
 import type { AnimalId, Cell, GameState, PlantId, SimEvent, SpeciesId, Weather } from './types';
 
@@ -37,7 +37,7 @@ export function weatherFor(seed: number, season: number): { weather: Weather; fi
 export const WEATHER_TEXT: Record<Weather, string> = {
   fair: 'Fair weather.',
   drought: 'Drought: every cell is one step drier.',
-  fire: 'Dry lightning: every cell is one step drier, and late in summer lightning strikes the marked cell. Fire catches in the nearest full-grown grass, flowers or shrub within 2 cells and spreads through touching ones on bone-dry ground (moisture 0). Grazed or young plants, damp ground, water, bare cells and oaks stop it.',
+  fire: 'Dry lightning: every cell is one step drier, and late in summer lightning strikes the marked cell. Fire catches in the nearest grass, flowers or shrub within 3 cells that is half grown or more, ungrazed this summer and on bone-dry ground (moisture 0), then leaps to more like it up to 2 cells away (a one-cell gap won\'t stop it). Animals caught in it die; bees and songbirds fly off. Oaks, seedlings, grazed plants, damp ground and water never burn.',
   storm: 'Storm: heavy rain makes every cell one step wetter, but bees and birds stay hidden and spread nothing.',
   harsh: 'Harsh winter: animals that stay awake need twice the food.',
 };
@@ -70,9 +70,10 @@ export function moisture(cells: Cell[], weather: Weather): number[] {
   });
 }
 
-/** Plants that burn: only full grown (grazed or young ones are too short) and on bone-dry ground (moisture 0). */
+/** Plants that burn: half grown or more (seedlings are too green) on bone-dry ground (moisture 0).
+ * The fire also spares plants grazed that summer (see `wildfire`). */
 export const BURNS: PlantId[] = ['grass', 'flowers', 'shrub'];
-export const canBurn = (c: Cell, wet: number) => !!c.plant && BURNS.includes(c.plant.id) && c.plant.n >= 3 && wet === 0;
+export const canBurn = (c: Cell, wet: number) => !!c.plant && BURNS.includes(c.plant.id) && c.plant.n >= 2 && wet === 0;
 
 /** Plant habitat check including the fungi's need for a woody neighbor. */
 export function plantOk(cells: Cell[], i: number, id: PlantId, wet: number): boolean {
@@ -226,6 +227,7 @@ export function simulate(s: GameState, plantsOnly = false): SimEvent[] {
 
   // Grazers crop plants rather than uproot them: each plant unit eaten
   // covers two units of need. Hunters take whole prey.
+  const cropped = new Set<number>();
   const eat = (at: number, id: AnimalId, need: number) => {
     const def = ANIMALS[id];
     const src = [at, ...ADJ[at]];
@@ -261,6 +263,7 @@ export function simulate(s: GameState, plantsOnly = false): SimEvent[] {
       } else {
         // Grazers crop a plant but never take its last unit: the roots regrow.
         c.plant!.n--;
+        cropped.add(best);
         left -= 2;
       }
     }
@@ -373,19 +376,20 @@ export function simulate(s: GameState, plantsOnly = false): SimEvent[] {
   }
 
   // --- Wildfire, late in a lightning summer (after grazing) ---
-  if (s.weather === 'fire' && s.fireAt >= 0) wildfire(s, ev);
+  if (s.weather === 'fire' && s.fireAt >= 0) wildfire(s, ev, cropped);
 
   return ev;
 }
 
 /** Lightning strikes the marked cell; fire catches in the nearest burnable plant
- * within 2 cells and spreads to touching burnable plants. */
-function wildfire(s: GameState, ev: SimEvent[]) {
+ * within 3 cells and leaps to burnable plants up to 2 cells away. Plants grazed
+ * this season (`cropped`) don't burn; animals caught in it die, fliers escape. */
+function wildfire(s: GameState, ev: SimEvent[], cropped: Set<number>) {
   const cells = s.cells;
   const wet = moisture(cells, s.weather);
-  const burnable = (i: number) => canBurn(cells[i], wet[i]);
+  const burnable = (i: number) => canBurn(cells[i], wet[i]) && !cropped.has(i);
   let start = -1;
-  for (const j of [s.fireAt, ...NEAR2[s.fireAt]]) {
+  for (const j of [s.fireAt, ...NEAR3[s.fireAt]]) {
     if (burnable(j)) {
       start = j;
       break;
@@ -406,13 +410,10 @@ function wildfire(s: GameState, ev: SimEvent[]) {
     s.stats.burnt++;
     const a = c.animal;
     if (a && a.id !== 'bees' && a.id !== 'songbird') {
-      a.n--;
-      if (a.n <= 0) {
-        c.animal = null;
-        ev.push({ type: 'die', cell: i, id: a.id, why: 'burnt' });
-      } else ev.push({ type: 'shrink', cell: i, id: a.id, why: 'burnt' });
+      c.animal = null;
+      ev.push({ type: 'die', cell: i, id: a.id, why: 'burnt' });
     }
-    for (const j of ADJ[i]) {
+    for (const j of NEAR2[i]) {
       if (!seen.has(j) && burnable(j)) {
         seen.add(j);
         queue.push(j);
