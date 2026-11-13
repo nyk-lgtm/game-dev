@@ -20,7 +20,7 @@ import {
 } from './data';
 import { T_FEST, T_MARKET, T_WEATHER, makeCrowd, rngFor, simulate, type MenuItem, type NightCtx, type NightResult, type Why } from './night';
 
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 2;
 
 export interface Batch {
   ing: number;
@@ -51,6 +51,8 @@ export interface Ledger {
   rep: number;
   repGain: number;
   repLoss: number;
+  /** Guests let down (sold out, gave up, closing). */
+  letdowns: number;
   left: Partial<Record<Why, number>>;
   sold: number[];
   coins: number;
@@ -120,7 +122,7 @@ export function makeFestivals(seed: number): number[] {
 }
 
 export function ctxOf(r: Run, d = r.day): NightCtx {
-  return { weather: r.weather[Math.min(d, r.weather.length - 1)], festival: r.festivals.includes(d), payday: isPayday(d) };
+  return { weather: r.weather[Math.min(d, r.weather.length - 1)], festival: r.festivals.includes(d), payday: isPayday(d), cool: r.ups[UP.cool] > 0 };
 }
 
 export type PriceMood = 'cheap' | 'usual' | 'dear';
@@ -319,7 +321,8 @@ function openStall(r: Run, plan: { helper: boolean; menu: MenuItem[] }): void {
     wasteCost,
     rep: r.rep - before,
     repGain: rc.gain,
-    repLoss: letdowns,
+    repLoss: rc.loss,
+    letdowns,
     left,
     sold: night.sold,
     coins: r.coins,
@@ -349,14 +352,17 @@ export function replay(seed: number, actions: string[]): Run {
 export const REP_MAX = 100;
 /**
  * Tonight's change in renown: each delighted guest spreads the word, but only to the
- * share of the market that hasn't heard of you yet ((100 − renown)%); each guest let
- * down (sold out, waited too long, turned away at closing) costs a point.
+ * share of the market that hasn't heard of you yet ((100 − renown)%); guests let down
+ * (sold out, waited too long, turned away at closing) grumble: every two (rounded up)
+ * cost a point, at most `TUNE.lossCap` a night.
  */
-export function repChange(rep: number, delighted: number, letdowns: number): { gain: number; delta: number } {
+export function repChange(rep: number, delighted: number, letdowns: number): { gain: number; loss: number; delta: number } {
   const gain = Math.round((delighted * (REP_MAX - rep)) / REP_MAX);
-  const after = Math.max(0, Math.min(REP_MAX, rep + gain - letdowns));
-  return { gain, delta: after - rep };
+  const loss = lossFor(letdowns);
+  const after = Math.max(0, Math.min(REP_MAX, rep + gain - loss));
+  return { gain, loss, delta: after - rep };
 }
+export const lossFor = (letdowns: number): number => Math.min(TUNE.lossCap, Math.ceil(letdowns * TUNE.lossPer));
 
 export const scoreOf = (r: Run): number => r.coins + TUNE.repPts * r.rep;
 export const starsOf = (score: number): number => STARS.filter((s) => score >= s).length;

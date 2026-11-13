@@ -17,6 +17,8 @@ export interface NightCtx {
   weather: WeatherId;
   festival: boolean;
   payday: boolean;
+  /** The stall has a cool box: cold dishes are served properly chilled. */
+  cool?: boolean;
 }
 
 export interface MenuItem {
@@ -53,6 +55,7 @@ export function worthOf(dish: number, sp: number, ctx: NightCtx): Worth {
     if (x) parts.push({ label: `${TAG_WORD[t]} on a ${wx.name.toLowerCase()} night`, x });
   }
   if (ctx.festival && d.tags.includes('sweet')) parts.push({ label: 'festival treat', x: TUNE.festSweet });
+  if (ctx.cool && d.tags.includes('cold')) parts.push({ label: 'chilled in the cool box', x: TUNE.coolCold });
   let w = d.base;
   for (const p of parts) w *= p.x;
   return { w: Math.round(w), parts };

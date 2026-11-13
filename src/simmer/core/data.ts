@@ -125,7 +125,7 @@ export const UPGRADES: UpgradeDef[] = [
   { key: 'stove', name: 'Second stove', icon: '🔥', cost: [110], text: 'Cook two orders at once' },
   { key: 'lantern', name: 'Paper lanterns', icon: '🏮', cost: [70], text: '20% more passers-by stop to look' },
   { key: 'bench', name: 'A bench', icon: '🪑', cost: [40], text: 'Guests queue 50% longer before giving up' },
-  { key: 'cool', name: 'Cool box', icon: '🧊', cost: [60], text: 'Ingredients keep one night longer' },
+  { key: 'cool', name: 'Cool box', icon: '🧊', cost: [35], text: 'Ingredients keep a night longer (fish two); cold dishes worth ×1.15' },
 ];
 export const UP = { board: 0, stove: 1, lantern: 2, bench: 3, cool: 4 } as const;
 
@@ -153,6 +153,11 @@ export const TUNE = {
   friendCap: 10,
   /** Helper's wage for a night. */
   wage: 12,
+  /** Renown lost per guest let down (rounded up), and at most this much a night. */
+  lossPer: 0.5,
+  /** Cold dishes are worth this much more with a cool box. */
+  coolCold: 1.15,
+  lossCap: 5,
   /** Score = coins + repPts × renown. */
   repPts: 10,
 };
@@ -166,4 +171,4 @@ export const SERVE = 2;
 export const MAX_PRICE = 40;
 
 /** Score lines for one, two and three stars. */
-export const STARS = [1200, 2300, 4300];
+export const STARS = [1200, 2700, 4000];

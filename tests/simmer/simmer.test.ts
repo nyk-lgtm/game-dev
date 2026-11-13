@@ -30,6 +30,11 @@ import {
   simulate,
   starsOf,
   worthOf,
+  UPGRADES,
+  fillNeed,
+  lossFor,
+  recipePreview,
+  upgradePayback,
   type Guest,
   type NightCtx,
 } from '../../src/simmer/core';
@@ -121,8 +126,9 @@ describe('simmer core', () => {
   });
 
   it('renown spreads only to those who have not heard yet; let-downs cost one each', () => {
-    expect(repChange(0, 10, 0)).toEqual({ gain: 10, delta: 10 });
-    expect(repChange(50, 10, 2)).toEqual({ gain: 5, delta: 3 });
+    expect(repChange(0, 10, 0)).toEqual({ gain: 10, loss: 0, delta: 10 });
+    expect(repChange(50, 10, 3)).toEqual({ gain: 5, loss: 2, delta: 3 });
+    expect(repChange(90, 0, 40).loss).toBe(TUNE.lossCap);
     expect(repChange(95, 40, 0).delta).toBe(2);
     expect(repChange(99, 400, 0).delta).toBe(1);
     expect(repChange(1, 0, 5).delta).toBe(-1);
@@ -209,18 +215,39 @@ describe('simmer core', () => {
     }
   });
 
-  it('bots: naive lands on 1★, decent beats it, clever beats decent', () => {
-    let naive = 0, decent = 0, clever = 0;
+  it('bots: naive lands on 1★, lazy (Fill to forecast) beats it, clever beats lazy', () => {
+    let naive = 0, lazy = 0, clever = 0;
     const seeds = [21, 22, 23];
     for (const s of seeds) {
       naive += scoreOf(playSeason(newRun(s), STRATS.naive));
-      decent += scoreOf(playSeason(newRun(s), STRATS.decent));
+      lazy += scoreOf(playSeason(newRun(s), STRATS.lazy));
       clever += scoreOf(playSeason(newRun(s), STRATS.clever));
     }
     expect(starsOf(naive / 3)).toBe(1);
-    expect(decent).toBeGreaterThan(naive * 1.3);
-    expect(clever).toBeGreaterThan(decent * 1.2);
+    expect(lazy).toBeGreaterThan(naive * 1.2);
+    expect(clever).toBeGreaterThan(lazy * 1.1);
     expect(STARS).toHaveLength(3);
+  });
+
+  it('let-downs: every two cost a ♥, capped each night', () => {
+    expect([0, 1, 2, 3, 4].map(lossFor)).toEqual([0, 1, 1, 2, 2]);
+    expect(lossFor(100)).toBe(TUNE.lossCap);
+  });
+
+  it('payback estimates: recipes, upgrades, Fill to forecast', () => {
+    const r = newRun(31);
+    const p = recipePreview(r, 3, r.lastMenu);
+    expect(p.lovers.map((sp) => SPECIES[sp].key).sort()).toEqual(['fox', 'heron', 'owl']);
+    expect(p.replaces).toBeGreaterThanOrEqual(0); // the three-dish board is full
+    for (let k = 0; k < UPGRADES.length; k++) {
+      const u = upgradePayback(r, k, r.lastMenu);
+      expect(Number.isFinite(u.perNight) && u.text.length > 5, UPGRADES[k].key).toBe(true);
+    }
+    // No recipe known beyond the menu: the board has nothing to add.
+    expect(upgradePayback(r, UP.board, r.lastMenu).perNight).toBe(0);
+    const need = fillNeed(r, r.lastMenu);
+    const d = demand(r, r.lastMenu);
+    expect(need[0]).toBe(Math.ceil((d.orders[0] + d.orders[2]) * 1.1 - 1e-9)); // rice: rice ball + dango
   });
 
   it('every dish is loved by some kind of guest, and every kind loves some dish', () => {
