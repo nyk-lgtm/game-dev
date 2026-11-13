@@ -11,7 +11,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 `kitbag/` (dice-placement roguelite: roll dice, slot them into gear cards, 12 floors to a boss),
 `brink/` (push duel on a crumbling hex island vs an alpha-beta AI, plus win-in-N puzzles),
 `loomsong/` (rhythm game: seeded synth songs, notes charted from the song's own onsets, 4 lanes),
-`simmer/` (cozy management sim: a night-market food stall for 20 nights, critter guests on a watchable evening).
+`simmer/` (cozy management sim: a night-market food stall for 20 nights, critter guests on a watchable evening),
+`gleam/` (light-and-mirrors logic puzzle: place mirrors/splitters/filters so every crystal gets its exact colour).
 
 - The owner plays and tests only on an Android phone (Chrome, portrait). Every UI
   change must work by touch at ~390 CSS px wide; tap targets ≥ 44px.
@@ -94,6 +95,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     beats Normal 93%, Easy 100%; Normal beats Easy 81-89%; games 19-25 plies median; Hard ~160 ms/move (p90 ~190) on a
     laptop; shove-back runs ≤ 1-3, repeated layouts 0.1-0.3 a game. vite-node runs the search ~4x slower than the browser; for long probes bundle with esbuild and run node.
     `TUNE=crumbleStart:6,komi:1`, `W=threat:60`, `LV=normal.depth:3`, `SETUP=1` try other rules/weights/levels/starts.
+  - Gleam: `npx vite-node scripts/gleam/stats.ts 200` (rules v1: gen median 0.4 / 1.9 / 14 ms Small/Medium/Large, max
+    ~110 ms Large; unique 100%; deduction depth 2 needed in 0% / ~23% / 100% (Large requires it); hints ≤ ~25 ms).
+    `show.ts <seed> [size]` prints a puzzle, its light and the model's eliminations; `stress.ts 200` checks the model
+    never rules out an answer piece from part-filled boards and hints always finish.
   - Hexhold: `npx vite-node scripts/hexhold/balance.ts 32` (heuristic bot, rules v5: median wave ~27, ~7/32 wins);
     `scripts/hexhold/probe.ts 32` lists each loss with its wave and map shape (one or two portals) and the
     lives lost per band of waves (the difficulty curve: v5 is gentle to wave 10, steady pressure from 15 on,
@@ -114,7 +119,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   with batched `fillText` runs; art lives in each game's `art.ts`.
 - Daily challenges (src/shared/daily.ts): `<game>/?daily` plays today's seed (`dailySeed(game, day)`,
   local date); each game keeps its in-progress daily under `dailyRun` and today's best under `daily`.
-  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad, Ninefold, Summit, Quarry, Sungrazer, Kitbag, Brink (a daily win-in-N puzzle), Loomsong (a daily song) and Simmer (a daily season); the hub's Daily section links them.
+  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad, Ninefold, Summit, Quarry, Sungrazer, Kitbag, Brink (a daily win-in-N puzzle), Loomsong (a daily song), Simmer (a daily season) and Gleam (a Medium puzzle); the hub's Daily section links them.
 - Afterglow extras: Nights 1-5 (`NIGHTS` in content.ts, unlocked by `profile.nightsWon`), arenas
   (`ARENAS`/pillars in core/arena.ts, hashed from the seed), unions (`union` on a WeaponDef: two
   maxed weapons merge in a chest), and player damage is attributed (`w.taken`, `w.killedBy`).
@@ -344,6 +349,19 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   pantry with spoil warnings, recipe/upgrade cards), canvas evening (scene.ts: original critter sprites, the red-panda keeper,
   weather; guests set off 16 sim minutes early so they reach the stall on time), a log and guest taps that spell out purse,
   worth factors and the reason, a ledger card per night, guest book (📖). `SIMMER v… seed=… a=…` reports.
+- Gleam (src/gleam/core): N×N tiles (`kind`: floor, wall, socket, lamp, crystal); colours are R/G/B bits, added at
+  crystals (`target` per cell, 0 = dark crystal). Codes per socket: 0 empty, 1-2 mirror / \, 3-4 splitter / \ (pass +
+  turn), 5-7 R/G/B filter; `stock` per type (mirror, splitter, 3 filters) = the answer's pieces, givens included. Solved =
+  every crystal exact, no dark crystal lit, every tray piece placed and lit (`status`). Solvers work on socket domains
+  (bitmask of codes): `Ctx.check` = certain light (through decided sockets) must not over-light a crystal, possible light
+  (union of options) must still reach every needed bit and every piece, tray counts must fit; used-up types narrow
+  undecided sockets in place (repeated until stable: a socket narrowed to one piece counts as placed).
+  `solveAll` branches on frontier sockets (exact, uniqueness); `deduce(p, depth)` eliminates codes whose assumption
+  fails `check` (depth 1) or fails after depth-1 deductions (depth 2), and `nextHint` replays that log to the first
+  ring pinned to a piece. Generator (gen.ts): beam walk on fresh tiles, decoys, dark crystals, uniqueness fixes,
+  `CHECK_LIMIT` per attempt; seeds hash `mixSeed(mixSeed(mixSeed(seed, tag), n), attempt)`. A run is seed + actions
+  (`<sock b36><code>`, `H…` hint, `M<a><b>` swap, `U`, `R`); `replay(p, a)`. Reports `GLEAM v… seed=… size=… a=…`,
+  `?seed=&size=&a=`. Bump `RULES_VERSION` when the generator or rules change puzzles.
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)
   plus a shape in render/draw.ts and a color in palette.ts; tests in
   tests/telegraph/enemies.test.ts. Telegraphed attacks set `aim` and resolve via

@@ -1,0 +1,56 @@
+/* Gleam: deep night blue, brass sockets, coloured light. */
+body {
+  --bg: #0b0d18;
+  --panel: #12152a;
+  --line: #242a48;
+  --text: #eef0fb;
+  --muted: #9aa1c0;
+  --accent: #ffd678;
+  background: radial-gradient(120% 70% at 50% 35%, #12162c 0%, #0b0d18 70%);
+}
+#hud { gap: 10px; }
+#hud .spacer { flex: 1; }
+#clock { font-variant-numeric: tabular-nums; min-width: 52px; }
+#clock.pen { color: var(--gold); }
+#lit { font-variant-numeric: tabular-nums; }
+#controls {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 8px 12px max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line); background: var(--panel);
+}
+body #info { min-height: 56px; height: 56px; overflow-y: auto; font-size: 13.5px; line-height: 1.38; color: var(--muted); }
+#info i { color: var(--muted); }
+#tray { display: flex; gap: 8px; }
+#tray .piece {
+  flex: 1; min-width: 0; min-height: 60px;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  border-radius: 12px; border: 1px solid var(--line);
+  background: #1a1e38; color: var(--text); font-weight: 700;
+  touch-action: none; padding: 0 4px;
+}
+#tray .piece svg { flex: none; }
+#tray .piece .name { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tray .piece .n { font-size: 16px; font-variant-numeric: tabular-nums; }
+#tray .piece.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: #2c2a2a; }
+#tray .piece.empty { opacity: 0.4; }
+#tray .piece.empty .n { color: var(--muted); }
+#tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+#tools button {
+  min-height: 48px; border-radius: 12px; border: 1px solid var(--line);
+  background: #1a1e38; color: var(--text); font-size: 15px; font-weight: 700;
+}
+#tools button:disabled { opacity: 0.4; }
+#controls button:active { transform: scale(0.97); }
+.ghost {
+  position: fixed; z-index: 15; pointer-events: none;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6));
+}
+#overlay .card svg { vertical-align: middle; }
+@media (max-width: 360px) {
+  #tray .piece .name { display: none; }
+}
+@media (max-height: 700px) {
+  body #info { min-height: 40px; height: 40px; }
+  #tray .piece { min-height: 50px; }
+}

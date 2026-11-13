@@ -29,10 +29,34 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
    late Nova vs flyers. (Delve depth 5: done, rules v6. Rewild fire was too tame: rules v6 gives it teeth; watch playtests.)
 5. Grove: owner said keep it as is (board and balance); only bugs/clarity. Afterglow: leave alone unless asked.
 6. New games are welcome when the queue is quiet (recent additions: Ninefold, Summit, Quarry, Sungrazer, Kitbag,
+   Brink, Loomsong, Simmer, Gleam). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle.
+7. Simmer: second blind playtest (see its item below). Gleam (new light puzzle): first blind playtest.
    Brink, Loomsong, Simmer). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle.
 7. Simmer: third blind playtest (see its item below).
 
 ## Now
+- [ ] **Gleam** (original light-and-mirrors logic puzzle, daily). Milestones:
+  - [x] Core (src/gleam/core, rules v1): N×N tiles (6/7/8); lamps on the rim shine R/G/B/white beams (bitmasks, added
+        at crystals); pieces only go on brass rings (sockets): mirror / \, splitter / \ (pass + turn), R/G/B filter;
+        every tray piece must be placed and lit; crystals swallow light and must get their exact colour, dark crystals
+        (target 0) none; stone blocks. Generator walks the beams dropping pieces/crystals on fresh tiles, adds decoy
+        rings and dark crystals beside turns, then the exact solver (frontier search with one-look pruning) adds a dark
+        crystal where a second answer shines (or drops a decoy, or gives a piece) until unique; the deduction model
+        (eliminate a code when assuming it fails the one-look check: certain light, possible light, tray counts; depth
+        2 = after depth-1 deductions) must finish within the size's depth (Large needs a depth-2 step). Stats (200/size,
+        laptop): gen median 0.4 / 1.9 / 14 ms, max 4 / 26 / 110 ms; unique 100%; depth-2 in 0% / 23% / 100%.
+        Learned: narrowing used-up piece types inside the check must repeat until stable (a socket narrowed to one
+        piece counts as placed), or the room count goes unsound; stress.ts found it from part-filled boards.
+  - [x] UI: canvas board with additive beams (each colour bit stroked with 'lighter', so crossings mix), photons,
+        lamp lenses, glass splitters, crystal pips per needed colour, dark crystals flare red when lit, unlit pieces
+        dashed red; tap a ring to cycle (types with pieces left), tray tap arms a type, drag from the tray or between
+        rings (swap), drag off to remove; undo/clear/hint (+30 s; names a wrong piece first, else places the model's
+        next piece with why the ring can't stay empty / turn the other way, and rings the crystal it's about);
+        tap tiles for what they need; saves as seed + actions; `?daily` (Medium), hub card (Puzzle) + Daily + NEWS.
+        Pixel 7 and 360×640 checked.
+  - [ ] Next: blind playtest. Watch: are the rules clear from the help card alone (rings, every piece lit, pips)?
+        Is Small too easy (mostly mirrors, 2 crystals) and is Large's depth-2 step fair? Do hints read well? Is the
+        tap cycle (up to 7 options with filters) tedious next to the tray drag? Any frame cost on the phone (photons)?
 - [ ] **Simmer** (cozy management sim: a night-market food stall for 20 nights, critter guests). Milestones:
   - [x] Core (src/simmer/core, rules v1): ingredients that spoil (fish 1 night … rice 6) with seeded cheap/dear market days,
         10 dishes (3 known, 7 to learn), 8 critter kinds with loves/dislikes, purses, patience, arrival windows and weather

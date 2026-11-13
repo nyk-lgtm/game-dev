@@ -37,8 +37,29 @@ const kitbag = makeStore('kitbag.');
 const brink = makeStore('brink.');
 const loomsong = makeStore('loomsong.');
 const simmer = makeStore('simmer.');
+const gleam = makeStore('gleam.');
 
 const GAMES: GameCard[] = [
+  {
+    path: './gleam/',
+    title: 'Gleam',
+    tag: 'Light puzzle',
+    pitch: 'Bend coloured beams with mirrors, splitters and filters until every crystal glows its exact colour: red and blue make magenta where they meet. Dark crystals must stay dark. One answer each, no guessing.',
+    accent: '#ff5cf0',
+    best: () => {
+      const p = gleam.load<{ solved?: number } | null>('profile', null);
+      return p?.solved ? `${p.solved} solved` : null;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#0b0d18"/>
+      <g fill="#141830"><rect x="4" y="4" width="22" height="22" rx="3"/><rect x="27" y="4" width="22" height="22" rx="3"/><rect x="50" y="4" width="22" height="22" rx="3"/><rect x="4" y="27" width="22" height="22" rx="3"/><rect x="27" y="27" width="22" height="22" rx="3"/><rect x="50" y="27" width="22" height="22" rx="3"/><rect x="4" y="50" width="22" height="22" rx="3"/><rect x="27" y="50" width="22" height="22" rx="3"/><rect x="50" y="50" width="22" height="22" rx="3"/></g>
+      <g stroke-linecap="round" fill="none"><path d="M8 38H38V58" stroke="#ff4f5e" stroke-width="7" opacity="0.25"/><path d="M8 38H38V58" stroke="#ff8a94" stroke-width="2.2"/>
+      <path d="M68 61H44" stroke="#5b8cff" stroke-width="7" opacity="0.25"/><path d="M68 61H44" stroke="#9db8ff" stroke-width="2.2"/></g>
+      <path d="M31 31L45 45" stroke="#e8eeff" stroke-width="3.4" stroke-linecap="round"/>
+      <path d="M38 52l7 4.5-3.5 7.5h-7l-3.5-7.5z" fill="#ff5cf0" stroke="#ffd0fa" stroke-width="1"/>
+      <rect x="2" y="32" width="9" height="12" rx="3" fill="#262b45"/><circle cx="10" cy="38" r="3" fill="#ff4f5e"/>
+      <rect x="65" y="55" width="9" height="12" rx="3" fill="#262b45"/><circle cx="66" cy="61" r="3" fill="#5b8cff"/>
+      <path d="M61 10l5 3.5-2.5 6h-5l-2.5-6z" fill="#0b0912" stroke="#7a64a8"/></svg>`,
+  },
   {
     path: './simmer/',
     title: 'Simmer',
@@ -420,7 +441,7 @@ const GAMES: GameCard[] = [
 
 // Filter chips: the hub has grown long, so games can be narrowed by kind.
 const KINDS: Record<string, string[]> = {
-  Puzzle: ['triad', 'unspoken', 'grove', 'quarry', 'ninefold', 'summit'],
+  Puzzle: ['gleam', 'triad', 'unspoken', 'grove', 'quarry', 'ninefold', 'summit'],
   Action: ['loomsong', 'sungrazer', 'afterglow', 'nightline', 'hexhold'],
   Strategy: ['simmer', 'brink', 'kitbag', 'glyph', 'telegraph', 'rewild', 'hexhold', 'summit'],
   Story: ['lastlight', 'lantern', 'delve', 'unspoken'],
@@ -485,6 +506,7 @@ const DAILY = [
   { path: './brink/?daily', title: 'Brink', store: brink, accent: '#ff8a6e' },
   { path: './loomsong/?daily', title: 'Loomsong', store: loomsong, accent: '#ffc857' },
   { path: './simmer/?daily', title: 'Simmer', store: simmer, accent: '#ffb35c' },
+  { path: './gleam/?daily', title: 'Gleam', store: gleam, accent: '#ff5cf0' },
 ];
 const daily = document.getElementById('daily')!;
 daily.innerHTML = `<h3>Daily challenges <span>${prettyDay()}</span></h3><p>The same run for everyone today. A new one at midnight.</p>`;
