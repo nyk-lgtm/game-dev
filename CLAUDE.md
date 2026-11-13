@@ -92,7 +92,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   - Hexhold: `npx vite-node scripts/hexhold/balance.ts 32` (heuristic bot, rules v5: median wave ~27, ~7/32 wins);
     `scripts/hexhold/probe.ts 32` lists each loss with its wave and map shape (one or two portals) and the
     lives lost per band of waves (the difficulty curve: v5 is gentle to wave 10, steady pressure from 15 on,
-    no spike at 27-30); `scripts/hexhold/waves.ts` shows wave sizes and the biggest pile of one kind.
+    no spike at 27-30), plus gold banked per band, open cells and upgrade gold left, and gold unspent at the end
+    (`CAP=14` stops building at 14 towers, `EXPAND=1` builds again once they're all maxed: hoarding check, no sink
+    needed: the bot banks ~16 gold, a capped maze 1-3k but spending it on new towers wins 1 → 29/64);
+    `scripts/hexhold/waves.ts` shows wave sizes and the biggest pile of one kind.
   - Rewild: `npx vite-node scripts/rewild/balance.ts 16 greedy 1` (score, species, stars; compare
     with `random`; rules v6: greedy median ~2280 (32 games; random ~940), stars at 900/1700/2400, ~1/4 of bot games 3★),
     `scripts/rewild/upto.ts <seed> <n>` (a bot game's actions to season n, for `?seed=&a=`), `scripts/rewild/probe.ts` (plays and causes of death), `trace.ts <seed>`,

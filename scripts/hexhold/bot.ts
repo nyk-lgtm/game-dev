@@ -12,6 +12,36 @@ export interface Run {
   reached: number;
   /** Lives lost on each wave (index = wave - 1). */
   lost: number[];
+  /** Gold left unspent as each wave was sent (index = wave - 1). */
+  banked: number[];
+  /** What was still there to spend on as each wave was sent. */
+  room: Room[];
+}
+
+/** What a player could still buy: open cells a tower fits on (gold aside), upgrades and specializations left. */
+export interface Room {
+  cells: number;
+  ups: number;
+  specs: number;
+  /** Gold all those upgrades and specializations would cost. */
+  upGold: number;
+}
+
+export function roomOf(s: State): Room {
+  const gold = s.gold;
+  s.gold = 1e9;
+  let cells = 0;
+  for (let c = 0; c < N; c++) if (!buildError(s, c, 'bolt')) cells++;
+  s.gold = gold;
+  let ups = 0;
+  let specs = 0;
+  let upGold = 0;
+  for (const t of s.towers) {
+    if (!t) continue;
+    for (let l = t.level; l < 3; l++) (ups++, (upGold += upgradeCost(t.id, l)));
+    if (t.spec < 0) (specs++, (upGold += specCost(t.id)));
+  }
+  return { cells, ups, specs, upGold };
 }
 
 /** Every portal's path, end to end (so length = total walking, cells may repeat). */
@@ -47,7 +77,9 @@ export function bestBuild(s: State, id: TowerId): { cell: number; score: number 
   return best;
 }
 
-export function runGame(seed: number, skill = 1): Run {
+/** `cap` stops building after that many towers (a player who only upgrades from then on);
+ *  with `expand` it builds again once every tower is maxed and specialized. */
+export function runGame(seed: number, skill = 1, cap = Infinity, expand = false): Run {
   const s = newGame(seed);
   PORTALS = s.portals;
   const toks: string[] = [];
@@ -56,10 +88,13 @@ export function runGame(seed: number, skill = 1): Run {
   };
   let built = 0;
   const lost: number[] = [];
+  const banked: number[] = [];
+  const room: Room[] = [];
   while (s.status === 'playing' && s.wave < WAVES) {
     for (let guard = 0; guard < 20; guard++) {
       const id = PLAN[built % PLAN.length];
-      const pick = s.gold >= TOWERS[id].cost ? bestBuild(s, id) : null;
+      const full = () => !s.towers.some((t) => t && t.id !== 'beacon' && (t.level < 3 || t.spec < 0));
+      const pick = s.gold >= TOWERS[id].cost && (built < cap || (expand && full())) ? bestBuild(s, id) : null;
       // Upgrade the busiest tower when building isn't worth it any more.
       const towers = s.towers.filter((t): t is NonNullable<typeof t> => !!t && t.level < 3 && t.id !== 'beacon');
       const p = path(s.field.dist);
@@ -78,9 +113,11 @@ export function runGame(seed: number, skill = 1): Run {
       else break;
     }
     const lives = s.lives;
+    banked.push(s.gold);
+    room.push(roomOf(s));
     doAct({ t: 'wave' });
     while (s.status === 'playing' && s.active) step(s);
     lost.push(lives - s.lives);
   }
-  return { s, actions: toks.join(','), reached: s.wave, lost };
+  return { s, actions: toks.join(','), reached: s.wave, lost, banked, room };
 }

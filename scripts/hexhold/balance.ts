@@ -1,7 +1,7 @@
 // npx vite-node scripts/hexhold/balance.ts [runs]
-import { runGame } from './bot';
+import { runGame, type Run } from './bot';
 const n = +(process.argv[2] ?? 12);
-const res = [];
+const res: Run[] = [];
 for (let k = 0; k < n; k++) res.push(runGame(100 + k));
 const reached = res.map((r) => (r.s.status === 'won' ? 31 : r.reached)).sort((a, b) => a - b);
 console.log('waves reached:', reached.join(' '));
@@ -10,3 +10,8 @@ const dealt: Record<string, number> = {};
 for (const r of res) for (const [k, v] of Object.entries(r.s.stats.dealt)) dealt[k] = (dealt[k] ?? 0) + v!;
 const tot = Object.values(dealt).reduce((a, b) => a + b, 0);
 console.log('damage share:', Object.entries(dealt).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${Math.round((100 * v) / tot)}%`).join(', '));
+// Hoarding check: gold left unspent as waves 21-30 were sent, and at the end (probe.ts splits it by band).
+const med = (a: number[]) => [...a].sort((x, y) => x - y)[(a.length - 1) >> 1] ?? 0;
+const late = res.flatMap((r) => r.banked.slice(20));
+const endGold = (won: boolean) => med(res.filter((r) => (r.s.status === 'won') === won).map((r) => r.s.gold));
+console.log(`gold banked waves 21-30: median ${med(late)}, max ${Math.max(0, ...late)}; unspent at the end: wins ${endGold(true)}, losses ${endGold(false)}`);

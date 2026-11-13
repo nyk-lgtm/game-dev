@@ -23,7 +23,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 2. Loomsong: needs a real-phone check of sound and timing (headless has no audio); then a second playtest.
 3. Third playtests done (2026-11-13) and shipped: Summit v4, Kitbag v4, Sungrazer v4 (+ frame cost cut ~3x), Brink AI v4
    (combo-aware rings, softer Normal), Quarry v4. Loomsong second playtest: fixes in progress. A cozy management sim is being built.
-4. Hexhold gold sink (honing specialized towers) if hoarding persists; Glyphwright: refit the bot model (fit.ts),
+4. Hexhold gold sink: checked, not needed (gold is always spendable on new towers; see its item). Glyphwright: refit the bot model (fit.ts),
    late Nova vs flyers. (Delve depth 5: done, rules v6. Rewild fire was too tame: rules v6 gives it teeth; watch playtests.)
 5. Grove: owner said keep it as is (board and balance); only bugs/clarity. Afterglow: leave alone unless asked.
 6. New games are welcome when the queue is quiet (recent additions: Ninefold, Summit, Quarry, Sungrazer, Kitbag,
@@ -406,7 +406,17 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         "Wave 27 held · +gold · −10♥"; the preview explains the kind with the biggest share of the wave and
         what −2♥ means (help too). Bot: median 27, 7/32 wins; lives lost by band 15-20/21-25/26-30:
         76/90/267 → 83/171/210. `scripts/hexhold/waves.ts` shows wave sizes and the biggest piles per kind.
-  - [ ] Next ideas: a gold sink if players still hoard (e.g. honing specialized towers); owner feedback.
+  - [x] Gold sink checked (2026-11-13): not needed, rules unchanged (v5). probe.ts now reports gold banked per wave
+        band, open cells, upgrade gold left and gold unspent at the end (64 seeds). The bot banks a median 14-17 gold
+        in every band (p90 ≤ 38) with ~10k of upgrades and 17-30 open cells still to buy at waves 21-30; it ends with
+        ~590 at a win / ~200 at a loss, i.e. the last wave's bounties, earned after the last chance to spend. Hoarding
+        only appears when a player stops building: `CAP=14` (14 towers, all maxed) banks median 1,800 (p90 2,800) at
+        waves 26-30 and wins 1/64; `CAP=18` ~1,000, 15/64. That gold is not unspendable: 56-73 cells stay open, and
+        `EXPAND=1` (build again once all are maxed+specialized) turns it into wins: CAP 14 1 → 29/64, CAP 18 15 → 26/64,
+        vs the default bot 16/64. So the lesson for coasting players is "keep building", not a missing sink. Side
+        finding: max-first-then-expand beats the bot's build-wide plan (~45% vs ~25% wins); if humans find it, waves
+        26-30 may need more teeth, so watch playtests before touching numbers.
+  - [ ] Next ideas: owner feedback; maybe a late-game hint when gold sits unspent (> ~500 with open cells).
 - [x] **Blind playtests** for Rewild, Glyphwright, Telegraph, and their bug/UX fixes (shipped).
 - [ ] **Design follow-ups from those playtests** (balance; need care, not quick fixes):
   - [x] Glyphwright gold sink (rules v2): **Empower** raises a rune a tier for gold (4×/10× its
