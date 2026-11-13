@@ -122,15 +122,6 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     stop 4-5); risky/greedy ~0%; deaths mostly food (~65%), then oil, spread over stops 4-10; ~2 callbacks faced a run).
     `TUNE=startF:6,legFoodHills:1` tries numbers (careful: legFood hills/pass 2 → ~55%, 1 → ~85%: the touchiest knob),
     `W=reserve:0.7` bot weights; `trace.ts <seed> [policy]` prints a journey stop by stop and its `?seed=&a=`.
-  - Trestle: `npx vite-node scripts/trestle/probe.ts 200` (rules v2, 200 levels over d 0..1: first layout
-    proven 81% (crossings ~90%, lanterns ~62%), every level within ≤ 12 layouts; par/budget median 0.76 (0.62-0.86); twists:
-    wind 27%, two rings 9%, log 8%, floor 10%, island 5%; gen median ~370 ms, p90 ~0.9 s, max ~1.7 s on a laptop (runs in the
-    page's worker, prefetched; capped at 400 test runs); one test run ~2.5 ms).
-    `par.ts 60` re-surveys levels 4× harder (a stand-in for a clever player): it beats par on ~18% of levels, median gap 0,
-    p90 ~9%, max ~17% (v1's surveyor was beaten by ~30% by the first tester). `trail.ts 1 40` lists the trail (goal, span,
-    load, wind, pegs, par, twists); `why.ts 50 [cross|reach]` tallies why first layouts fail; `bumps.ts [cart]` crosses a
-    propped flat/V/hill road (plank peaks must stay low: no contact spikes); `tutorials.ts` runs each tutorial's `ref`
-    (the obvious build that sets its par; tests want peak < 0.85) and what the surveyor finds (must be ≤ par).
   - Lull: `npx vite-node scripts/lull/probe.ts [seed] [plants]` (weather spells, then a full garden's day: rules v1 ~1.6 notes
     a step / ~26 a bar, busiest step capped at 6 (`MAX_PER_STEP`), Harpfern runs are the bulk; bees/fireflies/frog out per phase).
     Frame cost (Playwright, Pixel 7, 30 grown plants): desktop 60 fps (draw JS ~0.4 ms); CPU ×4 throttled ~45-48 fps at DPR 2
