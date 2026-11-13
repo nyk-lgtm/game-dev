@@ -5,7 +5,7 @@ import { Rng } from '../../src/shared/rng';
 import {
   BAR, BEE, DAY, FLY, FLOURISH, MAX_PER_STEP, MAX_PLANTS, PENT, ROWS, SPECIES, START, XS, apply, colOf, critterCount, crittersAt,
   dayTime, decode, decodeActions, eligible, encode, groundAt, growth, newGarden, notesAt, plantError, replay, rootOf, sameGarden, target,
-  weatherAt, wishesMet, GARDEN_WISHES, fillWishes, gardenWish, gardenWishAt, grantWishes, newWishState, type Action, type Garden,
+  weatherAt, wishesMet, GARDEN_WISHES, fillWishes, gardenWish, gardenWishAt, grantWishes, newWishState, tooEasy, type Action, type Garden,
 } from '../../src/lull/core';
 
 describe('garden wishes', () => {
@@ -24,22 +24,48 @@ describe('garden wishes', () => {
     for (let n = 0; n < 300; n++) expect(gardenWish(gardenWishAt(7, n)), String(n)).not.toBeNull();
   });
 
-  it('the first wish asks for a plant on a note; planting it grants it and draws another', () => {
+  it('the first wish is an echo (one note on beats 1 and 3); it needs half-grown plants, then a new one is drawn', () => {
     for (let seed = 1; seed <= 30; seed++) {
       const g = newGarden(seed);
       const ws = fillWishes(g, newWishState());
       const first = gardenWishAt(seed, 0);
-      expect(first).toMatch(/^sing\.\d\.\d$/);
+      expect(first).toMatch(/^twin\.\d$/);
       expect(ws.a[0]).toBe(first);
-      const [, sp, col] = first.split('.').map(Number);
-      let planted = false;
-      for (let y = 0; y < ROWS && !planted; y++) for (let x = col * 100; x < col * 100 + 100 && !planted; x += 7) planted = apply(g, { t: g.now, k: 'P', sp, x, y });
-      expect(planted, `seed ${seed}`).toBe(true);
+      const col = Number(first.split('.')[1]);
+      // Glowcaps on beat 1 (rows 0-4) and beat 3 (rows 18-22) in that column.
+      const put = (rows: number[]) => {
+        for (const sp of [4, 3, 2]) for (const y of rows) for (let x = col * 100; x < col * 100 + 100; x += 7) if (apply(g, { t: g.now, k: 'P', sp, x, y })) return true;
+        return false;
+      };
+      expect(put([0, 1, 2, 3, 4]) && put([18, 19, 20, 21, 22]), `seed ${seed}`).toBe(true);
+      // Freshly planted: not yet.
+      expect(grantWishes(g, ws)).toEqual([]);
+      g.now += 200;
       expect(grantWishes(g, ws)).toContain(first);
       expect(ws.done).toContain(first);
       expect(ws.a.length).toBe(GARDEN_WISHES);
       expect(ws.a).not.toContain(first);
     }
+  });
+
+  it('never draws a wish that is true now or would come true by waiting', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const g = fullGarden(seed);
+      const ws = fillWishes(g, newWishState());
+      for (const id of ws.a) expect(tooEasy(g, gardenWish(id)!), `${seed} ${id}`).toBe(false);
+      // Grow up and turn the clock over a day: nothing drawn is granted without a change.
+      for (let k = 0; k <= 12; k++) expect(grantWishes({ ...g, now: g.now + 300 + k * 112 }, { ...ws, a: [...ws.a], done: [] }), `${seed} ${k}`).toEqual([]);
+    }
+  });
+
+  it('mostly asks for compositions and moments, rarely a single plant on a note', () => {
+    const kinds: Record<string, number> = {};
+    for (let n = 1; n < 2001; n++) {
+      const k = gardenWishAt(99, n).split('.')[0];
+      kinds[k] = (kinds[k] ?? 0) + 1;
+    }
+    expect(kinds.sing ?? 0).toBeLessThan(150);
+    expect((kinds.chord ?? 0) + (kinds.minor ?? 0) + (kinds.rise ?? 0) + (kinds.groove ?? 0)).toBeGreaterThan(500);
   });
 
   it('dawn starts dark and brightens; the label and the sky agree', () => {

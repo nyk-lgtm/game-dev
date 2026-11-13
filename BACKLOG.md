@@ -52,7 +52,14 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         narrowed/nudged inside, dawn synced with the sky (moon sets, stars fade), HUD weather word in the small label, wish
         toasts on one line, plurals ("Moonlilies"), one name per plant everywhere (Whistlereed → Pipereed), sapling look for
         young Humwillows, a sandier dashed shore. Perf unchanged (60 fps desktop; ×4: ~30 fps DPR 2, ~50 at 1.5).
-  - [ ] Next: second blind playtest + owner's phone (sound!). Watch: is "left = note, back-to-front = beat" discoverable
+  - [x] Second blind playtest fixes (rules and codes unchanged): the tap that wakes the sound after a reload also acts
+        (cue stays until audio runs); sun sets mid-dusk (never at night); garden wishes reworked: weighted toward
+        compositions and moments (chords on a beat, rising/falling tunes, groove, offbeats, creature visits, dusk/night),
+        only half-grown plants count, never drawn if true now / when grown / at any of 6 times over the next day
+        (`tooEasy`), first wish an echo (`twin`); no-garden visitor wording; dark numbered beat chips (≥ 11 px) with plants
+        kept clear of the edges; taller meadow on short screens (360×640: lanes ~34 px); lilies drawn last, willows over
+        the pond at 62%. Perf: desktop 60 fps; ×4 throttled ~32 fps at DPR 2, ~55 after stepping down.
+  - [ ] Next: third blind playtest + owner's phone (sound!). Watch: is "left = note, back-to-front = beat" discoverable
         from the ghost label and the sweeping band? Is a full garden too busy (Harpfern runs dominate; MAX_PER_STEP 6)? Do
         seedlings read at the back rows? Is half a day of growth while away welcome? Does the DPR step-down ever fire on
         a real phone (it never steps back up)? Maybe: a gentle master volume, more species (a bass drone moss?), seasons.

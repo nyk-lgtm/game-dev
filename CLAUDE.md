@@ -404,15 +404,21 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   (`lull.garden` {code, at}) and share links (`?g=CODE`, opened as a visit until "Keep") are the same thing; time away
   grows the garden on by up to half a day. Wishes (wishes.ts) are pure tests of the garden at its step: 9 milestones
   (`WISHES`, once per player, in the profile) and each garden's own rotating wishes: 3 active ids from a seeded order
-  (`gardenWishAt(seed, n)`, first always "a <kind> on <note>"; ids like `sing.0.3`, `run.1`, `beat.4`, `twin.5`, `chord1`,
-  `pond3`…, built by `gardenWish(id)`), `fillWishes` skips repeats and any already true when drawn (so they aren't met by
-  accident), `grantWishes` swaps met ones for the next; the `WishState` saves with the garden (`lull.garden.w`), not in
-  codes. Dawn starts at t 0.97 with light 0 (moon sets, stars fade by light 0.35), so the sky matches the label.
+  (`gardenWishAt(seed, n)`, weighted `KINDS`: mostly compositions and moments, e.g. `chord.<lane>`, `minor.<lane>`, `rise`,
+  `fall`, `groove`, `offbeat.<sp>`, `beevisit.<sp>`, `flyvisit`, `frogvisit`, `duskchord`; a single plant on a note (`sing`)
+  is rare; the first is always `twin.<col>`; built by `gardenWish(id)`). Only plants ≥ half grown count. `fillWishes` never
+  draws a wish that `tooEasy` finds true now, with every plant grown up, or grown up at six times over the next day (so
+  waiting alone never grants one); `grantWishes` swaps met ones for the next; the `WishState` saves with the garden
+  (`lull.garden.w`), not in codes. Sun up t 0.97 → 0.57 (sets mid-dusk, fading), moon 0.56 → 0.97; dawn starts at light 0
+  (stars fade by light 0.35), so the sky matches the label.
   A shared link (`?g=`) stays in the address while visiting and is rewritten with the visit's current code on save, until
-  Keep / Back to my garden. After a reload the sound needs a tap: 🔇 pulses and "Tap the garden to listen" shows, and that
-  first meadow tap only wakes the audio. Plants near the edges are drawn narrowed (to 60%) then nudged in (`Scene.fit`;
-  creatures, glows and strum use `baseX`). The beat: a bright added-light band on the current half-beat's lane, edge dots
-  (numbered on beats 1-4, the current lit) and each plant pops (scale + ring at its base) when it sings. Page: two canvases (#land: sky/hills/meadow/pond shaded for the light,
+  Keep / Back to my garden (a visitor with no garden of their own gets "Keep this garden" / "Start my own garden"). After a
+  reload the sound needs a tap: 🔇 pulses and "Tap the garden to listen" shows until audio runs; that tap also does the
+  tool's action. Plants keep clear of the edge beat chips (`Scene.edge()`): drawn narrowed (to 60%) then nudged in
+  (`Scene.fit`; creatures, glows and strum use `baseX`). The beat: a bright added-light band on the current half-beat's
+  lane, dark numbered chips on beats 1-4 and dots on the "and"s at both edges (the current one lit), and each plant pops
+  (scale + ring at its base) when it sings. Meadow top at 44% / 40% / 33% of the stage (≥ 640 / ≥ 480 / shorter: 360×640
+  gets ~34 px lanes). Lilies draw after all other plants; a willow in front of the pond overlapping it draws at 62%. Page: two canvases (#land: sky/hills/meadow/pond shaded for the light,
   re-drawn ≤ 2-3×/s; #board: transparent, cleared each frame), plants are cached sprites re-drawn per growth notch (1/48)
   and light notch (tone), swayed by a skew; audio.ts has six synth voices + reverb + rain/wind beds; the garden clock is the
   AudioContext clock once sound runs (perf clock before/without), notes scheduled 0.22 s ahead; `?seed=N` opens a fresh

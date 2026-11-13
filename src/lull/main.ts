@@ -18,11 +18,15 @@ const visit = shared ? decode(shared) : null;
 if (visit) {
   // The link stays in the address until Keep or Back to my garden, so a reload keeps the visit.
   game.open(visit, true);
+  const own = game.hasOwn();
+  const n = visit.plants.length;
   showCard(
-    `<h2>A shared garden</h2><p>Someone sent you their garden: ${visit.plants.length} plant${visit.plants.length === 1 ? '' : 's'}. Listen, strum and play with it; your own garden stays as it is.</p>`,
+    `<h2>A shared garden</h2><p>Someone sent you their garden: ${n} plant${n === 1 ? '' : 's'}. Listen, strum and play with it. ${
+      own ? 'Your own garden stays as it is.' : 'Menu → <b>Keep this garden</b> makes it yours, or start one of your own.'
+    }</p>`,
     [
       { label: 'Visit', primary: true, onClick: closeOverlay },
-      { label: 'Back to my garden', onClick: () => game.resumeOwn() },
+      own ? { label: 'Back to my garden', onClick: () => game.resumeOwn() } : { label: 'Start my own garden', onClick: () => game.newGarden() },
     ],
   );
 } else if (q.has('seed') && Number.isFinite(Number(q.get('seed')))) {
