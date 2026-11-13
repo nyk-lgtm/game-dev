@@ -19,6 +19,8 @@ export interface Layout {
   hitY: number;
   topY: number;
   padR: number;
+  /** Top of the band under the pads where judgement words show (off the beads' approach). */
+  popY: number;
   clothY: number;
 }
 
@@ -28,7 +30,8 @@ export function layout(w: number, h: number): Layout {
   const below = Math.max(118, Math.min(170, h * 0.2));
   const hitY = h - below;
   const padR = Math.min(laneW * 0.32, 28);
-  return { w, h, left: side, laneW, hitY, topY: -24, padR, clothY: hitY + padR + 18 };
+  const popY = hitY + padR + 4;
+  return { w, h, left: side, laneW, hitY, topY: -24, padR, popY, clothY: popY + 40 };
 }
 
 export const laneX = (L: Layout, lane: number) => L.left + L.laneW * (lane + 0.5);
@@ -219,7 +222,7 @@ function yarn(g: CanvasRenderingContext2D, x: number, y0: number, y1: number, w:
   }
 }
 
-const POP_S = 0.55;
+const POP_S = 0.5;
 
 export function draw(g: CanvasRenderingContext2D, s: Scene): void {
   const { L, chart, judge, now } = s;
@@ -316,16 +319,17 @@ export function draw(g: CanvasRenderingContext2D, s: Scene): void {
   }
   g.globalAlpha = 1;
 
-  // Judgment popups.
+  // Judgment popups: under the pads, so they never cover a bead on its way to the bar
+  // (or a neighbour's bead on Hard), and fading fast.
   g.textAlign = 'center';
   for (const p of s.popups) {
     const k = (s.time - p.t) / POP_S;
     if (k >= 1) continue;
     const x = laneX(L, p.lane);
-    const y = L.hitY - L.padR - 34 - k * 22;
-    g.globalAlpha = k < 0.7 ? 1 : (1 - k) / 0.3;
-    // As large as the lane allows (PERFECT is the widest word).
-    const size = Math.min(22, Math.floor((L.laneW - 6) / (p.text.length * 0.68)));
+    // As large as the lane allows (PERFECT is the widest word), with a gap to the next lane's word.
+    const size = Math.min(20, Math.floor((L.laneW - 10) / (p.text.length * 0.7)));
+    const y = L.popY + size + k * 3;
+    g.globalAlpha = k < 0.6 ? 1 : (1 - k) / 0.4;
     g.font = `900 ${size}px system-ui, sans-serif`;
     g.lineWidth = 5;
     g.lineJoin = 'round';
@@ -346,11 +350,11 @@ export function draw(g: CanvasRenderingContext2D, s: Scene): void {
       g.stroke();
     }
     if (p.sub) {
-      g.font = '800 14px system-ui, sans-serif';
+      g.font = '800 12px system-ui, sans-serif';
       g.lineWidth = 4;
       g.strokeStyle = 'rgba(10,6,16,0.85)';
-      g.strokeText(p.sub, x, y + 18);
-      g.fillText(p.sub, x, y + 18);
+      g.strokeText(p.sub, x, y + 15);
+      g.fillText(p.sub, x, y + 15);
     }
   }
   g.globalAlpha = 1;
@@ -396,23 +400,30 @@ export function draw(g: CanvasRenderingContext2D, s: Scene): void {
 
 const COLS = 24;
 
-/** The woven cloth under the bar: newest row on top (at the shuttle), older rows below. */
+/**
+ * The woven cloth under the bar: newest row on top (at the shuttle), older rows below. It stops
+ * short of the screen's edge, and once it is longer than the space, its oldest rows fade out
+ * (whole rows only, never one cut in half).
+ */
 export function drawCloth(g: CanvasRenderingContext2D, L: Layout, cloth: [number, Judgment][]): void {
-  const top = L.clothY, bottom = L.h - 4;
+  const top = L.clothY, bottom = L.h - 14;
   if (bottom - top < 10) return;
   const sw = (L.w - 2 * L.left) / COLS, sh = 7;
-  const rows = Math.floor((bottom - top) / (sh + 1));
+  const rows = Math.floor((bottom - top + 1) / (sh + 1));
   const lastRow = Math.floor(Math.max(0, cloth.length - 1) / COLS);
+  const more = lastRow + 1 > rows;
   for (let r = 0; r < rows; r++) {
     const row = lastRow - r;
     if (row < 0) break;
     const y = top + r * (sh + 1);
+    g.globalAlpha = more && r >= rows - 3 ? (rows - r) / 4 : 1;
     for (let c = 0; c < COLS; c++) {
       const i = row * COLS + c;
       if (i >= cloth.length) break;
       stitch(g, L.left + c * sw, y, sw, sh, cloth[i][0], cloth[i][1], (row + c) % 2 === 0);
     }
   }
+  g.globalAlpha = 1;
 }
 
 function stitch(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, lane: number, j: Judgment, over: boolean): void {

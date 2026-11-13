@@ -275,10 +275,13 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   ctx − perf over 1.5 s); no Web Audio, sound off by choice, or a context that never starts → a silent perf clock.
   Calibration: 22 clicks every 0.6 s, taps after the 3rd, median error = `profile.offset`, clamped to −50..300 ms
   (`clampOffset`); an optional guide ring flashes at click + current offset; negative/huge/wide (spread > 60) results
-  ask to retry; the prompt returns every visit (menu dot) until calibrated or "Don't ask again". The offset shifts only
-  the SOUND against beads + judging (they always agree), so results offer "shift the sound" by the mean error once, and
-  not again if the last shift left the error unchanged (`profile.shift`: a sight-tapper). The menu song persists
-  (`profile.song`). Songs play out (~2 s fade) before results. `?song=CODE` (base-36 seed), `?seed=&lv=&a=` shows a recorded play rescored; `__game.auto = true`
+  ask to retry; result cards' buttons stay disabled (dimmed) for `CALIB_GUARD` 1.5 s, since the thumb keeps tapping the
+  beat; the prompt returns every visit (menu dot) until calibrated or "Don't ask again". The offset shifts only
+  the SOUND against beads + judging (they always agree), so results offer a "Shift timing ±N ms" button (the one name,
+  as in the help) by the mean error once, and not again if the last shift left the error unchanged (`profile.shift`: a
+  sight-tapper). A resize or rotation mid-song pauses (the pause card asks a sideways phone to turn upright);
+  judgement words sit under the pads (`L.popY`), off the beads' approach; the opening hint goes at the first note.
+  The menu song persists (`profile.song`). Songs play out (~2 s fade) before results. `?song=CODE` (base-36 seed), `?seed=&lv=&a=` shows a recorded play rescored; `__game.auto = true`
   plays a bot (screenshots). Reports `LOOMSONG v… seed=… lv=… off=… a=…`.
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)
   plus a shape in render/draw.ts and a color in palette.ts; tests in

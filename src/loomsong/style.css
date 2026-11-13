@@ -13,16 +13,23 @@ body {
 #hud .acc { min-width: 64px; }
 #hud .combo { min-width: 50px; }
 #combo.hot { color: var(--accent); }
+#hud .label { letter-spacing: 0.04em; }
 @media (max-width: 400px) {
-  #hud { gap: 10px; padding-left: 10px; padding-right: 10px; }
-  #hud .value { font-size: 18px; }
-  #hud .score { min-width: 76px; }
-  #hud .acc { min-width: 56px; }
-  #hud .combo { min-width: 40px; }
+  #hud { gap: 8px; padding-left: 10px; padding-right: 8px; }
+  #hud .label { font-size: 10px; }
+  #hud .value { font-size: 16px; }
+  #hud .score { min-width: 66px; }
+  #hud .acc { min-width: 52px; }
+  #hud .combo { min-width: 36px; }
 }
-#hud .songlbl { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
-#songName { font-size: 14px; font-weight: 800; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#songMeta { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+/* The song's name gets what the numbers leave: two lines if it must, never cut mid-word at 390 px;
+   the mode stays on one line. */
+#hud .songlbl { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; text-align: right; line-height: 1.1; }
+#songName {
+  font-size: 13px; font-weight: 800; max-width: 100%; overflow: hidden; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+}
+#songMeta { font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 #stage { touch-action: none; }
 button.primary { color: #2a1a05; }
 
@@ -56,7 +63,12 @@ button.primary { color: #2a1a05; }
 }
 .card .meta2 { color: var(--muted); font-size: 13px; text-align: center; }
 .card .timing { font-size: 13px; line-height: 1.4; text-align: center; color: var(--muted); background: #150f20; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-height: 76px; }
-.card .timing button.link { min-height: 32px; padding: 0 2px; font-size: 13px; display: inline; vertical-align: baseline; }
+.card .timing p { font-size: 13px; }
+.card .timing button.secondary { display: block; width: 100%; margin-top: 6px; min-height: 44px; font-size: 15px; border-color: var(--accent); color: var(--accent); }
+/* A card that has just opened under a busy thumb: its buttons wake after a moment. */
+.card button { transition: opacity 0.3s; }
+.card.waking button { opacity: 0.3; }
+.card .warn { color: var(--accent); font-weight: 700; text-align: center; }
 .card .nw { white-space: nowrap; }
 .card .calres { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
 .card .calres span { display: flex; flex-direction: column; align-items: center; background: #150f20; border: 1px solid var(--line); border-radius: 10px; padding: 6px 2px; font-size: 11px; color: var(--muted); }
@@ -78,7 +90,11 @@ button.primary { color: #2a1a05; }
 .card p.big { font-size: 32px; font-weight: 900; text-align: center; color: var(--text); margin: 0; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .card .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
 .card .stats span { display: flex; flex-direction: column; align-items: center; background: #150f20; border: 1px solid var(--line); border-radius: 10px; padding: 5px 2px; font-size: 11px; color: var(--muted); text-align: center; }
-.card .stats b { font-size: 17px; color: var(--text); font-variant-numeric: tabular-nums; }
+.card .stats b { font-size: 17px; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.card .stats b small { font-size: 12px; font-weight: 700; color: var(--muted); }
+.card .stats .el { justify-content: center; }
+.card .stats .el b { font-size: 15px; line-height: 1.2; }
+.card .stats .el b small { font-size: 11px; font-weight: 600; }
 .card .stats .j0 b { color: #ffe08a; }
 .card .stats .j1 b { color: #8ee6c8; }
 .card .stats .j2 b { color: #ff8a95; }
