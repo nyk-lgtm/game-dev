@@ -1,6 +1,8 @@
 // The smart Glyphwright bot. It plays like a careful human who reads the wave
 // preview: it scores each loom row with a damage model of the incoming foes
-// (armor, resistances, flyers, crowd size, overkill), rearranges runes by
+// (armor, resistances, flyers, crowd size, overkill), and the loom by how well
+// it covers every kind of foe (a power mean, so a hole such as Drakes against
+// Nova and Fire costs a lot), rearranges runes by
 // greedy swaps, values merges and pairs, banks gold for interest, rerolls
 // within a budget and freezes a shop that holds a merge it can't yet afford.
 // It never peeks at battle outcomes (no simulation of the real wave).
@@ -18,6 +20,7 @@ import {
   enemyHp,
   get,
   isBoss,
+  MOD,
   mixSeed,
   mergeAll,
   move,
@@ -122,37 +125,53 @@ function composition(q: [number, EnemyKind, number][], wave: number): Profile {
 }
 
 interface RowEval {
+  /** Modelled damage per second over the whole wave (P.foes weights). */
   dps: number;
+  /** Damage per second against each foe of P.foes (unweighted, same order). */
+  vs: number[];
   /** Slow applied per second, weighted by how much of the wave it can slow. */
   slowCov: number;
   gild: number;
   leech: number;
 }
 
-/** Tunable weights of the damage model (fit against scripts/glyph/probe.ts). */
+/** Tunable weights of the damage model (fit against real leaks: scripts/glyph/fit.ts). */
 export const W = {
-  pierceD: 0.112,
-  orbD: 0.225,
+  pierceD: 0.223,
+  orbD: 0.299,
   orbEff: 0.8,
   beamD: 0.6,
-  novaBase: 0.22,
+  novaBase: 0.195,
   novaD: 0.525,
   rainD: 0.075,
   chainD: 0.235,
   splitEff: 1,
-  slow: 0.45,
-  burn: 0.5,
+  slow: 0.056,
+  burn: 0.333,
   arc: 1,
-  shred: 0.013,
-  // Per-caster trust (set from favor runs in balance.ts, not the row fit).
+  shred: 0.006,
+  /** Coverage: the loom's damage is a power mean over the wave's foes with
+   *  this exponent (1 = a plain weighted sum; lower punishes a foe kind the
+   *  loom barely hurts, like Drakes against Nova and Fire). */
+  cover: 0.15,
+  /** A second Nova row counts this much (a third, its square): they share one ring of reach. */
+  novaStack: 0.07,
+  // Per-caster trust (fit too; the whole-loom set moved Nova 0.75 -> 1).
   bolt: 1,
   beam: 1,
-  nova: 0.75,
+  nova: 1,
   rain: 1.1,
   orb: 1.1,
 };
+// Try other weights without editing: BOTW='cover=1,novaStack=1'.
+for (const kv of (process.env.BOTW ?? '').split(',').filter(Boolean)) {
+  const [k, v] = kv.split('=');
+  if (!(k in W)) throw new Error(`BOTW: no weight ${k}`);
+  W[k as keyof typeof W] = Number(v);
+}
 
-function castValue(sp: Spell, cd: number, P: Profile): number {
+/** Damage one cast deals to each foe of the profile (unweighted). */
+function castValue(sp: Spell, cd: number, P: Profile): number[] {
   const D = P.density;
   let instances = sp.count;
   let per: number;
@@ -180,26 +199,44 @@ function castValue(sp: Spell, cd: number, P: Profile): number {
   const hits = instances * per * W[sp.caster];
   const arcs = sp.chain > 0 ? instances * Math.min(sp.chain, 1 + W.chainD * D) * W.arc : 0;
   const burnT = Math.min(3, 1.5 + cd) * W.burn;
-  let v = 0;
-  for (const f of P.foes) {
-    if (sp.caster === 'nova' && f.flying) continue;
+  return P.foes.map((f) => {
+    if (sp.caster === 'nova' && f.flying) return 0;
     const res = f.resist[sp.element] ?? 1;
     const raw = sp.dmg * res;
     const armor = Math.max(0, f.armor - sp.shred * W.shred);
     const hitD = raw > 0 ? Math.min(f.hp, Math.max(1, raw - armor)) : 0;
-    const arcD = raw > 0 ? Math.min(f.hp, Math.max(1, raw * 0.7 - armor)) : 0;
+    const arcD = raw > 0 ? Math.min(f.hp, Math.max(1, raw * MOD.stormDmg - armor)) : 0;
     const burn = sp.burn > 0 && (f.resist.fire ?? 1) > 0 ? Math.min(f.hp, sp.burn * burnT) : 0;
-    v += f.w * (hits * (hitD + burn) + arcs * (arcD + burn));
+    return hits * (hitD + burn) + arcs * (arcD + burn);
+  });
+}
+
+/** Weighted power mean of per-foe damage (exponent W.cover). */
+function coverMean(vs: number[], P: Profile): number {
+  const p = W.cover;
+  let v = 0;
+  if (Math.abs(p - 1) < 1e-9) {
+    P.foes.forEach((f, i) => (v += f.w * vs[i]));
+    return v;
   }
-  return v;
+  if (Math.abs(p) < 1e-6) {
+    // Geometric mean (a zero anywhere is a hole: count it as a tiny share).
+    let lg = 0;
+    P.foes.forEach((f, i) => (lg += f.w * Math.log(Math.max(vs[i], 1e-3))));
+    return Math.exp(lg);
+  }
+  P.foes.forEach((f, i) => (v += f.w * Math.pow(Math.max(p > 0 ? 0 : 1e-3, vs[i]), p)));
+  return Math.pow(v, 1 / p);
 }
 
 export function evalRow(row: (Rune | null)[], P: Profile): RowEval {
   const sp = compileRow(row);
-  if (!sp) return { dps: 0, slowCov: 0, gild: 0, leech: 0 };
-  let v = castValue(sp, sp.cooldown, P);
-  for (const e of sp.echoes) v += castValue(e, sp.cooldown, P);
-  const dps = v / sp.cooldown;
+  if (!sp) return { dps: 0, vs: P.foes.map(() => 0), slowCov: 0, gild: 0, leech: 0 };
+  const vs = castValue(sp, sp.cooldown, P);
+  for (const e of sp.echoes) castValue(e, sp.cooldown, P).forEach((x, i) => (vs[i] += x));
+  for (let i = 0; i < vs.length; i++) vs[i] /= sp.cooldown;
+  let dps = 0;
+  P.foes.forEach((f, i) => (dps += f.w * vs[i]));
   let slowCov = 0;
   const casts = (1 + sp.echoes.length) / sp.cooldown;
   const slowers = [sp, ...sp.echoes].filter((x) => x.slow > 0);
@@ -212,7 +249,7 @@ export function evalRow(row: (Rune | null)[], P: Profile): RowEval {
     }
     slowCov = Math.max(slowCov, x.slow * share * Math.min(1, (casts * (x.caster === 'nova' ? 0.6 : 1)) / 0.8));
   }
-  return { dps, slowCov, gild: sp.gild, leech: sp.leech };
+  return { dps, vs, slowCov, gild: sp.gild, leech: sp.leech };
 }
 
 const rowKey = (row: (Rune | null)[]) => row.map((r) => (r ? r.id + r.tier : '-')).join(',');
@@ -241,16 +278,26 @@ export class Evaluator {
     if (this.opts.favor) {
       let fi = -1;
       rows.forEach((r, i) => loom[i].some((x) => x?.id === this.opts.favor) && loom[i][0] && (fi < 0 || r.dps > rows[fi].dps) && (fi = i));
-      if (fi >= 0) rows = rows.map((r, i) => (i === fi ? { ...r, dps: r.dps * (this.opts.favorMult ?? 1.4) } : r));
+      const k = this.opts.favorMult ?? 1.4;
+      if (fi >= 0) rows = rows.map((r, i) => (i === fi ? { ...r, dps: r.dps * k, vs: r.vs.map((x) => x * k) } : r));
     }
-    const dps = rows.reduce((a, r) => a + r.dps, 0);
+    // Novas share the ring around the tower: each one after the first counts less.
+    let novas = 0;
+    rows = rows.map((r, i) => {
+      if (loom[i][0]?.id !== 'nova' || !r.dps) return r;
+      const k = W.novaStack ** novas++;
+      return k === 1 ? r : { ...r, dps: r.dps * k, vs: r.vs.map((x) => x * k) };
+    });
+    const sum = rows.reduce((a, r) => a + r.dps, 0);
+    const vs = this.P.foes.map((_, i) => rows.reduce((a, r) => a + r.vs[i], 0));
+    const dps = coverMean(vs, this.P);
     const slow = Math.min(0.55, rows.reduce((a, r) => a + r.slowCov, 0));
     let v = dps * (1 + W.slow * slow);
     // Economy runes: gold from kills while there are waves left to spend it.
     const left = Math.max(0, WAVES - this.s.wave) / WAVES;
     for (const r of rows) {
-      if (!dps) break;
-      const share = r.dps / dps;
+      if (!sum) break;
+      const share = r.dps / sum;
       v += r.gild * share * this.P.kills * left * dps * 0.012;
       if (this.s.hp < this.s.maxHp) v += r.leech * share * this.P.kills * dps * 0.01 * Math.min(1, (this.s.maxHp - this.s.hp) / 5);
     }

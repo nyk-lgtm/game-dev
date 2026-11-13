@@ -1,6 +1,10 @@
 // Glyphwright balance probe. Run: npx vite-node scripts/glyph/balance.ts [runs] [bots]
 //   bots: comma list of naive, smart, favor (smart bot pushed toward each caster),
 //   favor:mods (toward each modifier), favor:beam+fire (toward the given runes)
+// Rules v3 with the refit bot model (coverage-aware looms, 2026-11-13), 100 seeds: smart 83% (200: 85%), every
+//   loss at the Lich; primary bolt 37 / beam 1 / nova 51 / rain 7 / orb 4; favor bolt 90, beam 75, nova 91,
+//   rain 84, orb 71%. Same rules with the old model: smart 37%, favor 46/43/24/35/36% (it stacked Novas and
+//   Fire and let Drakes through).
 // Rules v3 (order-free Fire, caster buffs, bounty cap), 100 seeds: smart 37% (v2: 41%), primary casters
 //   bolt 12 / beam 4 / nova 56 / rain 27 / orb 1 (v2: 63/0/31/1/5); see BACKLOG.md for favor runs.
 // Rules v2 (Empower, rising rerolls), 60 seeds: smart 32%, oldsmart (never empowers) 35%.
@@ -12,6 +16,10 @@
 import { CASTERS, MODS, WAVES, type CasterId, type RuneId } from '../../src/glyph/core';
 import { PLAYERS, runGame, type Player, type RunResult } from './bot';
 import { smartPlayer } from './smart';
+import { applyTweaks } from './tweak';
+
+// TWEAK='drake.hp=100,BUDGET.square=0.45' tries rule numbers (tweak.ts); BOTW='cover=1' bot weights (smart.ts).
+applyTweaks();
 
 const runs = Number(process.argv[2] ?? 60);
 const bots = (process.argv[3] ?? 'naive,smart').split(',');
