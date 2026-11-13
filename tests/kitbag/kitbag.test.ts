@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ELITE_GAP,
   ENEMIES,
   FLOORS,
   GEAR,
   MAX_GEAR,
   act,
   attackOf,
+  diceRoom,
+  incomingOf,
   enemyDef,
   intentOf,
   legalPlacements,
@@ -15,6 +18,7 @@ import {
   placeError,
   previewPlace,
   replay,
+  rngFor,
   slotSentence,
   type GearId,
   type Run,
@@ -69,7 +73,7 @@ describe('slots', () => {
 
   it('a sword deals the die, a dagger only takes 3 or less and adds 3, block soaks first', () => {
     const r = fightWith(['sword', 'dagger', 'buckler'], [5, 4, 2]);
-    expect(placeError(r, 1, 1, 0)).toBe('doesn’t fit');
+    expect(placeError(r, 1, 1, 0)).toBe('needs 3 or less');
     r.fight!.enemy.block = 3;
     expect(previewPlace(r, 0, 0, 0)!.dmg).toBe(2);
     act(r, 'P0.0.0');
@@ -79,7 +83,7 @@ describe('slots', () => {
     expect(r.fight!.enemy.hp).toBe(193);
     expect(placeError(r, 1, 0, 0)).toBe('used this turn');
     act(r, 'P1.2.0');
-    expect(r.block).toBe(4);
+    expect(r.block).toBe(5);
   });
 
   it('two-dice slots wait for a partner; a pair needs equal values', () => {
@@ -106,7 +110,7 @@ describe('slots', () => {
     act(r, 'P1.1.0');
     expect(r.fight!.pool[6].v).toBe(5);
     act(r, 'P2.2.0');
-    expect(r.fight!.pool[7].v).toBe(5);
+    expect(r.fight!.pool[7].v).toBe(6);
     act(r, 'P3.3.0');
     const v = r.fight!.pool[8].v;
     expect(v).toBeGreaterThanOrEqual(1);
@@ -120,7 +124,7 @@ describe('slots', () => {
 
   it('a chisel will not split a 1', () => {
     const r = fightWith(['chisel'], [1, 4]);
-    expect(placeError(r, 0, 0, 0)).toBe('doesn’t fit');
+    expect(placeError(r, 0, 0, 0)).toBe('needs 2 or more');
   });
 
   it('powder keg fills over turns and blows through block', () => {
@@ -167,7 +171,7 @@ describe('enemy intents', () => {
     act(r, 'P0.0.0');
     const hp = r.hp;
     act(r, 'E');
-    expect(r.hp).toBe(hp - (attackOf({ ...e, step: 0 }, enemyDef('ogre').pattern[0]) - 5));
+    expect(r.hp).toBe(hp - (attackOf({ ...e, step: 0 }, enemyDef('ogre').pattern[0]) - 6));
     expect(r.block).toBe(0);
     // Next: strength +2 and block 8.
     act(r, 'E');
@@ -284,5 +288,99 @@ describe('runs', () => {
     const mid = JSON.stringify(r);
     for (const a of ['P9.0.0', 'P0.9.0', 'P0.0.4', 'M0', 'C0']) expect(act(r, a)).toBeNull();
     expect(JSON.stringify(r)).toBe(mid);
+  });
+});
+
+/** Each fight's rolls, turn by turn (the first three dice, as a string), over one bot run. */
+function rollsByFight(seed: number): string[][] {
+  const r = newRun(seed);
+  const fights: string[][] = [];
+  let key = '';
+  for (let guard = 0; r.phase !== 'over' && guard < 20000; guard++) {
+    if (r.phase === 'fight') {
+      const k = `${r.stats.fights}.${r.fight!.turn}`;
+      if (k !== key) {
+        key = k;
+        if (r.fight!.turn === 1) fights.push([]);
+        fights[fights.length - 1].push(r.fight!.pool.slice(0, 3).map((p) => p.v).join(''));
+      }
+    }
+    act(r, botAction(r));
+  }
+  return fights;
+}
+
+describe('rules v2 fixes', () => {
+  it('roll streams are keyed on every part, not their sum', () => {
+    for (let seed = 1; seed < 50; seed++) {
+      expect(rngFor(seed, 7, 1, 1).next()).not.toBe(rngFor(seed, 7, 0, 2).next());
+      expect(rngFor(seed, 7, 2, 1).next()).not.toBe(rngFor(seed, 7, 1, 2).next());
+    }
+  });
+
+  it('a fight never opens with the rolls of the fight before', () => {
+    let repeats = 0;
+    let pairs = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const fights = rollsByFight(seed);
+      for (let k = 1; k < fights.length; k++) {
+        if (fights[k].length < 2) continue;
+        const open = `${fights[k][0]}|${fights[k][1]}`;
+        const prev = fights[k - 1];
+        for (let t = 0; t + 1 < prev.length; t++) {
+          pairs++;
+          if (`${prev[t]}|${prev[t + 1]}` === open) repeats++;
+        }
+      }
+    }
+    // Two turns of three dice match by chance about once in 47,000.
+    expect(pairs).toBeGreaterThan(200);
+    expect(repeats).toBeLessThanOrEqual(1);
+  });
+
+  it('elites are spaced out', () => {
+    for (let seed = 1; seed < 200; seed++) {
+      const m = makeMap(seed);
+      const at = m.map((row, f) => (row.some((n) => n.kind === 'elite') ? f : -1)).filter((f) => f >= 0);
+      for (let k = 1; k < at.length; k++) expect(at[k] - at[k - 1]).toBeGreaterThanOrEqual(ELITE_GAP);
+    }
+  });
+
+  it('incoming damage counts poison and flags lethal', () => {
+    const r = fightWith(['buckler'], [3]);
+    r.fight!.enemy.id = 'toad';
+    r.fight!.enemy.step = 0; // atk 4 + poison 2
+    r.poison = 3;
+    expect(incomingOf(r)).toMatchObject({ hit: 4, through: 4, tick: 5, total: 9, lethal: false });
+    r.hp = 9;
+    expect(incomingOf(r).lethal).toBe(true);
+    act(r, 'P0.0.0'); // block 3+1
+    expect(incomingOf(r)).toMatchObject({ total: 5, lethal: false });
+    act(r, 'E');
+    expect(r.hp).toBe(4);
+  });
+
+  it('a salve past full HP blocks instead', () => {
+    const r = fightWith(['salve'], [3]);
+    r.hp = r.maxHp - 1;
+    act(r, 'P0.0.0');
+    expect(r.hp).toBe(r.maxHp);
+    expect(r.block).toBe(3);
+  });
+
+  it('no dice rewards when the gear has no room for more dice', () => {
+    const r = newRun(11);
+    expect(diceRoom(r)).toBe(3);
+    r.gear = [{ id: 'coin', up: false }, { id: 'sword', up: false }];
+    expect(diceRoom(r)).toBe(1);
+    for (let seed = 1; seed < 40; seed++) {
+      const q = newRun(seed);
+      act(q, 'M0');
+      q.fight!.enemy.hp = 1;
+      q.fight!.pool[0].locked = false;
+      expect(act(q, 'P0.0.0')!.fightWon).toBe(true);
+      expect(q.phase).toBe('choice');
+      expect(q.choice!.options.some((o) => o.gifts.some((g) => g.t === 'die'))).toBe(false);
+    }
   });
 });

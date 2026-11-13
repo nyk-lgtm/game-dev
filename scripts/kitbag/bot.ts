@@ -86,14 +86,16 @@ export function planTurn(r: Run, budget = 12000): { steps: Step[]; value: number
     const poisonNow = e.poison + a.poison;
     if (left <= 0 || poisonNow >= left) return 10000 + r.hp + Math.min(a.heal, missing) * 0.5 - a.dmg * 0.001;
     const hit = a.stun ? 0 : incoming;
-    const taken = Math.max(0, hit - a.block);
+    const taken = Math.max(0, hit - a.block - Math.max(0, a.heal - missing));
+    // Your poison (and any the enemy adds) ticks before your next turn too.
+    const tick = r.poison + (a.stun ? 0 : (it.poison ?? 0));
     let v = hpLoss * 1.0;
     // Poison keeps ticking (n + n-1 + …) until the enemy dies.
     v += Math.min(left, (poisonNow * (poisonNow + 1)) / 2 - (e.poison * (e.poison + 1)) / 2) * 0.55;
     v += kegPart * 0.6;
     v += Math.min(a.heal, missing) * 0.9;
-    v -= taken * (r.hp - taken <= 10 ? 1.8 : 1.3);
-    if (taken >= r.hp) v -= 5000;
+    v -= taken * (r.hp - taken - tick <= 10 ? 1.8 : 1.3);
+    if (taken + tick >= r.hp) v -= 5000;
     if (a.stun && !incoming) v -= 2;
     return v;
   };

@@ -53,13 +53,13 @@ const s = (need: Cond, fx: Fx, mult: number, add: number, uses = 1, extra: Parti
 
 export const GEAR: GearDef[] = [
   { id: 'sword', name: 'Sword', icon: '🗡️', rarity: 1, slots: [s('any', 'dmg', 1, 0)], up: [s('any', 'dmg', 1, 2)] },
-  { id: 'buckler', name: 'Buckler', icon: '🛡️', rarity: 1, slots: [s('any', 'block', 1, 0)], up: [s('any', 'block', 1, 2)] },
+  { id: 'buckler', name: 'Buckler', icon: '🛡️', rarity: 1, slots: [s('any', 'block', 1, 1)], up: [s('any', 'block', 1, 3)] },
   { id: 'dagger', name: 'Dagger', icon: '🔪', rarity: 1, slots: [s('le3', 'dmg', 1, 3)], up: [s('le3', 'dmg', 1, 3, 2)] },
   { id: 'axe', name: 'Hand Axe', icon: '🪓', rarity: 1, slots: [s('even', 'dmg', 1, 2)], up: [s('even', 'dmg', 1, 4)] },
   { id: 'ward', name: 'Ward', icon: '🧿', rarity: 1, slots: [s('odd', 'block', 1, 2)], up: [s('odd', 'block', 1, 4)] },
   { id: 'sling', name: 'Sling', icon: '🪃', rarity: 1, slots: [s('le2', 'dmg', 1, 5)], up: [s('le2', 'dmg', 1, 5, 2)] },
   { id: 'coin', name: 'Lucky Coin', icon: '🪙', rarity: 1, slots: [s('any', 'reroll', 0, 0)], up: [s('any', 'reroll', 0, 0, 2)] },
-  { id: 'whet', name: 'Whetstone', icon: '🪨', rarity: 1, slots: [s('any', 'bump', 0, 1)], up: [s('any', 'bump', 0, 2)] },
+  { id: 'whet', name: 'Whetstone', icon: '🪨', rarity: 1, slots: [s('any', 'bump', 0, 2)], up: [s('any', 'bump', 0, 2, 2)] },
   { id: 'spiked', name: 'Spiked Shield', icon: '🌵', rarity: 1, slots: [s('even', 'spike', 1, 3)], up: [s('even', 'spike', 1, 5)] },
   { id: 'maul', name: 'Maul', icon: '🔨', rarity: 2, slots: [s('ge5', 'dmg', 2, 0)], up: [s('ge4', 'dmg', 2, 0)] },
   { id: 'tower', name: 'Tower Shield', icon: '🏰', rarity: 2, slots: [s('ge4', 'block', 1, 4)], up: [s('ge4', 'block', 1, 7)] },
@@ -67,7 +67,7 @@ export const GEAR: GearDef[] = [
   { id: 'fang', name: 'Viper Fang', icon: '🐍', rarity: 2, slots: [s('odd', 'poison', 0.5, 1)], up: [s('any', 'poison', 0.5, 1)] },
   { id: 'hourglass', name: 'Hourglass', icon: '⏳', rarity: 2, slots: [s('any', 'flip', 0, 0)], up: [s('any', 'flip', 0, 0, 2)] },
   { id: 'chisel', name: 'Chisel', icon: '⛏️', rarity: 2, slots: [s('ge2', 'split', 0, 0)], up: [s('ge2', 'split', 0, 0, 2)] },
-  { id: 'salve', name: 'Salve', icon: '🌿', rarity: 2, slots: [s('le2', 'heal', 0, 4, 1, { perFight: 2 })], up: [s('le3', 'heal', 0, 5, 1, { perFight: 2 })] },
+  { id: 'salve', name: 'Salve', icon: '🌿', rarity: 2, slots: [s('le3', 'heal', 0, 4, 1, { perFight: 2 })], up: [s('le3', 'heal', 0, 6, 1, { perFight: 2 })] },
   { id: 'twin', name: 'Twinblade', icon: '⚔️', rarity: 3, slots: [s('pair', 'dmg', 1, 6)], up: [s('pair', 'dmg', 1, 10)] },
   { id: 'net', name: 'Net', icon: '🕸️', rarity: 3, slots: [s('six', 'stun', 0, 0, 1, { perFight: 1 })], up: [s('ge5', 'stun', 0, 0, 1, { perFight: 1 })] },
   { id: 'keg', name: 'Powder Keg', icon: '💣', rarity: 3, slots: [s('any', 'keg', 0, 20, 0, { fuse: 12 })], up: [s('any', 'keg', 0, 20, 0, { fuse: 9 })] },
@@ -169,7 +169,7 @@ export function slotSentence(d: SlotDef): string {
       eff = `block its value and deal ${d.add}`;
       break;
     case 'heal':
-      eff = `heal ${d.add}`;
+      eff = `heal ${d.add} (past full HP it blocks instead)`;
       break;
     case 'poison':
       eff = `poison ${x(d.mult, d.add)}`;
@@ -210,7 +210,7 @@ export interface DieDef {
 }
 
 export const DICE: DieDef[] = [
-  { kind: 'd6', name: 'Bone die', faces: [1, 2, 3, 4, 5, 6], text: 'A plain d6.' },
+  { kind: 'd6', name: 'Bone die', faces: [1, 2, 3, 4, 5, 6], text: 'A plain d6, like the three you started with.' },
   { kind: 'd8', name: 'Iron d8', faces: [1, 2, 3, 4, 5, 6, 7, 8], text: 'Eight faces, 1 to 8.' },
   { kind: 'loaded', name: 'Weighted die', faces: [3, 4, 4, 5, 5, 6], text: 'Faces 3 4 4 5 5 6.' },
   { kind: 'even', name: 'Even die', faces: [2, 2, 4, 4, 6, 6], text: 'Faces 2 2 4 4 6 6.' },

@@ -57,8 +57,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     delay, timing jitter, a two-level release planner; rules v3 (40 runs): novice median ~22 s (alt ~470), human
     ~50-70 s (alt ~700-900; seed noise is large), good ~115 s (alt ~1900, p75 ~158 s), perfect survives 10 min;
     most good-bot deaths are cinders it brushes after a jittered grab). `SG_MODE=s|t|m` for modes, `CHECK=1` verifies replays.
-  - Kitbag: `npx vite-node scripts/kitbag/balance.ts 500` (planning bot, rules v1: first two fights 100%, median floor 12,
-    ~24% wins (25% seeds 1000+, 23% SEED=9000), ~32 turns a run; most losses at The House (~45% of runs), then stage-3
+  - Kitbag: `npx vite-node scripts/kitbag/balance.ts 1000` (planning bot, rules v2: first two fights 100%, median floor 12,
+    ~22% wins (24% seeds 1000+, 18% SEED=9000), ~32 turns a run; most losses at The House (~48% of runs), then stage-3
     entry (floor 9-10: Golem, Wyvern, Mimic, the Lich elite) and the Iron Warden elite on floors 5-8). `TUNE=hp:1.04,dmg:1.05`
     tries numbers (win rate is touchy: hp ×1.04 alone ≈ −3 points); `trace.ts <seed>` prints a bot run turn by turn,
     `upto.ts <seed> <floorsDone> [phase] [extra]` gives actions for `?seed=&a=`.
@@ -186,14 +186,18 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 - Kitbag (src/kitbag/core): gear.ts (19 gear cards: each has slots `{need, fx, mult, add, uses, perFight?, fuse?}` and
   an `up` version; 6 dice kinds with face lists), enemies.ts (hp + a cycle of intents `{atk, hits, block, hex, wither,
   poison, heal, buff, charge}`; the fight starts at a seeded step, never on a wind-up), run.ts. A turn: block resets,
-  your poison ticks, dice roll (`Rng(mixSeed(seed, mixSeed(floor, turn)))`), wither lowers them, hex locks the
+  your poison ticks, dice roll (`rngFor(seed, T_ROLL, floor, turn)`: every stream goes through `rngFor`, which hashes each
+  part in turn, because `mixSeed(a, b)` collides along a + b and v1 replayed whole roll sequences between fights), wither lowers them, hex locks the
   highest (always leaves one free). Placing applies at once (`applyPlace`; damage soaks enemy block first, `pierce`
   and the Keg skip it); two-dice slots (`pair`/`two`) hold the first die (`held`) until the partner lands; reroll/
   split/flip/bump push a die back into the pool (rerolls key on a per-turn counter that undo restores, so undo can't
   fish). `E`: enemy block resets, its poison ticks, then the intent (skipped if stunned). Wins open a `Choice`
   (reward: gear / upgrade-or-die / heal-or-more; elites `more: 1`; rests heal 35% or upgrade; shrines trade HP);
-  a full kit (6) needs `C<k>.<replace>`. Map: 12 floors × 2 nodes (floors 1-2 fights, 6 rest|shrine, 11 rest|…,
-  12 The House); walking into a rest/shrine completes the floor. Actions `M<k>`, `P<die>.<card>.<slot>`, `U`
+  a full kit (6) needs `C<k>.<replace>`; dice are only offered while `diceRoom(r)` (dice the gear can spend a turn)
+  exceeds your dice. Heals past full HP become block. `incomingOf(r)` = the hit past block + the poison that ticks
+  next turn, `lethal` when it kills (red tag, info line, End-turn confirm). Map: 12 floors × 2 nodes, a free pick per
+  floor (floors 1-2 fights, 6 rest|shrine, 11 rest|…, 12 The House; elites ≥ `ELITE_GAP` = 3 floors apart); walking
+  into a rest/shrine completes the floor. Actions `M<k>`, `P<die>.<card>.<slot>`, `U`
   (undo within the turn, snapshots in `hist`), `E`, `C<k>[.<r>]`, `S`, `X`; `replay(seed, a)`; `previewPlace` runs a
   placement on a clone for the slot previews (never show a reroll's value). UI is DOM (game.ts): drag a die (pointer
   capture + ghost) or tap die then slot; kit grid bottom-aligned near the dice, the enemy panel takes the spare height

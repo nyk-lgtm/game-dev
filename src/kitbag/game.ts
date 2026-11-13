@@ -17,6 +17,8 @@ import {
   COND_LABEL,
   act,
   attackOf,
+  diceRoom,
+  incomingOf,
   diceFor,
   dieDef,
   enemyDef,
@@ -113,7 +115,7 @@ function effectText(ef: Effect, def: SlotDef, v = 0): string {
   if (ef.boom) bits.push(`BOOM ${ef.dmg + ef.soaked}`);
   else if (ef.dmg || ef.soaked) bits.push(`Deal ${ef.dmg}${ef.soaked ? ` (${ef.soaked} blocked)` : ''}`);
   if (ef.block) bits.push(`Block ${ef.block}`);
-  if (def.fx === 'heal') bits.push(ef.heal ? `Heal ${ef.heal}` : 'Heal 0 (full)');
+  if (ef.heal) bits.push(`Heal ${ef.heal}`);
   if (ef.poison) bits.push(`Poison ${ef.poison}`);
   if (ef.stun) bits.push('Stun!');
   if (def.fx === 'reroll') bits.push('Reroll');
@@ -152,7 +154,7 @@ function giftText(r: Run, g: Gift): { name: string; text: string } {
     }
     case 'die': {
       const d = dieDef(g.kind);
-      return { name: `New die: ${d.name}`, text: `${d.text} You roll ${r.dice.length + 1} dice a turn.` };
+      return { name: `New die: ${d.name}`, text: `${d.text} You’d roll ${r.dice.length + 1} dice a turn; your gear can take ${diceRoom(r)}.` };
     }
     case 'hone': {
       const d = r.dice[g.die];
@@ -272,8 +274,12 @@ export class Game {
   private afterStep(): void {
     const r = this.r;
     if (r.phase === 'over') this.showEnd();
-    else if (r.phase === 'choice') this.showChoice();
-    else if (r.phase === 'map') this.showMap(false);
+    else if (r.phase === 'choice') {
+      this.showChoice();
+      // A "which card makes room?" question left open before a reload comes back.
+      const pend = store.load<{ seed: number; n: number; k: number } | null>('pendingReplace', null);
+      if (pend && pend.seed === r.seed && pend.n === r.actions.length && r.choice?.options[pend.k] && needsReplace(r, r.choice.options[pend.k])) this.askReplace(pend.k);
+    } else if (r.phase === 'map') this.showMap(false);
   }
 
   // ---------------------------------------------------------------- input
@@ -348,6 +354,14 @@ export class Game {
     const under = d.over ?? document.elementFromPoint(e.clientX, e.clientY - 20)?.closest<HTMLElement>('.slot');
     if (under && under.classList.contains('fit')) this.place(d.i, Number(under.dataset.c), Number(under.dataset.s));
     else {
+      if (under) {
+        const c = Number(under.dataset.c);
+        const err = placeError(this.r, d.i, c, Number(under.dataset.s));
+        if (err) {
+          this.sfx.nope();
+          this.msg = `<span class="warn">${gearName(this.r.gear[c])}: ${err}.</span>`;
+        }
+      }
       this.sel = -1;
       this.render();
     }
@@ -420,10 +434,23 @@ export class Game {
     this.render();
   }
 
-  private endTurn(): void {
+  private endTurn(confirmed = false): void {
     this.sfx.unlock();
     const r = this.r;
     if (this.busy || r.phase !== 'fight') return;
+    const inc = incomingOf(r);
+    if (inc.lethal && !confirmed) {
+      this.sfx.nope();
+      navigator.vibrate?.([20, 40, 20]);
+      showCard(
+        `<h2>This would kill you</h2><p>Ending the turn now costs <b>${inc.total} HP</b>${inc.tick ? ` (${inc.through} from the hit, ${inc.tick} from poison)` : ''} and you have <b>${r.hp}</b>.${legalPlacements(r).length ? ' You still have dice to place: more block, or a kill, could save you.' : ''}</p>`,
+        [
+          { label: 'Keep fighting', primary: true, onClick: closeOverlay },
+          { label: 'End turn anyway', onClick: () => (closeOverlay(), this.endTurn(true)) },
+        ],
+      );
+      return;
+    }
     const f = r.fight!;
     const it = intentOf(f.enemy);
     const stunned = f.enemy.stunned;
@@ -473,6 +500,11 @@ export class Game {
         }
         this.rolling = true;
         this.busy = false;
+        const eb = r.fight?.enemy.block ?? 0;
+        if (eb && !store.load('seenEnemyBlock', false)) {
+          store.save('seenEnemyBlock', true);
+          this.msg = `<b>🛡 ${eb} on the enemy:</b> its block soaks your damage this turn and drops when it acts again. Pierce and the Powder Keg go straight through.`;
+        }
         this.render();
       },
       fx ? 260 : 60,
@@ -604,6 +636,7 @@ export class Game {
     if (e.str) tags.push(`<span class="tag str">💪 +${e.str}</span>`);
     if (e.stunned) tags.push(`<span class="tag stun">💫 stunned</span>`);
     $('foeTags').innerHTML = tags.join('');
+    $('intentWords').innerHTML = e.stunned ? 'Stunned: it skips its next action.' : `Next it will ${intentWords(e, intentOf(e))}.`;
     const it = intentOf(e);
     const btn = $('intent');
     const total = e.stunned ? 0 : attackOf(e, it);
@@ -683,12 +716,10 @@ export class Game {
     if (r.block) tags.push(`<span class="tag block">🛡 ${r.block}</span>`);
     if (r.poison) tags.push(`<span class="tag poison">☠ ${r.poison}</span>`);
     if (f && r.phase === 'fight') {
-      const e = f.enemy;
-      const hit = e.stunned ? 0 : attackOf(e, intentOf(e));
-      if (hit > 0) {
-        const through = Math.max(0, hit - r.block);
-        tags.push(through ? `<span class="tag str">⚔ −${through}</span>` : `<span class="tag block">safe</span>`);
-      }
+      const inc = incomingOf(r);
+      if (inc.lethal) tags.push(`<span class="tag lethal">lethal −${inc.total}</span>`);
+      else if (inc.total) tags.push(`<span class="tag str">−${inc.total} next</span>`);
+      else if (inc.hit) tags.push(`<span class="tag block">safe</span>`);
     }
     $('youTags').innerHTML = tags.join('');
   }
@@ -703,9 +734,11 @@ export class Game {
     }
     const roll = this.rolling && !reducedFx();
     let k = 0;
+    // Used dice leave a gap, so the others never shift under a quick finger.
+    tray.className = f.pool.length > 7 ? 'many2' : f.pool.length > 5 ? 'many' : '';
     const html = f.pool
       .map((p, i) => {
-        if (p.used) return '';
+        if (p.used) return '<div class="die used"></div>';
         const cls = [
           i === this.sel ? 'sel' : '',
           p.locked ? 'locked' : '',
@@ -716,7 +749,7 @@ export class Game {
         return dieHtml(p.v, this.kindOf(i), cls, `data-i="${i}" data-w="${f.withered}" ${style} role="button"`);
       })
       .join('');
-    tray.innerHTML = html || '<span class="empty">All dice placed</span>';
+    tray.innerHTML = f.pool.some((p) => !p.used) ? html : '<span class="empty">All dice placed</span>';
     if (this.rolling) this.sfx.roll(f.pool.length);
     this.rolling = false;
     this.fresh.clear();
@@ -728,6 +761,23 @@ export class Game {
     if (!ef) return '';
     const sd = slotsOf(r.gear[card])[slot];
     return `${gearDef(r.gear[card].id).icon} <b>${gearName(r.gear[card])}</b>: ${effectText(ef, sd)}`;
+  }
+
+  /** What ending the turn now costs, poison included, flagged when it would kill you. */
+  private incomingLine(): string {
+    const r = this.r;
+    const inc = incomingOf(r);
+    const e = r.fight!.enemy;
+    if (!inc.hit && !inc.tick) return e.poison >= e.hp ? `<span class="good">Its poison finishes it.</span>` : `${enemyDef(e.id).name} won’t attack this turn.`;
+    const parts: string[] = [];
+    if (inc.hit) parts.push(`Incoming <b>${inc.hit}</b>${r.block ? `, you block ${Math.min(inc.hit, r.block)}` : ''}`);
+    if (inc.tick) parts.push(`${inc.hit ? 'then ' : ''}☠ <b>${inc.tick}</b> poison`);
+    const end = inc.lethal
+      ? `<span class="warn">LETHAL: ${inc.total} with ${r.hp} HP left</span>`
+      : inc.total
+        ? `<span class="warn">you lose ${inc.total}</span>`
+        : '<span class="good">all blocked</span>';
+    return `${parts.join(', ')}: ${end}.`;
   }
 
   private renderInfo(): void {
@@ -743,13 +793,8 @@ export class Game {
         html = n ? `Tap a <b>glowing slot</b> (${n} ${n === 1 ? 'fits' : 'fit'}), or tap the die again to put it back.` : 'This die fits <b>no slot</b> right now.';
       } else if (r.floor === 0 && f.turn === 1 && !r.hist.length) html = '<b>Drag a die onto a slot</b> (or tap a die, then a slot). Slots show what they need: any, ≤3, even…';
       else if (f.hexed && f.turn <= 3 && !r.hist.length) html = `<span class="warn">Hexed:</span> your ${f.hexed > 1 ? `${f.hexed} highest dice are` : 'highest die is'} locked this turn.`;
-      else if (!legal.length) html = left ? 'Nothing else fits. <b>End turn</b> when ready.' : 'All dice placed. <b>End turn</b> to let the enemy act.';
-      else {
-        const e = f.enemy;
-        const hit = e.stunned ? 0 : attackOf(e, intentOf(e));
-        const through = Math.max(0, hit - r.block);
-        html = `${`${left} ${left === 1 ? 'die' : 'dice'}`} left.${hit ? ` Incoming <b>${hit}</b>${r.block ? `, you block ${Math.min(hit, r.block)}` : ''}${through ? `: <span class="warn">you take ${through}</span>` : ': <span class="good">all blocked</span>'}.` : ` ${enemyDef(e.id).name} won’t attack this turn.`}`;
-      }
+      else if (!legal.length) html = `${left ? 'Nothing else fits.' : 'All dice placed.'} ${this.incomingLine()}`;
+      else html = `${left} ${left === 1 ? 'die' : 'dice'} left. ${this.incomingLine()}`;
     }
     $('info').innerHTML = html || '&nbsp;';
   }
@@ -783,7 +828,7 @@ export class Game {
       .join('');
     const title = peek ? 'The map' : r.floor === 0 ? 'The climb to The House' : `Floor ${r.floor + 1}: choose a path`;
     showCard(
-      `<h2>${title}<span class="sub">${peek ? `Floor ${floorReached(r)} of ${FLOORS}. ` : ''}Tap a room on the lit row. The House waits on floor ${FLOORS}.</span></h2><div class="map">${rows}</div>`,
+      `<h2>${title}<span class="sub">${peek ? `Floor ${floorReached(r)} of ${FLOORS}. ` : ''}Pick either room on the lit row: rooms aren’t linked, so you can switch sides on any floor. The House waits on floor ${FLOORS}.</span></h2><div class="map">${rows}</div>`,
       peek ? [{ label: 'Back', primary: true, onClick: () => this.back() }] : [],
       peek,
     );
@@ -850,13 +895,14 @@ export class Game {
 
   private askReplace(k: number): void {
     const r = this.r;
+    store.save('pendingReplace', { seed: r.seed, n: r.actions.length, k });
     const g = r.choice!.options[k].gifts.find((x) => x.t === 'gear') as { t: 'gear'; id: string } | undefined;
     const name = g ? gearDef(g.id as never).name : 'the new card';
     showCard(
       `<h2>Your kit is full<span class="sub">${MAX_GEAR} cards at most. Which one makes room for the ${name}?</span></h2><div class="opts">${r.gear
         .map((x, i) => `<button class="opt" data-r="${i}"><span class="ic">${gearDef(x.id).icon}</span><span><b>${gearName(x)}</b><span class="t">${slotsOf(x).map(slotSentence).join(' ')}</span></span></button>`)
         .join('')}</div>`,
-      [{ label: 'Back', onClick: () => this.showChoice() }],
+      [{ label: 'Back', onClick: () => (store.save('pendingReplace', null), this.showChoice()) }],
       false,
     );
     document.querySelectorAll<HTMLButtonElement>('#overlay .opt').forEach((b) => (b.onclick = () => this.choose(`C${k}.${b.dataset.r}`)));
@@ -865,6 +911,7 @@ export class Game {
   private choose(a: string): void {
     this.sfx.unlock();
     if (!act(this.r, a)) return;
+    store.save('pendingReplace', null);
     this.save();
     this.sfx.pick();
     navigator.vibrate?.(10);
@@ -925,7 +972,7 @@ export class Game {
        <p>Climb twelve floors to <b>The House</b>, fighting with dice and the gear in your bag.</p>
        <div class="help-dice">${dieHtml(2)}<span class="arrow">→</span><span class="help-slot">≤3</span><span class="arrow">=</span><b>Dagger: deal 2+3</b></div>
        <ul>
-         <li>Each turn you <b>roll your dice</b>. <b>Drag</b> each one onto a slot on your gear (or tap a die, then a slot). Slots say what they take: <b>any</b>, <b>≤3</b>, <b>even</b>, <b>5+</b>, a <b>pair</b>… Slots that fit glow and show exactly what they’d do.</li>
+         <li>You start with three <b>bone dice</b> (plain d6s). Each turn you <b>roll your dice</b>. <b>Drag</b> each one onto a slot on your gear (or tap a die, then a slot). Slots say what they take: <b>any</b>, <b>≤3</b>, <b>even</b>, <b>5+</b>, a <b>pair</b>… Slots that fit glow and show exactly what they’d do.</li>
          <li>The enemy shows its <b>next move</b> in the top-right: ⚔ attack, 🛡 block, ☠ poison, 🔒 hex (locks your best die), 🥀 wither (lowers your roll), ⏳ winding up a big hit. Tap it for words.</li>
          <li><b>Block</b> soaks hits until your next turn. Changed your mind? <b>↶</b> undoes a placement this turn. Then <b>End turn</b>.</li>
          <li>Win a fight: pick a <b>reward</b>: new gear (at most ${MAX_GEAR}), an upgrade, a new die (at most ${MAX_DICE}), or a heal. HP carries over. Elites give two picks; campfires heal or upgrade.</li>

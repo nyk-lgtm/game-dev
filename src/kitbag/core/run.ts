@@ -24,7 +24,7 @@ import {
   type GearId,
 } from './gear';
 
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 2;
 export const FLOORS = 12;
 export const START_HP = 40;
 export const MAX_GEAR = 6;
@@ -158,29 +158,49 @@ export interface Run {
   stats: Stats;
 }
 
+// ---------------------------------------------------------------- randomness
+
+/**
+ * An Rng for one purpose, keyed by the run seed and a chain of numbers
+ * (tag, floor, turn, reroll…). Each part is hashed in turn: mixSeed(a, b) alone
+ * collides along a + b (floor 1 turn 1 = floor 0 turn 2), which once replayed
+ * whole roll sequences from one fight in the next.
+ */
+export function rngFor(seed: number, ...parts: number[]): Rng {
+  let h = seed >>> 0;
+  for (const p of parts) h = mixSeed(h, p >>> 0);
+  return new Rng(h);
+}
+const T_MAP = 0x6d6170, T_FIGHT = 0x666967, T_ROLL = 0x726f6c, T_REROLL = 0x727272, T_CHOICE = 0x63686f;
+
 // ---------------------------------------------------------------- map
 
+/** Floors between elites, at least. */
+export const ELITE_GAP = 3;
 /** Enemy tier for an ordinary fight on floor f (0-based). */
 export const stageOf = (f: number): 1 | 2 | 3 => (f < 4 ? 1 : f < 8 ? 2 : 3);
 
 export function makeMap(seed: number): MapNode[][] {
-  const rng = new Rng(mixSeed(seed, 0x6d6170));
+  const rng = rngFor(seed, T_MAP);
   const map: MapNode[][] = [];
   const foe = (t: number, avoid: string[]) => {
     const pool = enemiesOfTier(t).filter((e) => !avoid.includes(e.id));
     return rng.pick(pool.length ? pool : enemiesOfTier(t)).id;
   };
   const recent: string[] = [];
+  // Elites come at most once every ELITE_GAP floors (either room counts).
+  let lastElite = -ELITE_GAP;
   for (let f = 0; f < FLOORS; f++) {
     let kinds: NodeKind[];
+    const eliteOk = f - lastElite >= ELITE_GAP;
     if (f === FLOORS - 1) kinds = ['boss'];
     else if (f < 2) kinds = ['fight', 'fight'];
     else if (f === 5) kinds = ['rest', 'shrine'];
-    else if (f === FLOORS - 2) kinds = ['rest', rng.next() < 0.5 ? 'shrine' : 'elite'];
+    else if (f === FLOORS - 2) kinds = ['rest', eliteOk && rng.next() < 0.5 ? 'elite' : 'shrine'];
     else {
       const roll = (): NodeKind => {
         const x = rng.next();
-        return x < 0.5 ? 'fight' : x < 0.72 ? 'elite' : x < 0.86 ? 'rest' : 'shrine';
+        return x < 0.52 ? 'fight' : x < 0.72 ? (eliteOk ? 'elite' : 'fight') : x < 0.86 ? 'rest' : 'shrine';
       };
       const a = roll();
       let b = roll();
@@ -189,6 +209,7 @@ export function makeMap(seed: number): MapNode[][] {
       if (a !== 'fight' && a !== 'elite' && b !== 'fight' && b !== 'elite') b = 'fight';
       kinds = [a, b];
     }
+    if (kinds.includes('elite')) lastElite = f;
     const row: MapNode[] = kinds.map((k) => {
       if (k === 'fight') {
         const id = foe(stageOf(f), recent);
@@ -252,7 +273,7 @@ export const attackOf = (e: Enemy, it: Intent): number => hitOf(e, it) * (it.atk
 
 function startFight(r: Run, node: MapNode): void {
   const def = enemyDef(node.foe!);
-  const rng = new Rng(mixSeed(r.seed, 0x66000 + r.floor));
+  const rng = rngFor(r.seed, T_FIGHT, r.floor);
   const elite = node.kind === 'elite';
   const boss = node.kind === 'boss';
   const max = Math.round(def.hp * TUNE.hp);
@@ -292,7 +313,7 @@ function startTurn(r: Run): void {
     r.poison--;
     if (r.phase === 'over') return;
   }
-  const rng = new Rng(mixSeed(r.seed, mixSeed(r.floor, f.turn)));
+  const rng = rngFor(r.seed, T_ROLL, r.floor, f.turn);
   f.pool = r.dice.map((d, i) => ({ v: rollDie(d, rng), src: i, used: false, locked: false }));
   f.withered = f.witherNext;
   if (f.witherNext) for (const p of f.pool) p.v = Math.max(1, p.v - f.witherNext);
@@ -347,6 +368,12 @@ export interface SlotRef {
   slot: number;
 }
 
+/** What a slot takes, for "needs …" messages. */
+export const NEED_WORDS: Record<string, string> = {
+  any: 'any die', even: 'an even die', odd: 'an odd die', le2: '2 or less', le3: '3 or less', ge2: '2 or more',
+  ge4: '4 or more', ge5: '5 or more', six: 'a 6', pair: 'two equal dice', two: 'two dice',
+};
+
 /** Why a die can't go into a slot, or null if it can. */
 export function placeError(r: Run, die: number, card: number, slot: number): string | null {
   const f = r.fight;
@@ -361,7 +388,7 @@ export function placeError(r: Run, die: number, card: number, slot: number): str
   const st = f.slots[card][slot];
   if (def.uses && st.used >= def.uses) return 'used this turn';
   if (def.perFight && st.fight >= def.perFight) return def.perFight === 1 ? 'once a fight' : 'used up this fight';
-  if (!meets(def.need, p.v)) return 'doesn’t fit';
+  if (!meets(def.need, p.v)) return `needs ${NEED_WORDS[def.need]}`;
   if (def.fx === 'split' && p.v < 2) return 'can’t split a 1';
   if (diceFor(def.need) === 2) {
     if (st.held >= 0) {
@@ -446,9 +473,12 @@ function applyPlace(r: Run, die: number, card: number, slot: number): Effect {
       deal(def.add, false);
       break;
     case 'heal': {
+      // Healing past full HP becomes block instead of going to waste.
       const h = Math.min(amount, r.maxHp - r.hp);
       r.hp += h;
       out.heal = h;
+      r.block += amount - h;
+      out.block = amount - h;
       break;
     }
     case 'poison': {
@@ -458,7 +488,7 @@ function applyPlace(r: Run, die: number, card: number, slot: number): Effect {
       break;
     }
     case 'reroll': {
-      const rng = new Rng(mixSeed(r.seed, mixSeed(0x7272 + r.floor, f.turn * 64 + f.rerolls++)));
+      const rng = rngFor(r.seed, T_REROLL, r.floor, f.turn, f.rerolls++);
       giveBack(rollDie(r.dice[p.src], rng), p.src);
       break;
     }
@@ -570,13 +600,21 @@ function pickGear(rng: Rng, r: Run, n: number, rare: boolean): GearId[] {
   return out;
 }
 
+const GIVES_BACK = new Set(['reroll', 'split', 'flip', 'bump']);
+/** How many dice the kit can spend in a turn (slots that hand the die back don't count; a keg counts 2). */
+export function diceRoom(r: Run): number {
+  let n = 0;
+  for (const g of r.gear) for (const d of slotsOf(g)) if (!GIVES_BACK.has(d.fx)) n += (d.uses || 2) * diceFor(d.need);
+  return n;
+}
+
 const upgradable = (r: Run) => r.gear.map((g, i) => (g.up ? -1 : i)).filter((i) => i >= 0);
 const NEW_DICE: DieKind[] = ['d6', 'd8', 'loaded', 'even', 'pebble', 'chance'];
 /** The die that gains most from honing: lowest face sum. */
 export const weakestDie = (r: Run) => r.dice.reduce((b, d, i) => (d.faces.reduce((a, x) => a + x, 0) < r.dice[b].faces.reduce((a, x) => a + x, 0) ? i : b), 0);
 
 function openChoice(r: Run, kind: Choice['kind'], more: number, pick: number): void {
-  const rng = new Rng(mixSeed(r.seed, mixSeed(0x63686f + r.floor, pick)));
+  const rng = rngFor(r.seed, T_CHOICE, r.floor, pick);
   const options: Option[] = [];
   const one = (g: Gift): Option => ({ cost: 0, gifts: [g] });
   const ups = rng.shuffle(upgradable(r));
@@ -585,9 +623,11 @@ function openChoice(r: Run, kind: Choice['kind'], more: number, pick: number): v
     const [g1, g2] = pickGear(rng, r, 2, elite);
     options.push(one({ t: 'gear', id: g1 }));
     // Second option: an upgrade or a die.
-    const dieOk = r.dice.length < MAX_DICE;
+    // A new die only when the kit has a slot to spend it in.
+    const dieOk = r.dice.length < MAX_DICE && r.dice.length < diceRoom(r);
     if (ups.length && (!dieOk || rng.next() < 0.5)) options.push(one({ t: 'up', card: ups[0] }));
     else if (dieOk) options.push(one({ t: 'die', kind: rng.pick(r.dice.length < 4 ? ['d6', 'loaded', 'even', 'd8'] : NEW_DICE) }));
+    else if (g2) options.push(one({ t: 'gear', id: g2 }));
     else options.push(one({ t: 'hone', die: weakestDie(r) }));
     // Third: heal when hurt, else another gear card or a hone.
     const hurt = r.hp < r.maxHp * 0.7;
@@ -602,7 +642,7 @@ function openChoice(r: Run, kind: Choice['kind'], more: number, pick: number): v
     // Shrines: a price in blood for something good, a gift, or walk on.
     const deals: Option[] = [];
     if (ups.length >= 2) deals.push({ cost: 8, gifts: [{ t: 'up', card: ups[0] }, { t: 'up', card: ups[1] }], label: 'Blood forge' });
-    if (r.dice.length < MAX_DICE) deals.push({ cost: 6, gifts: [{ t: 'die', kind: rng.pick(['d8', 'loaded', 'chance'] as DieKind[]) }], label: 'Dice altar' });
+    if (r.dice.length < MAX_DICE && r.dice.length < diceRoom(r)) deals.push({ cost: 6, gifts: [{ t: 'die', kind: rng.pick(['d8', 'loaded', 'chance'] as DieKind[]) }], label: 'Dice altar' });
     deals.push({ cost: 0, gifts: [{ t: 'maxhp', n: 6 }], label: 'Old spring' });
     deals.push({ cost: 5, gifts: [{ t: 'gear', id: pickGear(rng, r, 1, true)[0] }], label: 'Wayside cache' });
     deals.push({ cost: 0, gifts: [{ t: 'hone', die: weakestDie(r) }], label: 'Grindstone' });
@@ -797,3 +837,22 @@ export function legalPlacements(r: Run): { die: number; card: number; slot: numb
 }
 
 
+
+/**
+ * What ending the turn now would cost: the blow that gets past your block, plus
+ * the poison that ticks at the start of your next turn (yours and any the enemy
+ * adds). Nothing if the enemy's own poison kills it first.
+ */
+export function incomingOf(r: Run): { hit: number; through: number; tick: number; total: number; lethal: boolean } {
+  const f = r.fight;
+  const none = { hit: 0, through: 0, tick: 0, total: 0, lethal: false };
+  if (!f || r.phase !== 'fight') return none;
+  const e = f.enemy;
+  if (e.poison >= e.hp) return none;
+  const it = intentOf(e);
+  const hit = e.stunned ? 0 : attackOf(e, it);
+  const through = Math.max(0, hit - r.block);
+  const tick = r.poison + (e.stunned ? 0 : (it.poison ?? 0));
+  const total = through + tick;
+  return { hit, through, tick, total, lethal: total >= r.hp };
+}

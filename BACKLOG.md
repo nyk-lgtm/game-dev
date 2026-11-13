@@ -36,9 +36,18 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         seat click, thud, clank, boom), map card, reward/campfire/shrine cards with a replace-which flow, end card
         with stats, help, menu (kit, map, bug report), daily (`?daily`), hub card first + Daily link. Pixel 7 checked
         (help, map, fight, preview with a pair slot, drag, reward, end) and a tap-only playthrough without errors.
-  - [ ] Next: owner playtest. Watch: is the run length right (~30 turns)? Is The House too much of a wall compared
-        with the stage-3 fights? Are Powder Keg and the Lucky Coin too strong, Hourglass/Whetstone too weak? Do the
-        tiny `≤3`/`pair` labels read at arm's length?
+  - [x] Blind playtest (won run 1 with 15 HP in 35 turns / ~12 min; died floor 9 to the Mimic; daily died at The House;
+        drag and previews "excellent") and fixes (rules v2): rolls repeated across fights (`mixSeed(floor, turn)`
+        collided along floor + turn, so a fight opened with the last fight's next roll) → `rngFor` hashes every part;
+        "you take X" counts poison and turns red "LETHAL" (tag, info line, End-turn confirm); a die in the wrong slot
+        says what it needs ("needs 3 or less"); the map says the pick is free each floor and elites sit ≥ 3 floors
+        apart; Salve ≤3 (heal past full HP blocks), Whetstone +2 (up: twice a turn), Buckler X+1 (up X+3); dice
+        rewards only while the gear can spend another die (and say how many it can); bone dice named in help; the
+        enemy's lingering block explained the first time; a pending "replace which?" survives a reload; used dice
+        leave a gap in the tray; a bigger enemy panel with the intent in words. Enemies +5% HP on floors 5+, The House
+        168. Bot (1000 + 500 runs): ~22% wins, first fights 100%.
+  - [ ] Next: owner playtest. Watch: is The House too much of a wall compared with the stage-3 fights? Are Powder Keg
+        and the Lucky Coin too strong? Do the tiny `≤3`/`pair` labels read at arm's length?
 - [ ] **Sungrazer** (one-thumb arcade: hold to swing a comet round a star, let go to fling). Milestones:
   - [x] Core (src/sungrazer/core, rules v1): fixed 240 Hz sim, lazily grown seeded sky (spine stars ≤ 40 apart,
         bonus stars, motes, cinders from altitude 450, pulsars 1000, giants and drifting cinders 1700, sparser past
