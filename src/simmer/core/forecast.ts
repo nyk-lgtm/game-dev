@@ -3,7 +3,7 @@
 // order off a given menu. It never looks at tonight's actual crowd.
 
 import { DISHES, INGS, OPEN_MINUTES, SERVE, SPECIES, TUNE, UP, UPGRADES } from './data';
-import { chooseFrom, delights, purseRange, speciesWeights, streetMean, worthTable, type MenuItem, type NightCtx, type Why } from './night';
+import { chooseFrom, delights, isRequest, purseRange, speciesWeights, streetMean, worthTable, type MenuItem, type NightCtx, type Why } from './night';
 import { ctxOf, marketPrice, menuSize, stovesOf, wageOf, type Run } from './run';
 import { T_PREVIEW, makeCrowd, rngFor, simulate } from './night';
 
@@ -80,7 +80,8 @@ export function demand(r: Run, menu: MenuItem[], f = forecast(r), stoves = 1 + r
       if (c.pick < 0) continue;
       share[c.pick] += 1 / k;
       const w = W[sp][c.pick];
-      if (delights(menu[c.pick].dish, sp, w, prices[c.pick])) delight += 1 / k;
+      if (delights(menu[c.pick].dish, sp, w, prices[c.pick], f.ctx)) delight += 1 / k;
+      if (isRequest(f.ctx, menu[c.pick].dish, sp)) revenue += (n * TUNE.reqTip) / k;
       else happy += 1 / k;
       if (SPECIES[sp].appetite > 1) {
         const c2 = chooseFrom(W[sp], prices, bases, p - prices[c.pick], all);
@@ -208,10 +209,12 @@ export function fillNeed(r: Run, menu: MenuItem[], stoves = stovesOf(r)): number
  * stream, never tonight's real crowd), the menu with unlimited stock, `stoves` cooking.
  * Averages guests who give up waiting or are still queueing at closing.
  */
-export function queuePreview(r: Run, menu: MenuItem[], stoves: number, samples = 4): { slow: number; closed: number; letdowns: number } {
+export function queuePreview(r: Run, menu: MenuItem[], stoves: number, samples = 8): { slow: number; closed: number; letdowns: number; lo: number; hi: number } {
   const ctx = ctxOf(r);
   let slow = 0, closed = 0;
+  const each: number[] = [];
   for (let k = 0; k < samples; k++) {
+    const before = slow + closed;
     const guests = makeCrowd(
       { seed: r.seed, day: r.day, rep: r.rep, ctx, lanterns: r.ups[UP.lantern] > 0, bench: r.ups[UP.bench] > 0, friends: r.friends },
       rngFor(r.seed, T_PREVIEW, r.day, k),
@@ -221,8 +224,11 @@ export function queuePreview(r: Run, menu: MenuItem[], stoves: number, samples =
       if (v.why === 'slow') slow++;
       else if (v.why === 'closed') closed++;
     }
+    each.push(slow + closed - before);
   }
-  return { slow: slow / samples, closed: closed / samples, letdowns: (slow + closed) / samples };
+  each.sort((a, b) => a - b);
+  // The range leaves out the single calmest and busiest of the sample evenings.
+  return { slow: slow / samples, closed: closed / samples, letdowns: (slow + closed) / samples, lo: each[1] ?? each[0], hi: each[each.length - 2] ?? each[0] };
 }
 
 /**
@@ -230,14 +236,52 @@ export function queuePreview(r: Run, menu: MenuItem[], stoves: number, samples =
  * typical evening now and with one more cook, and what each saved guest is worth (their
  * profit plus the half ♥ a let-down costs, at `repPts` a point).
  */
-export function helperPayback(r: Run, menu: MenuItem[]): { before: number; after: number; saved: number; perGuest: number; value: number; wage: number } {
+export interface HelperPayback {
+  before: number;
+  after: number;
+  /** Likely ranges (most sample evenings fall inside). */
+  range: [number, number];
+  rangeAfter: [number, number];
+  saved: number;
+  perGuest: number;
+  value: number;
+  wage: number;
+}
+export function helperPayback(r: Run, menu: MenuItem[]): HelperPayback {
   const s = stovesOf(r);
-  const before = queuePreview(r, menu, s).letdowns;
-  const after = before > 0 ? queuePreview(r, menu, s + 1).letdowns : 0;
+  const q0 = queuePreview(r, menu, s);
+  const q1 = q0.hi > 0 ? queuePreview(r, menu, s + 1) : { letdowns: 0, lo: 0, hi: 0 };
+  const before = q0.letdowns, after = q1.letdowns;
   const d = demand(r, menu, forecast(r), s);
   let profit = 0;
   menu.forEach((m, i) => (profit += d.orders[i] * (m.price - dishCost(r, m.dish))));
   const perGuest = (d.guests > 0 ? profit / d.guests : 0) + TUNE.repPts * TUNE.lossPer;
   const saved = Math.max(0, before - after);
-  return { before, after, saved, perGuest, value: saved * perGuest, wage: wageOf(r) };
+  return { before, after, range: [q0.lo, q0.hi], rangeAfter: [q1.lo, q1.hi], saved, perGuest, value: saved * perGuest, wage: wageOf(r) };
+}
+
+/**
+ * How far the stock goes if tonight's expected orders all come: orders arrive mixed in
+ * proportion (dish by dish, as a crowd would), each takes its ingredients while they last.
+ * Shared ingredients are split between dishes this way. Returns portions served per dish.
+ */
+export function allocateStock(menu: MenuItem[], orders: number[], have: number[]): number[] {
+  const left = have.slice();
+  const served = menu.map(() => 0);
+  const stream: { i: number; at: number }[] = [];
+  menu.forEach((_, i) => {
+    const n = Math.round(orders[i]);
+    for (let k = 0; k < n; k++) stream.push({ i, at: (k + 0.5) / n });
+  });
+  stream.sort((a, b) => a.at - b.at || a.i - b.i);
+  for (const { i } of stream) {
+    const uses = DISHES[menu[i].dish].uses;
+    const need: number[] = [];
+    for (const u of uses) need[u] = (need[u] ?? 0) + 1;
+    if (need.every((n, u) => n === undefined || left[u] >= n)) {
+      for (const u of uses) left[u]--;
+      served[i]++;
+    }
+  }
+  return served;
 }

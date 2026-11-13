@@ -11,6 +11,7 @@ import {
   DISHES,
   INGS,
   MAX_PRICE,
+  SPECIES,
   START_MENU,
   STARS,
   TUNE,
@@ -18,9 +19,9 @@ import {
   UPGRADES,
   type WeatherId,
 } from './data';
-import { T_FEST, T_MARKET, T_WEATHER, makeCrowd, rngFor, simulate, streetMean, type MenuItem, type NightCtx, type NightResult, type Why } from './night';
+import { T_FEST, T_MARKET, T_REQ, T_WEATHER, makeCrowd, rngFor, simulate, speciesWeights, streetMean, type MenuItem, type NightCtx, type NightResult, type Why } from './night';
 
-export const RULES_VERSION = 3;
+export const RULES_VERSION = 4;
 
 export interface Batch {
   ing: number;
@@ -53,6 +54,11 @@ export interface Ledger {
   repLoss: number;
   /** Guests let down (sold out, gave up, closing). */
   letdowns: number;
+  /** ♥ beyond full renown, and the regulars' tips they became. */
+  overflow: number;
+  tips: number;
+  /** Tips (included in revenue) from guests served the dish they asked for. */
+  reqTips: number;
   left: Partial<Record<Why, number>>;
   sold: number[];
   coins: number;
@@ -122,7 +128,27 @@ export function makeFestivals(seed: number): number[] {
 }
 
 export function ctxOf(r: Run, d = r.day): NightCtx {
-  return { weather: r.weather[Math.min(d, r.weather.length - 1)], festival: r.festivals.includes(d), payday: isPayday(d), cool: r.ups[UP.cool] > 0 };
+  const ctx: NightCtx = { weather: r.weather[Math.min(d, r.weather.length - 1)], festival: r.festivals.includes(d), payday: isPayday(d), cool: r.ups[UP.cool] > 0 };
+  if (d === r.day) ctx.req = requestOf(r, ctx);
+  return ctx;
+}
+
+/**
+ * Tonight's request (from night `TUNE.reqFrom` on): a kind expected tonight, picked by its
+ * share of the crowd, asks for one of the dishes it loves (known or not). Seeded per night.
+ */
+export function requestOf(r: Run, ctx: NightCtx): { sp: number; dish: number } | undefined {
+  if (r.day < TUNE.reqFrom) return undefined;
+  const rng = rngFor(r.seed, T_REQ, r.day);
+  const wts = speciesWeights(r.rep, ctx.weather);
+  let x = rng.next() * wts.reduce((a, b) => a + b, 0);
+  let sp = 0;
+  for (let i = 0; i < wts.length; i++) if ((x -= wts[i]) < 0 && wts[i] > 0) {
+    sp = i;
+    break;
+  }
+  const loved = DISHES.map((d, i) => (d.tags.includes(SPECIES[sp].loves) ? i : -1)).filter((i) => i >= 0);
+  return { sp, dish: rng.pick(loved) };
 }
 
 export type PriceMood = 'cheap' | 'usual' | 'dear';
@@ -308,6 +334,10 @@ function openStall(r: Run, plan: { helper: boolean; menu: MenuItem[] }): void {
   const letdowns = night.visits.filter((v) => v.rep < 0).length;
   const rc = repChange(r.rep, night.friends.length, letdowns);
   r.rep += rc.delta;
+  // At full renown, hearts that can't be added come back as regulars' tips.
+  const overflow = Math.max(0, before + rc.gain - rc.loss - REP_MAX);
+  const tips = overflow * TUNE.fullTip;
+  r.coins += tips;
   const left: Partial<Record<Why, number>> = {};
   for (const v of night.visits) if (v.why) left[v.why] = (left[v.why] ?? 0) + 1;
   for (const g of guests) r.met[g.sp] = true;
@@ -329,6 +359,9 @@ function openStall(r: Run, plan: { helper: boolean; menu: MenuItem[] }): void {
     rep: r.rep - before,
     repGain: rc.gain,
     repLoss: rc.loss,
+    overflow,
+    tips,
+    reqTips: night.visits.reduce((a, v) => a + (v.tip ?? 0), 0),
     letdowns,
     left,
     sold: night.sold,

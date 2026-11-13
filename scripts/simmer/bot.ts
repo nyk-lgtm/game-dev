@@ -66,8 +66,12 @@ export interface Strat {
   repPerDay: number;
   /** Keep every menu line filled (a person rarely leaves one empty). */
   fillMenu?: boolean;
+  /** Learn and serve the dish guests ask for. */
+  requests?: boolean;
   /** Only these dishes may go on the menu (single-minded strategies). */
   only?: number[];
+  /** Buy these upgrades from these nights (0-based) on, as soon as affordable: [upgrade, night]. */
+  upAt?: [number, number][];
 }
 
 const BASE: Strat = {
@@ -91,6 +95,7 @@ const BASE: Strat = {
   helper: 'busy',
   repValue: Number(process.env.RV ?? 10),
   repPerDay: Number(process.env.RD ?? 1),
+  requests: true,
 };
 
 export const STRATS: Record<string, Strat> = {
@@ -99,10 +104,15 @@ export const STRATS: Record<string, Strat> = {
   // warning card's default button (it hires the helper when the queue warning shows).
   lazy: { ...BASE, name: 'lazy', menu: 'fixed', price: 'base', stock: 'fill', bulk: false, learn: 'none', ups: [], helper: 'warn' },
   // The same, but never hiring (always "Open anyway").
+  // The playtester's middle way: lazy, plus paper lanterns on night 4 and a second stove on night 7.
+  middle: { ...BASE, name: 'middle', menu: 'fixed', price: 'base', stock: 'fill', bulk: false, learn: 'none', ups: [], helper: 'warn', upAt: [[UP.lantern, 3], [UP.stove, 6]] },
+  // Careful: the middle way's two upgrades, plus menus that delight (renown valued), and learning and
+  // serving the dish guests ask for.
+  careful: { ...BASE, name: 'careful', price: 'base', stock: 'fill', bulk: false, helper: 'warn', fillMenu: true, learn: 'order', learnMax: 0, ups: [], upAt: [[UP.lantern, 3], [UP.stove, 6]] },
   lazynohelp: { ...BASE, name: 'lazynohelp', menu: 'fixed', price: 'base', stock: 'fill', bulk: false, learn: 'none', ups: [], helper: 'never' },
   // A careful player using the page: dishes by their "~N orders", listed prices, Fill to forecast,
   // a helper when warned, recipes and upgrades whose payback lines look good.
-  decent: { ...BASE, name: 'decent', price: 'base', stock: 'fill', bulk: false, helper: 'warn', repValue: 0, repPerDay: 0, fillMenu: true },
+  decent: { ...BASE, name: 'decent', price: 'base', stock: 'fill', bulk: false, helper: 'warn', fillMenu: true },
   // The old decent bot: a fixed two recipes and the menu board, stock with a margin.
   steady: {
     ...BASE,
@@ -186,6 +196,9 @@ export function planMenu(r: Run, s: Strat, f = forecast(r), stoves = stovesOf(r)
   }
   const pool = DISHES.map((_, i) => i).filter((i) => known[i] && (!s.only || s.only.includes(i)));
   const menu: MenuItem[] = [];
+  // A careful player puts tonight's asked-for dish on the menu when they know it.
+  const req = f.ctx.req;
+  if (s.requests && req && pool.includes(req.dish)) menu.push({ dish: req.dish, price: priceFor(s, req.dish) });
   let cur = -Infinity;
   const size = Math.min(menuSize(r), pool.length);
   while (menu.length < size) {
@@ -238,6 +251,9 @@ export function planDay(r: Run, s: Strat): string[] {
   const lam = lamOf(r, s);
   // What tonight's stock will cost: shopping never eats into it.
   const stockBudget = () => costOf(r, needFor(r, s, planMenu(r, s, f, stovesOf(r), lam).menu, f, false)) + s.reserve;
+  // The asked-for dish: learn it if it is affordable and the season has nights left.
+  const rq = f.ctx.req;
+  if (s.requests && s.learn !== 'none' && rq && !r.known[rq.dish] && daysLeft(r) >= 3 && (!s.only || s.only.includes(rq.dish)) && r.coins >= DISHES[rq.dish].learn + stockBudget()) doAct(`l${rq.dish}`);
   // Recipes.
   const nKnown = () => r.known.filter(Boolean).length - 3;
   if (s.learn === 'order') {
@@ -259,6 +275,10 @@ export function planDay(r: Run, s: Strat): string[] {
       if (g > gain) (gain = g), (best = d);
     }
     if (best >= 0) doAct(`l${best}`);
+  }
+  for (const [k, night] of s.upAt ?? []) {
+    const c = upCost(r, k);
+    if (c !== null && r.day >= night && r.coins >= c + stockBudget()) doAct(`u${k}`);
   }
   // Upgrades: by the page's payback estimate, or in the strategy's order.
   const last = r.ledgers[r.ledgers.length - 1];
@@ -294,7 +314,7 @@ export function planDay(r: Run, s: Strat): string[] {
     const menu = planMenu(r, s, f, stovesOf(r), lam).menu;
     const cost = costOf(r, needFor(r, s, menu, f, false));
     const h = helperPayback(r, menu);
-    helper = h.before >= QUEUE_WARN && h.value > h.wage && r.coins >= wageOf(r) + Math.min(cost, r.coins);
+    helper = (h.before >= QUEUE_WARN || h.range[1] >= 2) && h.value > h.wage && r.coins >= wageOf(r) + Math.min(cost, r.coins);
   }
   else if (s.helper === 'busy' && r.coins >= wageOf(r) + stockBudget()) {
     const h = helperPayback(r, planMenu(r, s, f, stovesOf(r), lam).menu);
