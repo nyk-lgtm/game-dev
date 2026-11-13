@@ -8,6 +8,12 @@ import type { Item, ItemKind, Level, Monster, MonsterKind, Tile } from './types'
 export const SIZE = 33;
 /** At most this many of a kind on one floor. */
 const FLOOR_CAP: Partial<Record<MonsterKind, number>> = { golem: 1, wraith: 2, mage: 2 };
+/** On a capped kind's first depth only one shows up, so wraiths and cultists (both new at depth 5) ease in. */
+export function floorCap(kind: MonsterKind, depth: number): number {
+  const cap = FLOOR_CAP[kind];
+  if (cap === undefined) return Infinity;
+  return depth === MONSTERS[kind].depths[0] ? Math.min(1, cap) : cap;
+}
 /** Kinds that only spawn on open ground. */
 const ROOMY = new Set<MonsterKind>(['golem']);
 
@@ -158,7 +164,7 @@ export function generateFloor(seed: number, depth: number): Floor {
     };
     for (let i = 0; i < n && spots.length; i++) {
       // The heaviest foes are capped per floor, so a floor never stacks them.
-      const pool = kinds.filter((k) => monsters.filter((m) => m.kind === k).length < (FLOOR_CAP[k] ?? Infinity));
+      const pool = kinds.filter((k) => monsters.filter((m) => m.kind === k).length < floorCap(k, depth));
       const total = pool.reduce((s, k) => s + MONSTERS[k].weight, 0);
       let r = rng.next() * total;
       let kind = pool[0];

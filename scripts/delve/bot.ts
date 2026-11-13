@@ -57,6 +57,8 @@ export interface BotResult {
   floors: FloorStat[];
   /** Kind of monster that landed the killing blow, if the bot died. */
   killer: MonsterKind | null;
+  /** If the bot died: damage over its last 5 turns, potions/MP left, awake foes in sight. */
+  death: { burst: number; potions: number; mp: number; foes: MonsterKind[]; maxHp: number } | null;
 }
 
 const walkable = (s: GameState, x: number, y: number) => {
@@ -328,6 +330,7 @@ export function playDescent(seed: number, maxActions = 8000, stopDepth = Infinit
   const mem: BotMemory = { floorStart: 0, waited: 0, target: -1, targetSince: 0 };
   let killer: MonsterKind | null = null;
   let idle = 0;
+  const recent: { turn: number; dmg: number }[] = [];
   while (s.status === 'playing' && actions.length < maxActions && s.depth < stopDepth) {
     const a = botAction(s, mem);
     const r = applyAction(s, a);
@@ -341,6 +344,7 @@ export function playDescent(seed: number, maxActions = 8000, stopDepth = Infinit
     for (const e of r.events)
       if (e.type === 'hurt') {
         f.hurt[e.by] = (f.hurt[e.by] ?? 0) + e.dmg;
+        recent.push({ turn: s.turn, dmg: e.dmg });
         if (s.status === 'dead') killer = e.by;
       }
     if (s.depth !== depth) {
@@ -350,6 +354,16 @@ export function playDescent(seed: number, maxActions = 8000, stopDepth = Infinit
     }
   }
   floors[floors.length - 1].turns = s.turn - mem.floorStart;
-  return { state: s, actions, floors, killer };
+  const death =
+    s.status === 'dead'
+      ? {
+          burst: recent.filter((h) => h.turn > s.turn - 5).reduce((a, h) => a + h.dmg, 0),
+          potions: s.player.potions,
+          mp: s.player.mp,
+          foes: s.monsters.filter((m) => m.awake && visible(s, m)).map((m) => m.kind),
+          maxHp: s.player.maxHp,
+        }
+      : null;
+  return { state: s, actions, floors, killer, death };
 }
 

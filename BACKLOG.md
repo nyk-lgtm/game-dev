@@ -24,7 +24,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 3. Third playtests done (2026-11-13) and shipped: Summit v4, Kitbag v4, Sungrazer v4 (+ frame cost cut ~3x), Brink AI v4
    (combo-aware rings, softer Normal), Quarry v4. Loomsong second playtest: fixes in progress. A cozy management sim is being built.
 4. Hexhold gold sink (honing specialized towers) if hoarding persists; Glyphwright: refit the bot model (fit.ts),
-   late Nova vs flyers; Delve: depth 5 ghouls; Rewild: is fire now too tame?
+   late Nova vs flyers; Rewild: is fire now too tame? (Delve depth 5: done, rules v6.)
 5. Grove: owner said keep it as is (board and balance); only bugs/clarity. Afterglow: leave alone unless asked.
 6. New games are welcome when the queue is quiet (recent additions: Ninefold, Summit, Quarry, Sungrazer, Kitbag,
    Brink, Loomsong, Simmer). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle.
@@ -616,6 +616,15 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   wisps 20% → 22% (bot: 276 → 248 turns, Spirit Tree 49/60 → 30/60); help says wisps never merge and
   what traps pay; brighter labels; empty stash is dashed and says so. Still long for one sitting —
   owner said keep the board as is (no smaller board).
+- Delve depth 5 spike (rules v6). The probe now prints damage per depth by kind, killers per depth, each floor's monster
+  mix and (`DEATHS=1`) how each death went. Finding (400 seeds): floor damage went d4 ~50 → d5 ~135 → d6-9 ~100-125, a step
+  not a ramp: wraiths and cultists both debut at depth 5 (1.4 each, ~80 of the 135), and d5 killed 37 runs (d6 20) though
+  bots arrive at full HP with 6 potions (most d5 deaths: out of potions; a few bursts of 2 cultists + an archer in line).
+  Threats are readable (minimap shows awake foes, red edge arrows, the cultist's tell), so it was numbers, not clarity.
+  Fix: a capped kind's first depth holds at most one (`floorCap`), so d5 has one wraith and one cultist (mostly both);
+  Warden HP 420 → 450 keeps the overall win rate. 400 seeds: wins 55.8% → 56.3% (seeds 1-100: 58% → 58%), d5 deaths
+  37 → 23, d6 20 → 11, d5 floor damage ~135 → ~108, Warden deaths 84 → 113. Depth 5 is still the deadliest ordinary
+  floor (the first with three heavy kinds); next lever if humans stall there is ghoul count, not caps.
 - Delve second blind playtest (depth 7 to a cultist at a door, depth 8 between a wraith and a golem, daily depth 2)
   and fixes (rules v5): at most 1 golem (only on open ground, never corridors/dead ends), 2 wraiths, 2 cultists per
   floor; cultists gather flame a turn after each firebolt (logged, a tell); a sleeping monster spends the turn it

@@ -34,7 +34,7 @@ export const MONSTERS: Record<MonsterKind, MonsterDef> = {
   wraith: { name: 'Wraith', hp: 32, atk: 15, def: 3, xp: 18, slow: 0, range: 0, erratic: 0, ghost: true, depths: [5, 10], weight: 1.5, blurb: 'Drifts through walls.' },
   mage: { name: 'Cultist', hp: 26, atk: 16, def: 2, xp: 20, slow: 0, range: 6, erratic: 0, ghost: false, depths: [5, 10], weight: 1.5, blurb: 'Hurls fire from afar.' },
   golem: { name: 'Stone golem', hp: 80, atk: 20, def: 5, xp: 30, slow: 1, range: 0, erratic: 0, ghost: false, depths: [6, 10], weight: 1.5, blurb: 'Slow as stone, hits like a landslide.' },
-  warden: { name: 'The Warden', hp: 420, atk: 24, def: 5, xp: 0, slow: 0, range: 4, erratic: 0, ghost: false, depths: [99, 99], weight: 0, blurb: 'Keeper of the deep. Calls the dead.' },
+  warden: { name: 'The Warden', hp: 450, atk: 24, def: 5, xp: 0, slow: 0, range: 4, erratic: 0, ghost: false, depths: [99, 99], weight: 0, blurb: 'Keeper of the deep. Calls the dead.' },
 };
 
 export const WEAPONS = ['Dagger', 'Sword', 'Axe', 'Warblade', 'Runeblade'];

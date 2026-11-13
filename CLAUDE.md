@@ -40,8 +40,11 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     diagonal steps can't squeeze between two blocked cells, so never connect areas
     only diagonally.
   - Afterglow: `npx vite-node scripts/afterglow/balance.ts` (bot survival per character).
-  - Delve: `npx vite-node scripts/delve/balance.ts 100` (descent bot, rules v5: ~58% wins, d10 reached ~78%,
-    deaths mostly at the Warden and depth 5; per-floor caps `FLOOR_CAP` in gen.ts); Nightline: `npx vite-node scripts/nightline/balance.ts`
+  - Delve: `npx vite-node scripts/delve/balance.ts 100` (descent bot, rules v6: ~58% wins (56% over 400 seeds), d10 reached
+    ~84%, deaths mostly at the Warden (450 HP), then depth 5 ~6%, depth 6 ~3%; it also prints damage per depth by kind with the
+    killers there, each floor's monster mix, and `DEATHS=1` how each death went (burst, potions left, foes in sight).
+    Per-floor caps `FLOOR_CAP`/`floorCap` in gen.ts: a capped kind's first depth holds one, so wraiths and cultists,
+    both new at depth 5, come one of each; floor damage d4 ~50, d5 ~108, d6-8 ~120); Nightline: `npx vite-node scripts/nightline/balance.ts`
     (rules v2: bot finishes ~40/40 always-left, ~38/40 always-right; it dodges with perfect information, so
     human-facing fixes are about seeing traffic and curves sooner). Nightline's camera height follows the
     horizon (`camHeight` in render.ts) so the road at the car stays as wide as CAR_HIT_W was measured for.

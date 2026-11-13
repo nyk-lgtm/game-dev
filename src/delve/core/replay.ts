@@ -3,7 +3,7 @@
 import { applyAction, newGame } from './rules';
 import type { Action, GameState, SpellId } from './types';
 
-export const RULES_VERSION = 5;
+export const RULES_VERSION = 6;
 
 const CODES: Record<string, Action> = {
   f: { type: 'forward' },

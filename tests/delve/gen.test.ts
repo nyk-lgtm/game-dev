@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_DEPTH, MONSTERS, SIZE, distances, generateFloor, newGame } from '../../src/delve/core';
+import { MAX_DEPTH, MONSTERS, SIZE, distances, floorCap, generateFloor, newGame } from '../../src/delve/core';
 
 const SEEDS = Array.from({ length: 100 }, (_, i) => i + 1);
 const DEPTHS = Array.from({ length: MAX_DEPTH }, (_, i) => i + 1);
@@ -89,6 +89,20 @@ describe('floor generation', () => {
         }
       }
     expect(golems).toBeGreaterThan(100);
+  });
+
+  it('wraiths and cultists ease in: at most one of each on depth 5, their first floor', () => {
+    let both = 0;
+    for (const seed of SEEDS) {
+      const f = generateFloor(seed, 5);
+      const n = (k: string) => f.monsters.filter((m) => m.kind === k).length;
+      expect(n('wraith'), `seed ${seed}`).toBeLessThanOrEqual(1);
+      expect(n('mage'), `seed ${seed}`).toBeLessThanOrEqual(1);
+      if (n('wraith') && n('mage')) both++;
+    }
+    expect(both).toBeGreaterThan(SEEDS.length / 2);
+    expect(floorCap('wraith', 6)).toBe(2);
+    expect(floorCap('ghoul', 4)).toBe(Infinity);
   });
 
   it("the boss floor is the Warden's pillared hall with its guard", () => {
