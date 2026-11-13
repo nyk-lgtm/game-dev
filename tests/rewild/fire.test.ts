@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   ADJ,
   ADJ6,
+  NEAR2,
+  fireZone,
   ALL_IDS,
   N,
   RING,
@@ -15,6 +17,8 @@ import {
   track,
   type GameState,
 } from '../../src/rewild/core';
+
+const NEAR2Of = (i: number) => NEAR2[i];
 
 const blank = (seed = 1): GameState => {
   const s = newGame(seed);
@@ -173,6 +177,42 @@ describe('wildfire', () => {
     expect(s.cells[a].animal).toBeNull();
     expect(s.cells[b].animal?.id).toBe('bees');
     expect(s.cells[c].animal?.id).toBe('songbird');
+  });
+
+  it('animals never move or send young into the fire\'s reach', () => {
+    const { s, i } = meadowOnFire(16);
+    // A hungry fox on bare rock two cells out; the only food (rabbits) sits in the burning meadow.
+    const far = NEAR2Of(i).find((k) => !ADJ[i].includes(k) && k !== i)!;
+    s.cells[far].animal = { id: 'fox', n: 2, age: 1 };
+    s.cells[ADJ[i][0]].animal = { id: 'rabbit', n: 3, age: 1 };
+    const t = clone(s);
+    const zone = (() => {
+      const p = clone(s);
+      simulate(p, true);
+      return fireZone(p.cells, 'fire', p.fireAt);
+    })();
+    const ev = simulate(t);
+    for (const e of ev) if (e.type === 'move' || (e.type === 'spread' && !['grass', 'flowers', 'shrub', 'lichen', 'reeds', 'tree', 'fungi'].includes(e.id))) expect(zone.has(e.to)).toBe(false);
+    // The burn never leaves the zone.
+    for (const e of ev) if (e.type === 'burn') expect(zone.has(e.cell)).toBe(true);
+  });
+
+  it('the season report gives a species that died out one cause: what finished it', () => {
+    const { s, i } = meadowOnFire(17);
+    // Two fox families: one starves on bare rock far away, the other burns in the meadow.
+    const rock = s.cells.findIndex((_, k) => RING[k] === 4);
+    s.cells[rock].animal = { id: 'fox', n: 1, age: 1 };
+    s.cells[i].animal = { id: 'fox', n: 3, age: 1 };
+    s.cells[ADJ[i][1]].animal = { id: 'rabbit', n: 3, age: 1 };
+    const before = clone(s);
+    const ev = apply(s, { type: 'end' })!;
+    const r = seasonReport(before, ev, s);
+    const fox = r.lost.filter((t) => t.id === 'fox');
+    if (fox.length) {
+      expect(fox.length).toBe(1);
+      const last = [...ev].reverse().find((e) => e.type === 'die' && e.id === 'fox') as { why: string };
+      expect(fox[0].why).toBe(last.why);
+    }
   });
 
   it('the season report counts burnt plants as burnt in the wildfire', () => {

@@ -74,6 +74,8 @@ export function seasonReport(before: GameState, ev: SimEvent[], after: GameState
     goals: [],
   };
   const richer = new Set<number>();
+  /** The last death of each species: for one that died out, what finished it. */
+  const lastDeath = new Map<SpeciesId, Tally>();
   for (const e of ev) {
     switch (e.type) {
       case 'spread':
@@ -84,6 +86,7 @@ export function seasonReport(before: GameState, ev: SimEvent[], after: GameState
         break;
       case 'die':
         bump(r.died, e.id, e.why, e.by);
+        lastDeath.set(e.id, { id: e.id, n: 1, why: e.why, by: e.by });
         break;
       case 'shrink':
         bump(r.shrank, e.id, e.why, e.by);
@@ -115,8 +118,9 @@ export function seasonReport(before: GameState, ev: SimEvent[], after: GameState
   r.land.richer = richer.size;
   for (const id of was) {
     if (now.has(id)) continue;
-    const why = most(r.died.filter((d) => d.id === id))[0];
-    r.lost.push(why ? { ...why } : { id, n: 0 });
+    // One cause per species: what finished it (the last population to go).
+    const last = lastDeath.get(id);
+    r.lost.push(last ? { ...last, n: r.died.filter((d) => d.id === id).reduce((a, d) => a + d.n, 0) } : { id, n: 0 });
     if ((before.stats.streak[id] ?? 0) >= SETTLE_AFTER) r.lostSettled.push(id);
   }
   r.spread = most(r.spread);

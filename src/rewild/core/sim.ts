@@ -21,7 +21,7 @@ export function weatherFor(seed: number, season: number): { weather: Weather; fi
   let weather: Weather = 'fair';
   if (season >= 2) {
     if (sea === 0) weather = r < 0.25 ? 'storm' : 'fair';
-    else if (sea === 1) weather = season < 4 ? (r < 0.3 ? 'drought' : 'fair') : r < 0.28 ? 'drought' : r < 0.55 ? 'fire' : 'fair';
+    else if (sea === 1) weather = season < 4 ? (r < 0.3 ? 'drought' : 'fair') : r < 0.25 ? 'drought' : r < 0.65 ? 'fire' : 'fair';
     else if (sea === 2) weather = r < 0.3 ? 'storm' : 'fair';
     else weather = season >= 7 && r < 0.45 ? 'harsh' : 'fair';
   }
@@ -37,7 +37,7 @@ export function weatherFor(seed: number, season: number): { weather: Weather; fi
 export const WEATHER_TEXT: Record<Weather, string> = {
   fair: 'Fair weather.',
   drought: 'Drought: every cell is one step drier.',
-  fire: 'Dry lightning: every cell is one step drier, and late in summer lightning strikes the marked cell. Fire catches in the nearest grass, flowers or shrub within 3 cells that is half grown or more, ungrazed this summer and on bone-dry ground (moisture 0), then leaps to more like it up to 2 cells away (a one-cell gap won\'t stop it). Animals caught in it die; bees and songbirds fly off. Oaks, seedlings, grazed plants, damp ground and water never burn.',
+  fire: 'Dry lightning: every cell is one step drier, and late in summer lightning strikes the marked cell. Fire catches in the nearest grass, flowers or shrub within 3 cells that is half grown or more, ungrazed this summer and on bone-dry ground (moisture 0), then leaps to more like it up to 2 cells away (a one-cell gap won\'t stop it). Animals caught in it die (bees and songbirds fly off), but none move into its reach this summer. Oaks, seedlings, grazed plants, damp ground and water never burn.',
   storm: 'Storm: heavy rain makes every cell one step wetter, but bees and birds stay hidden and spread nothing.',
   harsh: 'Harsh winter: animals that stay awake need twice the food.',
 };
@@ -218,11 +218,13 @@ export function simulate(s: GameState, plantsOnly = false): SimEvent[] {
 
   // --- Animals ---
   if (plantsOnly) return ev;
+  // In a lightning summer, animals keep out of the fire's reach (they never move or send young into it).
+  const zone = s.weather === 'fire' && s.fireAt >= 0 ? fireZone(cells, s.weather, s.fireAt) : new Set<number>();
   const acted = new Set<number>();
   const order: number[] = [];
   for (let i = 0; i < N; i++) if (cells[i].animal) order.push(i);
 
-  const freeFor = (j: number, id: AnimalId) => !cells[j].animal && animalFits(id, cells[j]);
+  const freeFor = (j: number, id: AnimalId) => !cells[j].animal && animalFits(id, cells[j]) && !zone.has(j);
   const wolfNear = (j: number) => ADJ[j].some((k) => cells[k].animal?.id === 'wolf');
 
   // Grazers crop plants rather than uproot them: each plant unit eaten
@@ -376,18 +378,38 @@ export function simulate(s: GameState, plantsOnly = false): SimEvent[] {
   }
 
   // --- Wildfire, late in a lightning summer (after grazing) ---
-  if (s.weather === 'fire' && s.fireAt >= 0) wildfire(s, ev, cropped);
+  if (s.weather === 'fire' && s.fireAt >= 0) wildfire(s, ev, cropped, zone);
 
   return ev;
 }
 
+/** The cells a lightning strike at `fireAt` could burn this season, judged once the plants have
+ * grown (grazing only shrinks it): burnable plants within 3 cells of the strike and every burnable
+ * plant linked to them by sparks (up to 2 cells apart). Animals don't move into it, and the fire
+ * never leaves it, so it is an exact outer bound of the burn. */
+export function fireZone(cells: Cell[], weather: Weather, fireAt: number): Set<number> {
+  const wet = moisture(cells, weather);
+  const queue = [fireAt, ...NEAR3[fireAt]].filter((j) => canBurn(cells[j], wet[j]));
+  const zone = new Set(queue);
+  while (queue.length) {
+    const i = queue.shift()!;
+    for (const j of NEAR2[i]) {
+      if (!zone.has(j) && canBurn(cells[j], wet[j])) {
+        zone.add(j);
+        queue.push(j);
+      }
+    }
+  }
+  return zone;
+}
+
 /** Lightning strikes the marked cell; fire catches in the nearest burnable plant
- * within 3 cells and leaps to burnable plants up to 2 cells away. Plants grazed
- * this season (`cropped`) don't burn; animals caught in it die, fliers escape. */
-function wildfire(s: GameState, ev: SimEvent[], cropped: Set<number>) {
+ * within 3 cells and leaps to burnable plants up to 2 cells away, within `zone`.
+ * Plants grazed this season (`cropped`) don't burn; animals caught in it die, fliers escape. */
+function wildfire(s: GameState, ev: SimEvent[], cropped: Set<number>, zone: Set<number>) {
   const cells = s.cells;
   const wet = moisture(cells, s.weather);
-  const burnable = (i: number) => canBurn(cells[i], wet[i]) && !cropped.has(i);
+  const burnable = (i: number) => zone.has(i) && canBurn(cells[i], wet[i]) && !cropped.has(i);
   let start = -1;
   for (const j of [s.fireAt, ...NEAR3[s.fireAt]]) {
     if (burnable(j)) {

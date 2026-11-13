@@ -26,7 +26,9 @@ import {
   census,
   clone,
   encode,
+  fireZone,
   isPlant,
+  simulate,
   moisture,
   newGame,
   placeError,
@@ -151,6 +153,11 @@ export class Game {
   private look = 1;
   /** Cells this season's wildfire would burn as things stand. */
   private burnPlan: number[] = [];
+  /** During the season before a lightning summer: what that fire would burn if nothing more is played. */
+  private nextPlan: number[] = [];
+  /** This summer's fire's reach, and bone-dry soil while lightning is coming or here. */
+  private zone = new Set<number>();
+  private dry = new Set<number>();
   /** What the last season did, and what the next one would do if nothing is played. */
   report: SeasonReport | null = null;
   risk: SeasonReport | null = null;
@@ -334,8 +341,20 @@ export class Game {
     this.refresh(false);
   }
 
+  /** Why a new hand can't be dealt now, or null. */
+  private rerollBlock(): string | null {
+    if (this.s.rerolls <= 0) return 'No new hands left. You get one more each spring (up to 3).';
+    if (this.s.plays < PLAYS) return 'A new hand is only dealt before you play a card this season.';
+    return null;
+  }
+
   private reroll() {
-    if (this.busy() || this.s.rerolls <= 0 || this.s.plays < PLAYS) return;
+    if (this.busy() || this.s.over) return;
+    const why = this.rerollBlock();
+    if (why) {
+      toast(why);
+      return;
+    }
     this.act({ type: 'reroll' });
     this.sfx.click();
     this.card = -1;
@@ -393,7 +412,14 @@ export class Game {
     this.wet = moisture(this.s.cells, this.s.weather);
     this.risk = null;
     this.burnPlan = [];
+    this.nextPlan = [];
+    this.zone = new Set();
+    this.dry = new Set();
     let strike = -1;
+    const drySoil = (cells: Cell[]) => {
+      const w = moisture(cells, 'fire');
+      return new Set(cells.map((_, i) => i).filter((i) => cells[i].t === 'soil' && w[i] === 0));
+    };
     if (!this.s.over) {
       const t = clone(this.s);
       const before = clone(t);
@@ -405,6 +431,18 @@ export class Game {
           if (e.type === 'strike') strike = e.cell;
         }
       }
+      if (this.s.weather === 'fire') {
+        // The fire's reach, judged where the rules judge it: after this summer's plants grow.
+        const p = clone(this.s);
+        simulate(p, true);
+        this.zone = fireZone(p.cells, 'fire', this.s.fireAt);
+        this.dry = drySoil(this.s.cells);
+      } else if (!t.over && t.weather === 'fire') {
+        // A lightning summer is next: play it out with nothing more placed (exact for that case).
+        const u = clone(t);
+        for (const e of apply(u, { type: 'end' }) ?? []) if (e.type === 'burn') this.nextPlan.push(e.cell);
+        this.dry = drySoil(t.cells);
+      }
     }
     const now = this.now();
     this.board.set(this.s, this.wet, fade, now);
@@ -413,6 +451,9 @@ export class Game {
     this.board.fireAt = !s.over && s.weather === 'fire' ? s.fireAt : -1;
     this.board.catchAt = strike;
     this.board.burnPlan = new Set(this.burnPlan);
+    this.board.nextPlan = new Set(this.nextPlan);
+    this.board.fireZone = this.zone;
+    this.board.dry = this.dry;
     // Next season's lightning, marked faintly a season ahead.
     const next = !s.over && s.season + 1 < SEASONS ? weatherFor(s.seed, s.season + 1) : null;
     this.board.nextFireAt = next?.weather === 'fire' ? next.fireAt : -1;
@@ -455,7 +496,9 @@ export class Game {
     $('when').textContent = s.over ? 'Done' : `${yearOf(season)} · ${SEASON_NAMES[seasonOf(season)]}`;
     $('score').textContent = String(s.score);
     const wb = $('weatherBtn');
-    wb.innerHTML = `<span class="dot" style="background:${WEATHER_COLOR[s.weather]}"></span>${WEATHER_NAME[s.weather]}`;
+    const nextFire = this.board.nextFireAt >= 0;
+    wb.innerHTML = `<span class="dot" style="background:${WEATHER_COLOR[s.weather]}"></span>${WEATHER_NAME[s.weather]}${nextFire ? '<span class="nx">→⚡</span>' : ''}`;
+    wb.setAttribute('aria-label', `Weather: ${WEATHER_NAME[s.weather]}${nextFire ? ', lightning next season' : ''}`);
     const done = s.goals.filter((g) => g.done).length;
     $('goalsCount').textContent = `⚑${done}/${s.goals.length}`;
     $('goalsBtn').classList.toggle('done', done === s.goals.length);
@@ -471,7 +514,9 @@ export class Game {
     end.disabled = s.over;
     const rr = $('rerollBtn') as HTMLButtonElement;
     rr.textContent = `New hand (${s.rerolls})`;
-    rr.disabled = s.rerolls <= 0 || s.plays < PLAYS || s.over;
+    // Greyed but still tappable, so a tap can say why.
+    rr.classList.toggle('off', this.rerollBlock() !== null);
+    rr.disabled = s.over;
   }
 
   private renderHand() {
@@ -575,9 +620,17 @@ export class Game {
     } else if (s.weather !== 'fair') {
       weather = `<b style="color:${WEATHER_COLOR[s.weather]}">${WEATHER_NAME[s.weather]}:</b> ${WEATHER_TEXT[s.weather].replace(/^[^:]*: /, '')}`;
     }
-    // Summary lines stay one line each, except the died-out line, which wraps so no species is cut.
+    if (this.board.nextFireAt >= 0) {
+      const n = this.nextPlan.length;
+      const warn =
+        `<b style="color:${WEATHER_COLOR.fire}">⚡ Lightning next ${SEASON_NAMES[seasonOf(s.season + 1)].toLowerCase()}:</b> dry, grown plants near the bolt may burn` +
+        (n ? `; <span class="warn">${n} cell${n > 1 ? 's' : ''}</span> would as things stand (dashed flames).` : '; nothing would as things stand.') +
+        ' Cracks mark bone-dry soil.';
+      weather = weather ? `${weather}<br>${warn}` : warn;
+    }
+    // Died-out and die-out-next lines always show; the rest fill up to the cap. Lines wrap.
     const lines = rep
-      ? summaryLines(rep, this.risk, weather ? 3 : 4).map((l) => `<div class="line${l.includes('✖') ? ' wrap' : ''}">${l}</div>`)
+      ? summaryLines(rep, this.risk, weather ? 3 : 4).map((l) => `<div class="line">${l}</div>`)
       : [`<div>${left > 0 ? 'Pick a card, then a glowing cell. Tap any cell to see what lives there.' : 'End the season to watch the island grow.'}</div>`];
     info.innerHTML =
       `<div class="row head"><span class="title">${title}</span>${undo}${rep ? '<button class="act" id="repBtn">Report</button>' : ''}</div>` +
@@ -670,6 +723,12 @@ export class Game {
     }
     if (parts.length) lines.push(`<div>${parts.join(' · ')}</div>`);
     lines.push(`<div>This season: ${this.forecast(c, next.cells[i], i, ev, fp, fa)}</div>`);
+    const fire = (t: string) => lines.push(`<div><b style="color:${WEATHER_COLOR.fire}">⚡</b> ${t}</div>`);
+    if (s.weather === 'fire' && i === s.fireAt) fire('Lightning strikes here at the end of this summer; the fire catches in the nearest dry, grown plant within 3 cells.');
+    else if (i === this.board.nextFireAt) fire(`Next season's lightning strikes here. Dry, grown plants within 3 cells may burn${this.nextPlan.includes(i) ? ', this one among them as things stand' : ''}.`);
+    if (s.weather === 'fire' && this.zone.has(i) && !this.burnPlan.includes(i)) fire('In the fire\'s reach: it could burn if nothing grazes it, and animals won\'t move here this summer.');
+    else if (this.board.nextFireAt >= 0 && this.nextPlan.includes(i) && i !== this.board.nextFireAt) fire('Would burn in next summer\'s wildfire as things stand.');
+    else if (this.dry.has(i) && !this.burnPlan.includes(i)) fire('Bone-dry under lightning: grass, flowers or shrubs grown here can burn.');
     return lines.join('');
   }
 
@@ -793,7 +852,7 @@ export class Game {
         <li>Life changes the land: <b>lichen</b> turns rock into soil, <b>grass</b> and <b>fungi</b> enrich it, <b>reeds</b> silt shallows into marsh, <b>beavers</b> dam ponds. Shrubs and oaks can be planted into grass once the soil is rich enough.</li>
         <li>Every season scores <b>species²/2 + life/5</b>: variety matters most. Grazers crop plants short so they can't spread; hunters keep grazers in check.</li>
         <li>A species alive at the end of <b>${SETTLE_AFTER} seasons in a row</b> is <b>settled</b> and earns <b>+${SETTLED_BONUS}</b> every season after. If it dies out, its streak starts over, so keep the balance rather than replanting.</li>
-        <li>Watch the weather: droughts dry the land, harsh winters starve animals, and summer lightning sets grown, bone-dry meadows alight, and animals caught in the fire die. The island shows which cells would burn; plants grazed that summer, seedlings, damp ground by ponds and marsh, and water don't burn, but sparks jump one-cell gaps.</li>
+        <li>Watch the weather: droughts dry the land, harsh winters starve animals, and summer lightning sets grown, bone-dry meadows alight, and animals caught in the fire die. The island shows which cells would burn; plants grazed that summer, seedlings, damp ground by ponds and marsh, and water don't burn, but sparks jump one-cell gaps. A season ahead, a bolt marks the strike, dashed flames what would burn and cracks the bone-dry soil.</li>
         <li>Tap any cell to see what lives there and what will happen to it next season. After each season, <b>Report</b> shows what grew, what died and why.</li>
       </ul>`,
       [{ label: 'Play', primary: true, onClick: closeOverlay }],
@@ -849,9 +908,9 @@ export class Game {
     if (s.weather === 'fire') {
       const n = this.burnPlan.length;
       rows.push(
-        `<p>The bolt in a dashed hex marks where lightning will strike${n ? `; flames mark the ${n} cell${n > 1 ? 's' : ''} that would burn as things stand` : ''}. The fire comes at the end of summer, after grazing, so you can still stop it: put rabbits or deer by a meadow (a plant grazed this summer won't burn), or plant into it. Sparks jump one-cell gaps, so a firebreak must be two cells wide, and animals caught in the fire die.</p>`,
+        `<p>The bolt in a dashed hex marks where lightning will strike${n ? `; flames mark the ${n} cell${n > 1 ? 's' : ''} that would burn as things stand` : ''}. The fire comes at the end of summer, after grazing, so you can still stop it: put rabbits or deer by a meadow (a plant grazed this summer won't burn), or plant into it. Sparks jump one-cell gaps, so a firebreak must be two cells wide. Animals caught in the fire die, but none move into its reach (dashed outlines) this summer.</p>`,
       );
-    } else if (weatherFor(s.seed, s.season + 1).weather === 'fire' && s.season + 1 < SEASONS) rows.push('<p>The faint bolt on the island marks where next season’s lightning will strike.</p>');
+    } else if (weatherFor(s.seed, s.season + 1).weather === 'fire' && s.season + 1 < SEASONS) rows.push('<p>The bolt on the island marks where next season’s lightning will strike. Dashed flames show what that fire would burn if nothing more is played, and cracks mark bone-dry soil, where grown grass, flowers and shrubs can burn.</p>');
     showCard(`<h2>Weather</h2>${rows.join('')}`, [{ label: 'Close', primary: true, onClick: closeOverlay }]);
   }
 

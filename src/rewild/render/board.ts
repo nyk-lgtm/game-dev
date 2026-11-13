@@ -37,8 +37,14 @@ export class Board {
   catchAt = -1;
   /** Cells this season's wildfire would burn as things stand. */
   burnPlan = new Set<number>();
-  /** Next season's lightning strike, marked faintly a season ahead. */
+  /** Next season's lightning strike, marked a season ahead. */
   nextFireAt = -1;
+  /** Cells next summer's wildfire would burn if nothing more is played (shown during the warning season). */
+  nextPlan = new Set<number>();
+  /** This summer's fire's reach (cells it could burn; animals keep out), drawn faintly around the plan. */
+  fireZone = new Set<number>();
+  /** Bone-dry soil (moisture 0 under lightning), shown while lightning is coming or here. */
+  dry = new Set<number>();
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -173,15 +179,45 @@ export class Board {
     const size = this.L.size;
     const sea = seasonOf(Math.min(s.season, 19));
 
-    // Wildfire forecast: the cells that would burn, the strike, and where the fire catches.
-    if (!s.over && this.fireAt >= 0) {
-      const flick = 0.5 + 0.5 * Math.sin(time * 5);
+    // Wildfire forecast: bone-dry soil, the fire's reach, the cells that would burn, where it catches.
+    const quiet = this.marks.size > 0; // quieter while a card is picked, so the placement glow shows through
+    const flick = 0.5 + 0.5 * Math.sin(time * 5);
+    if (!s.over && this.dry.size) {
       g.save();
+      g.strokeStyle = quiet ? 'rgba(232, 190, 120, 0.25)' : 'rgba(232, 190, 120, 0.55)';
+      g.lineWidth = 1.2;
+      for (const i of this.dry) {
+        // A few short dry cracks across the cell.
+        const p = this.center(i);
+        g.beginPath();
+        for (let k = 0; k < 3; k++) {
+          const y = p.y + size * (k - 1) * 0.32;
+          const x0 = p.x - size * 0.42 + ((i * 7 + k * 3) % 5) * size * 0.03;
+          g.moveTo(x0, y + size * 0.05);
+          g.lineTo(x0 + size * 0.22, y - size * 0.04);
+          g.lineTo(x0 + size * 0.38, y + size * 0.04);
+          g.lineTo(x0 + size * 0.6, y - size * 0.05);
+        }
+        g.stroke();
+      }
+      g.restore();
+    }
+    if (!s.over && this.fireAt >= 0) {
+      g.save();
+      g.setLineDash([3, 3]);
+      g.lineWidth = 1.2;
+      g.strokeStyle = 'rgba(255, 150, 70, 0.7)';
+      for (const i of this.fireZone) {
+        if (this.burnPlan.has(i)) continue;
+        const p = this.center(i);
+        hexPath(g, p.x, p.y, size * 0.82);
+        g.stroke();
+      }
+      g.setLineDash([]);
       for (const i of this.burnPlan) {
         const p = this.center(i);
         hexPath(g, p.x, p.y, size * 0.9);
-        // Quieter while a card is picked, so the placement glow shows through.
-        if (!this.marks.size) {
+        if (!quiet) {
           g.fillStyle = `rgba(255, 96, 32, ${0.18 + flick * 0.14})`;
           g.fill();
         }
@@ -190,8 +226,8 @@ export class Board {
         g.stroke();
         flame(g, p.x + size * 0.42, p.y - size * 0.38, size * 0.24, flick);
       }
-      const p = this.center(this.fireAt);
       if (this.catchAt >= 0 && this.catchAt !== this.fireAt) {
+        const p = this.center(this.fireAt);
         const q = this.center(this.catchAt);
         g.strokeStyle = '#ffd25e';
         g.lineWidth = 2;
@@ -202,14 +238,22 @@ export class Board {
         g.stroke();
         g.setLineDash([]);
       }
-      g.globalAlpha = 0.7 + 0.3 * Math.sin(time * 6);
-      hexPath(g, p.x, p.y, size * 0.98);
-      g.strokeStyle = '#ffd25e';
-      g.lineWidth = 2.5;
-      g.setLineDash([4, 3]);
-      g.stroke();
-      g.setLineDash([]);
-      bolt(g, p.x, p.y, size * 0.5);
+      g.restore();
+    } else if (!s.over && this.nextFireAt >= 0) {
+      // A season ahead: what would burn next summer if nothing more is played, dashed and faint.
+      g.save();
+      for (const i of this.nextPlan) {
+        const p = this.center(i);
+        hexPath(g, p.x, p.y, size * 0.86);
+        g.lineWidth = 1.5;
+        g.setLineDash([4, 3]);
+        g.strokeStyle = 'rgba(255, 140, 60, 0.75)';
+        g.stroke();
+        g.setLineDash([]);
+        g.globalAlpha = 0.6;
+        flame(g, p.x + size * 0.42, p.y - size * 0.38, size * 0.2, 0.3);
+        g.globalAlpha = 1;
+      }
       g.restore();
     }
     // Placement hints.
@@ -233,14 +277,6 @@ export class Board {
       g.restore();
     }
 
-    if (!s.over && this.nextFireAt >= 0) {
-      const p = this.center(this.nextFireAt);
-      g.save();
-      g.globalAlpha = 0.45;
-      bolt(g, p.x, p.y, size * 0.4);
-      g.restore();
-    }
-
     // Animals, back to front.
     const order: number[] = [];
     s.cells.forEach((c, i) => c.animal && order.push(i));
@@ -248,6 +284,29 @@ export class Board {
     for (const i of order) {
       const p = this.center(i);
       drawAnimal(g, p.x, p.y, size, s.cells[i].animal!, sea, time, i);
+    }
+
+    // Lightning bolts go over the plants and animals so they never hide under the art.
+    if (!s.over && (this.fireAt >= 0 || this.nextFireAt >= 0)) {
+      const now = this.fireAt >= 0;
+      const p = this.center(now ? this.fireAt : this.nextFireAt);
+      g.save();
+      g.globalAlpha = now ? 0.7 + 0.3 * Math.sin(time * 6) : 0.85;
+      hexPath(g, p.x, p.y, size * 0.98);
+      g.strokeStyle = '#ffd25e';
+      g.lineWidth = now ? 2.5 : 1.8;
+      g.setLineDash(now ? [4, 3] : [2, 4]);
+      g.stroke();
+      g.setLineDash([]);
+      // A dark disc behind the bolt keeps it readable over shrubs and birds.
+      g.globalAlpha = now ? 0.55 : 0.45;
+      g.fillStyle = '#10201c';
+      g.beginPath();
+      g.arc(p.x, p.y, size * (now ? 0.5 : 0.42), 0, Math.PI * 2);
+      g.fill();
+      g.globalAlpha = now ? 1 : 0.9;
+      bolt(g, p.x, p.y, size * (now ? 0.5 : 0.4));
+      g.restore();
     }
 
     if (this.selected >= 0) {

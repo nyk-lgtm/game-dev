@@ -22,6 +22,7 @@ body {
   font-size: 13px; font-weight: 700; white-space: nowrap;
   display: flex; align-items: center; gap: 6px;
 }
+.chip .nx { color: #ffd25e; font-weight: 800; margin-left: -2px; }
 .chip .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 #goalsBtn { width: auto; min-width: 52px; padding: 0 8px; font-size: 14px; font-weight: 700; }
 #goalsBtn.done { border-color: var(--gold); color: var(--gold); }
@@ -51,8 +52,8 @@ body #panel { padding: 6px 14px 8px; gap: 10px; position: relative; }
 #info .head { flex-wrap: nowrap; align-items: center; min-height: 44px; }
 #info .head .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #info .head .act { flex: none; }
-#info .line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#info .line.wrap { white-space: normal; }
+/* Summary lines wrap, so no species name is ever cut off (the panel scrolls). */
+#info .line { white-space: normal; }
 /* Long text scrolls inside the panel; a fade and a "more" tag say there is more below. */
 #info { overscroll-behavior: contain; padding-bottom: 2px; }
 #info.more { -webkit-mask-image: linear-gradient(#000 calc(100% - 26px), transparent); mask-image: linear-gradient(#000 calc(100% - 26px), transparent); }
@@ -88,7 +89,7 @@ body #panel.more::after {
 #endBtn { flex: 1; font-size: 15px; line-height: 1.1; }
 #endBtn.ready { animation: pulse 1.4s ease-in-out infinite; }
 #rerollBtn { min-height: 44px; font-size: 13px; }
-#rerollBtn:disabled { opacity: 0.4; }
+#rerollBtn:disabled, #rerollBtn.off { opacity: 0.4; }
 @keyframes pulse { 50% { box-shadow: 0 0 0 4px rgba(123, 216, 143, 0.35); } }
 body.busy #handRow { pointer-events: none; opacity: 0.6; }
 

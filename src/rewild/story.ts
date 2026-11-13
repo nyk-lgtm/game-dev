@@ -117,25 +117,33 @@ function shortPast(t: Tally): string {
   return causePast(t).replace(/ \(.*\)$/, '').replace(/: .*/, '');
 }
 
-/** Up to `max` short lines for the panel, most important first. */
+/** Short lines for the panel, most important first: what died out and what will die out if the
+ * season ends now always show (fire deaths included); the rest fill up to `max` lines. */
 export function summaryLines(r: SeasonReport, risk: SeasonReport | null, max: number): string[] {
-  const lines: string[] = [];
-  // Every species that died out, on one line (wrapping if it must) so none is cut.
-  if (r.lost.length === 1) lines.push(`<span class="warn">✖ ${SPECIES[r.lost[0].id].name} died out</span> — ${causePast(r.lost[0])}`);
-  else if (r.lost.length) lines.push(`<span class="warn">✖ ${r.lost.length} died out:</span> ${r.lost.map((t) => `${lower(t.id)} (${shortPast(t)})`).join(', ')}`);
-  for (const g of r.goals) lines.push(`<span class="gold">★ ${g}</span>`);
-  const grow = growthParts(r);
-  if (grow.length) lines.push(`<span class="good">▲</span> ${grow.join(', ')}`);
-  const loss = lossParts(r);
-  if (loss.length) lines.push(`<span class="warn">▼</span> ${loss.join(', ')}`);
-  const land = landParts(r);
-  if (land.length) lines.push(`<span class="land">◆</span> ${land.join(', ')}`);
+  const must: string[] = [];
+  // Every species that died out, on one line so none is cut.
+  if (r.lost.length === 1) must.push(`<span class="warn">✖ ${SPECIES[r.lost[0].id].name} died out</span> — ${causePast(r.lost[0])}`);
+  else if (r.lost.length) must.push(`<span class="warn">✖ ${r.lost.length} died out:</span> ${r.lost.map((t) => `${lower(t.id)} (${shortPast(t)})`).join(', ')}`);
   const doom = risk ? risk.lost : [];
   const dying = doom.filter((t) => t.why);
-  if (dying.length) lines.push(`<span class="warn">⚠ If you end the season now</span> ${dying.map((t) => lower(t.id)).join(', ')} will die out`);
-  else if (doom.length) lines.push(`This season the last ${doom.map((t) => lower(t.id)).join(', ')} ${doom[0].id === 'lichen' ? 'crumbles into soil' : 'will be gone'}`);
+  if (dying.length) must.push(`<span class="warn">⚠ If you end the season now</span> ${dying.map((t) => `${lower(t.id)} (${shortNow(t)})`).join(', ')} will die out`);
+  const rest: string[] = [];
+  if (!dying.length && doom.length) rest.push(`This season the last ${doom.map((t) => lower(t.id)).join(', ')} ${doom[0].id === 'lichen' ? 'crumbles into soil' : 'will be gone'}`);
+  for (const g of r.goals) rest.push(`<span class="gold">★ ${g}</span>`);
+  const grow = growthParts(r);
+  if (grow.length) rest.push(`<span class="good">▲</span> ${grow.join(', ')}`);
+  const loss = lossParts(r);
+  if (loss.length) rest.push(`<span class="warn">▼</span> ${loss.join(', ')}`);
+  const land = landParts(r);
+  if (land.length) rest.push(`<span class="land">◆</span> ${land.join(', ')}`);
+  const lines = [...must, ...rest.slice(0, Math.max(0, max - must.length))];
   if (!lines.length) lines.push('A quiet season.');
-  return lines.slice(0, max);
+  return lines;
+}
+
+/** A few words of what will kill it: "burn in the wildfire", "hunted by wolves". */
+function shortNow(t: Tally): string {
+  return causeNow(t.why, t.id, t.by).replace(/: .*/, '');
 }
 
 function tallyList(list: Tally[], verb: (t: Tally) => string): string {
@@ -159,12 +167,14 @@ export function reportHtml(r: SeasonReport, risk: SeasonReport | null, played = 
   for (const t of r.spread) grew.push(`<li>${name(t.id)} ${isPlant(t.id) ? 'spread to' : 'sent young to'} ${t.n} new cell${t.n > 1 ? 's' : ''}</li>`);
   for (const t of r.born) grew.push(`<li>${name(t.id)} had young${t.n > 1 ? ` on ${t.n} cells` : ''}</li>`);
   if (grew.length) out.push(`<h3 class="good">Growth</h3><ul>${grew.join('')}</ul>`);
+  // Species that died out are told once, with one cause, under Died out.
+  const gone = (t: Tally) => r.lost.some((l) => l.id === t.id);
   const losses =
     tallyList(
-      r.died.filter((t) => !r.lost.some((l) => l.id === t.id && l.why === t.why)),
+      r.died.filter((t) => !gone(t)),
       (t) => `— ${causePast(t)}`,
     ) +
-    tallyList(r.shrank, (t) => `— ${t.why === 'hunted' ? `thinned out, ${causePast(t)}` : t.why === 'hungry' ? 'went hungry and shrank' : `shrank: ${causePast(t)}`}`);
+    tallyList(r.shrank.filter((t) => !gone(t)), (t) => `— ${t.why === 'hunted' ? `thinned out, ${causePast(t)}` : t.why === 'hungry' ? 'went hungry and shrank' : `shrank: ${causePast(t)}`}`);
   if (losses) out.push(`<h3 class="warn">Losses</h3><ul>${losses}</ul>`);
   if (r.moved.length) out.push(`<h3>On the move</h3><ul>${tallyList(r.moved, () => 'moved to find food or safety')}</ul>`);
   const land = landParts(r);

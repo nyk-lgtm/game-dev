@@ -49,4 +49,33 @@ describe('season summary', () => {
     expect(some).toContain('burn in the wildfire');
     expect(some).not.toContain('Next season, if you play nothing');
   });
+
+  it('die-out warnings (fire included) always show, ahead of growth and losses', () => {
+    const r = report({
+      lost: [{ id: 'deer', n: 1, why: 'hunted', by: 'wolf' }],
+      goals: ['Grow 2 full oaks at once'],
+      spread: [{ id: 'bees', n: 3 }, { id: 'lichen', n: 2 }, { id: 'shrub', n: 1 }],
+      died: [{ id: 'rabbit', n: 1, why: 'starved' }],
+      land: { soil: 2, marsh: 0, ponds: 0, richer: 1, burnt: 0 },
+    });
+    const risk = report({ lost: [{ id: 'wolf', n: 1, why: 'burnt' }] });
+    const lines = summaryLines(r, risk, 3);
+    expect(lines[0]).toContain('died out');
+    expect(lines[1]).toContain('If you end the season now');
+    expect(lines[1]).toContain('wolves (burn in the wildfire)');
+    expect(lines.length).toBe(3);
+  });
+
+  it('a species that died out is told once, with one cause', () => {
+    const r = report({
+      lost: [{ id: 'fox', n: 2, why: 'burnt' }],
+      died: [
+        { id: 'fox', n: 1, why: 'starved' },
+        { id: 'fox', n: 1, why: 'burnt' },
+      ],
+    });
+    const html = reportHtml(r, null);
+    expect(html).toContain('burnt in the wildfire');
+    expect(html).not.toContain('starved');
+  });
 });

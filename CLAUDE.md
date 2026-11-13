@@ -109,10 +109,11 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     needed: the bot banks ~16 gold, a capped maze 1-3k but spending it on new towers wins 1 → 29/64);
     `scripts/hexhold/waves.ts` shows wave sizes and the biggest pile of one kind.
   - Rewild: `npx vite-node scripts/rewild/balance.ts 16 greedy 1` (score, species, stars; compare
-    with `random`; rules v6: greedy median ~2280 (32 games; random ~940), stars at 900/1700/2400, ~1/4 of bot games 3★),
+    with `random`; rules v7: greedy median ~2300 (32 games; random ~890), stars at 900/1700/2400, ~1/4 of bot games 3★),
     `scripts/rewild/upto.ts <seed> <n>` (a bot game's actions to season n, for `?seed=&a=`), `scripts/rewild/probe.ts` (plays and causes of death), `trace.ts <seed>`,
     `fire.ts 64 1 [random]` (per lightning summer: burns, the idle burn plan, whether the bot plays differently than in a
-    drought, and the score vs the same game with lightning turned into drought; v6 greedy: something burns in ~29/64, mean −13).
+    drought, and the score vs the same game with lightning turned into drought; v7 greedy: ~1.6 lightning summers a game,
+    something burns in ~44/101, mean −7; random −34).
 - Delve rules v5 (src/delve/core/rules.ts): a sleeping monster spends the turn it notices you; cultists rest a turn
   (`cd`) after each firebolt; blocked hunters try another equally short step; `use` (HIT) hits ahead, then a front
   corner (`cornerFoe`), opens/shuts doors (never with a foe beside you or in the doorway), else "You swing at nothing"
@@ -140,7 +141,12 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   placement glow and the cell readout come from the same trial. Wildfire burns last in a lightning summer
   (after grazing; rules v6): it catches in the nearest burnable cell within 3 of the strike (`NEAR3`) and leaps to burnable
   cells up to 2 away (`NEAR2`); burnable = grass/flowers/shrub at size ≥ 2 on moisture-0 ground, not cropped by a grazer
-  this season (`cropped` in simulate); animals on burning cells die (bees/songbirds escape). The board draws the burn plan.
+  this season (`cropped` in simulate); animals on burning cells die (bees/songbirds escape). Rules v7: `fireZone` (burnable
+  cells within reach, judged after the plants grow, before grazing) is an exact outer bound: animals never move or send young
+  into it and the fire never leaves it. Lightning: 40% of summers from year 2 (drought 25%). The board draws the burn plan,
+  the zone (dashed), bone-dry soil (cracks) and, the season before, the bolt over the art plus next summer's plan if
+  nothing more is played (clone + end twice: exact for that case). The panel's ✖/⚠ lines always show; a dead species
+  gets one cause in the report (the death that finished it).
   Deals favour cards that can be placed somewhere (`placeReason` gives the blocker kind for hints).
 - Unspoken: `makeLanguage(seed)` (core/lang.ts) invents grammar, sounds and glyphs; `makeWorld` builds
   5 chapters of authored scenes (every word in 2+ scenes; tests enforce it) plus generated riddles; state

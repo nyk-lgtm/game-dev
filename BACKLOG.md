@@ -563,8 +563,17 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
     12/64, the bot plays differently than in a drought in 24/64 (was 11), game score −13.5 mean (worst −286);
     random −24.9 (worst −474). Balance x32: greedy median 2333 → 2278 (stars 0/2/21/9 unchanged), random 987 → 941.
     Tried and dropped: size ≥ 2 alone (grazing no longer protected anything), reach 3 alone, longer ash.
-  - [ ] Next: playtest whether v6 fire reads well (the jump shows as flame cells apart); a second strike in
-    year 4-5 if it is still rare for players with big dry meadows.
+  - [x] Rewild v6 blind playtest (2461/1787/2180; 2 lightning summers in 60 seasons, one burnt 9; "fair but blunt,
+    the warning a season ahead is nearly invisible"). Rules v7: the season before shows "⚡ Lightning next summer"
+    in the panel and a →⚡ on the weather chip, the bolt is drawn over plants and animals on a dark disc, tapping it
+    says so, dashed flames show next summer's burn if nothing more is played (exact for that case), and cracks
+    mark bone-dry soil. In the fire summer the fire's reach (`fireZone`) is outlined; animals never move or send
+    young into it (no more wolves walking into the fire). ✖/⚠ lines always show first (⚠ names the cause, fire
+    included), summary lines wrap, a dead species gets one cause in the report. "New hand" greys out but says why
+    when tapped. Lightning 27% → 40% of summers from year 2 (drought 28% → 25%): 1.00 → 1.58 a game, games
+    with one 48 → 61 of 64. Greedy x32 median 2306 (v6 2278, v5 2333), stars 0/1/23/8; x64 2295, 3★ 18/64;
+    fire costs greedy −7 a game, random −34 (worst −553).
+  - [ ] Next: third playtest of the fire warning; a lightning-summer goal or a reason to want fire (ash enriches).
 - [x] **Unspoken art follow-ups**: held things (take/give/carry) sit beside the holder instead of
       over their body; an acting river is drawn as the river flooding its banks, not a sea wave.
       `.shots/us-gal.cjs '<frames json>' name` renders any frames side by side (needs `npx vite --port 5174`).
