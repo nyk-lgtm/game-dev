@@ -35,8 +35,31 @@ const quarry = makeStore('quarry.');
 const sungrazer = makeStore('sungrazer.');
 const kitbag = makeStore('kitbag.');
 const brink = makeStore('brink.');
+const loomsong = makeStore('loomsong.');
 
 const GAMES: GameCard[] = [
+  {
+    path: './loomsong/',
+    title: 'Loomsong',
+    tag: 'Rhythm',
+    pitch: 'Every song is made up on the spot from a seed: drums, bass, chords and a tune. Beads slide down four threads on its kicks, snares and melody; tap, hold and flick them in time and weave the song into cloth.',
+    accent: '#ffc857',
+    best: () => {
+      const p = loomsong.load<{ plays?: number; best?: number; bestGrade?: string | null } | null>('profile', null);
+      if (!p?.plays) return null;
+      return `Best ${p.bestGrade ?? ''} ${(p.best ?? 0).toLocaleString('en-US')} · ${p.plays} song${p.plays === 1 ? '' : 's'} played`;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#120d1b"/>
+      <g stroke-width="2" opacity="0.5"><path d="M14 0v52" stroke="#ff7a6b"/><path d="M30 0v52" stroke="#ffc857"/><path d="M46 0v52" stroke="#4fd1c5"/><path d="M62 0v52" stroke="#a78bfa"/></g>
+      <rect x="7" y="30" width="14" height="7" rx="3.5" fill="#ff7a6b"/>
+      <rect x="27" y="6" width="6" height="34" rx="3" fill="#ffc857" opacity="0.8"/><rect x="23" y="36" width="14" height="7" rx="3.5" fill="#ffc857"/>
+      <path d="M46 16H62" stroke="#fff7ea" stroke-width="1.5" stroke-dasharray="3 2"/>
+      <rect x="39" y="13" width="14" height="7" rx="3.5" fill="#4fd1c5"/><rect x="55" y="13" width="14" height="7" rx="3.5" fill="#a78bfa"/>
+      <rect x="4" y="50" width="68" height="4" rx="2" fill="#c89b6d"/>
+      <g fill="none" stroke-width="1.5"><circle cx="14" cy="52" r="5" stroke="#ff7a6b"/><circle cx="30" cy="52" r="5" stroke="#ffc857"/><circle cx="46" cy="52" r="5" stroke="#4fd1c5"/><circle cx="62" cy="52" r="5" stroke="#a78bfa"/></g>
+      <g><rect x="6" y="60" width="8" height="4" fill="#ff7a6b"/><rect x="14" y="60" width="8" height="4" fill="#ffc857"/><rect x="22" y="60" width="8" height="4" fill="#5a4a22"/><rect x="30" y="60" width="8" height="4" fill="#4fd1c5"/><rect x="38" y="60" width="8" height="4" fill="#a78bfa"/><rect x="46" y="60" width="8" height="4" fill="#ff7a6b"/><rect x="54" y="60" width="8" height="4" fill="#4fd1c5"/><rect x="62" y="60" width="8" height="4" fill="#ffc857"/>
+      <rect x="6" y="65" width="8" height="4" fill="#4fd1c5"/><rect x="14" y="65" width="8" height="4" fill="#a78bfa"/><rect x="22" y="65" width="8" height="4" fill="#ffc857"/><rect x="30" y="65" width="8" height="4" fill="#ff7a6b"/><rect x="38" y="65" width="8" height="4" fill="#3d3260"/><rect x="46" y="65" width="8" height="4" fill="#ffc857"/><rect x="54" y="65" width="8" height="4" fill="#ff7a6b"/><rect x="62" y="65" width="8" height="4" fill="#a78bfa"/></g></svg>`,
+  },
   {
     path: './brink/',
     title: 'Brink',
@@ -371,7 +394,7 @@ const GAMES: GameCard[] = [
 // Filter chips: the hub has grown long, so games can be narrowed by kind.
 const KINDS: Record<string, string[]> = {
   Puzzle: ['triad', 'unspoken', 'grove', 'quarry', 'ninefold', 'summit'],
-  Action: ['sungrazer', 'afterglow', 'nightline', 'hexhold'],
+  Action: ['loomsong', 'sungrazer', 'afterglow', 'nightline', 'hexhold'],
   Strategy: ['brink', 'kitbag', 'glyph', 'telegraph', 'rewild', 'hexhold', 'summit'],
   Story: ['lastlight', 'lantern', 'delve', 'unspoken'],
 };
@@ -433,6 +456,7 @@ const DAILY = [
   { path: './sungrazer/?daily', title: 'Sungrazer', store: sungrazer, accent: '#ffc35a' },
   { path: './kitbag/?daily', title: 'Kitbag', store: kitbag, accent: '#e8b04a' },
   { path: './brink/?daily', title: 'Brink', store: brink, accent: '#ff8a6e' },
+  { path: './loomsong/?daily', title: 'Loomsong', store: loomsong, accent: '#ffc857' },
 ];
 const daily = document.getElementById('daily')!;
 daily.innerHTML = `<h3>Daily challenges <span>${prettyDay()}</span></h3><p>The same run for everyone today. A new one at midnight.</p>`;

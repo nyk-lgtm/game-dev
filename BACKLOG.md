@@ -18,6 +18,21 @@ Ground rules: never break saves without bumping RULES_VERSION; never leave main 
 keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 
 ## Now
+- [ ] **Loomsong** (original rhythm game with procedurally generated music). Milestones:
+  - [x] Core (src/loomsong/core, rules v1): seeded songs (key, mode, 90-140 BPM, verse/chorus progressions, a form
+        sized to 90-120 s, drums with fills, bass, pads, chorus arpeggio, motif-based lead); charts from the song's own
+        onsets per level (Easy ~1.2 notes/s with a few holds and flicks, Normal ~2.2 with chords, Hard ~3.7); judge with
+        Perfect/Good windows, holds, flicks; plays recomputed from seed + level + events. 13 tests incl. a perfect bot
+        (1,000,000) and live-vs-recompute agreement.
+  - [x] UI: WebAudio synths scheduled on the audio clock, pointer timestamps mapped onto it; four warp threads, beads,
+        yarn holds, chevron flicks, dashed chord threads, beat lines, shuttle bar with pads, bursts, popups, combo,
+        live cloth; pause with a 3-2-1 count-in; results with grade (Silk…Frayed), stats, tapestry, "Shift timing";
+        song menu (level, new / daily / recent songs, song codes and links, note speed, timing ±5 and calibration);
+        calibration screen; first-visit help + calibration prompt; "needs sound" card (turn on / play silently);
+        bug reports and `?seed=&lv=&a=`; hub card first + Daily link. Pixel 7 checked (headless: audio context runs).
+  - [ ] Next: owner playtest on the phone. Watch: is the default timing guess close before calibrating, is
+        calibration steady (spread), do the charts feel on the music (especially Hard's kick/lead chords), are flicks
+        detected reliably, are songs varied enough (forms, grooves, lead tones), is ~1.2 notes/s right for Easy.
 - [ ] **Brink** (original two-player abstract: sumo on a crumbling hex island, vs an AI, plus puzzles). Milestones:
   - [x] Rules design by self-play (src/brink/core, rules v1): 37-tile hex island, six stones a side in a V two rows
         apart; step one tile, or shove the line in front if it is at most two stones (either colour; three won't

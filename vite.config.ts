@@ -45,6 +45,7 @@ export default defineConfig({
         sungrazer: resolve(__dirname, 'sungrazer/index.html'),
         kitbag: resolve(__dirname, 'kitbag/index.html'),
         brink: resolve(__dirname, 'brink/index.html'),
+        loomsong: resolve(__dirname, 'loomsong/index.html'),
       },
     },
   },

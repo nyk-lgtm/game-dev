@@ -1,0 +1,77 @@
+/* Loomsong: a dusk-plum loom, warm threads, a wooden shuttle bar. */
+body {
+  --bg: #120d1b;
+  --panel: #1c1428;
+  --line: #33274a;
+  --text: #f6eefc;
+  --muted: #b3a6c8;
+  --accent: #ffc857;
+}
+#hud { gap: 14px; background: #160f22; }
+#hud .value { font-variant-numeric: tabular-nums; }
+#hud .score { min-width: 86px; }
+#hud .songlbl { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
+#songName { font-size: 14px; font-weight: 800; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#songMeta { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+#stage { touch-action: none; }
+button.primary { color: #2a1a05; }
+
+.card h2 .day { display: block; font-size: 13px; font-weight: 600; color: var(--muted); }
+.card .songcard { background: #150f20; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; }
+.card .sname { font-size: 20px; font-weight: 900; color: var(--text); }
+.card .smeta { font-size: 13px; color: var(--muted); }
+.card .sbest { font-size: 13px; color: var(--muted); }
+.card .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.card .chips button {
+  flex: 1; min-height: 44px; min-width: 52px; padding: 0 10px; border-radius: 22px; border: 1px solid var(--line);
+  background: #150f20; color: var(--text); font-size: 14px; font-weight: 700;
+}
+.card .chips button.on { background: var(--accent); color: #2a1a05; border-color: var(--accent); }
+.card .row2, .card .row3 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.card .row3 { grid-template-columns: 1fr 1fr 1fr; }
+.card .row3 button { min-height: 44px; font-size: 13px; padding: 0 4px; }
+.card .recent { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.card .recent span { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-right: 2px; }
+.card .recent button {
+  min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px dashed var(--line);
+  background: transparent; color: var(--text); font-size: 13px; font-weight: 600;
+}
+.card .opts { display: flex; flex-direction: column; gap: 8px; }
+.card .opt { display: flex; flex-direction: column; gap: 4px; }
+.card .opt > span { font-size: 13px; color: var(--muted); }
+.card .code { font-size: 12px; text-align: center; }
+.card button.link {
+  background: none; border: 0; color: var(--accent); font: inherit; font-weight: 700; text-decoration: underline;
+  min-height: 44px; padding: 0 4px; vertical-align: middle;
+}
+.card .meta2 { color: var(--muted); font-size: 13px; text-align: center; }
+.card .hint { font-size: 13px; text-align: center; }
+.card .hint button.link { display: block; margin: 0 auto; }
+
+.card .grade { display: flex; align-items: baseline; justify-content: center; gap: 10px; }
+.card .grade span { font-size: 54px; font-weight: 900; line-height: 1; }
+.card .grade b { font-size: 20px; font-weight: 800; }
+.card .grade.gS span { color: #ffe08a; text-shadow: 0 0 18px rgba(255, 200, 87, 0.6); }
+.card .grade.gA span { color: #8ee6c8; }
+.card .grade.gB span { color: #9fc4ff; }
+.card .grade.gC span { color: #d6b3ff; }
+.card .grade.gD span { color: #ff8a95; }
+.card .tags { display: flex; justify-content: center; gap: 6px; }
+.card .tags span { font-size: 11px; font-weight: 900; letter-spacing: 0.08em; color: #2a1a05; background: var(--accent); border-radius: 6px; padding: 3px 7px; }
+.card p.big { font-size: 32px; font-weight: 900; text-align: center; color: var(--text); margin: 0; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.card .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.card .stats span { display: flex; flex-direction: column; align-items: center; background: #150f20; border: 1px solid var(--line); border-radius: 10px; padding: 5px 2px; font-size: 11px; color: var(--muted); text-align: center; }
+.card .stats b { font-size: 17px; color: var(--text); font-variant-numeric: tabular-nums; }
+.card .stats .j0 b { color: #ffe08a; }
+.card .stats .j1 b { color: #8ee6c8; }
+.card .stats .j2 b { color: #ff8a95; }
+.card .cloth canvas { display: block; width: 100%; height: auto; border-radius: 8px; image-rendering: pixelated; }
+.card .diagram { width: 100%; height: auto; border-radius: 12px; }
+@media (max-height: 700px) {
+  .card .grade span { font-size: 42px; }
+  .card p.big { font-size: 26px; }
+  .card .diagram { max-height: 110px; }
+  .card .cloth canvas { max-height: 90px; object-fit: cover; object-position: top; }
+}
+/* The menu button can't be reached under a card: hide it while one is open. */
+body:has(#overlay:not([hidden])) #menuBtn { visibility: hidden; }
