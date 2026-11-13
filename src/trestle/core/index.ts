@@ -6,3 +6,4 @@ export * from './gen';
 export * from './tutorials';
 export * from './trail';
 export * from './diagnose';
+export * from './pool';

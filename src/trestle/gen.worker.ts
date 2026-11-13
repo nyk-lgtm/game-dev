@@ -2,9 +2,9 @@
 // runs per level (a second or more on a phone), so the page asks here and
 // shows "Surveying…" (or has already asked ahead for the next level).
 
-import { makeLevel, trailLevel, type Level } from './core';
+import { seedLevel, trailLevel, type Level } from './core';
 
-export type GenSpec = { kind: 'trail'; n: number } | { kind: 'seed'; seed: number; d: number; levelId: string };
+export type GenSpec = { kind: 'trail'; n: number } | { kind: 'seed'; seed: number; d: number; levelId: string; daily?: boolean };
 export type GenJob = GenSpec & { id: number };
 
 self.onmessage = (e: MessageEvent<GenJob>) => {
@@ -12,7 +12,7 @@ self.onmessage = (e: MessageEvent<GenJob>) => {
   let level: Level | null = null;
   let error = '';
   try {
-    level = job.kind === 'trail' ? trailLevel(job.n) : { ...makeLevel(job.seed, job.d), id: job.levelId };
+    level = job.kind === 'trail' ? trailLevel(job.n) : seedLevel(job.seed, job.d, job.levelId, job.daily);
   } catch (err) {
     error = String(err);
   }

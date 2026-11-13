@@ -5,8 +5,9 @@
 // The cart is three particles: two light wheels rolling on planks and rock and
 // a heavy body riding on sprung, damped struts (so a wheel dropping over a
 // joint between planks doesn't hammer the road with the whole load). Lanterns
-// hang from their ring pegs on short cords. Wind levels push every peg in
-// proportion to the pieces it holds, in slow gusts.
+// hang from their ring pegs on short cords; a convoy is two carts in a row.
+// Wind levels push every peg in proportion to the pieces it holds, in slow
+// gusts across and updraughts from the gorge that lift what only hangs.
 //
 // Pure and deterministic: only + − × ÷ and Math.sqrt (correctly rounded
 // everywhere), fixed step, members solved in list order.
@@ -33,7 +34,8 @@ const WHEEL_SHARE = 0.12;
 const SPRING_K = 360;
 const SPRING_DAMP = 18;
 export const CART_SPEED = 2.4;
-const CART_ACC = 6;
+/** The beetle's pull: under g·sin(21°), so it can't haul the cart up a 2-across-1-up plank (roads must not climb). */
+const CART_ACC = 3.6;
 const LANTERN_CORD = 0.7;
 /** How close each ring peg must stay, and for how long before the end of a reach run. */
 export const RING_TOL = 0.4;
@@ -53,6 +55,19 @@ export function gust(step: number): number {
   const rise = step < WIND_RISE ? step / WIND_RISE : 1;
   return rise * (0.35 + 0.65 * tri);
 }
+
+/** Updraught (−0.3..1 of the level's wind, + lifts) at a step: a shorter cycle out of step with the gusts. */
+export function lift(step: number): number {
+  const ph = ((step + LIFT_STEPS / 3) % LIFT_STEPS) / LIFT_STEPS;
+  const tri = ph < 0.5 ? ph * 2 : 2 - ph * 2;
+  const rise = step < WIND_RISE ? step / WIND_RISE : 1;
+  return rise * (-0.3 + 1.3 * tri);
+}
+/** How hard an updraught lifts compared with the sideways gust. */
+const LIFT_K = 1.6;
+const LIFT_STEPS = Math.round(HZ * 1.4);
+/** Gap between carts in a convoy (middle to middle). */
+const CONVOY_GAP = 1.6;
 
 export class Sim {
   readonly level: Level;
@@ -88,13 +103,15 @@ export class Sim {
   /** The first member to snap and when (−1 none). */
   firstBreak = -1;
   firstBreakAt = -1;
-  /** Cart particles (rear wheel, front wheel, body) or null. */
+  /** Cart particles (rear wheel, front wheel, body), the lead cart first; `cart` is the lead. */
+  readonly carts: [number, number, number][];
   readonly cart: [number, number, number] | null;
   /** Lantern particles and their ring pegs' particles (−1 where a ring has no peg). */
   readonly lanterns: number[];
   readonly ringPegs: number[];
   /** Wheel contact normals from the last step (0,0 = airborne). */
   private cn = new Float64Array(4);
+  private springLam = new Float64Array(8);
   private springRest = 0;
   private springAlpha = 0;
   steps = 0;
@@ -118,7 +135,8 @@ export class Sim {
     for (const r of rings) used.add(r);
     this.pegIds = [...pegs(level, members)].filter((p) => used.has(p)).sort((a, b) => a - b);
     const idx = new Map(this.pegIds.map((p, i) => [p, i]));
-    const extra = g.kind === 'cross' ? 3 : rings.length;
+    const nCarts = g.kind === 'cross' ? (g.carts ?? 1) : 0;
+    const extra = g.kind === 'cross' ? 3 * nCarts : rings.length;
     const n = this.pegIds.length + extra;
     this.x = new Float64Array(n);
     this.y = new Float64Array(n);
@@ -172,26 +190,34 @@ export class Sim {
     this.pegIds.forEach((p, i) => (this.w[i] = anchors.has(p) ? 0 : 1 / mass[i]));
     const base = this.pegIds.length;
     if (g.kind === 'cross') {
-      this.cart = [base, base + 1, base + 2];
+      this.carts = [];
       const cy = g.startY - WHEEL_R;
-      this.x[base] = g.startX - WHEELBASE / 2;
-      this.x[base + 1] = g.startX + WHEELBASE / 2;
-      this.y[base] = this.y[base + 1] = cy;
-      this.x[base + 2] = g.startX;
       const body = g.cart * (1 - 2 * WHEEL_SHARE);
       this.springRest = Math.sqrt((WHEELBASE / 2) * (WHEELBASE / 2) + BODY_UP * BODY_UP);
       // Static sag: each strut carries about half the body's weight.
       const k = SPRING_K * body;
       this.springAlpha = 1 / k;
-      this.y[base + 2] = cy - BODY_UP + (body * GRAVITY) / (2 * k);
-      this.w[base] = this.w[base + 1] = 1 / (g.cart * WHEEL_SHARE);
-      this.w[base + 2] = 1 / body;
-      this.area[base + 2] = 0.5;
+      for (let c = 0; c < nCarts; c++) {
+        const b = base + 3 * c;
+        const sx = g.startX - c * CONVOY_GAP;
+        this.carts.push([b, b + 1, b + 2]);
+        this.x[b] = sx - WHEELBASE / 2;
+        this.x[b + 1] = sx + WHEELBASE / 2;
+        this.y[b] = this.y[b + 1] = cy;
+        this.x[b + 2] = sx;
+        this.y[b + 2] = cy - BODY_UP + (body * GRAVITY) / (2 * k);
+        this.w[b] = this.w[b + 1] = 1 / (g.cart * WHEEL_SHARE);
+        this.w[b + 2] = 1 / body;
+        this.area[b + 2] = 0.5;
+      }
+      this.cart = this.carts[0];
+      this.cn = new Float64Array(4 * nCarts);
       this.lanterns = [];
       this.ringPegs = [];
-      this.lastCx = g.startX;
-      this.maxSteps = Math.round(HZ * ((g.goalX - g.startX) / CART_SPEED + 4));
+      this.lastCx = g.startX - (nCarts - 1) * CONVOY_GAP;
+      this.maxSteps = Math.round(HZ * ((g.goalX - this.lastCx) / CART_SPEED + 4));
     } else {
+      this.carts = [];
       this.cart = null;
       this.lanterns = rings.map((_, k) => base + k);
       this.ringPegs = rings.map((r) => (members.some((m) => m.a === r || m.b === r) ? idx.get(r)! : -1));
@@ -214,9 +240,8 @@ export class Sim {
     this.outcomeAt = this.steps;
   }
 
-  /** The cart's middle (between the wheels). */
-  cartMid(): [number, number] {
-    const c = this.cart!;
+  /** A cart's middle (between the wheels); the rearmost cart by default. */
+  cartMid(c = this.carts[this.carts.length - 1]): [number, number] {
     return [(this.x[c[0]] + this.x[c[1]]) / 2, (this.y[c[0]] + this.y[c[1]]) / 2];
   }
 
@@ -226,49 +251,60 @@ export class Sim {
     return wd ? wd * gust(this.steps) : 0;
   }
 
+  /** Updraught this step (+ lifts). */
+  liftNow(): number {
+    const wd = this.level.wind ?? 0;
+    return wd ? (wd < 0 ? -wd : wd) * LIFT_K * lift(this.steps) : 0;
+  }
+
   step(): void {
     const { x, y, ox, oy, vx, vy, w } = this;
     const n = x.length;
-    const c = this.cart;
     // Motor: wheels touching something push along it toward the flag.
-    if (c && !this.outcome) {
-      for (let k = 0; k < 2; k++) {
-        const nx = this.cn[2 * k];
-        const ny = this.cn[2 * k + 1];
-        if (nx === 0 && ny === 0) continue;
-        let tx = -ny;
-        let ty = nx;
-        if (tx < 0) (tx = -tx), (ty = -ty);
-        const i = c[k];
-        const vt = vx[i] * tx + vy[i] * ty;
-        let dv = 0;
-        if (vt < CART_SPEED) dv = Math.min(CART_ACC * H, CART_SPEED - vt);
-        else if (vt > CART_SPEED + 0.6) dv = -Math.min(CART_ACC * H, vt - CART_SPEED);
-        vx[i] += tx * dv;
-        vy[i] += ty * dv;
-        // The motor pulls the whole cart: each driving wheel takes half the body along.
-        const vb = vx[c[2]] * tx + vy[c[2]] * ty;
-        if (dv < 0 || vb < CART_SPEED) {
-          vx[c[2]] += tx * dv * 0.5;
-          vy[c[2]] += ty * dv * 0.5;
+    if (!this.outcome)
+      for (let ci = 0; ci < this.carts.length; ci++) {
+        const c = this.carts[ci];
+        for (let k = 0; k < 2; k++) {
+          const nx = this.cn[4 * ci + 2 * k];
+          const ny = this.cn[4 * ci + 2 * k + 1];
+          if (nx === 0 && ny === 0) continue;
+          let tx = -ny;
+          let ty = nx;
+          if (tx < 0) ((tx = -tx), (ty = -ty));
+          const i = c[k];
+          const vt = vx[i] * tx + vy[i] * ty;
+          let dv = 0;
+          if (vt < CART_SPEED) dv = Math.min(CART_ACC * H, CART_SPEED - vt);
+          else if (vt > CART_SPEED + 0.6) dv = -Math.min(CART_ACC * H, vt - CART_SPEED);
+          vx[i] += tx * dv;
+          vy[i] += ty * dv;
+          // The motor pulls the whole cart: each driving wheel takes half the body along.
+          const vb = vx[c[2]] * tx + vy[c[2]] * ty;
+          if (dv < 0 || vb < CART_SPEED) {
+            vx[c[2]] += tx * dv * 0.5;
+            vy[c[2]] += ty * dv * 0.5;
+          }
         }
       }
-    }
     const wind = this.windNow();
+    const up = this.liftNow();
     for (let i = 0; i < n; i++) {
       ox[i] = x[i];
       oy[i] = y[i];
       if (w[i] === 0) continue;
       vy[i] += GRAVITY * H;
-      if (wind) vx[i] += wind * this.area[i] * w[i] * H;
+      if (wind) {
+        vx[i] += wind * this.area[i] * w[i] * H;
+        vy[i] -= up * this.area[i] * w[i] * H;
+      }
       x[i] += vx[i] * H;
       y[i] += vy[i] * H;
     }
     const M = this.members.length;
     const lam = this.lam;
     lam.fill(0);
-    let s0 = 0;
-    let s1 = 0;
+    const sl = this.springLam;
+    sl.fill(0);
     for (let it = 0; it < ITER; it++) {
       for (let k = 0; k < M; k++) {
         if (this.broken[k]) continue;
@@ -291,11 +327,13 @@ export class Sim {
         x[b] -= w[b] * dl * nx;
         y[b] -= w[b] * dl * ny;
       }
-      if (c) {
-        this.rigid(c[0], c[1], WHEELBASE);
-        s0 = this.spring(c[0], c[2], s0);
-        s1 = this.spring(c[1], c[2], s1);
-      } else
+      if (this.carts.length)
+        this.carts.forEach((c, ci) => {
+          this.rigid(c[0], c[1], WHEELBASE);
+          sl[2 * ci] = this.spring(c[0], c[2], sl[2 * ci]);
+          sl[2 * ci + 1] = this.spring(c[1], c[2], sl[2 * ci + 1]);
+        });
+      else
         this.lanterns.forEach((l, k) => {
           const r = this.ringPegs[k];
           if (r >= 0) this.rope(r, l, LANTERN_CORD);
@@ -307,7 +345,7 @@ export class Sim {
       vx[i] = ((x[i] - ox[i]) / H) * DAMP;
       vy[i] = ((y[i] - oy[i]) / H) * DAMP;
     }
-    if (c) {
+    for (const c of this.carts) {
       this.dampSpring(c[0], c[2]);
       this.dampSpring(c[1], c[2]);
     }
@@ -322,7 +360,7 @@ export class Sim {
       if (r > 1 && (s > 0 || !this.isRope[k])) {
         this.broken[k] = 1;
         this.brokeAt[k] = this.steps;
-        if (this.firstBreak < 0) (this.firstBreak = k), (this.firstBreakAt = this.steps);
+        if (this.firstBreak < 0) ((this.firstBreak = k), (this.firstBreakAt = this.steps));
         this.breaks++;
         this.force[k] = 0;
       }
@@ -385,53 +423,54 @@ export class Sim {
 
   private collide(): void {
     const { x, y, w } = this;
-    const c = this.cart;
     // Pegs stay out of rock.
     for (let i = 0; i < this.pegIds.length; i++) if (w[i] > 0) this.pushOut(i, 0);
-    if (!c) return;
-    this.pushOut(c[2], BODY_R);
-    for (let k = 0; k < 2; k++) {
-      const i = c[k];
-      let nx = 0;
-      let ny = 0;
-      // Planks.
-      for (let m = 0; m < this.members.length; m++) {
-        if (this.broken[m] || !this.isRoad[m]) continue;
-        const a = this.ma[m];
-        const b = this.mb[m];
-        const ex = x[b] - x[a];
-        const ey = y[b] - y[a];
-        const ee = ex * ex + ey * ey;
-        let t = ee > 0 ? ((x[i] - x[a]) * ex + (y[i] - y[a]) * ey) / ee : 0;
-        t = t < 0 ? 0 : t > 1 ? 1 : t;
-        const qx = x[a] + ex * t;
-        const qy = y[a] + ey * t;
-        const dx = x[i] - qx;
-        const dy = y[i] - qy;
-        const dd = dx * dx + dy * dy;
-        if (dd >= WHEEL_R * WHEEL_R || dd < 1e-12) continue;
-        const d = Math.sqrt(dd);
-        const ux = dx / d;
-        const uy = dy / d;
-        const C = d - WHEEL_R;
-        const wa = w[a] * (1 - t);
-        const wb = w[b] * t;
-        const ws = w[i] + wa * (1 - t) + wb * t;
-        const dl = -C / ws;
-        x[i] += w[i] * dl * ux;
-        y[i] += w[i] * dl * uy;
-        x[a] -= wa * dl * ux;
-        y[a] -= wa * dl * uy;
-        x[b] -= wb * dl * ux;
-        y[b] -= wb * dl * uy;
-        nx += ux;
-        ny += uy;
+    for (let ci = 0; ci < this.carts.length; ci++) {
+      const c = this.carts[ci];
+      this.pushOut(c[2], BODY_R);
+      for (let k = 0; k < 2; k++) {
+        const i = c[k];
+        let nx = 0;
+        let ny = 0;
+        // Planks.
+        for (let m = 0; m < this.members.length; m++) {
+          if (this.broken[m] || !this.isRoad[m]) continue;
+          const a = this.ma[m];
+          const b = this.mb[m];
+          const ex = x[b] - x[a];
+          const ey = y[b] - y[a];
+          const ee = ex * ex + ey * ey;
+          let t = ee > 0 ? ((x[i] - x[a]) * ex + (y[i] - y[a]) * ey) / ee : 0;
+          t = t < 0 ? 0 : t > 1 ? 1 : t;
+          const qx = x[a] + ex * t;
+          const qy = y[a] + ey * t;
+          const dx = x[i] - qx;
+          const dy = y[i] - qy;
+          const dd = dx * dx + dy * dy;
+          if (dd >= WHEEL_R * WHEEL_R || dd < 1e-12) continue;
+          const d = Math.sqrt(dd);
+          const ux = dx / d;
+          const uy = dy / d;
+          const C = d - WHEEL_R;
+          const wa = w[a] * (1 - t);
+          const wb = w[b] * t;
+          const ws = w[i] + wa * (1 - t) + wb * t;
+          const dl = -C / ws;
+          x[i] += w[i] * dl * ux;
+          y[i] += w[i] * dl * uy;
+          x[a] -= wa * dl * ux;
+          y[a] -= wa * dl * uy;
+          x[b] -= wb * dl * ux;
+          y[b] -= wb * dl * uy;
+          nx += ux;
+          ny += uy;
+        }
+        const r = this.pushOut(i, WHEEL_R);
+        if (r) ((nx += r[0]), (ny += r[1]));
+        const d = Math.sqrt(nx * nx + ny * ny);
+        this.cn[4 * ci + 2 * k] = d > 0 ? nx / d : 0;
+        this.cn[4 * ci + 2 * k + 1] = d > 0 ? ny / d : 0;
       }
-      const r = this.pushOut(i, WHEEL_R);
-      if (r) (nx += r[0]), (ny += r[1]);
-      const d = Math.sqrt(nx * nx + ny * ny);
-      this.cn[2 * k] = d > 0 ? nx / d : 0;
-      this.cn[2 * k + 1] = d > 0 ? ny / d : 0;
     }
   }
 
@@ -440,6 +479,8 @@ export class Sim {
     const { x, y } = this;
     let hit: [number, number] | null = null;
     for (const k of this.level.terrain) {
+      // A keep-clear lane (a boat passes) only stops building; it doesn't push.
+      if (k.kind === 'clear') continue;
       const cx = x[i] < k.x0 ? k.x0 : x[i] > k.x1 ? k.x1 : x[i];
       const cy = y[i] < k.y0 ? k.y0 : y[i] > k.y1 ? k.y1 : y[i];
       const dx = x[i] - cx;
@@ -459,10 +500,10 @@ export class Sim {
       const t = y[i] - k.y0;
       const b = k.y1 - y[i];
       const m = Math.min(l, rr, t, b);
-      if (m === t) (y[i] = k.y0 - r), (hit = [0, -1]);
-      else if (m === l) (x[i] = k.x0 - r), (hit = [-1, 0]);
-      else if (m === rr) (x[i] = k.x1 + r), (hit = [1, 0]);
-      else (y[i] = k.y1 + r), (hit = [0, 1]);
+      if (m === t) ((y[i] = k.y0 - r), (hit = [0, -1]));
+      else if (m === l) ((x[i] = k.x0 - r), (hit = [-1, 0]));
+      else if (m === rr) ((x[i] = k.x1 + r), (hit = [1, 0]));
+      else ((y[i] = k.y1 + r), (hit = [0, 1]));
     }
     return hit;
   }
@@ -475,13 +516,16 @@ export class Sim {
       return;
     }
     if (g.kind === 'cross') {
-      const c = this.cart!;
-      if (Math.min(this.x[c[0]], this.x[c[1]]) >= g.goalX) return this.decide('crossed');
-      if (this.y[c[2]] > g.startY + 2.5 || this.y[c[2]] > WATER) return this.decide('fell');
+      let over = true;
+      for (const c of this.carts) {
+        if (Math.min(this.x[c[0]], this.x[c[1]]) < g.goalX) over = false;
+        if (this.y[c[2]] > g.startY + 2.5 || this.y[c[2]] > WATER) return this.decide('fell');
+      }
+      if (over) return this.decide('crossed');
       const [cx] = this.cartMid();
       if (Math.abs(cx - this.lastCx) < 0.05) {
         if (++this.still > HZ * 1.5) return this.decide('stalled');
-      } else (this.still = 0), (this.lastCx = cx);
+      } else ((this.still = 0), (this.lastCx = cx));
       if (this.steps >= this.maxSteps) return this.decide('stalled');
       return;
     }

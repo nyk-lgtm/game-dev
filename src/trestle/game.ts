@@ -26,7 +26,7 @@ import {
   explain,
   joined,
   lenOf,
-  makeLevel,
+  seedLevel,
   memberCost,
   pegs,
   pt,
@@ -171,6 +171,7 @@ export class Game {
       const m = Number(b.dataset.m) as Mat;
       b.querySelector('.ic')!.innerHTML = matSvg(m, 26);
       b.querySelector('.pr')!.textContent = `${MATS[m].cost}/u · ≤${MAXLEN[m]}`;
+      b.querySelector('.st')!.textContent = `${MATS[m].rope ? 'pull' : 'holds'} ${MATS[m].strength}`;
       b.onclick = () => {
         this.mat = m;
         this.sounds.unlock();
@@ -227,7 +228,7 @@ export class Game {
     const day = todayKey();
     store.save('mode', 'daily');
     if (!wantsDaily()) history.replaceState(null, '', `${location.pathname}?daily`);
-    this.load(this.cached(`gd${day}`, { kind: 'seed', seed: dailySeed('trestle', day), d: DAILY_D, levelId: `d${day}` }), (l) => {
+    this.load(this.cached(`gd${day}`, { kind: 'seed', seed: dailySeed('trestle', day), d: DAILY_D, levelId: `d${day}`, daily: true }), (l) => {
       this.mode = 'daily';
       this.day = day;
       const saved = store.load<{ v: number; day: string; a: string } | null>('dailyRun', null);
@@ -281,7 +282,7 @@ export class Game {
   }
 
   private generate(job: GenSpec): Promise<Level> {
-    const local = () => (job.kind === 'trail' ? trailLevel(job.n) : { ...makeLevel(job.seed, job.d), id: job.levelId });
+    const local = () => (job.kind === 'trail' ? trailLevel(job.n) : seedLevel(job.seed, job.d, job.levelId, job.daily));
     const w = this.worker;
     if (!w) return new Promise((res) => setTimeout(() => res(local()), 30));
     return new Promise((res) => {
@@ -416,12 +417,21 @@ export class Game {
       this.zoomed = false;
       this.view = this.fit;
     } else {
-      this.zoomed = true;
-      const g = this.level.goal;
-      const r0 = ringsOf(this.level)[0];
-      const [cx, cy] = g.kind === 'cross' ? [(px(g.from) + px(g.to)) / 2, py(g.from) + 0.5] : [px(r0) - 1, py(r0) + 0.5];
+      // Zoom to everything that matters (anchors, pegs, rings, road ends) with a margin, so no peg is cut off.
+      const l = this.level;
+      const pts = [...l.anchors, ...pegs(l, this.members), ...ringsOf(l)];
+      const xs = pts.map(px);
+      const ys = pts.map(py);
+      if (l.goal.kind === 'cross') xs.push(l.goal.startX - 0.6, l.goal.goalX + 0.4), ys.push(l.goal.startY - 1);
+      const [x0, x1, y0, y1] = [Math.min(...xs) - 0.8, Math.max(...xs) + 0.8, Math.min(...ys) - 1, Math.max(...ys) + 1];
       const r = this.canvas.getBoundingClientRect();
-      this.view = clampView(fitView(r.width, r.height, 1.7, cx, cy), this.fit);
+      const z = Math.min(2.4, r.width / ((x1 - x0) * this.fit.s), r.height / ((y1 - y0) * this.fit.s));
+      if (z < 1.08) {
+        toast('Everything is already in view: pinch to look closer');
+        return;
+      }
+      this.zoomed = true;
+      this.view = clampView(fitView(r.width, r.height, z, (x0 + x1) / 2, (y0 + y1) / 2), this.fit);
     }
     this.refresh();
   }
@@ -679,12 +689,18 @@ export class Game {
   private stopRun(): void {
     const s = this.sim;
     if (s && this.finished && !WON.has(s.outcome!)) {
-      this.hot = new Map(this.members.map((m, i) => [`${m.a}:${m.b}`, s.broken[i] && i === s.firstBreak ? 2 : s.broken[i] ? 1.05 : s.peak[i]]));
+      this.hot = this.firstBreakHot(s);
     } else if (s) this.hot = null;
     this.sim = null;
     this.finished = false;
     this.sparks = [];
     this.refresh();
+  }
+
+  /** After a failure only the piece that snapped first glows (the swinging pegs are ringed apart). */
+  private firstBreakHot(s: Sim): Map<string, number> {
+    const m = this.members[s.firstBreak];
+    return new Map(m ? [[`${m.a}:${m.b}`, 2]] : []);
   }
 
   private stepRun(dt: number): void {
@@ -745,7 +761,7 @@ export class Game {
       // Keep the words and the glow for this exact build, across a reload.
       const k = this.debriefKey();
       if (k) {
-        const hot: [string, number][] = this.members.map((m, i) => [`${m.a}:${m.b}`, s.broken[i] && i === s.firstBreak ? 2 : s.broken[i] ? 1.05 : s.peak[i]]);
+        const hot: [string, number][] = [...this.firstBreakHot(s)];
         store.save(k, { v: RULES_VERSION, a: builtOnly(this.a), text: this.debrief, hot, wobbly: [...v.wobbly] } satisfies Debrief);
       }
       this.info(this.debrief);
@@ -903,9 +919,9 @@ export class Game {
       <ul>
         <li><b>Drag from a peg</b> to another point to add a piece. The gold rings are fixed to the rock; every piece you add makes new pegs. A magnifier shows where the piece will end.</li>
         <li>${matSvg(0, 20)} <b>Planks</b> (10 a unit, up to 2.2 long) are the road: the cart only rolls on planks and rock. ${matSvg(1, 20)} <b>Twigs</b> (5 a unit, up to 2.2) push and pull. ${matSvg(2, 20)} <b>Twine</b> (3 a unit, up to 4.5) reaches far but only pulls. Drag past a piece’s reach and it stops at the last point in reach (a dashed circle shows it).</li>
-        <li>Pegs bend freely, so a lone row of planks sags: brace it into <b>triangles</b>.</li>
+        <li>Pegs bend freely, so a lone row of planks sags: brace it into <b>triangles</b>. Planks hold 80, twigs 60 (push or pull), twine 45 (pull only). The beetle can’t haul uphill: keep the road level or going down.</li>
         <li><b>Tap a piece</b> to pick it, tap again (or ✕) to remove it. Pinch or ⤢ to zoom; two fingers pan. Undo takes back anything.</li>
-        <li><b>▶ Go</b> runs a test: pieces turn yellow, then red as they strain, and snap past their limit. After a failed run the line below says why, the piece that snapped first glows red and pegs that can swing are ringed.</li>
+        <li><b>▶ Go</b> runs a test: pieces turn yellow, then red as they strain, and snap past their limit. After a failed run the line below says why: the piece that snapped first glows red and pegs that can swing are ringed. Wind gusts push sideways and updraughts lift whatever only hangs.</li>
         <li>★ clear it within the budget, ★★ at the surveyor's cost (par) or less, ★★★ also with no more parts than the surveyor.</li>
       </ul>`,
       [{ label: 'Build', primary: true, onClick: closeOverlay }],
@@ -923,7 +939,7 @@ export class Game {
     const total = Object.values(prof.stars).reduce((a, b) => a + b, 0);
     const d = loadDaily(store, todayKey());
     showCard(
-      `<h2>The trail</h2><p>${plural(total, 'star')} so far. Clear a level to open the next; the first six teach the tricks, then gaps widen, pegs get scarcer, loads heavier, and wind and twin lanterns join in.</p><div class="levels">${cells.join('')}</div>`,
+      `<h2>The trail</h2><p>${plural(total, 'star')} so far. Clear a level to open the next; the first six teach the tricks; after that the kinds of level take turns (hooks, low pegs only, boat lanes, two carts, islands, lanterns on cliffs and over gaps) and slowly get harder, with wind later on.</p><div class="levels">${cells.join('')}</div>`,
       [
         { label: `Daily level${d ? ` (${d.label})` : ''}`, onClick: () => this.playDaily() },
         { label: 'Close', primary: true, onClick: closeOverlay },

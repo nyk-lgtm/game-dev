@@ -46,7 +46,14 @@ export function joined(l: Level, ms: readonly Member[]): Joined {
   const g = l.goal;
   let road = true;
   if (g.kind === 'cross') {
-    const planks = groups(l, ms, (m) => m.mat === PLANK);
+    // Planks, plus the top of any rock the cart can roll across (an island between two road ends).
+    const roadMs: Member[] = ms.filter((m) => m.mat === PLANK);
+    for (const r of l.terrain) {
+      if (r.kind === 'clear' || r.kind === 'log') continue;
+      const top = l.anchors.filter((a) => py(a) === r.y0 && px(a) >= r.x0 && px(a) <= r.x1);
+      for (let i = 1; i < top.length; i++) roadMs.push({ a: top[0], b: top[i], mat: PLANK });
+    }
+    const planks = groups(l, roadMs);
     road = planks.get(g.from) === planks.get(g.to);
   }
   const rings = ringsOf(l).every((r) => all.has(r) && anchored.has(all.get(r)!));
@@ -125,21 +132,32 @@ export function explain(l: Level, ms: readonly Member[], r: Pick<RunResult, 'out
   const wob = wobbly(l, ms);
   const piece = r.firstBreak;
   if (WON.has(r.outcome)) return { cause: 'won', text: '', piece, wobbly: new Set() };
-  const j = joined(l, ms);
-  if (l.goal.kind === 'cross' && !j.road)
-    return { cause: 'unjoined', text: 'Road not joined: the cart only rolls on planks, so lay them bank to bank with no gap.', piece, wobbly: wob };
-  if (!j.rings) return { cause: 'unjoined', text: 'A ring isn’t joined to the rock: build out from an anchor to each ring.', piece, wobbly: wob };
   const name = piece >= 0 ? MATS[ms[piece].mat].name.toLowerCase() : '';
   const pulled = piece >= 0 && (force ? force[piece] >= 0 : r.minF[piece] > -1);
+  const swing = wob.size === 1 ? 'The ringed peg can swing' : `The ${wob.size} ringed pegs can swing`;
+  // What snapped first is named before anything else; a shape that can swing is the cause before a piece's strength.
   if (piece >= 0 && r.firstBreakAt < HZ * 0.3)
     return {
       cause: 'weight',
-      text: `Fell under its own weight: ${article(name)} ${name} (red) snapped at once. ${wob.size ? 'Ringed pegs swing: add diagonals.' : 'Make the triangles deeper.'}`,
+      text: `Fell under its own weight: ${article(name)} ${name} (red) snapped at once. ${wob.size ? `${swing}: add diagonals.` : 'Make the triangles deeper.'}`,
       piece,
       wobbly: wob,
     };
-  if (wob.size && (piece < 0 || r.breaks > 2))
-    return { cause: 'wobbly', text: 'Wobbly shape: the ringed pegs can swing. Add diagonals so every piece is in a triangle.', piece, wobbly: wob };
+  const j = joined(l, ms);
+  const unjoined =
+    l.goal.kind === 'cross' && !j.road
+      ? 'Road not joined: the cart only rolls on planks (and rock), so lay them bank to bank with no gap.'
+      : !j.rings
+        ? 'A ring isn’t joined to the rock: build out from an anchor to each ring.'
+        : '';
+  if (unjoined && piece < 0) return { cause: 'unjoined', text: unjoined, piece, wobbly: wob };
+  if (wob.size)
+    return {
+      cause: 'wobbly',
+      text: `Wobbly shape: ${swing.charAt(0).toLowerCase()}${swing.slice(1)}${piece >= 0 ? `, so ${article(name)} ${name} (red) snapped` : ''}. Add diagonals so every piece is in a triangle.`,
+      piece,
+      wobbly: wob,
+    };
   if (piece >= 0) {
     const m = ms[piece];
     const holds = MATS[m.mat].strength;
@@ -149,10 +167,11 @@ export function explain(l: Level, ms: readonly Member[], r: Pick<RunResult, 'out
         : `Too weak: ${article(name)} ${name} (red) was ${pulled ? 'pulled' : 'pushed'} past its ${holds}. Brace it, or make the triangle deeper.`;
     return { cause: 'weak', text: what, piece, wobbly: wob };
   }
+  if (unjoined) return { cause: 'unjoined', text: unjoined, piece, wobbly: wob };
   if (l.goal.kind === 'cross')
     return {
       cause: 'offroad',
-      text: r.outcome === 'stalled' ? 'Cart stuck: a step in the road is too steep or it dips below the bank.' : 'Off the road: nothing snapped, but the road tipped or sagged away under the cart.',
+      text: r.outcome === 'stalled' ? 'Cart stuck: the beetle can’t haul uphill, so keep the road level or going down.' : 'Off the road: nothing snapped, but the road tipped or sagged away under the cart.',
       piece,
       wobbly: wob,
     };

@@ -30,7 +30,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 5. Grove: owner said keep it as is (board and balance); only bugs/clarity. Afterglow: leave alone unless asked.
 6. New games are welcome when the queue is quiet (recent additions: Ninefold, Summit, Quarry, Sungrazer, Kitbag,
    Brink, Loomsong, Simmer, Gleam, Lull, Trestle). Ideas: a co-op-free social/daily puzzle. (The creative/sandbox toy is Lull.)
-   Trestle (new physics builder): first playtest fixes done (rules v2); second blind playtest next (see its item).
+   Trestle (new physics builder): second playtest fixes done (rules v3: picked trail, level types, wind that matters); third blind playtest next.
 7. Simmer: second blind playtest (see its item below). Gleam (new light puzzle): first blind playtest. Lull: first playtest fixes shipped;
    second blind playtest and a real-phone sound check next.
    Brink, Loomsong, Simmer). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle.
@@ -70,7 +70,21 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         help give reaches; "not joined yet" in the cost line; tap picks a piece (✕ Remove), second tap removes; header
         icon buttons 44 px at 360-390 (stars beside the level label); levels generated in a worker with a loading card,
         the next one prefetched; vibration guarded. 17 tests.
-  - [ ] Next: second blind playtest. Watch: is ★★★ now a real target (par from the stronger surveyor) without being
+  - [x] Second blind playtest (v2 live: tutorials and 7-14 ★★★ in 1-2 tries, a 2-plank arch beat par on 9, a spike at 15,
+        16-18 easy, 10/12/13/16 all fell to 3 planks + 2 twines from one hook, wind changed nothing, every lantern a wall
+        bracket) and fixes (rules v3): island rock tops count as road in `joined`; failure notes name what snapped first and
+        a swinging shape is "wobbly" (counting the ringed pegs) before "too weak"; only the first-snapped piece glows; ⤢
+        zooms to the box of all anchors/pegs/rings (never cuts one off); dailies get their own name words; tray shows
+        holds 80 / 60 / pull 45. Rules: the beetle can't haul up a 2-across-1-up plank (CART_ACC 3.6), which kills dips
+        and humps (plank chains and arches held and beat every truss); wind adds updraughts (`lift`, LIFT_K 1.6) so hung
+        builds lift (`wind.ts`: the calm par build fails in 15/18 windy versions, par +8%); convoys (two carts); level
+        types (plain, hooks, arch, boat lane, convoy, island, spire, wall lantern, gap lantern) with tips. The trail is a
+        picked pool (`pool.ts`): 9 types × 18 candidates re-surveyed at effort 4, difficulty = 0.65 × textbook shapes that
+        failed + 0.35 × parts, chosen to rising targets in a type rotation, ordered easiest-first with no type twice within
+        two levels: thirds 0.26 → 0.51 → 0.75, neighbour steps ≤ 0.08. 20 tests.
+  - [ ] Next: third blind playtest. Watch: does difficulty (shapes that fail) match how hard people find levels? Is
+        "no climbing" clear (the stuck message says so)? Do boat lanes and arches feel fair? Is the late pool (diff ~0.9,
+        par ~190) a wall? Old v2 watch items: is ★★★ now a real target (par from the stronger surveyor) without being
         impossible on some levels? Do wind and twin lanterns read clearly? Is two-finger pan at the fitted view missed
         (it only pans when zoomed)? Is the loading card ever seen after level 7 (prefetch)? Maybe: a "show the surveyor's build" after a few failed runs,
         springs, two-cart or moving-load levels, a ghost of the last run's sag.
