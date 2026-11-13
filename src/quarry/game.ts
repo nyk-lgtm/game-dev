@@ -9,6 +9,7 @@ import { randomSeed } from '../shared/rng';
 import { reducedFx } from '../shared/settings';
 import { makeStore } from '../shared/storage';
 import {
+  BLAST_CAP,
   DEPTHS,
   DEPTH_NAMES,
   H,
@@ -219,6 +220,8 @@ export class Game {
       // ignore
     }
     this.path = [i];
+    // A banner over the word box gives way as soon as you start tracing.
+    $('banner').hidden = true;
     this.sfx.tick(1);
     this.renderTrail();
   }
@@ -346,7 +349,7 @@ export class Game {
 
   private resultLine(s: Score, o: Outcome): string {
     const extra: string[] = [];
-    if (o.blastPts) extra.push(`<span class="c">+${o.blastPts} blast</span>`);
+    if (o.blastPts) extra.push(`<span class="c">blast ${plural(o.blasted!.length, 'tile')} +${o.blastPts}${o.blastPts >= BLAST_CAP ? ' (max)' : ''}</span>`);
     if (o.rockPts) extra.push(`<span class="c">+${o.rockPts} ${o.broken!.length === 1 ? 'rock' : 'rocks'}</span>`);
     if (o.cracked?.length) extra.push(`<span class="c">granite cracked${o.cracked.length > 1 ? ` ×${o.cracked.length}` : ''}</span>`);
     if (o.lostWords) extra.push(`<span class="c warn">fuse blew −${plural(o.lostWords, 'word')}</span>`);
@@ -458,13 +461,6 @@ export class Game {
     $('layer').textContent = `${DEPTH_NAMES[Math.min(r.depth, DEPTHS - 1)]}`;
     document.body.dataset.depth = String(r.depth);
     if (drop) this.renderBoard(new Map(), true);
-    // Perk icons, as many as fit beside the tools; the rest fold into a "+n" button.
-    const bar = $('perkBar');
-    const room = Math.max(1, Math.floor(($('dock').clientWidth - $('tools').offsetWidth - 34 + 6) / 50));
-    const shown = r.perks.length > room ? r.perks.slice(0, room - 1) : r.perks;
-    bar.innerHTML =
-      shown.map((id) => `<button data-p="${id}" aria-label="${perkDef(id).name}">${perkDef(id).icon}</button>`).join('') +
-      (shown.length < r.perks.length ? `<button data-more="1" class="more" aria-label="All perks">+${r.perks.length - shown.length}</button>` : '');
     const shakeBtn = $('shakeBtn') as HTMLButtonElement;
     shakeBtn.disabled = r.shakes <= 0 || r.phase !== 'play';
     $('shakeN').textContent = String(r.shakes);
@@ -474,6 +470,13 @@ export class Game {
     pick.classList.toggle('on', this.pickMode);
     $('pickN').textContent = String(r.picks);
     $('board').classList.toggle('picking', this.pickMode);
+    // Perk icons (measured after the tools are final), as many as fit; the rest fold into a "+n" button.
+    const bar = $('perkBar');
+    const room = Math.max(1, Math.floor(($('dock').clientWidth - $('tools').offsetWidth - 34 + 6) / 50));
+    const shown = r.perks.length > room ? r.perks.slice(0, room - 1) : r.perks;
+    bar.innerHTML =
+      shown.map((id) => `<button data-p="${id}" aria-label="${perkDef(id).name}">${perkDef(id).icon}</button>`).join('') +
+      (shown.length < r.perks.length ? `<button data-more="1" class="more" aria-label="All perks">+${r.perks.length - shown.length}<small>perks</small></button>` : '');
     this.renderGoal(0);
     this.renderWord();
   }

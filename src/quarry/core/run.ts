@@ -14,21 +14,25 @@ import type { Dict } from './dict';
 import { PERKS, type PerkId } from './perks';
 import { anyWord } from './search';
 
-export const RULES_VERSION = 3;
+export const RULES_VERSION = 4;
 export const DEPTHS = 8;
 export const DEPTH_NAMES = ['Topsoil', 'Clay', 'Sandstone', 'Limestone', 'Slate', 'Granite', 'Basalt', 'Obsidian'];
 /** Words per depth, before perks. */
-export const WORDS = [7, 7, 6, 6, 6, 6, 6, 6];
+export const WORDS = [7, 7, 6, 6, 6, 7, 7, 7];
 /** Score to reach on each depth. */
 export const TARGETS = [90, 130, 180, 235, 295, 365, 430, 495];
 /** Rocks on a fresh face, and the chance a falling tile is a rock. */
-export const ROCKS = [0, 2, 3, 4, 4, 5, 6, 7];
+export const ROCKS = [0, 2, 3, 4, 4, 5, 5, 6];
 export const ROCK_RATE = [0, 0.02, 0.03, 0.035, 0.04, 0.05, 0.06, 0.07];
-export const ROCK_CAP = 9;
+export const ROCK_CAP = 6;
 /** Chance a rock is granite (two hits). */
 export const GRANITE = [0, 0, 0, 0, 0.3, 0.4, 0.5, 0.6];
 /** What a broken rock pays (with Stonebreaker). */
 export const ROCK_PAY = 5;
+/** A blast pays its tiles' letter values × this (× BLAST_DEMOLITION with Demolition), at most BLAST_CAP a word. */
+export const BLAST_PAY = 2;
+export const BLAST_DEMOLITION = 3;
+export const BLAST_CAP = 40;
 export const ROCK_PAY_STONEBREAKER = 10;
 /** Long Haul: +1 length bonus per letter beyond LONG_FROM - 1 (5 letters +1, 6 +2…). */
 export const LONG_FROM = 5;
@@ -86,6 +90,8 @@ export interface Run {
   words: number;
   best: { word: string; points: number } | null;
   longest: string;
+  /** Points of `longest` (ties go to the higher-scoring word). */
+  longestPts: number;
   actions: string[];
 }
 
@@ -262,7 +268,7 @@ function startDepth(r: Run, d: number, dict: Dict): void {
   }
   for (let k = has(r, 'wild') ? 2 : 0; k > 0; k--) {
     const i = take(() => true);
-    if (i >= 0) r.board[i] = { id: r.nextId++, ch: '*', gold: true };
+    if (i >= 0) r.board[i] = { id: r.nextId++, ch: '*', ...(k === 2 ? { gold: true } : {}) };
   }
   ensureWord(r, dict);
 }
@@ -292,6 +298,7 @@ export function newRun(seed: number, dict: Dict): Run {
     words: 0,
     best: null,
     longest: '',
+    longestPts: 0,
     actions: [],
   };
   startDepth(r, 0, dict);
@@ -398,7 +405,8 @@ function playWord(r: Run, path: number[], dict: Dict): Outcome | null {
   for (const i of path)
     if (board[i]!.fuse) for (const n of NEIGHBORS[i]) if (!used.has(n) && !blasted.includes(n)) blasted.push(n);
   let blastPts = 0;
-  for (const i of blasted) blastPts += (VALUES[board[i]!.ch] ?? 0) * (has(r, 'blast') ? 6 : 2);
+  for (const i of blasted) blastPts += (VALUES[board[i]!.ch] ?? 0) * (has(r, 'blast') ? BLAST_DEMOLITION : BLAST_PAY);
+  blastPts = Math.min(BLAST_CAP, blastPts);
   // Rocks next to the word crack; blasted ones break outright.
   const broken = blasted.filter((i) => board[i]!.rock);
   const cracked: number[] = [];
@@ -424,7 +432,10 @@ function playWord(r: Run, path: number[], dict: Dict): Outcome | null {
   r.streak = e.word.length >= STREAK_FROM ? r.streak + 1 : 0;
   r.fuseCool = path.some((i) => r.board[i].fuse) || blasted.some((i) => r.board[i].fuse) ? fuseCool(r) : Math.max(0, r.fuseCool - 1);
   if (!r.best || total > r.best.points) r.best = { word: e.word, points: total };
-  if (e.word.length > r.longest.length) r.longest = e.word;
+  if (e.word.length > r.longest.length || (e.word.length === r.longest.length && total > r.longestPts)) {
+    r.longest = e.word;
+    r.longestPts = total;
+  }
   if (r.got >= r.target) {
     refill(r, board);
     finishDepth(r, o);

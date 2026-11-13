@@ -135,11 +135,14 @@ body[data-depth='7'] { --top: #241a30; }
 #trail polyline { fill: none; stroke: rgba(255, 200, 87, 0.45); stroke-linecap: round; stroke-linejoin: round; }
 #trail.ok polyline { stroke: rgba(70, 200, 120, 0.5); }
 
+/* Depth banners sit over the word box (idle at those moments), never over the face. */
+#wordBox { position: relative; }
 #banner {
-  position: absolute; left: 0; right: 0; top: 45%; transform: translateY(-50%); z-index: 10;
+  position: absolute; inset: 0; z-index: 4;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
   text-align: center; pointer-events: none;
-  background: rgba(14, 10, 18, 0.82); padding: 12px 8px;
-  font-size: 24px; font-weight: 800; color: var(--text);
+  background: var(--bg); padding: 4px 8px;
+  font-size: 24px; font-weight: 800; color: var(--accent);
   animation: banner 2.4s forwards;
 }
 #banner small { display: block; font-size: 14px; font-weight: 600; color: var(--muted); margin-top: 2px; }
@@ -156,7 +159,8 @@ body[data-depth='7'] { --top: #241a30; }
   flex: none; width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line);
   background: #29222f; font-size: 21px; padding: 0; color: var(--text);
 }
-#perkBar button.more { font-size: 15px; font-weight: 800; color: var(--accent); }
+#perkBar button.more { font-size: 15px; font-weight: 800; color: var(--accent); line-height: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+#perkBar button.more small { font-size: 10px; font-weight: 700; color: var(--muted); margin-top: 2px; }
 #tools { display: flex; gap: 8px; flex: none; }
 .tool {
   min-width: 52px; min-height: 46px; border-radius: 12px; border: 1px solid var(--line);

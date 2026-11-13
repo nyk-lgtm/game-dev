@@ -216,6 +216,14 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         got teeth: Tremor gilds a tile per shake, Pickaxe's replacement tile is gold, Wild Stone's blanks are gold.
         Bot (300 runs, targets unchanged): smart picks 45% wins / median depth 8 (perk order re-ranked from the
         table), weakest picks 22% / 6, SEEN=0.05 20%, per-perk table 19-36%.
+  - [x] Third blind playtest (won 2,652 and 3,025; "chips excellent") and fixes (rules v4): blasts ×2 letter values
+        (Demolition ×3, was ×6), capped at 40 a word, with a "blast 4 tiles +12" chip; at most 6 rocks on a face (late
+        faces had 8-9) and 6/7/8 rocks → 5/5/6 at the start of depths 6-8; 7 words at depths 6-8 (targets unchanged);
+        Wild Stone: one of its two blanks is gold; the "+n perks" button now measures after the pickaxe button
+        appears (it used to be clipped off the bar, so the tester never saw it) and is labelled; MOWN, HEWN, SHORN, SAWN;
+        Hot Seam text says a new depth resets it; the end card's longest word is the best-scoring of the longest; depth
+        banners sit over the word box (never the face) and vanish when you start tracing. Bot (300 runs): smart picks
+        40% → 44% (median depth 8), weakest picks 16% → 25%, Demolition-first 21%, SEEN=0.05 14%.
   - [ ] Next: owner playtest. Watch: are 7-8 letter words findable on a phone? Do fuses feel fair? A hint button?
 - [ ] **Summit** (peaks-solitaire roguelite). Milestones:
   - [x] Core (src/summit/core): 8 floors of hand-drawn peak layouts (3 rows of 16-18 cards, then 4 rows of

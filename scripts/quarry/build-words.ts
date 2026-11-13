@@ -64,8 +64,11 @@ const BLOCK = new Set(
 // ("poof" stays out: it doubles as a slur.)
 const INFORMAL = `yay yikes phew nah bam oof eek whee ooh aww ciao oomph ick eww boing ribbit cuppa telly wifi
   app hiya vlog yeah yep yup nope okay oops meh duh comfy yummy zap zing`.split(/\s+/).filter(Boolean);
+// Irregular past participles SCOWL ranks too rare (a playtest missed MOWN); the rest (sewn, sown, strewn,
+// swollen, trodden…) are already in at these sizes.
+const PARTICIPLES = `mown hewn shorn sawn`.split(/\s+/).filter(Boolean);
 const common = load(COMMON_LEVELS);
-for (const w of INFORMAL) if (ok(w)) common.add(w);
+for (const w of [...INFORMAL, ...PARTICIPLES]) if (ok(w)) common.add(w);
 const extra = load(EXTRA_LEVELS);
 const dropped: string[] = [];
 const words = [...new Set([...common, ...extra])]

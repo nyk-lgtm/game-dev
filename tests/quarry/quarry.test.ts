@@ -13,6 +13,8 @@ import {
   at,
   evaluate,
   findWords,
+  BLAST_CAP,
+  ROCK_CAP,
   fuseFriendly,
   isScore,
   newRun,
@@ -53,6 +55,8 @@ describe('dictionary', () => {
     // Informal words people try (a playtest missed POOF).
     expect(dict.has('poof')).toBe(false);
     for (const w of ['yeah', 'okay', 'wow', 'oops', 'yay', 'meh', 'yikes', 'phew']) expect(dict.has(w), w).toBe(true);
+    // Past participles people try (a playtest missed MOWN).
+    for (const w of ['mown', 'hewn', 'sewn', 'sown', 'shorn', 'strewn', 'swollen', 'trodden']) expect(dict.has(w), w).toBe(true);
   });
 
   it('keeps out junk, names, abbreviations and offensive words', () => {
@@ -217,7 +221,9 @@ describe('scoring', () => {
     const b = act(s, `W${at(2, 2)}.${at(2, 3)}.${at(2, 4)}`, dict)!;
     // The fuse's four other neighbors (z, worth 9 each) are blasted for double their value.
     expect(b.blasted!.sort((x, y) => x - y)).toEqual(NEIGHBORS[at(2, 3)].filter((n) => n !== at(2, 2) && n !== at(2, 4)).sort((x, y) => x - y));
-    expect(b.blastPts).toBe(4 * VALUES.z * 2);
+    // 4 Zs × 9 × 2 = 72, capped at BLAST_CAP.
+    expect(b.blastPts).toBe(Math.min(BLAST_CAP, 4 * VALUES.z * 2));
+    expect(b.blastPts).toBe(40);
   });
 });
 
@@ -328,6 +334,31 @@ describe('perks', () => {
           const open = NEIGHBORS[i].filter((n) => !r.board[n].rock).length;
           if (open < 4) expect(r.board.some((_, j) => fuseFriendly(r.board, j))).toBe(false);
         });
+      }
+    }
+  });
+});
+
+describe('records', () => {
+  it('the longest word goes to the higher-scoring one on a tie; faces never hold more than ROCK_CAP rocks', () => {
+    const r = newRun(9, dict);
+    clean(r);
+    [...'cat'].forEach((ch, y) => (r.board[at(0, y)] = { id: 1 + y, ch }));
+    act(r, `W${at(0, 0)}.${at(0, 1)}.${at(0, 2)}`, dict);
+    expect(r.longest).toBe('cat');
+    clean(r);
+    [...'zoo'].forEach((ch, y) => (r.board[at(0, y)] = { id: 11 + y, ch }));
+    act(r, `W${at(0, 0)}.${at(0, 1)}.${at(0, 2)}`, dict);
+    expect(r.longest).toBe('zoo');
+    clean(r);
+    [...'tea'].forEach((ch, y) => (r.board[at(0, y)] = { id: 21 + y, ch }));
+    act(r, `W${at(0, 0)}.${at(0, 1)}.${at(0, 2)}`, dict);
+    expect(r.longest).toBe('zoo');
+    for (let s = 0; s < 20; s++) {
+      const q = newRun(800 + s, dict);
+      for (let k = 0; k < 200 && q.phase !== 'over'; k++) {
+        act(q, botAction(q, dict, { mode: 'best' }), dict);
+        expect(q.board.filter((t) => t.rock).length).toBeLessThanOrEqual(ROCK_CAP);
       }
     }
   });
