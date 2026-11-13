@@ -7,8 +7,8 @@
 
 import type { Choice, Ending } from './types';
 
-/** v2: Bramble stays with Nell once found (no "let her off the lead"), waiting only indoors. */
-export const RULES_VERSION = 2;
+/** v2: Bramble stays with Nell once found, waiting only indoors. v3: Nell knows the moor; Bassett is asked again only when something changed. */
+export const RULES_VERSION = 3;
 
 export type Room = 'cottage' | 'yard' | 'tower' | 'signal' | 'store' | 'moor' | 'house' | 'point';
 export type Item = 'logbook' | 'matches' | 'flask' | 'blowlamp' | 'crowbar' | 'keys' | 'lantern' | 'quilt' | 'note';
@@ -84,7 +84,8 @@ export interface State {
   };
   /** follows: on her lead with you. withNell: back with Nell, and won't leave her. */
   bramble: { room: Room; follows: boolean; led: boolean; withNell: boolean };
-  bassett: { trust: number; room: Room; follows: boolean; agreed: boolean; told: string[] };
+  /** asked: his trust when last asked about the signal (he's only asked again once it's grown). */
+  bassett: { trust: number; room: Room; follows: boolean; agreed: boolean; asked: number; told: string[] };
   nell: { trust: number; room: Room; follows: boolean; found: boolean; ready: boolean; promised: boolean; home: boolean; told: string[] };
   over: Ending | null;
 }
@@ -97,7 +98,7 @@ export function newGame(): State {
     at: { logbook: 'cottage', matches: 'cottage', flask: 'nowhere', blowlamp: 'store', crowbar: 'store', keys: 'bassett', lantern: 'moor', quilt: 'house', note: 'house' },
     f: { fuel: false, door: false, forced: false, heatAt: -1, running: false, horn: false, beacon: false, brewed: false },
     bramble: { room: 'cottage', follows: false, led: false, withNell: false },
-    bassett: { trust: 0, room: 'tower', follows: false, agreed: false, told: [] },
+    bassett: { trust: 0, room: 'tower', follows: false, agreed: false, asked: -99, told: [] },
     nell: { trust: 0, room: 'point', follows: false, found: false, ready: false, promised: false, home: false, told: [] },
     over: null,
   };
@@ -119,8 +120,10 @@ export const nellSafe = (s: State) => s.nell.found && (s.nell.follows || INDOORS
 export const blind = (s: State) => s.t >= FOG_T;
 /** Bramble is walking with you: on her lead, or beside Nell while Nell holds your hand. */
 const brambleWithYou = (s: State) => brambleHere(s) && (s.bramble.follows || (s.bramble.withNell && s.nell.follows));
-/** Something to steer by on the moor: the horn, or a dog that knows the way. */
-const guided = (s: State) => s.f.horn || brambleWithYou(s);
+/** Something to steer by on the moor: the horn, a dog that knows the way, or Nell, who walks it every day. */
+const guided = (s: State) => s.f.horn || brambleWithYou(s) || (s.nell.follows && s.nell.room === s.room);
+/** Nell will come once there's something for her mam's boat: a promise, or the horn itself. */
+const nellReady = (s: State) => s.nell.ready || s.f.horn;
 export const hot = (s: State) => s.f.heatAt >= 0 && s.t - s.f.heatAt >= HEAT;
 
 // ---------------------------------------------------------------- descriptions
@@ -202,7 +205,7 @@ function describeRoom(s: State, brief: boolean, skip: string[]): string[] {
       break;
     case 'store':
       out.push(brief ? 'The oil store, stinking of paraffin.' : 'A lean-to that stinks of paraffin: a drum on a cradle, a bench, tools on nails.');
-      if (here(s, 'blowlamp')) out.push(s.f.fuel ? 'A brass blowlamp hangs on a nail, full.' : 'A brass blowlamp hangs on a nail. It feels empty.');
+      if (here(s, 'blowlamp')) out.push(s.f.fuel ? 'A brass blowlamp hangs on a nail, full.' : 'A brass blowlamp hangs on a nail. It feels empty: it wants paraffin, and a match to light it.');
       if (here(s, 'crowbar')) out.push('A crowbar leans in the corner.');
       break;
     case 'moor':
@@ -210,12 +213,17 @@ function describeRoom(s: State, brief: boolean, skip: string[]): string[] {
         brief ? 'Carn Moor. The wall runs beside the path.' : 'Carn Moor: heather and grey wool in every direction. A dry-stone wall runs beside the path, the one thing you can be sure of.',
         fogLine(s),
       );
-      if (here(s, 'lantern')) out.push('A small tin lantern lies in the heather, out, its glass cracked. Small boot prints go on up the path toward the Point.');
+      if (here(s, 'lantern'))
+        out.push(
+          blind(s)
+            ? 'Your foot knocks something in the heather: a small tin lantern, out, its glass cracked.'
+            : `A small tin lantern lies in the heather, out, its glass cracked.${s.nell.found ? '' : ' Small boot prints go on up the path toward the Point.'}`,
+        );
       if (s.bramble.follows && brambleHere(s) && !s.nell.found) out.push('Bramble strains at her lead, nose down, toward the Point.');
       if (blind(s) && !guided(s)) out.push('Without something to steer by, you would only walk in circles out here. The wall will take you back to the yard.');
       break;
     case 'house':
-      out.push(brief ? 'The doctor’s house, dark but for the snoring from the back room.' : 'The doctor’s house is dark, the door on the latch. From the back room comes the sound of Nell’s gran snoring.');
+      out.push(brief ? 'The doctor’s house, dark, Nell’s gran snoring upstairs.' : 'The doctor’s house is dark, the door on the latch. From upstairs comes the sound of Nell’s gran snoring.');
       if (here(s, 'quilt') && s.nell.room !== 'house') out.push('Upstairs, Nell’s bed is empty, its patchwork quilt thrown back.');
       if (here(s, 'note')) out.push('On the kitchen table is a note in a child’s capitals, weighed down with the sugar bowl.');
       break;
@@ -246,7 +254,8 @@ function describeRoom(s: State, brief: boolean, skip: string[]): string[] {
                   ? 'Bassett sits by the lamp, his pencil sharpened.'
                   : 'Mr Bassett, the relief keeper, sits by the lamp with his logbook squared on the desk and his pencil sharpened. He came from Falmouth a fortnight ago and has not got used to Corran.',
       );
-    else if (s.room === 'signal' && !s.f.running) out.push('Bassett sits on an upturned bucket by the engine, minding the bulb.');
+    else if (s.room === 'signal' && !s.f.running)
+      out.push(s.f.heatAt < 0 ? 'Bassett sits on an upturned bucket by the cold engine.' : 'Bassett sits on an upturned bucket by the engine, minding the bulb.');
     else if (s.room === 'signal') out.push('Bassett stands by the engine, one hand on the receiver, watching the needle.');
     else out.push('Bassett is here.');
   }
@@ -259,7 +268,9 @@ function describeRoom(s: State, brief: boolean, skip: string[]): string[] {
           ? 'Nell is sitting up against the cairn, watching you.'
           : N.trust >= 1
             ? 'Nell is huddled against the cairn, shivering, watching you sideways.'
-            : 'Nell is crouched in the lee of the cairn, striking her last few matches at the wet gorse. Each one fizzles out.',
+            : s.f.horn
+              ? 'Nell is crouched in the lee of the cairn, her matches spent, listening to the horn.'
+              : 'Nell is crouched in the lee of the cairn, striking her last few matches at the wet gorse. Each one fizzles out.',
       );
     else if (s.room === 'house') out.push('Nell is in her own bed, pretending to be asleep.');
     else out.push(`Nell is ${NELL_AT[s.room].replace(/^asleep/, 'half asleep')}.`);
@@ -296,7 +307,7 @@ export function choices(s: State): Choice[] {
     if (s.room === 'yard' && r === 'signal' && !s.f.door) continue;
     add(`go:${r}`, ROOM_NAMES[r], 'go');
   }
-  for (const i of ITEMS) if (here(s, i)) add(`take:${i}`, `Take ${the(i)}`, i);
+  for (const i of ITEMS) if (here(s, i) && !(i === 'quilt' && s.nell.home && s.nell.room === s.room)) add(`take:${i}`, `Take ${the(i)}`, i);
   if (s.room === 'cottage' && !s.f.brewed) add('brew', 'Make a flask of cocoa', 'stove');
   if (here(s, 'logbook') || has(s, 'logbook')) add('read:logbook', 'Read Ada’s logbook', 'logbook');
   if (here(s, 'note') || has(s, 'note')) add('read:note', 'Read the note', 'note');
@@ -348,7 +359,7 @@ function bassettTopics(s: State): [string, string][] {
   const t: [string, string][] = [];
   if (!told('nell')) t.push(['nell', !s.nell.found ? 'Tell him Nell is missing' : nellSafe(s) ? 'Tell him Nell’s safe' : 'Tell him Nell is out on the Point']);
   if (!told('boat')) t.push(['boat', 'Ask about the Merrow']);
-  if (!s.f.horn && !B.agreed) t.push(['signal', told('signal') ? 'Ask him again to start the horn' : 'Ask about the fog signal']);
+  if (!s.f.horn && !B.agreed && B.trust > B.asked) t.push(['signal', told('signal') ? 'Ask him again to start the horn' : 'Ask about the fog signal']);
   if (s.f.forced && !told('hasp')) t.push(['hasp', 'Own up about the hasp']);
   if (B.agreed && !B.follows && !s.f.running && s.room !== 'signal') t.push(['come', 'Ask him to come and swing the flywheel']);
   if (B.follows) t.push(['stay', 'Ask him to wait here']);
@@ -417,7 +428,7 @@ export function act(s: State, id: string): string[] | null {
       if (a === 'logbook')
         out.push(
           'Ada’s square hand: “3 Nov. Air receiver cracked. Patched it with a plate and twelve bolts. Holds to sixty pound. Keep the needle under the red line and she’ll do. Inspector can whistle.”',
-          'Below it, a note for her relief: “Fog engine. Blowlamp under the bulb a good quarter hour, then swing the flywheel. Two to swing her. On your own, lever her round with the bar from the store. Then open the air valve.”',
+          'Below it, a note for her relief: “Fog engine. Fill the blowlamp at the drum, light it, and set it under the bulb a good quarter hour. Then swing the flywheel. Two to swing her. On your own, lever her round with the bar from the store. Then open the air valve.”',
         );
       else out.push('In big careful capitals: “GONE TO MAKE A LIGHT FOR MAMS BOAT ON THE POINT. BACK SOON. N.”', 'The box of matches by the range is gone too.');
       break;
@@ -475,7 +486,7 @@ export function act(s: State, id: string): string[] | null {
       out.push('You listen to the horn call, and the Merrow’s bell answer, closer every time.');
       return finish(s, out, 0, t0);
   }
-  return finish(s, out, cost, t0);
+  return finish(s, out, cost, t0, verb === 'go');
 }
 
 const spend = (s: State, cost: number) => (s.t = Math.min(END_T, s.t + cost));
@@ -494,7 +505,16 @@ function go(s: State, to: Room, out: string[]): void {
     }
     out.push('You find the wall with your hands and follow it, stone by stone, back toward the yard. It takes an age.');
     cost = 3;
-  }
+  } else if (from === 'moor' && blind(s))
+    out.push(
+      brambleWithYou(s)
+        ? 'Bramble leads, nose down. She knows this path blind.'
+        : s.nell.follows
+          ? 'Nell tugs you along. “This way. I come up here every day.”'
+          : to === 'yard'
+            ? 'You walk toward the horn’s groan, and the path comes back under your feet.'
+            : 'You keep the horn behind you, and the path comes back under your feet.',
+    );
   spend(s, cost);
   const brambleStays = s.bramble.withNell && s.bramble.room === from && !s.nell.follows && s.nell.room === from;
   s.room = to;
@@ -507,11 +527,11 @@ function go(s: State, to: Room, out: string[]): void {
   // Events on arrival, told after the room.
   const after: string[] = [];
   const skip: string[] = [];
-  if (brambleStays) out.push('Bramble stays pressed against Nell. She won’t leave her now.');
+  if (brambleStays) out.push('Behind you, Bramble stays pressed against Nell. She won’t leave her now.');
   if (to === 'signal' && s.bassett.follows && !s.f.running) {
     s.bassett.follows = false;
     skip.push('bassett');
-    after.push('Bassett takes off his coat and sits on a bucket by the engine. “I’ll mind her. Shout when you want that flywheel swung.”');
+    after.push(`Bassett takes off his coat and sits on a bucket by the engine. “${s.f.heatAt < 0 ? 'Get her lit and I’ll mind her.' : 'I’ll mind her.'} Shout when you want that flywheel swung.”`);
   }
   if ((to === 'cottage' || to === 'house') && s.nell.follows) {
     s.nell.follows = false;
@@ -528,7 +548,9 @@ function go(s: State, to: Room, out: string[]): void {
     s.nell.found = true;
     skip.push('nell');
     after.push(
-      'Someone small is crouched in the lee of the cairn, striking match after match at the wet gorse.',
+      s.f.horn
+        ? 'Someone small is crouched in the lee of the cairn, hugging her knees, listening to the horn.'
+        : 'Someone small is crouched in the lee of the cairn, striking match after match at the wet gorse.',
       s.f.horn
         ? '“Go away!” A small voice, fierce and shaky. “I’m not coming. I’m waiting for Mam’s boat.”'
         : '“Go away!” A small voice, fierce and shaky. “I’m not coming. I’m keeping a light for Mam’s boat.”',
@@ -664,30 +686,18 @@ function talkBassett(s: State, topic: string, out: string[]) {
       B.told.push('boat');
       out.push('“The Merrow? Due round the Point at one, with the doctor aboard, and your Ada.” He looks at the fog pressing on the glass. “They’ll be feeling their way in on the lead line, listening for the horn. If there were a horn.”');
       break;
-    case 'signal': {
-      const first = !told('signal');
-      if (first) B.told.push('signal');
+    case 'signal':
+      if (!told('signal')) B.told.push('signal');
+      B.asked = B.trust;
       if (B.trust >= 2) {
         B.agreed = true;
         B.follows = true;
-        const lead = first ? '“Condemned, by the tag.” ' : '';
         if (!s.f.door) {
           s.at.keys = 'inv';
-          out.push(`${lead}Bassett looks at the lamp, then at the fog against the glass, for a long moment. “It’s no use to anyone tonight, is it.” He unhooks his keys and hands them over. “I’ll swing that flywheel with you. Two’s the job. Lead on.”`);
-        } else out.push(`${lead}“Well. The door’s open already.” He sighs and reaches for his coat. “I’ll swing that flywheel with you, then. Two’s the job. Lead on.”`);
-        break;
-      }
-      if (first) out.push('“Condemned,” he says. “Inspector’s tag on the flywheel. Cracked air receiver. I’m not having it burst on my watch, and I’m not leaving the light.”');
-      if (B.trust >= 1)
-        out.push(
-          !told('log')
-            ? `${first ? 'He hesitates. ' : ''}“I hear you.” He taps the inspector’s report on his desk. “But that receiver’s cracked. If it bursts, it’s my name in the log. Show me it won’t.”`
-            : `${first ? 'He hesitates. ' : ''}“Ada’s patch, Ada’s word. But I don’t know this island, and I don’t know you.” He looks at the fog. “The Merrow has charts and a lead line. Give me a better reason to break the rules.”`,
-        );
-      else if (!first) out.push('“I’ve said. Condemned.” He turns back to his lamp.');
-      if (B.trust < 1 && s.f.forced) out.push('He looks at you hard. “And I heard what you did to that door.”');
+          out.push('Bassett looks at the lamp, then at the fog against the glass, for a long moment. “It’s no use to anyone tonight, is it.” He unhooks his keys and hands them over. “I’ll swing that flywheel with you. Two’s the job. You’ll want matches for the blowlamp. Lead on.”');
+        } else out.push('“Well. The door’s open already.” He sighs and reaches for his coat. “I’ll swing that flywheel with you, then. Two’s the job. Lead on.”');
+      } else out.push(signalReply(s));
       break;
-    }
     case 'hasp':
       B.told.push('hasp');
       B.trust++;
@@ -702,6 +712,22 @@ function talkBassett(s: State, topic: string, out: string[]) {
       out.push('“I’ll be here,” he says.');
       break;
   }
+}
+
+/** Why Bassett won't start the horn yet, depending on what he's been told. */
+function signalReply(s: State): string {
+  const B = s.bassett;
+  const told = (k: string) => B.told.includes(k);
+  if (s.f.forced && B.trust < 1)
+    return told('hasp')
+      ? '“You broke my padlock, and you owned up. That’s something.” He doesn’t move from his chair. “It isn’t enough.”'
+      : '“Condemned,” he says. “And you’ve had the padlock off it already. I heard you.” He turns back to his lamp.';
+  if (told('log'))
+    return '“Ada’s patch will hold, I’ll grant you that. But I’m to keep this light, and you want me down at that engine on the word of a lad I met a fortnight ago.” He looks at the fog. “Give me a reason worth breaking the rules for.”';
+  if (told('nell'))
+    return '“The child, yes. God help her.” He taps the inspector’s report on his desk. “But that receiver’s cracked, and if it bursts I’ll have two to answer for. Show me it’ll hold.”';
+  if (B.trust >= 1) return '“It’s condemned,” he says, more gently than before. “Cracked receiver. Show me it’ll hold, or give me a reason worth the risk.”';
+  return '“Condemned,” he says. “Inspector’s tag on the flywheel. Cracked air receiver. I’m not having it burst on my watch, and I’m not leaving the light.”';
 }
 
 function talkNell(s: State, topic: string, out: string[]) {
@@ -730,14 +756,30 @@ function talkNell(s: State, topic: string, out: string[]) {
         out.push('You tell her that in fog nobody can see a light, but a ship can hear the horn for miles. You’ll get it going, for her mam’s boat. “Promise?” “Promise.” She looks at the wet gorse, and the dead matches, and nods.');
       }
       break;
-    case 'come':
-      if (N.trust >= 2 && N.ready) {
+    case 'come': {
+      const again = N.told.includes('come');
+      N.told.push('come');
+      if (N.trust >= 2 && nellReady(s)) {
+        if (!N.ready) out.push('She lifts her head as the horn groans again. “Is that for Mam’s boat?” “It is.”');
+        N.ready = true;
         N.follows = true;
         out.push('Nell gets up, stiff with cold, and takes your hand. She’s shaking. Get her somewhere warm: the cottage, or home to bed.');
-      } else if (N.trust <= 0) out.push('She shakes her head and hugs her knees. “I’m not coming. Everyone’s going to shout. And I lost Bramble.” She is shivering hard.');
-      else if (N.trust < 2) out.push('“I lost Bramble,” she says, very small. “She ran off in the fog, and it’s my fault. And I’m so cold.”');
-      else out.push('“Not till there’s something for Mam’s boat.” She points at the wet gorse. “Mr Bassett says nobody can see a light in fog. But I’ve got to do something.”');
+      } else if (N.trust <= 0)
+        out.push(
+          again
+            ? 'Nell turns her face to the stones. She isn’t coming for you, not like this.'
+            : 'She shakes her head and hugs her knees. “I’m not coming. Everyone’s going to shout. And I lost Bramble.” She is shivering hard.',
+        );
+      else if (N.trust < 2)
+        out.push(again ? '“I want Bramble,” she whispers, and her teeth chatter.' : '“I lost Bramble,” she says, very small. “She ran off in the fog, and it’s my fault. And I’m so cold.”');
+      else
+        out.push(
+          again
+            ? '“Something for Mam’s boat,” she says again, stubborn. “Then I’ll come.”'
+            : '“Not till there’s something for Mam’s boat.” She points at the wet gorse. “Mr Bassett says nobody can see a light in fog. But I’ve got to do something.”',
+        );
       break;
+    }
     case 'stay':
       N.follows = false;
       out.push('“Don’t be long,” she says.');
@@ -745,17 +787,24 @@ function talkNell(s: State, topic: string, out: string[]) {
   }
 }
 
-function finish(s: State, out: string[], cost: number, prev: number): string[] {
+function finish(s: State, out: string[], cost: number, prev: number, arrived = false): string[] {
   spend(s, cost);
   const crossed = (k: number) => prev < k && s.t >= k;
+  // Arriving in the yard or on the moor already describes the fog.
+  const told = arrived && (s.room === 'yard' || s.room === 'moor');
   if (crossed(FOG_T - 6))
-    out.push(`${INDOORS.has(s.room) ? 'Outside, the' : 'The'} fog is thickening. Soon the moor path will be gone, and out there you’ll need something to steer by.`);
-  if (crossed(FOG_T))
     out.push(
-      s.f.horn
-        ? 'The fog closes in completely. Only the horn gives you a direction now.'
+      told
+        ? 'Soon the moor path will be gone, and out there you’ll need something to steer by.'
+        : `${INDOORS.has(s.room) ? 'Outside, the' : 'The'} fog is thickening. Soon the moor path will be gone, and out there you’ll need something to steer by.`,
+    );
+  if (crossed(FOG_T) && !s.f.horn && !(arrived && s.room === 'moor'))
+    out.push(
+      told
+        ? 'Out on the moor now, without something to steer by, you’d only walk in circles.'
         : 'The fog closes in completely. On the moor now, without something to steer by, you’d only walk in circles.',
     );
+  else if (crossed(FOG_T) && s.f.horn && !told) out.push('The fog closes in completely. Only the horn gives you a direction now.');
   if (s.f.heatAt >= 0 && !s.f.running && crossed(s.f.heatAt + HEAT)) {
     if (s.room === 'signal') out.push('The bulb glows cherry red. Hot enough to fire.');
     else if (s.room !== 'moor' && s.room !== 'house' && s.room !== 'point') out.push('Across the yard, the blowlamp’s roar has steadied. The bulb should be hot by now.');
@@ -783,14 +832,18 @@ export function ending(s: State): Ending {
     );
   if (safe) {
     const at = NELL_AT[N.room];
-    if (horn) text.push(`The doctor comes up from the quay at a run and finds Nell ${at}.`);
+    if (horn)
+      text.push(
+        N.promised
+          ? `The doctor comes up from the quay at a run and finds Nell ${at}. She wakes as the door opens. “I heard it, Mam,” she says. “The horn. It was for you. They promised me.”`
+          : `The doctor comes up from the quay at a run and finds Nell ${at}. “I heard the horn,” Nell mumbles. “I knew it’d bring you.”`,
+      );
     else
       text.push(
         N.promised
           ? `Nell is safe, ${at}. But when she wakes she listens for a horn that never sounded. “You promised,” she says.`
           : `Nell is safe, ${at}, though she wakes at every sound, listening for her mam’s boat.`,
       );
-    if (horn && N.promised) text.push('“You kept your promise,” Nell tells everyone, over and over.');
   } else if (N.follows)
     text.push(
       `Nell is still out ${s.room === 'point' ? 'on the Point' : s.room === 'moor' ? 'on the moor' : 'in the yard'} with you at one o’clock, shaking, your coat round her. You get her indoors at last, frozen through.`,

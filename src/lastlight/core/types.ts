@@ -51,6 +51,8 @@ export interface Story<S extends StoryState = StoryState> {
   subjectName(s: S, k: string): string;
   /** Is this subject something you're carrying? */
   carried(s: S, k: string): boolean;
+  /** Who is walking with you (shown above the choices). */
+  company(s: S): string[];
   /** Time is short and the main job isn't done (the clock turns red). */
   late(s: S): boolean;
 }

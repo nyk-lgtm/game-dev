@@ -182,7 +182,7 @@ export function describe(s: State, brief = false): string[] {
           ? 'Below, the tide has covered the steps down to the shore.'
           : s.t >= TIDE_T - 8
             ? 'The sea is nearly at the top of the steps down to the shore. Whoever goes down now may not come back up.'
-            : 'Steps cut in the rock lead down to the shore. The tide is rising.',
+            : 'Steps cut in the rock lead down to the shore. The tide is rising; by a quarter past eleven it will cover them, and anyone below will be cut off till morning.',
       );
       if (!s.f.foundAda) out.push('Up the village road, you think you hear someone calling.');
       break;
@@ -246,6 +246,7 @@ export function choices(s: State): Choice[] {
   for (const i of takeable) if (here(s, i)) add(`take:${i}`, `Take ${the(i)}`, i);
   if (s.room === 'cottage') {
     if (!s.f.drawer) add('open:drawer', 'Open the drawer', 'drawer');
+    if (here(s, 'coat')) add('wear', 'Put on the coat', 'coat');
     if (here(s, 'kettle')) add('brew', 'Make a pot of tea', 'kettle');
     if (here(s, 'logbook') || has(s, 'logbook')) add('read:logbook', 'Read the logbook', 'logbook');
   }
@@ -367,7 +368,7 @@ export function act(s: State, id: string): string[] | null {
       out.push(
         {
           coat: 'You lift the oilskin off its hook. It smells of Ada’s pipe.',
-          matches: 'You pocket the matches.',
+          matches: s.wearing ? 'You pocket the matches.' : 'You pocket the matches. Out in that rain they won’t stay dry for long, not without something waterproof over them.',
           kettle: 'You take the kettle, still warm.',
           tea: 'You take the tea.',
           logbook: 'You tuck the logbook under your arm.',
@@ -388,6 +389,7 @@ export function act(s: State, id: string): string[] | null {
       break;
     }
     case 'wear':
+      s.at.coat = 'inv';
       s.wearing = true;
       out.push('You shrug into the oilskin and button it to the chin. Let it rain.');
       break;
@@ -412,7 +414,9 @@ export function act(s: State, id: string): string[] | null {
       cost = 0;
       out.push(
         {
-          door: 'Locked. Ada keeps the key on her ring, and Ada isn’t here. The window beside it is old, small-paned glass.',
+          door: has(s, 'keys')
+            ? 'Locked. But you have Ada’s keys, and the big iron one is for this door.'
+            : 'Locked. Ada keeps the key on her ring, and Ada isn’t here. The window beside it is old, small-paned glass.',
           box: 'Locked tight. A small brass keyhole — or a hard enough knock.',
           lamp: `The burner needs ${[!s.f.oil && 'oil', !s.f.wick && 'a new wick'].filter(Boolean).join(' and ') || 'only a flame'}. Then the clockwork wound to turn the lens.`,
           branch: s.tomas.follows && tomasHere(s) ? 'Together you might manage it.' : 'You heave until your vision swims. It doesn’t move. One person can’t shift it.',
@@ -645,8 +649,16 @@ export function ending(s: State): Ending {
   } else {
     text.push('Midnight. The tower is dark. Over the wind you hear timber break on the Teeth.');
   }
-  if (tideIn(s) && (s.room === 'shore' || s.room === 'boathouse'))
-    text.push(s.tomas.room === s.room ? 'You and Tomas wait out the tide in the boathouse, saying nothing, listening.' : 'You wait out the tide alone in the boathouse.');
+  const below = (r: Room) => r === 'shore' || r === 'boathouse';
+  const stranded = tideIn(s) && below(s.room);
+  if (stranded)
+    text.push(
+      below(s.tomas.room)
+        ? s.tomas.trust >= 2
+          ? 'You and Tomas wait out the tide in the boathouse, saying nothing, listening.'
+          : 'You wait out the tide in the boathouse with Tomas. He shares his lantern and says nothing about the ship.'
+        : `You wait out the tide alone ${s.room === 'shore' ? 'on the shore, in the lee of the boathouse' : 'in the boathouse'}.`,
+    );
   if (s.ada.freed) {
     stars++;
     text.push(
@@ -670,7 +682,8 @@ export function ending(s: State): Ending {
           ? 'Tomas stays at your side until the storm blows out.'
           : 'Tomas comes up from the boathouse at low tide and shakes your hand without a word.',
     );
-  }
+  } else if (!(stranded && below(s.tomas.room)))
+    text.push('Tomas sits out the night in the boathouse. In the morning he goes home without looking up at the tower.');
   if (light && s.tomas.told.includes('ship') && s.f.sawShip)
     text.push('At first light a boat puts in at the harbour, and Tomas runs down the slip shouting his brother’s name.');
   const title = light ? (stars === 3 ? 'The Last Light' : 'The Light Turns') : 'The Dark Tower';

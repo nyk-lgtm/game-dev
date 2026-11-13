@@ -141,6 +141,13 @@ export class Game {
       $('endBtn').onclick = () => this.showEnd();
       return;
     }
+    const company = st.company(s);
+    if (company.length) {
+      const w = document.createElement('div');
+      w.className = 'with';
+      w.textContent = `With you: ${company.length > 1 ? `${company.slice(0, -1).join(', ')} and ${company[company.length - 1]}` : company[0]}`;
+      box.appendChild(w);
+    }
     const cs = st.choices(s);
     const go = cs.filter((c) => c.about === 'go');
     const rest = cs.filter((c) => c.about !== 'go');

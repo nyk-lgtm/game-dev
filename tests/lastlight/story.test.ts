@@ -69,6 +69,23 @@ describe('Last Light', () => {
     expect(s.tomas.follows).toBe(false);
   });
 
+  it('the coat can be put on straight off the hook, and the keys are pointed out at the door', () => {
+    const s = replay(['wear', 'open:drawer', 'take:matches', 'go:yard']);
+    expect(s.wearing).toBe(true);
+    expect(s.wet).toBe(false);
+    const k = replay(['take:coat', 'wear', 'go:yard', 'go:cliff', 'go:road', 'say:ada:keys', 'go:cliff', 'go:yard']);
+    expect(act(k, 'look:door')!.join(' ')).toContain('you have Ada’s keys');
+  });
+
+  it('stranded below, the ending says where you are and who is with you', () => {
+    const s = replay(['take:coat', 'wear', 'go:yard', 'go:cliff', 'go:shore']);
+    s.t = TIDE_T;
+    act(s, 'watch');
+    const text = s.over!.text.join(' ');
+    expect(text).toContain('in the boathouse with Tomas');
+    expect(text).not.toContain('alone');
+  });
+
   it('random play never crashes and always ends by midnight', () => {
     let seed = 7;
     const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 2 ** 32);

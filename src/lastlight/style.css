@@ -32,6 +32,7 @@ body {
 }
 #acts > :last-child { margin-bottom: max(12px, env(safe-area-inset-bottom)); }
 #acts .row { display: flex; flex-direction: column; gap: 3px; }
+#acts .with { font-size: 13px; color: var(--accent); padding-top: 2px; }
 #acts .lab { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
 #acts .list { display: flex; flex-wrap: wrap; gap: 6px; }
 /* The Go row stays pinned at the bottom of the panel while the rest scrolls. */

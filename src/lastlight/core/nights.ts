@@ -35,6 +35,7 @@ export const NIGHT1: Story<n1.State> = {
     return cap(k);
   },
   carried: (s, k) => k in n1.ITEM_NAMES && n1.has(s, k as n1.Item),
+  company: (s) => (s.tomas.follows ? ['Tomas'] : []),
   late: (s) => !s.f.wound && s.t >= 30,
 };
 
@@ -72,6 +73,12 @@ export const NIGHT2: Story<n2.State> = {
     return N2_THINGS[k] ?? cap(k);
   },
   carried: (s, k) => k in n2.ITEM_NAMES && n2.has(s, k as n2.Item),
+  company: (s) =>
+    [
+      s.nell.follows && 'Nell',
+      s.bramble.room === s.room && (s.bramble.follows || (s.bramble.withNell && s.nell.follows)) && 'Bramble',
+      s.bassett.follows && 'Bassett',
+    ].filter((x): x is string => !!x),
   late: (s) => !s.f.horn && s.t >= 30,
 };
 

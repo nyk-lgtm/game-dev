@@ -165,10 +165,41 @@ describe('Last Light, night 2', () => {
     expect(moor).not.toContain('thickening fast');
   });
 
-  it('asking about the fog signal first gets an answer, not a plea', () => {
+  it('Bassett answers about the signal from what he knows, and is only asked again when that changes', () => {
+    const fresh = play(['go:yard', 'go:tower']);
+    expect(act(fresh, 'say:bassett:signal')![0]).toMatch(/^“Condemned,”/);
+    expect(choices(fresh).some((c) => c.id === 'say:bassett:signal')).toBe(false);
     const s = play(['take:logbook', 'go:yard', 'go:tower', 'show:logbook:bassett']);
-    const out = act(s, 'say:bassett:signal')!;
-    expect(out[0]).toMatch(/^“Condemned,”/);
+    const out = act(s, 'say:bassett:signal')!.join(' ');
+    expect(out).toContain('Ada’s patch will hold');
+    expect(out).not.toContain('burst on my watch');
+    expect(choices(s).some((c) => c.id === 'say:bassett:signal')).toBe(false);
+    act(s, 'say:bassett:nell');
+    expect(choices(s).find((c) => c.id === 'say:bassett:signal')?.label).toBe('Ask him again to start the horn');
+    act(s, 'say:bassett:signal');
+    expect(s.bassett.agreed).toBe(true);
+  });
+
+  it('with the horn going, Nell needs no promise, and she or the horn leads you over the moor', () => {
+    const s = play([
+      'take:matches', 'take:logbook', 'go:yard', 'go:tower', 'show:logbook:bassett', 'say:bassett:nell', 'say:bassett:signal',
+      'go:yard', 'go:store', 'take:blowlamp', 'use:blowlamp:drum', 'go:yard', 'use:keys:door', 'go:signal', 'use:blowlamp:bulb',
+      'wait:bulb', 'swing', 'open:valve', 'go:yard', 'go:moor', 'go:point',
+    ]);
+    expect(s.f.horn).toBe(true);
+    expect(choices(s).find((c) => c.id === 'say:nell:horn')?.label).toBe('Tell her the horn is for her mam’s boat');
+    act(s, 'say:nell:cross');
+    expect(s.nell.trust).toBe(1);
+    act(s, 'say:nell:horn');
+    act(s, 'say:nell:come');
+    expect(s.nell.follows).toBe(true);
+    // Without the horn, Nell herself knows the way over the moor.
+    const n = play(['go:yard', 'go:moor', 'take:lantern', 'go:point', 'give:lantern:nell', 'say:nell:cross', 'say:nell:horn', 'say:nell:come']);
+    n.t = FOG_T;
+    act(n, 'go:moor');
+    const back = act(n, 'go:yard')!.join(' ');
+    expect(back).toContain('I come up here every day');
+    expect(n.room).toBe('yard');
   });
 
   it('the Story wrappers keep night 1 as it was', () => {

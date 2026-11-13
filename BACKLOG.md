@@ -268,6 +268,13 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         "Tell him Nell's safe" counts like "missing", endings put Nell where she is, Bramble stays with
         Nell once found, Bassett reacts to the forced hasp, contradictions fixed, short text on repeat
         visits (both nights), people's lone actions keep the name, Go row pinned, "New" goes once started.
+  - [x] Third pass (N1 blind 0★ cut off by the tide, "harsh"; N2 1★ blind, 3★ aimed, "fair and tight")
+        and fixes: N1 cliff says when the tide covers the steps, coat can be put on off the hook, a
+        warning when pocketing matches without it, the door points to Ada's keys, stranded endings say
+        where and with whom (and Tomas always gets a line); N2 rules v3: Bassett's signal replies follow
+        what he knows and he's asked again only when something changed, Nell comes for the horn without
+        a promise and knows the moor herself, stale moor/fog/house lines fixed, blowlamp needs-a-match
+        hints, Nell's payoff line; a "With you" line above the choices.
 
 - [x] **Nightline fixes from its blind playtest** (agent reached the goal on run 3; no errors):
   steering ~120 px to full lock; HUD on backing panels, 11 px labels, brighter TIME UP; traffic drawn
