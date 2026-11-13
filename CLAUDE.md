@@ -47,7 +47,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     other charm strengths, and `CHARM=mirror` starts every run holding one charm (the fair way to compare charms:
     v3 wins 16% with none, ~36-43% Pockets/Flags/Mirror/Joker/Blast, ~27-34% Lantern/Wind/Stride/Momentum).
   - Quarry: `npx vite-node scripts/quarry/balance.ts 300 human` (bot that spots 8% of the common words ≤ 6 letters;
-    rules v3: median depth 8, ~45% wins with its perk order (`PRIORITY` in bot.ts); `PICK=worst` (`WORST`) ~22%;
+    rules v3 (depth 6-8 targets raised to 365/430/495 after these numbers, ~40% / ~16% expected): median depth 8, ~45% wins with its perk order (`PRIORITY` in bot.ts); `PICK=worst` (`WORST`) ~22%;
     `SEEN=0.05` ~20%; `best` mode ~99%); `PERKTABLE=1` favors each perk in turn (others weakest-first: ~19-36% wins);
     `TARGETS=`/`WORDS=` try others.
   - Hexhold: `npx vite-node scripts/hexhold/balance.ts 32` (heuristic bot, rules v4: median wave ~28, ~7/32 wins);
