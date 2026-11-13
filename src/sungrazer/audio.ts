@@ -10,13 +10,21 @@ export class Sounds {
   private noise: AudioBuffer | null = null;
   private master: GainNode | null = null;
   private sizzle: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
+  private on = soundOn();
+
+  /** Follow the sound switch (the in-game menu flips the hub setting). */
+  setOn(on: boolean): void {
+    this.on = on;
+    if (!on) this.graze(false);
+    if (on) this.unlock();
+  }
 
   unlock(): void {
     if (this.ctx) {
       if (this.ctx.state === 'suspended') void this.ctx.resume();
       return;
     }
-    if (!soundOn()) return;
+    if (!this.on) return;
     try {
       this.ctx = new AudioContext();
       this.master = this.ctx.createGain();
@@ -33,7 +41,7 @@ export class Sounds {
 
   private tone(f0: number, f1: number, dur: number, vol: number, type: OscillatorType = 'sine', delay = 0): void {
     const c = this.ctx;
-    if (!c || !this.master) return;
+    if (!c || !this.master || !this.on) return;
     const t = c.currentTime + delay;
     const o = c.createOscillator();
     const g = c.createGain();
@@ -50,7 +58,7 @@ export class Sounds {
 
   private hiss(f0: number, f1: number, dur: number, vol: number, delay = 0, q = 1): void {
     const c = this.ctx;
-    if (!c || !this.noise || !this.master) return;
+    if (!c || !this.noise || !this.master || !this.on) return;
     const t = c.currentTime + delay;
     const s = c.createBufferSource();
     s.buffer = this.noise;
@@ -116,7 +124,7 @@ export class Sounds {
   graze(on: boolean): void {
     const c = this.ctx;
     if (!c || !this.noise || !this.master) return;
-    if (on && !this.sizzle) {
+    if (on && !this.sizzle && this.on) {
       const src = c.createBufferSource();
       src.buffer = this.noise;
       src.loop = true;

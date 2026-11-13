@@ -14,7 +14,7 @@ while (r.alive && r.tick <= run.tick) {
   const evs: Ev[] = [];
   const t = r.tick;
   step(r, heldAt(inputs, t), evs);
-  for (const e of evs) if (e.k === 'near' || e.k === 'sungraze' || e.k === 'zone' || e.k === 'die') marks.push({ t, k: e.k, mult: e.mult });
+  for (const e of evs) if (e.k === 'near' || e.k === 'sungraze' || e.k === 'zone' || e.k === 'die') marks.push({ t, k: e.k === 'die' ? `die:${e.cause}` : e.k, mult: e.mult });
 }
 if (process.argv.includes('--json')) console.log(JSON.stringify({ seed, a: encodeInputs(inputs), tick: run.tick, marks }));
 else {

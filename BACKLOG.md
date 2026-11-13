@@ -33,8 +33,17 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         shake/flash (off with reduced effects), synth sounds incl. a corona sizzle, haptics; first-run help card
         with a diagram and coach lines; end card with stats, unlocks and mode chips; replays (last run, best run,
         bug-report links), daily sky, hub card first + Daily link. Pixel 7 screenshots checked.
-  - [ ] Next: owner playtest. Watch: is the void too fast/slow early? Are pulsars readable? Is the release preview
-        too generous (it shows ~0.45 s of the path)? Does holding to "catch the next star" feel natural?
+  - [x] Blind playtest (27 runs by a ~200 ms screenshot bot: first runs 77-102, best 5,172; "good juice") and fixes
+        (rules v2): ~70% of deaths were free-flight flings into the next star, so the path preview (and a free-flight
+        check) turns red with an ✕ on a collision course, those deaths say "Flew into a star", and spine stars are
+        never stacked in a column; friendlier opening (void rises from 0.6 u/s, lighter gravity and faster orbits
+        early, tighter early gaps); close shaves count from 4.5 units (was 2.6) with a green shave ring that lights
+        up, explained in help; the first star is ringed and the coach line only mentions a ring when there is one;
+        zone banners are a slim strip under the HUD for 1.8 s; popups and pills stay on screen and stack; the end
+        card comes back after "Watch replay"; Sound on/off in the menu; slightly fewer, smaller cinders.
+        Bot (40 runs): novice 18 s, human 48 s (alt 715), good 95 s (alt 1,800).
+  - [ ] Next: owner playtest. Watch: is the opening friendly enough now? Are pulsars readable? Is the release preview
+        too generous? Good-bot deaths are mostly cinders brushed right after a grab: maybe fewer cinders near stars.
 - [ ] **Quarry** (word roguelite on a hex letter wall). Milestones:
   - [x] Dictionary: SCOWL sizes 10-50 (npm `wordlist-english`, MIT; SCOWL's own permissive licence), 3-8 letters
         a-z with a vowel, minus `badwords-list` (MIT), `naughty-words` en (CC-BY-4.0) and a hand list of slurs, with

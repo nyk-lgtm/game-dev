@@ -19,7 +19,7 @@ export interface Skill {
 export const SKILLS: Record<string, Skill> = {
   novice: { react: 62, jitter: 22, greed: 0, caution: 1 },
   human: { react: 50, jitter: 14, greed: 0.3, caution: 2 },
-  good: { react: 38, jitter: 7, greed: 0.8, caution: 2 },
+  good: { react: 38, jitter: 7, greed: 0.4, caution: 2 },
   perfect: { react: 30, jitter: 0, greed: 0.8, caution: 1 },
 };
 

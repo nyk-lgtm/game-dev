@@ -6,14 +6,14 @@ import { closeOverlay, showCard } from '../shared/cards';
 import { dailySeed, leaveDaily, loadDaily, recordDaily, todayKey } from '../shared/daily';
 import { copyText, toast } from '../shared/debug';
 import { randomSeed } from '../shared/rng';
-import { reducedFx } from '../shared/settings';
+import { loadSettings, reducedFx, saveSettings, soundOn } from '../shared/settings';
 import { makeStore } from '../shared/storage';
 import {
   LOCK, MODES, MODE_IDS, REGRAB, RULES_VERSION, TPS, ZONES, altitude, cloneRun, encodeInputs, finalScore, isLit, lowerY, newRun, step, target,
   type Cause, type Ev, type Mode, type Run, type Star,
 } from './core';
 import { Sounds } from './audio';
-import { draw, fitView, type Floater, type Particle, type Scene, type View } from './render/draw';
+import { BANNER_S, draw, fitView, type Floater, type Particle, type Scene, type View } from './render/draw';
 
 export const store = makeStore('sungrazer.');
 const $ = (id: string) => document.getElementById(id)!;
@@ -43,7 +43,8 @@ const ZONE_SUB = [
   'Everything, faster',
 ];
 const CAUSE: Record<Cause, [string, string]> = {
-  burn: ['Burned up', 'You touched a star. Let go before the tether reels you in.'],
+  burn: ['Burned up', 'The tether reeled you into the star. Let go sooner.'],
+  star: ['Flew into a star', 'Watch the dotted line: it turns red with an ✕ when you’re heading into something.'],
   cinder: ['Hit a cinder', 'Cinders burn on touch. Close shaves pay, contact doesn’t.'],
   void: ['Lost to the void', 'The void keeps rising. Keep grabbing higher stars.'],
 };
@@ -169,7 +170,7 @@ export class Game {
     while (this.run.alive && this.run.tick < t) {
       const evs: Ev[] = [];
       step(this.run, this.watchHeld(), evs);
-      if (t - this.run.tick < 90) for (const e of evs) this.effect(e);
+      for (const e of evs) if (t - this.run.tick < 90 || e.k === 'die') this.effect(e);
       if (t - this.run.tick < 50 && this.run.tick % 4 === 0) {
         this.trail.push(this.run.x, this.run.y);
         if (this.trail.length > 44) this.trail.splice(0, 2);
@@ -300,7 +301,7 @@ export class Game {
     this.floaters = this.floaters.filter((f) => f.t < 1.15);
     if (this.banner) {
       this.banner.t += dt;
-      if (this.banner.t > 2.6) this.banner = null;
+      if (this.banner.t > BANNER_S) this.banner = null;
     }
     if (!this.run.alive && this.trail.length) this.trail.splice(0, 2);
   }
@@ -312,18 +313,24 @@ export class Game {
     const r = this.run;
     const playing = this.state === 'play' || this.state === 'ready' || this.state === 'watch' || this.state === 'paused';
     const tgt = r.alive && !r.tether ? target(r) : null;
+    // While swinging: where letting go now would fly (~0.45 s). In free flight: only a collision course.
     let preview: number[] | null = null;
-    if (r.alive && r.tether && playing) {
+    let hit: { x: number; y: number } | null = null;
+    if (r.alive && playing && this.state !== 'ready') {
       const c = cloneRun(r);
-      preview = [c.x, c.y];
-      for (let i = 1; i <= 110 && c.alive; i++) {
+      const path = [c.x, c.y];
+      const n = r.tether ? 110 : 90;
+      for (let i = 1; i <= n && c.alive; i++) {
         step(c, false);
-        if (i % 10 === 0) preview.push(c.x, c.y);
+        if (!c.alive && c.cause !== 'void') hit = { x: c.x, y: c.y };
+        else if (i % 10 === 0) path.push(c.x, c.y);
       }
+      if (r.tether || hit) preview = path;
+      if (hit) path.push(hit.x, hit.y);
     }
     draw(this.g, v, {
       run: r, time: this.time, trail: this.trail, particles: this.particles, floaters: this.floaters,
-      target: tgt, soon: !tgt && r.alive && !r.tether ? soonStar(r) : null, preview, reaching: this.state === 'play' && this.held && !r.tether && !r.used && !tgt,
+      target: tgt ?? (this.state === 'ready' ? soonStar(r) : null), soon: !tgt && r.alive && !r.tether ? soonStar(r) : null, preview, hit, reaching: this.state === 'play' && this.held && !r.tether && !r.used && !tgt,
       shake: this.fx ? this.shake : 0, flash: this.fx ? this.flash : 0, banner: this.banner,
       coach: this.coach(), prompt: this.state === 'ready' ? 'Hold anywhere to grab' : null, grabT: this.grabT,
       replay: this.state === 'watch',
@@ -337,7 +344,10 @@ export class Game {
     const r = this.run;
     if (r.tether && r.grazing) return 'In the corona: points! Let go soon';
     if (r.tether && r.stats.links < 4) return 'Let go to fling along the dotted line';
-    if (!r.tether && r.stats.links < 3 && r.tick > 60) return this.held ? 'Holding: you’ll catch the next star' : 'Hold again to grab the ringed star';
+    if (!r.tether && r.stats.links < 3 && r.tick > 60) {
+      if (this.held) return r.used ? null : 'Holding: you’ll catch the next star';
+      return target(r) ? 'Hold to grab the ringed star' : 'Hold early: you’ll catch the next star';
+    }
     return null;
   }
 
@@ -351,7 +361,9 @@ export class Game {
   }
 
   private float(x: number, y: number, text: string, color: string, sub?: string): void {
-    this.floaters.push({ x, y, text, color, sub, t: 0 });
+    // Popups close together stack upward instead of overlapping.
+    const busy = this.floaters.filter((f) => f.t < 0.6 && Math.abs(f.x - x) < 30 && Math.abs(f.y - y) < 14).length;
+    this.floaters.push({ x, y, text, color, sub, t: 0, stack: busy });
     if (this.floaters.length > 8) this.floaters.shift();
   }
 
@@ -493,7 +505,7 @@ export class Game {
       [
         { label: this.daily ? 'Fly the daily again' : 'Fly again', primary: true, onClick: () => this.newRun() },
         ...(this.daily ? [{ label: 'Free flight (new sky)', onClick: () => this.leaveDaily('n') }] : [{ label: 'Retry this sky', onClick: () => this.start(r.seed, r.mode) }]),
-        { label: 'Watch replay', onClick: () => this.watch(r.seed, r.mode, this.inputs, Infinity, 'Last run') },
+        { label: 'Watch replay', onClick: () => this.watchLast() },
         { label: 'All games', onClick: () => (location.href = '../') },
       ],
       false,
@@ -517,11 +529,28 @@ export class Game {
     }
   }
 
+  /** Replay the run that just ended; its end card comes back afterwards. */
+  private watchLast(): void {
+    const r = this.run, inputs = this.inputs.slice();
+    this.lastPlay = { run: r, inputs, result: this.result! };
+    this.watch(r.seed, r.mode, inputs, Infinity, 'Last run');
+  }
+  private lastPlay: { run: Run; inputs: number[]; result: NonNullable<Game['result']> } | null = null;
+
   private endWatch(): void {
     if (!this.watching) return;
     const label = this.watching.label;
     this.watching = null;
     this.state = 'dead';
+    if (label === 'Last run' && this.lastPlay) {
+      this.run = this.lastPlay.run;
+      this.inputs = this.lastPlay.inputs;
+      this.result = this.lastPlay.result;
+      this.lastPlay = null;
+      this.hud();
+      this.endCard();
+      return;
+    }
     showCard(`<h2>${label} over</h2><p class="big">${finalScore(this.run).toLocaleString('en-US')}</p><p class="meta2">Altitude ${Math.floor(altitude(this.run))} · ${fmtTime(this.run.tick)}</p>`, [
       { label: 'Fly', primary: true, onClick: () => this.newRun() },
       { label: 'All games', onClick: () => (location.href = '../') },
@@ -554,9 +583,9 @@ export class Game {
          <text x="222" y="72" fill="#cfd6ff" font-size="12" text-anchor="middle" font-family="system-ui">next star</text>
        </svg>
        <ul>
-         <li><b>Hold anywhere</b> to grab the ringed star and swing round it. <b>Let go</b> to fling off along the dotted line; then gravity pulls.</li>
+         <li><b>Hold anywhere</b> to grab the ringed star and swing round it. <b>Let go</b> to fling off along the dotted line; then gravity pulls. If the line turns <b>red with an ✕</b>, that fling hits something.</li>
          <li>The tether <b>reels you in</b>: swing too long and you burn. Grazing the dashed <b>corona</b> pays, and letting go inside it is a <b>sungraze</b>.</li>
-         <li><b>Close shaves</b> past stars and cinders raise your <b>combo</b>. Walls and slow flying lose it.</li>
+         <li><b>Close shaves</b>: fly through the faint green ring round a star or cinder without touching it. That and sungrazes raise your <b>combo</b>; walls and long free flights lose it.</li>
          <li>Climb! The <b>void</b> rises from below.</li>
        </ul>`,
       [{ label: first ? 'Fly' : 'Back', primary: true, onClick: () => this.resume() }],
@@ -581,11 +610,19 @@ export class Game {
         ...(this.state === 'paused' ? [{ label: this.resumeTo === 'watch' ? 'Stop replay' : 'Restart', onClick: () => this.newRun() }] : []),
         ...(best ? [{ label: `Watch your best (${best.score.toLocaleString('en-US')})`, onClick: () => this.watchBest() }] : []),
         ...(this.daily ? [{ label: 'Leave the daily', onClick: () => this.leaveDaily('n') }] : []),
+        { label: soundOn() ? 'Sound: on (tap to mute)' : 'Sound: off (tap to unmute)', onClick: () => this.toggleSound() },
         { label: 'Copy bug report', onClick: () => this.copyReport() },
         { label: 'All games', onClick: () => (location.href = '../') },
       ],
     );
     this.wireModes();
+  }
+
+  private toggleSound(): void {
+    const st = loadSettings();
+    saveSettings({ ...st, sound: !st.sound });
+    this.sfx.setOn(!st.sound);
+    this.showMenu();
   }
 
   private watchBest(): void {

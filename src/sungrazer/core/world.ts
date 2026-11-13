@@ -194,9 +194,10 @@ export class World {
     const shower = MODES[this.mode].shower;
 
     // The next star on the spine: always within MAX_LINK of the last one, higher up.
-    const gap = 24 + rng.next() * 12 + Math.min(9, alt / 320);
+    const gap = 22 + rng.next() * 10 + Math.min(11, alt / 280);
     const side = p.x < 32 ? 1 : p.x > 68 ? -1 : rng.next() < 0.5 ? -1 : 1;
-    let x = clamp(p.x + side * (8 + rng.next() * 28), 14, 86);
+    // Never straight above: a plain fling upward shouldn't fly into the next star.
+    let x = clamp(p.x + side * (13 + rng.next() * 23), 14, 86);
     let dy = gap;
     if (Math.hypot(x - p.x, dy) > MAX_LINK) dy = Math.max(18, Math.sqrt(Math.max(0, MAX_LINK * MAX_LINK - (x - p.x) ** 2)));
     if (Math.hypot(x - p.x, dy) > MAX_LINK) x = p.x + Math.sign(x - p.x) * Math.sqrt(MAX_LINK * MAX_LINK - dy * dy);
@@ -236,7 +237,7 @@ export class World {
 
     // Cinders: small burning rocks in the gaps, clear of every corona and of the straight line between stars.
     if (z >= 1 || shower) {
-      let n = rng.next() < (z >= 4 ? 0.75 : z >= 2 ? 0.55 : 0.4) ? 1 : 0;
+      let n = rng.next() < (z >= 4 ? 0.7 : z >= 2 ? 0.48 : 0.33) ? 1 : 0;
       if (z >= 4 && rng.next() < 0.4) n++;
       if (shower) n += rng.next() < 0.7 ? 1 : 0;
       for (let k = 0; k < n; k++) {
@@ -245,9 +246,9 @@ export class World {
         for (let tries = 0; tries < 14; tries++) {
           const cx = 8 + amp + rng.next() * (84 - amp * 2);
           const cy = p.y + 6 + rng.next() * Math.max(1, dy - 20);
-          const cr = 1.5 + rng.next() * 0.6;
+          const cr = 1.4 + rng.next() * 0.5;
           let ok = segDist(cx, cy, p.x, p.y, s.x, s.y) > 7 + cr && this.clearOfCinders(cx, cy, 9);
-          for (const sx of drift ? [cx - amp, cx - amp / 2, cx, cx + amp / 2, cx + amp] : [cx]) if (ok) ok = this.clearOfStars(sx, cy, cr, 10);
+          for (const sx of drift ? [cx - amp, cx - amp / 2, cx, cx + amp / 2, cx + amp] : [cx]) if (ok) ok = this.clearOfStars(sx, cy, cr, 14);
           if (!ok) continue;
           const period = drift ? 720 + Math.floor(rng.next() * 480) : 1;
           insertByY(this.cinders, { id: this.ids++, x: cx, y: cy, r: cr, amp, period, phase: Math.floor(rng.next() * period) });

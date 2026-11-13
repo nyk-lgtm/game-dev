@@ -8,10 +8,11 @@ import { COMET_R, MODES, MOTE_R, START_Y, STEP, TPS, VIEW_H, W, World, cinderX, 
 
 /** How far a press reaches for a star (centre distance). */
 export const LOCK = 28;
-/** Gravity in free flight (units/s²). */
+/** Gravity in free flight (units/s²); lighter for the first few hundred units so early flings carry. */
 export const GRAVITY = 40;
+export const gravityAt = (alt: number) => GRAVITY - Math.max(0, 10 - alt / 40);
 /** A close shave: passing this close to a surface without touching it. */
-export const NEAR = 2.6;
+export const NEAR = 4.5;
 /** Letting go of an orbit this close to the surface is a sungraze. */
 export const SUNGRAZE = 2.2;
 export const MAX_MULT = 9;
@@ -26,12 +27,13 @@ const CAM_AT = 0.45;
 export const PTS = { link: 10, graze: 50, near: 25, sungraze: 40, mote: 10 };
 
 /** Orbit speed at an altitude. */
-export const speedAt = (alt: number) => 58 + Math.min(30, alt / 80);
+export const speedAt = (alt: number) => 62 + Math.min(26, alt / 120);
 /** The void's minimum climb rate. */
-export const riseAt = (alt: number) => 2 + Math.min(12, alt / 220);
+export const riseAt = (alt: number) => Math.min(2 + Math.min(11, alt / 260), 0.6 + alt / 60);
 export const reelAt = (alt: number) => 3.5 + Math.min(2.5, alt / 900);
 
-export type Cause = 'burn' | 'cinder' | 'void';
+/** burn: reeled into the star you hold; star: flew into one; cinder; void. */
+export type Cause = 'burn' | 'star' | 'cinder' | 'void';
 export type EvKind = 'grab' | 'release' | 'snap' | 'link' | 'near' | 'sungraze' | 'mote' | 'bounce' | 'drop' | 'zone' | 'die';
 export interface Ev {
   k: EvKind;
@@ -222,7 +224,7 @@ export function step(r: Run, held: boolean, out?: Ev[]): void {
       r.stats.graze += STEP;
     }
   } else {
-    r.vy = Math.max(-MAX_FALL, r.vy - GRAVITY * STEP);
+    r.vy = Math.max(-MAX_FALL, r.vy - gravityAt(alt) * STEP);
     r.x += r.vx * STEP;
     r.y += r.vy * STEP;
   }
@@ -242,18 +244,18 @@ export function step(r: Run, held: boolean, out?: Ev[]): void {
   // Stars and cinders: touch = burn; a close pass = a close shave once you're clear.
   const nowNear: number[] = [];
   const stars = w.stars;
-  for (let i = lowerY(stars, r.y - 12); i < stars.length && stars[i].y <= r.y + 12; i++) {
+  for (let i = lowerY(stars, r.y - 16); i < stars.length && stars[i].y <= r.y + 16; i++) {
     const s = stars[i];
     if (r.tether && r.tether.star === s) continue;
     const clear = Math.hypot(s.x - r.x, s.y - r.y) - s.r - COMET_R;
     if (clear <= 0) {
-      die(r, 'burn', out);
+      die(r, r.tether ? 'burn' : 'star', out);
       return;
     }
-    if (clear < NEAR && s.id !== r.last) nowNear.push(s.id);
+    if (clear < NEAR && (s.id !== r.last || r.since >= REGRAB)) nowNear.push(s.id);
   }
   const cs = w.cinders;
-  for (let i = lowerY(cs, r.y - 6); i < cs.length && cs[i].y <= r.y + 6; i++) {
+  for (let i = lowerY(cs, r.y - 9); i < cs.length && cs[i].y <= r.y + 9; i++) {
     const c = cs[i];
     const clear = Math.hypot(cinderX(c, r.tick) - r.x, c.y - r.y) - c.r - COMET_R;
     if (clear <= 0) {

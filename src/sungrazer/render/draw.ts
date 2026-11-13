@@ -3,7 +3,7 @@
 // sparks and floating points, and the void glowing at the bottom.
 // World y grows upward; the bottom of the screen is the run's camY.
 
-import { COMET_R, LOCK, MOTE_R, VIEW_H, W, ZONES, altitude, cinderX, isLit, lowerY, type Run, type Star } from '../core';
+import { COMET_R, LOCK, MOTE_R, NEAR, REGRAB, VIEW_H, W, ZONES, altitude, cinderX, isLit, lowerY, type Run, type Star } from '../core';
 
 export interface View {
   scale: number;
@@ -11,6 +11,9 @@ export interface View {
   w: number;
   h: number;
 }
+
+/** How long a zone banner shows (seconds). */
+export const BANNER_S = 1.8;
 
 export function fitView(w: number, h: number): View {
   const scale = Math.min(w / W, h / (VIEW_H * 0.9));
@@ -36,6 +39,8 @@ export interface Floater {
   t: number;
   /** Points so far, for a floater that sums a string of motes. */
   mote?: number;
+  /** Popups born close together stack upward by this many lines. */
+  stack?: number;
 }
 
 export interface Scene {
@@ -50,6 +55,8 @@ export interface Scene {
   soon: Star | null;
   /** Release path preview (world x,y pairs) while tethered. */
   preview: number[] | null;
+  /** Where that path would hit a star or cinder (it turns red and ends in an ✕). */
+  hit: { x: number; y: number } | null;
   /** Holding but nothing caught yet: show the reach. */
   reaching: boolean;
   shake: number;
@@ -320,11 +327,53 @@ export function draw(g: CanvasRenderingContext2D, v: View, sc: Scene): void {
   }
   if (sc.preview && sc.preview.length > 2) {
     const n = sc.preview.length / 2;
-    for (let i = 1; i < n; i++) {
-      g.fillStyle = `rgba(220,240,255,${0.75 * (1 - i / n)})`;
+    const last = sc.hit ? n - 1 : n;
+    for (let i = 1; i < last; i++) {
+      g.fillStyle = sc.hit ? `rgba(255,90,90,${0.95 - 0.4 * (i / n)})` : `rgba(220,240,255,${0.75 * (1 - i / n)})`;
       g.beginPath();
-      g.arc(X(sc.preview[i * 2]), Y(sc.preview[i * 2 + 1]), 1.8, 0, Math.PI * 2);
+      g.arc(X(sc.preview[i * 2]), Y(sc.preview[i * 2 + 1]), sc.hit ? 2.2 : 1.8, 0, Math.PI * 2);
       g.fill();
+    }
+    if (sc.hit) {
+      const hx = X(sc.hit.x), hy = Y(sc.hit.y), q = 7;
+      g.strokeStyle = 'rgba(0,0,0,0.6)';
+      g.lineWidth = 6;
+      g.lineCap = 'round';
+      for (const pass of [0, 1]) {
+        if (pass) {
+          g.strokeStyle = '#ff4d4d';
+          g.lineWidth = 3;
+        }
+        g.beginPath();
+        g.moveTo(hx - q, hy - q);
+        g.lineTo(hx + q, hy + q);
+        g.moveTo(hx + q, hy - q);
+        g.lineTo(hx - q, hy + q);
+        g.stroke();
+      }
+    }
+  }
+
+  // Close-shave rings: a faint ring shows how near counts as a shave, and lights up while you're inside it.
+  if (r.alive) {
+    const ring = (x: number, y: number, rad: number, clear: number) => {
+      if (clear > NEAR + 7) return;
+      const inside = clear < NEAR;
+      g.strokeStyle = inside ? 'rgba(125,255,210,0.85)' : `rgba(125,255,210,${0.35 * (1 - (clear - NEAR) / 7)})`;
+      g.lineWidth = inside ? 2 : 1.2;
+      g.beginPath();
+      g.arc(X(x), Y(y), rad * k, 0, Math.PI * 2);
+      g.stroke();
+    };
+    for (let i = lowerY(stars, r.y - 20); i < stars.length && stars[i].y < r.y + 20; i++) {
+      const s = stars[i];
+      if (tethered === s || (s.id === r.last && r.since < REGRAB)) continue;
+      ring(s.x, s.y, s.r + NEAR + COMET_R, Math.hypot(s.x - r.x, s.y - r.y) - s.r - COMET_R);
+    }
+    for (let i = lowerY(cs, r.y - 14); i < cs.length && cs[i].y < r.y + 14; i++) {
+      const c = cs[i];
+      const cx = cinderX(c, tick);
+      ring(cx, c.y, c.r + NEAR + COMET_R, Math.hypot(cx - r.x, c.y - r.y) - c.r - COMET_R);
     }
   }
 
@@ -405,18 +454,21 @@ export function draw(g: CanvasRenderingContext2D, v: View, sc: Scene): void {
   g.textBaseline = 'middle';
   for (const f of sc.floaters) {
     const a = Math.max(0, Math.min(1, (1.1 - f.t) * 3));
-    const yy = Y(f.y) - 20 - f.t * 40;
+    const yy = Math.max(24, Y(f.y) - 20 - f.t * 40 - (f.stack ?? 0) * 34);
     g.globalAlpha = a;
     g.font = '800 17px system-ui, sans-serif';
+    // Keep the whole text on screen, even right at a wall.
+    const half = Math.max(g.measureText(f.text).width, f.sub ? f.sub.length * 6.5 : 0) / 2 + 6;
+    const fx = Math.max(half, Math.min(w - half, X(f.x)));
     g.lineWidth = 4;
     g.strokeStyle = 'rgba(0,0,0,0.55)';
-    g.strokeText(f.text, X(f.x), yy);
+    g.strokeText(f.text, fx, yy);
     g.fillStyle = f.color;
-    g.fillText(f.text, X(f.x), yy);
+    g.fillText(f.text, fx, yy);
     if (f.sub) {
       g.font = '700 12px system-ui, sans-serif';
-      g.strokeText(f.sub, X(f.x), yy + 16);
-      g.fillText(f.sub, X(f.x), yy + 16);
+      g.strokeText(f.sub, fx, yy + 16);
+      g.fillText(f.sub, fx, yy + 16);
     }
   }
   g.globalAlpha = 1;
@@ -424,14 +476,13 @@ export function draw(g: CanvasRenderingContext2D, v: View, sc: Scene): void {
   // Coach line near the comet, prompt in the middle, zone banner.
   if (sc.coach && r.alive) {
     g.font = '700 15px system-ui, sans-serif';
-    const tx = Math.max(90, Math.min(w - 90, X(r.x)));
-    const ty = Math.max(30, Y(r.y) - 44);
-    pill(g, sc.coach, tx, ty, 'rgba(10,14,30,0.82)', '#ffffff');
+    const ty = Math.max(76, Y(r.y) - 44);
+    pill(g, sc.coach, X(r.x), ty, 'rgba(10,14,30,0.82)', '#ffffff', w);
   }
   if (sc.prompt) {
     const p = 0.75 + 0.25 * Math.sin(sc.time * 4);
     g.font = '800 20px system-ui, sans-serif';
-    pill(g, sc.prompt, w / 2, h * 0.42, 'rgba(10,14,30,0.75)', `rgba(255,255,255,${p})`);
+    pill(g, sc.prompt, w / 2, h * 0.42, 'rgba(10,14,30,0.75)', `rgba(255,255,255,${p})`, w);
     // A thumb ring, pressing.
     g.strokeStyle = `rgba(255,255,255,${0.5 * p})`;
     g.lineWidth = 3;
@@ -441,21 +492,22 @@ export function draw(g: CanvasRenderingContext2D, v: View, sc: Scene): void {
   }
   if (sc.banner) {
     const b = sc.banner;
-    const a = Math.max(0, Math.min(1, b.t * 4, (2.6 - b.t) * 2));
+    // A slim strip under the HUD, gone in under two seconds: it never hides what it introduces.
+    const a = Math.max(0, Math.min(1, b.t * 5, (BANNER_S - b.t) * 2.5));
     g.globalAlpha = a;
-    g.fillStyle = 'rgba(6,8,20,0.6)';
-    g.fillRect(0, h * 0.3 - 34, w, 68);
+    g.fillStyle = 'rgba(6,8,20,0.62)';
+    g.fillRect(0, 0, w, 50);
     g.fillStyle = '#ffffff';
-    g.font = '900 26px system-ui, sans-serif';
-    g.fillText(b.title.toUpperCase(), w / 2, h * 0.3 - 8);
-    g.font = '600 14px system-ui, sans-serif';
+    g.font = '900 17px system-ui, sans-serif';
+    g.fillText(b.title.toUpperCase(), w / 2, 16);
+    g.font = '600 12.5px system-ui, sans-serif';
     g.fillStyle = '#d6dcff';
-    g.fillText(b.sub, w / 2, h * 0.3 + 18);
+    g.fillText(b.sub, w / 2, 36);
     g.globalAlpha = 1;
   }
   if (sc.replay) {
     g.font = '800 13px system-ui, sans-serif';
-    pill(g, '● REPLAY', 52, 22, 'rgba(255,60,90,0.85)', '#fff');
+    pill(g, '● REPLAY', 52, h - 64, 'rgba(255,60,90,0.85)', '#fff', w);
   }
   g.restore();
 
@@ -465,9 +517,10 @@ export function draw(g: CanvasRenderingContext2D, v: View, sc: Scene): void {
   }
 }
 
-function pill(g: CanvasRenderingContext2D, text: string, x: number, y: number, bg: string, fg: string): void {
+function pill(g: CanvasRenderingContext2D, text: string, x0: number, y: number, bg: string, fg: string, w: number): void {
   const tw = g.measureText(text).width;
   const pw = tw + 24, ph = 32;
+  const x = Math.max(pw / 2 + 6, Math.min(w - pw / 2 - 6, x0));
   g.fillStyle = bg;
   g.beginPath();
   g.roundRect(x - pw / 2, y - ph / 2, pw, ph, 16);

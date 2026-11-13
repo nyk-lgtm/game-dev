@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  COMET_R, LOCK, MAX_LINK, MODE_IDS, REGRAB, START_Y, W, World, altitude, cinderX, cloneRun, decodeInputs, encodeInputs, heldAt,
+  COMET_R, LOCK, gravityAt, riseAt, MAX_LINK, MODE_IDS, REGRAB, START_Y, W, World, altitude, cinderX, cloneRun, decodeInputs, encodeInputs, heldAt,
   isLit, newRun, replay, step, target, type Ev, type Mode, type Run,
 } from '../../src/sungrazer/core';
 import { Rng } from '../../src/shared/rng';
@@ -45,6 +45,8 @@ describe('sky', () => {
         for (let i = 1; i < spine.length; i++) {
           const p = spine[i - 1], s = spine[i];
           if (s.y - p.y < 17.9 || Math.hypot(s.x - p.x, s.y - p.y) > MAX_LINK + 1e-6 || s.x < 12 || s.x > W - 12) bad.push(`${seed}${mode}: link ${i}`);
+          // Never stacked straight above: a plain upward fling shouldn't fly into the next star.
+          if (Math.abs(s.x - p.x) < 12) bad.push(`${seed}${mode}: link ${i} is a column`);
         }
         for (let i = 0; i < w.stars.length; i++)
           for (let j = i + 1; j < w.stars.length && w.stars[j].y < w.stars[i].y + 60; j++) {
@@ -110,6 +112,22 @@ describe('flight', () => {
     // Still in reach of the same star, but it's off limits for a moment.
     if (Math.hypot(r.x - s.x, r.y - s.y) <= LOCK) expect(r.tether?.star ?? null).not.toBe(s);
     expect(r.since).toBeLessThan(REGRAB);
+  });
+
+  it('flying into a star is its own cause; the opening is gentler than later', () => {
+    const w = new World(21, 'n');
+    const s = w.stars[0];
+    const r = newRun(21, 'n', w);
+    r.x = s.x;
+    r.y = s.y - 12;
+    r.vx = 0;
+    r.vy = 60;
+    while (r.alive && r.tick < 240) step(r, false);
+    expect(r.cause).toBe('star');
+    expect(riseAt(0)).toBeLessThan(1);
+    expect(riseAt(0)).toBeLessThan(riseAt(400) / 2);
+    expect(gravityAt(0)).toBeLessThan(gravityAt(800));
+    expect(riseAt(3000)).toBe(13);
   });
 
   it('does not touch the bottom of the screen while you dawdle: the void takes you', () => {
@@ -178,7 +196,7 @@ describe('replays', () => {
     for (let seed = 200; seed < 240; seed++) {
       const { run } = randomRun(seed, MODE_IDS[seed % 4], 240 * 60);
       expect(Number.isFinite(run.score) && run.score >= 0).toBe(true);
-      if (!run.alive) expect(['burn', 'cinder', 'void']).toContain(run.cause);
+      if (!run.alive) expect(['burn', 'star', 'cinder', 'void']).toContain(run.cause);
     }
   });
 });
