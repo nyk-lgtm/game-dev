@@ -10,7 +10,7 @@ export function rngFor(seed: number, ...parts: number[]): Rng {
   for (const p of parts) h = mixSeed(h, p >>> 0);
   return new Rng(h);
 }
-export const T_CROWD = 0x637277, T_WEATHER = 0x776561, T_MARKET = 0x6d6b74, T_FEST = 0x666573;
+export const T_CROWD = 0x637277, T_WEATHER = 0x776561, T_MARKET = 0x6d6b74, T_FEST = 0x666573, T_PREVIEW = 0x707276;
 
 /** What tonight is like, for worth and purses. */
 export interface NightCtx {

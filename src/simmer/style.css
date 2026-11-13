@@ -184,3 +184,4 @@ button.crowd small { font-size: 12px; }
 .shoprow .pay .sprite { margin-right: -2px; }
 button.secondary.small { min-width: 64px; min-height: 44px; font-size: 13px; padding: 0 8px; }
 #dockEvening button[hidden] { display: none; }
+.nw { white-space: nowrap; }

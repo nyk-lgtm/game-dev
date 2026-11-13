@@ -4,7 +4,8 @@
 
 import { DISHES, INGS, OPEN_MINUTES, SERVE, SPECIES, TUNE, UP, UPGRADES } from './data';
 import { chooseFrom, delights, purseRange, speciesWeights, streetMean, worthTable, type MenuItem, type NightCtx, type Why } from './night';
-import { ctxOf, marketPrice, menuSize, stovesOf, type Run } from './run';
+import { ctxOf, marketPrice, menuSize, stovesOf, wageOf, type Run } from './run';
+import { T_PREVIEW, makeCrowd, rngFor, simulate } from './night';
 
 export interface Forecast {
   ctx: NightCtx;
@@ -152,9 +153,12 @@ export function upgradePayback(r: Run, k: number, menu: MenuItem[]): { perNight:
     return { perNight: best, text: best > 0 ? `${name} on the extra line would add ~${Math.round(best)}¢ tonight` : 'Learn another recipe first to fill the extra line' };
   }
   if (key === 'stove') {
-    const v = profitOf(r, menu, f, stovesOf(r) + 1) - now;
-    const d = demand(r, menu, f);
-    return { perNight: v, text: `Tonight’s orders need ~${Math.round(d.cookMins)} of ${d.capacity} stove minutes${v > 0.5 ? `: ~${Math.round(v)}¢ more cooked in time` : ': one stove keeps up tonight'}` };
+    const h = helperPayback(r, menu);
+    const per = h.saved * h.perGuest + (h.before >= QUEUE_WARN && h.saved * h.perGuest > h.wage ? h.wage : 0);
+    return {
+      perNight: h.saved * h.perGuest,
+      text: h.before >= 0.5 ? `Tonight’s queue lets down ~${Math.round(h.before)} in a typical evening; with a second stove ~${Math.round(h.after)} (~${Math.round(per)}¢ tonight, no helper needed)` : 'One stove keeps up tonight',
+    };
   }
   if (key === 'lantern') {
     const v = profitOf(r, menu, forecast(r, r.day, true)) - now;
@@ -167,16 +171,29 @@ export function upgradePayback(r: Run, k: number, menu: MenuItem[]): { perNight:
     const per = r.ledgers.length ? r.ledgers.reduce((a, l) => a + l.revenue, 0) / Math.max(1, r.ledgers.reduce((a, l) => a + l.served, 0)) : 8;
     return { perNight: gave * per * 0.5, text: gave ? `${gave} gave up waiting last night; about half would have stayed` : 'Nobody gave up waiting last night' };
   }
-  // Cool box: cold dishes chilled tonight, plus what has been thrown out so far (most would have kept).
-  const chill = profitOf(r, menu, { ...f, ctx: { ...f.ctx, cool: true } }) - now;
+  // Cool box: cold dishes chilled tonight (more takers, more delights), plus what has been
+  // thrown out so far (most would have kept).
+  const cold = menu.filter((m) => DISHES[m.dish].tags.includes('cold'));
+  const fc = { ...f, ctx: { ...f.ctx, cool: true } };
+  const chill = profitOf(r, menu, fc) - now;
+  const joy = demand(r, menu, fc).rep - demand(r, menu, f).rep;
   const waste = r.ledgers.reduce((a, l) => a + l.wasteCost, 0);
   const per = r.ledgers.length ? (waste / r.ledgers.length) * 0.6 : 0;
-  const bits = [chill >= 0.5 ? `cold dishes ~${Math.round(chill)}¢ more tonight` : 'no cold dish on tonight’s menu gains', per >= 0.5 ? `~${Math.round(per)}¢ a night less thrown out` : 'little thrown out so far'];
-  return { perNight: chill + per, text: bits.join(' · ') };
+  const bits = [
+    cold.length
+      ? `${cold.map((m) => DISHES[m.dish].icon).join('')} worth ×${TUNE.coolCold} to every guest: ${
+          chill >= 0.5 || joy >= 0.5
+            ? `~${Math.round(Math.max(0, chill))}¢${joy >= 0.5 ? `, ~${Math.round(joy)} more delighted` : ''} tonight`
+            : 'no extra takers at tonight’s prices, but room to charge more'
+        }`
+      : 'no cold dish on tonight’s menu',
+    per >= 0.5 ? `~${Math.round(per)}¢ a night less thrown out` : 'little thrown out so far',
+  ];
+  return { perNight: Math.max(0, chill) + per + joy * 3, text: bits.join(' · ') };
 }
 
-/** The page warns when tonight's orders need more than this share of the stove minutes. */
-export const STOVE_WARN = 0.85;
+/** The page warns about the queue when typical evenings let down at least this many guests. */
+export const QUEUE_WARN = 1;
 
 /** Units of each ingredient "Fill to forecast" aims to have: expected orders × 1.1, rounded up. */
 export function fillNeed(r: Run, menu: MenuItem[], stoves = stovesOf(r)): number[] {
@@ -184,4 +201,43 @@ export function fillNeed(r: Run, menu: MenuItem[], stoves = stovesOf(r)): number
   const need = INGS.map(() => 0);
   menu.forEach((m, i) => DISHES[m.dish].uses.forEach((u) => (need[u] += d.orders[i] * 1.1)));
   return need.map((n) => Math.ceil(n - 1e-9));
+}
+
+/**
+ * Tonight's queue in a few typical evenings: crowds drawn from the forecast (their own seed
+ * stream, never tonight's real crowd), the menu with unlimited stock, `stoves` cooking.
+ * Averages guests who give up waiting or are still queueing at closing.
+ */
+export function queuePreview(r: Run, menu: MenuItem[], stoves: number, samples = 4): { slow: number; closed: number; letdowns: number } {
+  const ctx = ctxOf(r);
+  let slow = 0, closed = 0;
+  for (let k = 0; k < samples; k++) {
+    const guests = makeCrowd(
+      { seed: r.seed, day: r.day, rep: r.rep, ctx, lanterns: r.ups[UP.lantern] > 0, bench: r.ups[UP.bench] > 0, friends: r.friends },
+      rngFor(r.seed, T_PREVIEW, r.day, k),
+    );
+    const night = simulate(guests, menu, ctx, stoves, INGS.map(() => 999));
+    for (const v of night.visits) {
+      if (v.why === 'slow') slow++;
+      else if (v.why === 'closed') closed++;
+    }
+  }
+  return { slow: slow / samples, closed: closed / samples, letdowns: (slow + closed) / samples };
+}
+
+/**
+ * What a helper (or a second stove) would do tonight: guests let down by the queue in a
+ * typical evening now and with one more cook, and what each saved guest is worth (their
+ * profit plus the half ♥ a let-down costs, at `repPts` a point).
+ */
+export function helperPayback(r: Run, menu: MenuItem[]): { before: number; after: number; saved: number; perGuest: number; value: number; wage: number } {
+  const s = stovesOf(r);
+  const before = queuePreview(r, menu, s).letdowns;
+  const after = before > 0 ? queuePreview(r, menu, s + 1).letdowns : 0;
+  const d = demand(r, menu, forecast(r), s);
+  let profit = 0;
+  menu.forEach((m, i) => (profit += d.orders[i] * (m.price - dishCost(r, m.dish))));
+  const perGuest = (d.guests > 0 ? profit / d.guests : 0) + TUNE.repPts * TUNE.lossPer;
+  const saved = Math.max(0, before - after);
+  return { before, after, saved, perGuest, value: saved * perGuest, wage: wageOf(r) };
 }

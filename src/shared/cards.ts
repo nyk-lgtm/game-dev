@@ -61,7 +61,11 @@ export function showCard(html: string, buttons: CardButton[], dismissable = true
   // Long cards get a "more below" hint pinned to the bottom until you scroll
   // there. Only real content counts: not the build line, nor the hint itself.
   const hidden = card.scrollHeight - card.clientHeight - meta.offsetHeight;
-  if (hidden > 24) {
+  // How far real content reaches below the card's visible edge (a last button that
+  // merely dips into the card's bottom padding is in view and needs no hint over it).
+  const edge = card.getBoundingClientRect().bottom;
+  const reach = Math.max(0, ...[...card.children].filter((el) => el !== meta).map((el) => el.getBoundingClientRect().bottom - edge));
+  if (hidden > 24 && reach > 24) {
     const more = document.createElement('div');
     more.className = 'more';
     more.textContent = '▼ scroll for more';

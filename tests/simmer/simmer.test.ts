@@ -35,6 +35,9 @@ import {
   lossFor,
   recipePreview,
   upgradePayback,
+  queuePreview,
+  helperPayback,
+  wageOf,
   type Guest,
   type NightCtx,
 } from '../../src/simmer/core';
@@ -129,7 +132,7 @@ describe('simmer core', () => {
     expect(repChange(0, 10, 0)).toEqual({ gain: 10, loss: 0, delta: 10 });
     expect(repChange(50, 10, 3)).toEqual({ gain: 5, loss: 2, delta: 3 });
     expect(repChange(90, 0, 40).loss).toBe(TUNE.lossCap);
-    expect(repChange(95, 40, 0).delta).toBe(2);
+    expect(repChange(95, 40, 0).delta).toBe(5); // floor: 40 × 20% = 8, capped at 100
     expect(repChange(99, 400, 0).delta).toBe(1);
     expect(repChange(1, 0, 5).delta).toBe(-1);
   });
@@ -232,6 +235,19 @@ describe('simmer core', () => {
   it('let-downs: every two cost a ♥, capped each night', () => {
     expect([0, 1, 2, 3, 4].map(lossFor)).toEqual([0, 1, 1, 2, 2]);
     expect(lossFor(100)).toBe(TUNE.lossCap);
+  });
+
+  it('the queue preview is deterministic, a helper shortens it, and the wage grows with the crowd', () => {
+    const r = newRun(31);
+    r.rep = 100;
+    r.festivals = [0];
+    const one = queuePreview(r, r.lastMenu, 1);
+    expect(queuePreview(r, r.lastMenu, 1)).toEqual(one);
+    expect(one.letdowns).toBeGreaterThan(1);
+    expect(queuePreview(r, r.lastMenu, 2).letdowns).toBeLessThan(one.letdowns);
+    const h = helperPayback(r, r.lastMenu);
+    expect(h.saved).toBeCloseTo(h.before - h.after, 6);
+    expect(wageOf(r)).toBeGreaterThan(wageOf(newRun(31)));
   });
 
   it('payback estimates: recipes, upgrades, Fill to forecast', () => {

@@ -18,9 +18,9 @@ import {
   UPGRADES,
   type WeatherId,
 } from './data';
-import { T_FEST, T_MARKET, T_WEATHER, makeCrowd, rngFor, simulate, type MenuItem, type NightCtx, type NightResult, type Why } from './night';
+import { T_FEST, T_MARKET, T_WEATHER, makeCrowd, rngFor, simulate, streetMean, type MenuItem, type NightCtx, type NightResult, type Why } from './night';
 
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 
 export interface Batch {
   ing: number;
@@ -186,6 +186,13 @@ export function newRun(seed: number): Run {
   };
 }
 
+/** The helper's wage tonight: a base, plus a little per expected guest. */
+export function wageOf(r: Run, d = r.day): number {
+  const ctx = ctxOf(r, d);
+  const guests = streetMean(r.rep, ctx, r.ups[UP.lantern] > 0) + r.friends.length;
+  return Math.round(TUNE.wage + TUNE.wagePer * guests);
+}
+
 export const upCost = (r: Run, k: number): number | null => UPGRADES[k].cost[r.ups[k]] ?? null;
 
 /** Why an action can't be taken now, or null. */
@@ -219,7 +226,7 @@ export function actError(r: Run, a: string): string | null {
     if (p.menu.length > menuSize(r)) return 'Too many dishes';
     if (p.menu.some((x) => !r.known[x.dish])) return 'Unknown recipe';
     if (new Set(p.menu.map((x) => x.dish)).size !== p.menu.length) return 'A dish twice';
-    if (p.helper && TUNE.wage > r.coins) return 'Not enough coins for a helper';
+    if (p.helper && wageOf(r) > r.coins) return 'Not enough coins for a helper';
     return null;
   }
   return 'Unknown action';
@@ -273,7 +280,7 @@ export function act(r: Run, a: string): boolean {
 
 function openStall(r: Run, plan: { helper: boolean; menu: MenuItem[] }): void {
   const ctx = ctxOf(r);
-  const wage = plan.helper ? TUNE.wage : 0;
+  const wage = plan.helper ? wageOf(r) : 0;
   r.coins -= wage;
   const guests = makeCrowd({ seed: r.seed, day: r.day, rep: r.rep, ctx, lanterns: r.ups[UP.lantern] > 0, bench: r.ups[UP.bench] > 0, friends: r.friends });
   const have = onHand(r);
@@ -352,12 +359,12 @@ export function replay(seed: number, actions: string[]): Run {
 export const REP_MAX = 100;
 /**
  * Tonight's change in renown: each delighted guest spreads the word, but only to the
- * share of the market that hasn't heard of you yet ((100 − renown)%); guests let down
+ * share of the market that hasn't heard of you yet ((100 − renown)%, never under `TUNE.gainFloor`); guests let down
  * (sold out, waited too long, turned away at closing) grumble: every two (rounded up)
  * cost a point, at most `TUNE.lossCap` a night.
  */
 export function repChange(rep: number, delighted: number, letdowns: number): { gain: number; loss: number; delta: number } {
-  const gain = Math.round((delighted * (REP_MAX - rep)) / REP_MAX);
+  const gain = Math.round(delighted * Math.max(TUNE.gainFloor, (REP_MAX - rep) / REP_MAX));
   const loss = lossFor(letdowns);
   const after = Math.max(0, Math.min(REP_MAX, rep + gain - loss));
   return { gain, loss, delta: after - rep };

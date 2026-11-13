@@ -421,6 +421,16 @@ export class Scene {
   }
 
   /** Jump to the end of the night: every visit resolves at once. */
+  /** Fast-forward (unseen) to sim minute t: visits on the way resolve as usual. */
+  seek(t: number): void {
+    if (!this.night || this.done) return;
+    const sp = this.speed;
+    this.speed = 60;
+    while (this.t < t && !this.done) this.step(0.05);
+    this.speed = sp;
+    this.draw();
+  }
+
   skip(): void {
     if (!this.night || this.done) return;
     this.t = this.end;
