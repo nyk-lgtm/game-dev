@@ -167,6 +167,15 @@ export class Audio {
     this.song = null;
   }
 
+  /** Fade the song out over `s` seconds (the outro before the results). */
+  fadeOut(s: number): void {
+    if (!this.bus || !this.ctx) return;
+    const g = this.bus.gain, t = this.ctx.currentTime;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(0.0001, t + s);
+  }
+
   pause(): void {
     if (this.ctx && this.ctx.state === 'running') void this.ctx.suspend().catch(() => {});
     this.resetClock();

@@ -59,7 +59,7 @@ export interface Note {
 export interface Chart {
   level: Level;
   notes: Note[];
-  /** Judged objects: every note plus every hold's tail. */
+  /** Judged notes (one judgement each, holds included). */
   objects: number;
 }
 
@@ -252,7 +252,7 @@ export function makeChart(song: Song, level: Level): Chart {
   }
   notes.sort((a, b) => a.t - b.t || a.lane - b.lane);
   notes.forEach((n, i) => (n.id = i));
-  return { level, notes, objects: notes.length + notes.filter((n) => n.kind === 'hold').length };
+  return { level, notes, objects: notes.length };
 }
 
 /** Stats for the probe and the menu: notes a second, lane balance, longest same-lane run. */

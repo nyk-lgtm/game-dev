@@ -30,6 +30,14 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         song menu (level, new / daily / recent songs, song codes and links, note speed, timing ±5 and calibration);
         calibration screen; first-visit help + calibration prompt; "needs sound" card (turn on / play silently);
         bug reports and `?seed=&lv=&a=`; hub card first + Daily link. Pixel 7 checked (headless: audio context runs).
+  - [x] Blind playtest fixes (rules v2; visual timing was "excellent": tapping on sight gave 98-100% Perfect):
+        calibration guide ring (optional), result card with delay/spread/taps and Keep/Retry, retry asked for
+        negative, > 300 ms or wide results, overlay guarded against late taps (that is how −119 ms got saved),
+        prompt re-offered each visit with a menu dot until calibrated or "Don't ask again"; offset clamped −50..300;
+        "shift the sound" explained, not re-offered when the last shift didn't move the error, fixed-height box;
+        ~2 s outro with a fade and "Woven…" before results; bigger judgement words, grey struck MISS, "DROPPED" only
+        for holds you held, combo in the HUD; copy feedback on the buttons (no stacked toasts); one judgement per note
+        (counts match the menu); the menu song persists; Good 0.75 and grade lines 950/880/760/600k (Good FC = B).
   - [ ] Next: owner playtest on the phone. Watch: is the default timing guess close before calibrating, is
         calibration steady (spread), do the charts feel on the music (especially Hard's kick/lead chords), are flicks
         detected reliably, are songs varied enough (forms, grooves, lead tones), is ~1.2 notes/s right for Easy.

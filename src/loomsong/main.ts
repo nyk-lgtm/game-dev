@@ -25,7 +25,7 @@ if (p.has('seed') && p.has('a') && Number.isFinite(Number(p.get('seed')))) {
   } else if (wantsDaily()) {
     game.level = level;
     game.playDaily();
-  } else game.load(randomSeed(), level, null);
+  } else game.load(profile.song ?? randomSeed(), level, null);
   game.welcome();
 }
 

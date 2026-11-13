@@ -14,7 +14,7 @@ import {
   FLICK_MAX, GOOD, LEVELS, PERFECT, RULES_VERSION, VALUE, botEvents, chartFor, chartStats, encodeEvents, gradeName, keyName, judgePlay, songFor, Judge,
   type Chart, type Grade, type Hit, type InputEv, type Judgment, type Level, type Result, type Song,
 } from './core';
-import { draw, drawCalib, laneAt, laneX, layout, tapestry, LANE_COLORS, type Burst, type Layout, type Popup, type Spark } from './render/draw';
+import { draw, drawCalib, laneAt, laneX, layout, tapestry, LANE_COLORS, MISS_COLOR, type Burst, type Layout, type Popup, type Spark } from './render/draw';
 
 export const store = makeStore('loomsong.');
 const $ = (id: string) => document.getElementById(id)!;
@@ -32,8 +32,19 @@ export interface Profile {
   recent: number[];
   /** Played without sound on purpose (sound off on the hub). */
   silentOk: boolean;
+  /** The song on the menu (kept across reloads; dailies aside). */
+  song: number | null;
+  /** "Don't ask again" on the timing prompt. */
+  calibDismissed: boolean;
+  /** Flash a ring on each calibration click. */
+  calibRing: boolean;
+  /** The last "Shift timing": the average error it was meant to fix, checked on the next play. */
+  shift: { mean: number } | null;
 }
-export const loadProfile = (): Profile => ({ plays: 0, best: 0, bestGrade: null, level: 0, speed: 1, offset: null, tips: [], recent: [], silentOk: false, ...store.load<Partial<Profile>>('profile', {}) });
+export const loadProfile = (): Profile => ({
+  plays: 0, best: 0, bestGrade: null, level: 0, speed: 1, offset: null, tips: [], recent: [], silentOk: false, song: null, calibDismissed: false, calibRing: true, shift: null,
+  ...store.load<Partial<Profile>>('profile', {}),
+});
 const saveProfile = (p: Profile) => store.save('profile', p);
 type Bests = Record<string, { score: number; grade: Grade; acc: number }>;
 const loadBests = () => store.load<Bests>('bests', {});
@@ -43,6 +54,26 @@ export const SPEEDS = [
   { name: 'Normal', k: 1 },
   { name: 'Fast', k: 0.78 },
 ];
+/** Timing offsets outside this range (ms) are not believable: phones play sound late, not early. */
+export const OFFSET_MIN = -50;
+export const OFFSET_MAX = 300;
+export const clampOffset = (ms: number) => Math.max(OFFSET_MIN, Math.min(OFFSET_MAX, Math.round(ms)));
+
+/** One message at a time, low on the screen (it never covers a card's title or the daily line). */
+export function say(msg: string): void {
+  for (const el of document.querySelectorAll('.toast')) el.remove();
+  toast(msg).classList.add('low');
+}
+
+/** Copy, and say so on the button itself. */
+async function copyInto(btn: HTMLElement | null, text: string): Promise<void> {
+  const ok = await copyText(text);
+  if (!btn) return;
+  const was = btn.textContent;
+  btn.textContent = ok ? 'Copied ✓' : 'Copy failed';
+  setTimeout(() => btn.isConnected && (btn.textContent = was), 1800);
+}
+
 /** A swipe this long (CSS px) is a flick. */
 const FLICK_PX = 26;
 /** The live judge runs this far behind the clock, so a touch delivered late still counts. */
@@ -80,8 +111,8 @@ export class Game {
   events: InputEv[] = [];
   state: State = 'menu';
   result: Result | null = null;
-  /** Feed a bot's taps (screenshots, demos): `__game.auto = true`. */
-  auto = false;
+  /** Feed a bot's taps (screenshots, demos): `__game.auto = true`, or a number for a timing bias in ms. */
+  auto: boolean | number = false;
   readonly audio = new Audio();
   private canvas = $('board') as HTMLCanvasElement;
   private g = this.canvas.getContext('2d')!;
@@ -99,15 +130,18 @@ export class Game {
   private popups: Popup[] = [];
   private sparks: Spark[] = [];
   private cloth: [number, Judgment][] = [];
-  private comboT = 0;
   private sum = 0;
   private judged = 0;
   private time = 0;
   private last = 0;
   private botQ: InputEv[] = [];
+  /** Where each note's stitch sits in the live cloth (a dropped hold turns it into a miss). */
+  private clothAt = new Map<number, number>();
+  private lastEnd = 0;
+  private fading = false;
   private botI = 0;
   private fx = !reducedFx();
-  private calib: { start: number; interval: number; total: number; errs: number[]; tapT: number; scheduled: boolean } | null = null;
+  private calib: { start: number; interval: number; total: number; errs: number[]; tapT: number; scheduled: boolean; asked: number; ring: number } | null = null;
   /** The song time the last frame drew (for checks). */
   shownNow = 0;
 
@@ -122,7 +156,11 @@ export class Game {
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && (this.state === 'play' || this.state === 'countdown')) this.pause();
     });
-    $('menuBtn').onclick = () => (this.state === 'play' || this.state === 'countdown' ? this.pause() : this.state !== 'calib' && this.showMenu());
+    $('menuBtn').onclick = () => {
+      if (this.state === 'play' || this.state === 'countdown') this.pause();
+      else if (this.state === 'calib') this.calibCancel();
+      else this.showMenu();
+    };
     this.resize();
     requestAnimationFrame((t) => this.frame(t));
   }
@@ -131,9 +169,9 @@ export class Game {
 
   get offset(): number {
     const p = loadProfile();
-    if (p.offset !== null) return p.offset;
+    if (p.offset !== null) return clampOffset(p.offset);
     const r = this.audio.reportedLatency();
-    return r !== null ? r + 25 : 70;
+    return r !== null ? clampOffset(r + 25) : 70;
   }
 
   private get scroll(): number {
@@ -148,6 +186,13 @@ export class Game {
     this.daily = daily;
     this.song = songFor(this.seed);
     this.chart = chartFor(this.seed, level);
+    if (!daily) {
+      const p = loadProfile();
+      if (p.song !== this.seed) {
+        p.song = this.seed;
+        saveProfile(p);
+      }
+    }
     this.judge = new Judge(this.chart);
     this.events = [];
     this.result = null;
@@ -179,6 +224,8 @@ export class Game {
     this.popups = [];
     this.sparks = [];
     this.cloth = [];
+    this.clothAt.clear();
+    this.fading = false;
     this.ptrs.clear();
     this.laneCount = [0, 0, 0, 0];
     this.sum = 0;
@@ -196,7 +243,7 @@ export class Game {
     const ok = this.audio.ensure();
     if (!ok && !this.audio.silent) {
       this.audio.silent = true;
-      toast('No Web Audio here: playing silently');
+      say('No Web Audio here: playing silently');
     }
     this.load(this.seed, this.level, this.daily);
     const lead = Math.max(2.4, this.scroll / 1000 + 1.2);
@@ -204,9 +251,10 @@ export class Game {
     this.startPerf = performance.now();
     this.audioSeen = false;
     this.audio.play(this.song, this.startAt);
-    const last = this.chart.notes[this.chart.notes.length - 1];
-    this.endMs = Math.max(last ? last.end + 1500 : 0, this.song.steps * this.song.stepMs + 1200);
-    this.botQ = this.auto ? botEvents(this.chart, { jitter: 22, seed: this.seed, skip: 0.02 }) : [];
+    // The song plays out: its last bar rings and fades before the results.
+    this.lastEnd = this.chart.notes.reduce((m, n) => Math.max(m, n.end), 0);
+    this.endMs = Math.max(this.lastEnd + 2200, this.song.steps * this.song.stepMs + 1800);
+    this.botQ = this.auto !== false ? botEvents(this.chart, { jitter: 22, seed: this.seed, skip: 0.02, bias: typeof this.auto === 'number' ? this.auto : 0 }) : [];
     this.botI = 0;
     this.state = 'play';
     this.hud();
@@ -343,11 +391,11 @@ export class Game {
       a.stop();
       this.startAt = performance.now() / 1000 + Math.max(2.4, this.scroll / 1000 + 1.2);
       this.startPerf = performance.now();
-      toast('Sound didn’t start: playing silently');
+      say('Sound didn’t start: playing silently');
     }
     a.pump();
     const now = this.songAt(performance.now());
-    if (this.auto) {
+    if (this.botQ.length) {
       while (this.botI < this.botQ.length && this.botQ[this.botI].t <= now) {
         const e = this.botQ[this.botI++];
         if (e.k === 'd') this.laneCount[e.lane]++;
@@ -359,22 +407,37 @@ export class Game {
     const hits = this.judge.drain();
     for (const h of hits) this.effect(h);
     if (hits.length) this.hud();
+    if (!this.fading && now > this.endMs - 1600) {
+      this.fading = true;
+      a.fadeOut(1.5);
+    }
     if (now > this.endMs) this.finish();
   }
 
   private effect(h: Hit): void {
     const lane = h.note.lane;
+    if (h.tail) {
+      // A hold's end: kept is a small burst; let go too early turns the whole note into a miss.
+      this.bursts.push({ lane, j: h.j, t: this.time, tail: true });
+      if (h.j !== 2) return;
+      const head = this.judge.head[h.note.id];
+      const at = this.clothAt.get(h.note.id);
+      if (at !== undefined) this.cloth[at] = [lane, 2];
+      if (head === 0 || head === 1) this.sum -= VALUE[head];
+      this.popups = this.popups.filter((p) => p.lane !== lane);
+      this.popups.push({ lane, text: 'DROPPED', sub: 'held too short', color: MISS_COLOR, t: this.time, strike: true });
+      return;
+    }
+    this.clothAt.set(h.note.id, this.cloth.length);
     this.cloth.push([lane, h.j]);
     this.sum += VALUE[h.j];
     this.judged++;
-    if (h.j !== 2) this.comboT = this.time;
-    this.bursts.push({ lane, j: h.j, t: this.time, tail: h.tail });
-    if (h.tail && h.j !== 2) return;
+    this.bursts.push({ lane, j: h.j, t: this.time, tail: false });
     const pw = h.note.kind === 'flick' ? 60 : PERFECT;
-    const sub = h.j === 1 && h.dt !== null ? (h.dt < -pw ? 'early' : h.dt > pw ? 'late' : '') : h.j === 2 && h.dt !== null ? (h.dt < 0 ? 'too early' : 'too late') : h.tail ? 'let go' : '';
-    const [text, color] = h.j === 0 ? ['PERFECT', '#fff3c4'] : h.j === 1 ? ['GOOD', '#8ee6c8'] : ['MISS', '#ff6b7a'];
+    const sub = h.j === 1 && h.dt !== null ? (h.dt < -pw ? 'early' : h.dt > pw ? 'late' : '') : h.j === 2 && h.dt !== null ? (h.dt < 0 ? 'too early' : 'too late') : '';
+    const [text, color] = h.j === 0 ? ['PERFECT', '#fff3c4'] : h.j === 1 ? ['GOOD', '#8ee6c8'] : ['MISS', MISS_COLOR];
     this.popups = this.popups.filter((p) => p.lane !== lane);
-    this.popups.push({ lane, text, sub, color, t: this.time });
+    this.popups.push({ lane, text, sub, color, t: this.time, strike: h.j === 2 });
     if (this.fx && h.j === 0) {
       const x = laneX(this.L, lane);
       for (let i = 0; i < 7; i++) {
@@ -394,9 +457,13 @@ export class Game {
       const c = this.calib;
       const now = this.audio.now();
       const n = c.scheduled ? Math.floor((now - c.start) / c.interval) + 1 : 0;
+      // The guide ring flashes when the click should be heard (sent time + the current timing guess).
+      const heard = now - this.offset / 1000 - c.start;
+      const k = Math.floor(heard / c.interval);
+      const ring = c.scheduled && c.ring && k >= 0 && k < c.total ? heard - k * c.interval : 9;
       drawCalib(this.g, {
-        L, time: this.time, errs: c.errs, clicks: Math.max(0, n), total: c.total, pulse: this.time - c.tapT,
-        msg: !c.scheduled ? 'Starting the click…' : n <= 3 ? 'Listen first…' : 'Tap anywhere, on each click',
+        L, time: this.time, errs: c.errs, clicks: Math.max(0, Math.min(n, c.total)), total: c.total, pulse: this.time - c.tapT, ring,
+        msg: !c.scheduled ? 'Starting the click…' : n <= 3 ? 'Listen first…' : c.ring ? 'Tap with the sound:\nthe ring is only a guide' : 'Tap anywhere, on each click',
       });
       return;
     }
@@ -406,11 +473,12 @@ export class Game {
     const first = this.chart.notes[0]?.t ?? 0;
     const held = this.laneCount.map((c) => c > 0);
     const intro = playing && now < Math.min(first - 400, 1500);
+    const outro = this.state === 'play' && this.lastEnd > 0 && now > this.lastEnd + 350;
     draw(this.g, {
-      L, song: this.song, chart: this.chart, judge: this.judge, now, scroll: this.scroll, held, combo: this.state === 'countdown' ? 0 : this.judge.combo, comboT: this.comboT,
+      L, song: this.song, chart: this.chart, judge: this.judge, now, scroll: this.scroll, held, outro: outro ? Math.min(1, (now - this.lastEnd - 350) / 600) : 0,
       time: this.time, bursts: this.bursts, popups: this.popups, sparks: this.sparks, cloth: this.cloth,
-      title: intro ? this.song.name : null,
-      sub: intro ? `${LEVELS[this.level].name} · ${this.song.bpm} BPM${this.audio.silent ? ' · silent' : ''}` : null,
+      title: intro || outro ? this.song.name : null,
+      sub: intro ? `${LEVELS[this.level].name} · ${this.song.bpm} BPM${this.audio.silent ? ' · silent' : ''}` : outro ? (this.judge.combo === this.judged && this.judged > 0 ? 'Full combo! Woven…' : 'Woven…') : null,
       countdown: this.state === 'countdown' ? Math.max(1, Math.ceil((this.countEnd - performance.now()) / 800)) : null,
       hint: playing && loadProfile().plays < 2 && now < first + 5000,
       fx: this.fx,
@@ -424,6 +492,10 @@ export class Game {
     const live = this.state === 'menu' ? 0 : Math.round((900_000 * this.sum) / total + (100_000 * this.judge.maxCombo) / total);
     $('score').textContent = fmtScore(this.result ? this.result.score : live);
     $('acc').textContent = this.judged ? `${((100 * this.sum) / this.judged).toFixed(1)}%` : '—';
+    const c = this.state === 'play' || this.state === 'paused' || this.state === 'countdown' ? this.judge.combo : 0;
+    const ce = $('combo');
+    ce.textContent = c ? String(c) : '—';
+    ce.classList.toggle('hot', c >= 20);
     $('songName').textContent = this.song.name;
     $('songMeta').textContent = `${this.daily ? 'Daily · ' : ''}${LEVELS[this.level].name}`;
   }
@@ -451,7 +523,11 @@ export class Game {
       p.bestGrade = r.grade;
     }
     p.recent = [this.seed, ...p.recent.filter((s) => s !== this.seed)].slice(0, 6);
+    // Did the last "Shift timing" change the error? (It moves the sound, so it can't if you tap by sight.)
+    const shifted = p.shift;
+    p.shift = null;
     saveProfile(p);
+    this.shiftNote = shifted && r.hits >= 20 ? (Math.abs(r.meanDt - shifted.mean) < 12 ? 'same' : 'changed') : null;
     store.save('last', { v: RULES_VERSION, seed: this.seed, lv: this.level, off: Math.round(this.offset), a: encodeEvents(this.events) });
     let dailyLine = '';
     if (this.daily) {
@@ -462,10 +538,25 @@ export class Game {
     this.showResults(r, prev && !newBest ? prev.score : null, newBest && !!prev, dailyLine);
   }
 
+  /** What the last "Shift timing" did to the error, for this results card. */
+  private shiftNote: 'same' | 'changed' | null = null;
+
+  /** The timing box under the stats: the average error, and a shift only when it could help. */
+  private timingBox(r: Result, recorded: boolean): string {
+    if (recorded || r.hits < 20) return '';
+    const ms = Math.round(Math.abs(r.meanDt));
+    const dir = r.meanDt > 0 ? 'late' : 'early';
+    const target = clampOffset(this.offset + r.meanDt);
+    const avg = `On average you tapped <b class="nw">${ms} ms ${dir}</b>.`;
+    if (this.shiftNote === 'same' && ms >= 15)
+      return `<div class="timing">${avg} The last shift didn’t change that, so you’re probably tapping by sight, which is fine: the beads and the judging always line up. No more shifts suggested.</div>`;
+    if (ms < 15) return `<div class="timing">${avg} Right on.</div>`;
+    if (target === Math.round(this.offset)) return `<div class="timing">${avg} Timing is already at its ${target > 0 ? 'latest' : 'earliest'} setting.</div>`;
+    return `<div class="timing">${avg} If you play by ear, <button class="link" id="fixTiming">shift the sound <span class="nw">${r.meanDt > 0 ? '+' : '−'}${Math.abs(target - Math.round(this.offset))} ms</span></button> to line it up with the beads. Tapping by sight? Then a shift won’t change this.</div>`;
+  }
+
   showResults(r: Result, prevBest: number | null, improved: boolean, extra = '', recorded = false): void {
     const tags = [r.allPerfect ? 'ALL PERFECT' : r.fullCombo ? 'FULL COMBO' : '', improved ? 'NEW BEST' : ''].filter(Boolean);
-    const timing = r.hits >= 20 && Math.abs(r.meanDt) >= 15 && !recorded;
-    const ms = Math.round(Math.abs(r.meanDt));
     showCard(
       `<div class="grade g${r.grade}"><span>${r.grade}</span><b>${gradeName(r.grade)}</b></div>
        ${tags.length ? `<div class="tags">${tags.map((t) => `<span>${t}</span>`).join('')}</div>` : ''}
@@ -473,14 +564,14 @@ export class Game {
        <p class="meta2">${this.song.name} · ${LEVELS[this.level].name}${prevBest !== null ? ` · best ${fmtScore(prevBest)}` : ''}</p>
        <div class="stats">
          <span><b>${r.acc.toFixed(1)}%</b>accuracy</span>
-         <span><b>${r.maxCombo}</b>max combo / ${r.objects}</span>
+         <span><b>${r.maxCombo}</b>max combo of ${r.objects}</span>
          <span class="j0"><b>${r.perfect}</b>perfect</span>
          <span class="j1"><b>${r.good}</b>good</span>
          <span class="j2"><b>${r.miss}</b>miss</span>
          <span><b>${r.early}·${r.late}</b>early·late</span>
        </div>
        <div class="cloth"></div>
-       ${timing ? `<p class="hint">You tapped <b>${ms} ms ${r.meanDt > 0 ? 'late' : 'early'}</b> on average. <button class="link" id="fixTiming">Shift timing ${r.meanDt > 0 ? '+' : '−'}${ms} ms</button></p>` : ''}
+       ${this.timingBox(r, recorded)}
        ${extra}
        <div class="chips lv">${LEVELS.map((L, i) => `<button data-lv="${i}" class="${i === this.level ? 'on' : ''}">${L.name}</button>`).join('')}</div>
        <div class="row3"><button class="secondary" id="rNew">New song</button><button class="secondary" id="rMenu">Song menu</button><button class="secondary" id="rHub">All games</button></div>`,
@@ -497,9 +588,13 @@ export class Game {
     if (fix)
       fix.onclick = () => {
         const p = loadProfile();
-        p.offset = Math.round(this.offset + r.meanDt);
+        p.offset = clampOffset(this.offset + r.meanDt);
+        p.shift = { mean: r.meanDt };
         saveProfile(p);
-        fix.replaceWith(Object.assign(document.createElement('b'), { textContent: `Timing now ${p.offset} ms` }));
+        // Same box, same size: only the words change.
+        const box = fix.parentElement!;
+        box.style.height = `${box.offsetHeight}px`;
+        box.innerHTML = `Sound shifted: timing is now <b class="nw">${p.offset} ms</b>. The beads and judging stay put; play again and see if your error shrinks.`;
       };
     this.wireLevels(() => this.play());
     if (!recorded) {
@@ -557,7 +652,7 @@ export class Game {
        ${recent.length ? `<div class="recent"><span>Recent</span>${recent.map((r) => `<button data-seed="${r}">${songFor(r).name}</button>`).join('')}</div>` : ''}
        <div class="opts">
          <div class="opt"><span>Note speed</span><div class="chips sp">${SPEEDS.map((x, i) => `<button data-sp="${i}" class="${i === p.speed ? 'on' : ''}">${x.name}</button>`).join('')}</div></div>
-         <div class="opt"><span>Timing <b>${Math.round(this.offset)} ms</b>${p.offset === null ? ' (a guess)' : ''}</span><div class="chips"><button id="mMinus" aria-label="Earlier">−5</button><button id="mPlus" aria-label="Later">+5</button><button id="mCal">Calibrate</button></div></div>
+         <div class="opt"><span>Timing <b>${Math.round(this.offset)} ms</b>${p.offset === null ? ' (a guess: calibrate for a real number)' : ''}</span><div class="chips"><button id="mMinus" aria-label="Earlier">−5</button><button id="mPlus" aria-label="Later">+5</button><button id="mCal" class="${p.offset === null && !p.calibDismissed ? 'badge' : ''}">Calibrate</button></div></div>
        </div>
        <p class="code">Song code <b>${songCode(this.seed)}</b> · <button class="link" id="mShare">copy link</button></p>
        <div class="row3"><button class="secondary" id="mHelp">How to play</button><button class="secondary" id="mBug">Bug report</button><button class="secondary" id="mHub">All games</button></div>`,
@@ -566,7 +661,7 @@ export class Game {
     );
     this.wireLevels(() => this.showMenu());
     $('mHelp').onclick = () => this.showHelp(false, () => this.showMenu());
-    $('mBug').onclick = () => void this.copyReport();
+    $('mBug').onclick = () => void copyInto($('mBug'), this.reportText());
     $('mHub').onclick = () => (location.href = '../');
     $('mNew').onclick = () => this.newSong();
     $('mDaily').onclick = () => {
@@ -576,19 +671,16 @@ export class Game {
         this.showMenu();
       }
     };
-    $('mCal').onclick = () => this.calibrate();
+    $('mCal').onclick = () => this.calibIntro();
     const nudge = (d: number) => {
       const q = loadProfile();
-      q.offset = Math.round(this.offset + d);
+      q.offset = clampOffset(this.offset + d);
       saveProfile(q);
       this.showMenu();
     };
     $('mMinus').onclick = () => nudge(-5);
     $('mPlus').onclick = () => nudge(5);
-    $('mShare').onclick = async () => {
-      const url = `${location.origin}${location.pathname}?song=${songCode(this.seed)}`;
-      toast((await copyText(url)) ? 'Link to this song copied' : 'Copy failed');
-    };
+    $('mShare').onclick = () => void copyInto($('mShare'), `${location.origin}${location.pathname}?song=${songCode(this.seed)}`);
     for (const b of document.querySelectorAll<HTMLButtonElement>('#overlay [data-seed]'))
       b.onclick = () => {
         if (this.daily) leaveDaily();
@@ -609,6 +701,7 @@ export class Game {
     const p = loadProfile();
     if (!soundOn() && !p.silentOk) this.needSound();
     else if (!p.tips.includes('help')) this.showHelp(true);
+    else if (p.offset === null && !p.calibDismissed) this.calibPrompt();
     else this.showMenu();
   }
 
@@ -681,7 +774,7 @@ export class Game {
     );
   }
 
-  /** First visit: offer to calibrate. */
+  /** Offered on every visit until you calibrate or say "don't ask again" (the menu's Calibrate keeps a dot meanwhile). */
   calibPrompt(): void {
     const p = loadProfile();
     if (p.offset !== null) return this.showMenu();
@@ -690,11 +783,42 @@ export class Game {
        <p>Phones play sound late, by anything from 20 to 250 ms, and Loomsong has to know how late yours is. You’ll hear a click: tap along with it about 20 times (15 seconds).</p>
        <p class="meta2">Use the speaker or wired headphones you’ll play with. Bluetooth adds a lot of delay.</p>`,
       [
-        { label: 'Calibrate now', primary: true, onClick: () => this.calibrate() },
-        { label: 'Skip (use a guess)', onClick: () => this.showMenu() },
+        { label: 'Calibrate now', primary: true, onClick: () => this.calibIntro() },
+        { label: 'Not now', onClick: () => this.showMenu() },
+        {
+          label: 'Don’t ask again',
+          onClick: () => {
+            const q = loadProfile();
+            q.calibDismissed = true;
+            saveProfile(q);
+            this.showMenu();
+          },
+        },
       ],
       false,
     );
+  }
+
+  /** Before the clicks: how it works, and the guide ring on or off. */
+  calibIntro(): void {
+    const p = loadProfile();
+    showCard(
+      `<h2>Calibrate timing</h2>
+       <p>You’ll hear 22 clicks. Listen to the first three, then <b>tap anywhere along with the sound</b> of each click.</p>
+       <div class="opt"><span>Guide ring (flashes on each click; tap with the sound, not the ring)</span><div class="chips"><button data-ring="1" class="${p.calibRing ? 'on' : ''}">Ring on</button><button data-ring="0" class="${p.calibRing ? '' : 'on'}">Ring off</button></div></div>`,
+      [
+        { label: 'Start', primary: true, onClick: () => this.calibrate() },
+        { label: 'Back', onClick: () => this.showMenu() },
+      ],
+      false,
+    );
+    for (const b of document.querySelectorAll<HTMLButtonElement>('#overlay [data-ring]'))
+      b.onclick = () => {
+        const q = loadProfile();
+        q.calibRing = b.dataset.ring === '1';
+        saveProfile(q);
+        this.calibIntro();
+      };
   }
 
   calibrate(): void {
@@ -702,25 +826,42 @@ export class Game {
     if (!soundOn()) return this.needSound();
     this.audio.silent = false;
     if (!this.audio.ensure()) {
-      toast('Calibration needs Web Audio');
+      say('Calibration needs Web Audio');
       return this.showMenu();
     }
     this.audio.stop();
     this.state = 'calib';
-    this.calib = { start: 0, interval: 0.6, total: 22, errs: [], tapT: -9, scheduled: false };
+    this.calib = { start: 0, interval: 0.6, total: 22, errs: [], tapT: -9, scheduled: false, asked: performance.now(), ring: loadProfile().calibRing ? 1 : 0 };
+  }
+
+  private calibCancel(): void {
+    this.calib = null;
+    this.state = 'menu';
+    this.showMenu();
   }
 
   private calibTick(): void {
     const c = this.calib!;
     const a = this.audio;
     if (!c.scheduled) {
-      if (!a.running) return;
+      if (!a.running) {
+        if (performance.now() - c.asked > 2500) {
+          this.calib = null;
+          this.state = 'menu';
+          this.guardOverlay();
+          showCard(`<h2>No sound yet</h2><p>The click didn’t start: the phone hasn’t let the page play sound. Check the volume, tap Try again, and keep the screen on.</p>`, [
+            { label: 'Try again', primary: true, onClick: () => this.calibrate() },
+            { label: 'Back', onClick: () => this.showMenu() },
+          ], false);
+        }
+        return;
+      }
       c.start = a.now() + 0.8;
       for (let i = 0; i < c.total; i++) a.click(c.start + i * c.interval, i % 4 === 0);
       c.scheduled = true;
       return;
     }
-    if (a.now() > c.start + c.total * c.interval + 0.3) this.calibDone();
+    if (a.now() > c.start + c.total * c.interval + 0.9) this.calibDone();
   }
 
   private calibTap(e: PointerEvent): void {
@@ -741,8 +882,10 @@ export class Game {
     this.calib = null;
     this.state = 'menu';
     const errs = [...c.errs].sort((a, b) => a - b);
+    // Taps still landing as the card appears must not press its buttons.
+    this.guardOverlay();
     if (errs.length < 8) {
-      showCard(`<h2>Not enough taps</h2><p>Only ${errs.length} taps landed near a click. Tap along with each click you hear.</p>`, [
+      showCard(`<h2>Not enough taps</h2><p>Only ${errs.length} of your taps landed near a click (at least 8 are needed). Tap along with each click you hear.</p>`, [
         { label: 'Try again', primary: true, onClick: () => this.calibrate() },
         { label: 'Back', onClick: () => this.showMenu() },
       ], false);
@@ -752,33 +895,54 @@ export class Game {
     const q1 = errs[Math.floor(errs.length / 4)], q3 = errs[Math.floor((errs.length * 3) / 4)];
     const spread = Math.round((q3 - q1) / 2);
     const off = Math.round(med);
+    const keep = (v: number) => {
+      const p = loadProfile();
+      p.offset = clampOffset(v);
+      saveProfile(p);
+      this.showMenu();
+    };
+    const summary = `<div class="calres"><span><b>${off} ms</b>your delay</span><span><b>±${spread} ms</b>spread</span><span><b>${errs.length}</b>taps used</span></div>`;
+    if (off < OFFSET_MIN || off > OFFSET_MAX || spread > 60) {
+      const why = off < OFFSET_MIN
+        ? `Your taps came <b>before</b> the clicks were even played. Phones play sound late, never early, so you were probably tapping ahead of the sound (or to the ring).`
+        : off > OFFSET_MAX
+          ? `That is a very long delay. Bluetooth headphones can do that; wired ones or the speaker are much quicker.`
+          : `Your taps were spread out a lot, so this number isn’t reliable.`;
+      showCard(
+        `<h2>That doesn’t look right</h2>${summary}<p>${why} Try again and tap with the sound of each click.</p>`,
+        [
+          { label: 'Try again', primary: true, onClick: () => this.calibIntro() },
+          { label: `Keep ${clampOffset(off)} ms anyway`, onClick: () => keep(off) },
+          { label: 'Cancel', onClick: () => this.showMenu() },
+        ],
+        false,
+      );
+      return;
+    }
     this.audio.chime();
     showCard(
-      `<h2>Your timing: ${off} ms</h2>
-       <p>Your taps landed ${off} ms after the click was sent, give or take ${spread} ms. Loomsong will take that off every tap.</p>
-       ${spread > 45 ? '<p class="meta2">That was a wide spread: another try may give a steadier number.</p>' : ''}`,
+      `<h2>Your timing</h2>${summary}
+       <p>Your taps landed ${off} ms after each click was sent. Loomsong will take that off every tap, and line the beads up with the sound.</p>
+       ${spread > 35 ? '<p class="meta2">A fairly wide spread: another try may give a steadier number.</p>' : ''}`,
       [
-        {
-          label: 'Save',
-          primary: true,
-          onClick: () => {
-            const p = loadProfile();
-            p.offset = off;
-            saveProfile(p);
-            this.showMenu();
-          },
-        },
-        { label: 'Try again', onClick: () => this.calibrate() },
+        { label: `Keep ${off} ms`, primary: true, onClick: () => keep(off) },
+        { label: 'Try again', onClick: () => this.calibIntro() },
         { label: 'Cancel', onClick: () => this.showMenu() },
       ],
       false,
     );
   }
 
-  private async copyReport(): Promise<void> {
+  /** Ignore taps on a card that has just appeared under a busy thumb. */
+  private guardOverlay(ms = 800): void {
+    const o = $('overlay');
+    o.style.pointerEvents = 'none';
+    setTimeout(() => (o.style.pointerEvents = ''), ms);
+  }
+
+  private reportText(): string {
     const last = store.load<{ v: number; seed: number; lv: number; off: number; a: string } | null>('last', null);
-    const txt = last ? `LOOMSONG v${last.v} seed=${last.seed} lv=${last.lv} off=${last.off} a=${last.a}` : `LOOMSONG v${RULES_VERSION} seed=${this.seed} lv=${this.level} (no play yet)`;
-    toast((await copyText(txt)) ? 'Bug report copied' : 'Copy failed');
+    return last ? `LOOMSONG v${last.v} seed=${last.seed} lv=${last.lv} off=${last.off} a=${last.a}` : `LOOMSONG v${RULES_VERSION} seed=${this.seed} lv=${this.level} (no play yet)`;
   }
 }
 

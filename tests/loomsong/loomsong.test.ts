@@ -80,7 +80,7 @@ describe('charts', () => {
         // At most one hold at a time.
         const holds = ch.notes.filter((n) => n.kind === 'hold');
         for (let k = 1; k < holds.length; k++) expect(holds[k].t).toBeGreaterThanOrEqual(holds[k - 1].end);
-        expect(ch.objects).toBe(ch.notes.length + holds.length);
+        expect(ch.objects).toBe(ch.notes.length);
         expect(ch.notes[0].t).toBeGreaterThanOrEqual(song.stepMs * STEPS_PER_BAR - 1e-6);
       }
     }
@@ -177,6 +177,37 @@ describe('judging', () => {
     expect(play(h.end)).toBe(J_PERFECT);
     expect(play(h.end - TAIL_GRACE)).toBe(J_PERFECT);
     expect(play(h.end - TAIL_GRACE - 30)).toBe(J_MISS);
+  });
+
+  it('one judgement per note: a dropped hold is one miss, an untouched one too', () => {
+    const ch = makeChart(makeSong(9), 1);
+    const h = ch.notes.find((x) => x.kind === 'hold')!;
+    const all = botEvents(ch);
+    const dropped = all.map((e) => (e.k === 'u' && e.lane === h.lane && Math.abs(e.t - h.end) < 40 ? { ...e, t: Math.round(h.t + 60) } : e));
+    const r = judgePlay(ch, dropped);
+    expect(r.miss).toBe(1);
+    expect(r.perfect).toBe(ch.objects - 1);
+    expect(r.cloth.length).toBe(ch.notes.length);
+    const untouched = judgePlay(ch, all.filter((e) => !(e.lane === h.lane && e.t >= h.t - 5 && e.t <= h.end + 20)));
+    expect(untouched.miss).toBe(1);
+  });
+
+  it('a full combo of Goods is a B; Perfects and Goods half and half an A', () => {
+    const ch = makeChart(makeSong(13), 1);
+    const goods = judgePlay(ch, botEvents(ch, { bias: 70 }));
+    expect(goods.fullCombo).toBe(true);
+    expect(goods.good).toBe(ch.objects);
+    expect(goods.grade).toBe('B');
+    const mixed: InputEv[] = [];
+    let k = 0;
+    for (const n of ch.notes) {
+      const t = Math.round(n.t + (k++ % 2 ? 70 : 0));
+      mixed.push({ k: 'd', lane: n.lane, t });
+      if (n.kind === 'flick') mixed.push({ k: 'f', lane: n.lane, t });
+      mixed.push({ k: 'u', lane: n.lane, t: n.kind === 'hold' ? Math.round(n.end) + 10 : t + 40 });
+    }
+    mixed.sort((a, b) => a.t - b.t);
+    expect(judgePlay(ch, mixed).grade).toBe('A');
   });
 
   it('flicks need a flick, not a tap', () => {

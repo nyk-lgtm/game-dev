@@ -2,8 +2,9 @@
 // corrected for the player's calibrated latency, so the same events give the
 // same result live and in a replay. Presses take the nearest unjudged tap or
 // hold head in their lane; flicks (a swipe) take flick notes; a hold's tail is
-// kept if the lane stays down until near its end. The final result is always
-// recomputed from the event list (`judgePlay`), combo in chart order.
+// kept if the lane stays down until near its end. Every note is one judgement:
+// a hold let go too early counts as a miss, whatever its head was. The final
+// result is always recomputed from the event list (`judgePlay`), combo in chart order.
 
 import type { Chart, Note } from './chart';
 
@@ -56,22 +57,22 @@ export interface Result {
   grade: Grade;
   fullCombo: boolean;
   allPerfect: boolean;
-  /** Each judged object in chart order (head, then tail for holds): lane and judgment, for the tapestry. */
+  /** Each note's lane and judgment in chart order, for the tapestry. */
   cloth: [number, Judgment][];
 }
 
 export type Grade = 'S' | 'A' | 'B' | 'C' | 'D';
 export const GRADES: { g: Grade; min: number; name: string }[] = [
   { g: 'S', min: 950_000, name: 'Silk' },
-  { g: 'A', min: 900_000, name: 'Linen' },
-  { g: 'B', min: 800_000, name: 'Cotton' },
-  { g: 'C', min: 650_000, name: 'Wool' },
+  { g: 'A', min: 880_000, name: 'Linen' },
+  { g: 'B', min: 760_000, name: 'Cotton' },
+  { g: 'C', min: 600_000, name: 'Wool' },
   { g: 'D', min: 0, name: 'Frayed' },
 ];
 export const gradeOf = (score: number): Grade => GRADES.find((x) => score >= x.min)!.g;
 export const gradeName = (g: Grade) => GRADES.find((x) => x.g === g)!.name;
-/** Accuracy value of each judgment. */
-export const VALUE = [1, 0.6, 0];
+/** Accuracy value of each judgment (rules v2: Good 0.75, so a full combo of Goods is a B). */
+export const VALUE = [1, 0.75, 0];
 
 const winOf = (n: Note) => (n.kind === 'flick' ? FLICK_MISS + FLICK_MAX : MISS_WIN);
 
@@ -104,14 +105,17 @@ export class Judge {
     return this.active[lane];
   }
 
+  /** A head judgment (combo up or broken), or a hold's tail (kept: nothing more; dropped: the note becomes a miss). */
   private emit(note: Note, j: Judgment, dt: number | null, tail: boolean): void {
-    if (tail) this.tail[note.id] = j;
-    else {
+    if (tail) {
+      this.tail[note.id] = j;
+      if (j === J_MISS) this.combo = 0;
+    } else {
       this.head[note.id] = j;
       if (dt !== null) this.dt[note.id] = dt;
+      if (j === J_MISS) this.combo = 0;
+      else this.maxCombo = Math.max(this.maxCombo, ++this.combo);
     }
-    if (j === J_MISS) this.combo = 0;
-    else this.maxCombo = Math.max(this.maxCombo, ++this.combo);
     this.out.push({ note, j, dt, tail });
   }
 
@@ -141,7 +145,7 @@ export class Judge {
     const j: Judgment = d <= PERFECT ? J_PERFECT : d <= GOOD ? J_GOOD : J_MISS;
     this.emit(n, j, dt, false);
     if (n.kind === 'hold') {
-      if (j === J_MISS) this.emit(n, J_MISS, null, true);
+      if (j === J_MISS) this.tail[n.id] = J_MISS;
       else this.active[lane] = n;
     }
   }
@@ -180,7 +184,7 @@ export class Judge {
       const n = ns[i];
       if (this.head[n.id] < 0 && t > n.t + winOf(n)) {
         this.emit(n, J_MISS, null, false);
-        if (n.kind === 'hold') this.emit(n, J_MISS, null, true);
+        if (n.kind === 'hold') this.tail[n.id] = J_MISS;
       }
     }
     while (this.exp < ns.length && this.head[ns[this.exp].id] >= 0) this.exp++;
@@ -200,21 +204,16 @@ export class Judge {
   /** The result, from the judgments in chart order (call after advance(Infinity)). */
   result(): Result {
     const ns = this.chart.notes;
-    const objs: [number, number, number, Judgment][] = [];
-    for (const n of ns) {
-      objs.push([n.t, 0, n.id, Math.max(0, this.head[n.id]) as Judgment]);
-      if (n.kind === 'hold') objs.push([n.end, 1, n.id, (this.tail[n.id] < 0 ? J_MISS : this.tail[n.id]) as Judgment]);
-    }
-    objs.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
     let combo = 0, maxCombo = 0, sum = 0;
     const cnt = [0, 0, 0];
     const cloth: [number, Judgment][] = [];
-    for (const [, , id, j] of objs) {
+    for (const n of ns) {
+      const j = noteJudgment(n, this.head[n.id], this.tail[n.id]);
       cnt[j]++;
       sum += VALUE[j];
       combo = j === J_MISS ? 0 : combo + 1;
       maxCombo = Math.max(maxCombo, combo);
-      cloth.push([ns[id].lane, j]);
+      cloth.push([n.lane, j]);
     }
     let early = 0, late = 0, dsum = 0, hits = 0;
     for (const n of ns) {
@@ -226,7 +225,7 @@ export class Judge {
       if (dt < -pw) early++;
       else if (dt > pw) late++;
     }
-    const total = objs.length || 1;
+    const total = ns.length || 1;
     const score = Math.round((900_000 * sum) / total + (100_000 * maxCombo) / total);
     return {
       score,
@@ -235,17 +234,24 @@ export class Judge {
       perfect: cnt[0],
       good: cnt[1],
       miss: cnt[2],
-      objects: objs.length,
+      objects: ns.length,
       early,
       late,
       meanDt: hits ? dsum / hits : 0,
       hits,
       grade: gradeOf(score),
-      fullCombo: objs.length > 0 && cnt[2] === 0,
-      allPerfect: objs.length > 0 && cnt[0] === objs.length,
+      fullCombo: ns.length > 0 && cnt[2] === 0,
+      allPerfect: ns.length > 0 && cnt[0] === ns.length,
       cloth,
     };
   }
+}
+
+/** A note's judgment: its head's, unless it is a hold that was let go too early (or never held). */
+export function noteJudgment(n: Note, head: number, tail: number): Judgment {
+  if (head < 0 || head === J_MISS) return J_MISS;
+  if (n.kind === 'hold' && tail === J_MISS) return J_MISS;
+  return head as Judgment;
 }
 
 /** Score a play from its events (sorted by time; ties keep their order). */

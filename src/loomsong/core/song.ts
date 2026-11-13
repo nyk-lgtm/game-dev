@@ -6,7 +6,8 @@
 
 import { Rng, mixSeed } from '../../shared/rng';
 
-export const RULES_VERSION = 1;
+/** v2: one judgement per note (a dropped hold is a miss), Good worth 0.75, grade lines 950/880/760/600k. */
+export const RULES_VERSION = 2;
 export const STEPS_PER_BAR = 16;
 
 export type Inst = 'kick' | 'snare' | 'hat' | 'ohat' | 'crash' | 'bass' | 'pad' | 'lead' | 'arp';

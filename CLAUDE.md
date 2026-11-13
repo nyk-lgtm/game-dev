@@ -64,10 +64,11 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     floors 3-8 ~11% (enemies grow through each stage, so the end of a stage bites). `TUNE=hp:1.04,dmg:1.05`
     tries numbers (win rate is touchy: hp ×1.04 alone ≈ −3 points); `trace.ts <seed>` prints a bot run turn by turn,
     `upto.ts <seed> <floorsDone> [phase] [extra]` gives actions for `?seed=&a=`.
-  - Loomsong: `npx vite-node scripts/loomsong/charts.ts 300` (rules v1: songs 90-120 s at 90-140 BPM; notes/s median Easy
+  - Loomsong: `npx vite-node scripts/loomsong/charts.ts 300` (charts unchanged since v1: songs 90-120 s at 90-140 BPM; notes/s median Easy
     ~1.2, Normal ~2.2, Hard ~3.7, busiest 4 s ~2 / 3.5 / 5.75; per song Easy ~6 holds 2 flicks 0 chords, Normal ~13 / 3 / 7,
     Hard ~25 / 5 / 32; lanes ~21/29/28/22%; same-lane runs ≤ 4). `botrun.ts <seed> [lv] [jitter] [skip]` prints a bot play
-    and its `?seed=&lv=&a=` (N=100 gives the grade spread: Normal, 2% skipped, jitter 15 ms → mostly A, 30 → B, 45 → C).
+    and its `?seed=&lv=&a=` (N=100 gives the grade spread, rules v2: Normal, 2% skipped, jitter 15 ms → A 86 / S 12, 30 → A 65 / B 31, 45 → B,
+    60 → C; a full combo of Goods is a B).
   - Brink: `npx vite-node scripts/brink/selfplay.ts 40 [hard,hard normal,easy …]` (AI vs AI per pairing: wins, first-mover
     wins, plies, time per move, shove-backs a game and the longest run, repeated layouts; rules v1, AI v3 (80 games
     Easy/Normal, 40 Hard): first mover 50% Easy, 56% Normal, ~42% Hard mirrors; Hard beats Normal 90%, Easy 100%; Normal
@@ -245,14 +246,19 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   bar start flicks (cleared around), two-source strong steps chords; lanes follow the melody contour (up = right),
   kicks lean left, snares right, with jack/run/flick-clear/one-hold-at-a-time rules (tests check them). judge.ts: Perfect
   ±45, Good ±100, a press up to ±140 uses a note up as a miss; flicks ±60/120 (stamped at touch-down, swipe ≥ 26 px
-  within 220 ms); hold tails kept if let go ≤ 120 ms early. A play is seed + level + events (`d`/`u`/`f` + lane + song ms,
+  within 220 ms); a hold let go more than 120 ms early (or never held) is one miss: one judgement per note (rules v2),
+  so menu and results counts match. A play is seed + level + events (`d`/`u`/`f` + lane + song ms,
   already minus the calibrated offset); `judgePlay` sorts by time and recomputes; combo is counted in chart order, so
   the result never depends on frame timing (the live judge runs 50 ms behind the clock). Score = 900k × accuracy
-  (Perfect 1, Good 0.6) + 100k × max combo share; grades S Silk ≥ 950k, A Linen 900k, B Cotton 800k, C Wool 650k, D.
+  (Perfect 1, Good 0.75) + 100k × max combo share; grades S Silk ≥ 950k, A Linen 880k, B Cotton 760k, C Wool 600k, D.
   audio.ts schedules the song 0.3 s ahead on the AudioContext clock and maps pointer `timeStamp`s onto it (max of
   ctx − perf over 1.5 s); no Web Audio, sound off by choice, or a context that never starts → a silent perf clock.
-  Calibration: 22 clicks every 0.6 s, taps after the 3rd, median error = `profile.offset` (results offer "Shift timing" by
-  the mean error). `?song=CODE` (base-36 seed), `?seed=&lv=&a=` shows a recorded play rescored; `__game.auto = true`
+  Calibration: 22 clicks every 0.6 s, taps after the 3rd, median error = `profile.offset`, clamped to −50..300 ms
+  (`clampOffset`); an optional guide ring flashes at click + current offset; negative/huge/wide (spread > 60) results
+  ask to retry; the prompt returns every visit (menu dot) until calibrated or "Don't ask again". The offset shifts only
+  the SOUND against beads + judging (they always agree), so results offer "shift the sound" by the mean error once, and
+  not again if the last shift left the error unchanged (`profile.shift`: a sight-tapper). The menu song persists
+  (`profile.song`). Songs play out (~2 s fade) before results. `?song=CODE` (base-36 seed), `?seed=&lv=&a=` shows a recorded play rescored; `__game.auto = true`
   plays a bot (screenshots). Reports `LOOMSONG v… seed=… lv=… off=… a=…`.
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)
   plus a shape in render/draw.ts and a color in palette.ts; tests in

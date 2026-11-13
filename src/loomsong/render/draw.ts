@@ -8,6 +8,8 @@ import { LANES, type Chart, type Judge, type Judgment, type Note, type Song } fr
 export const LANE_COLORS = ['#ff7a6b', '#ffc857', '#4fd1c5', '#a78bfa'];
 export const LANE_DIM = ['#5a2c2b', '#5a4a22', '#1d4c49', '#3d3260'];
 const BG = '#120d1b';
+/** Misses are a cold grey-white with a strike, far from every lane colour. */
+export const MISS_COLOR = '#d9dbe6';
 
 export interface Layout {
   w: number;
@@ -44,6 +46,8 @@ export interface Popup {
   sub: string;
   color: string;
   t: number;
+  /** Struck through (misses). */
+  strike?: boolean;
 }
 export interface Spark {
   x: number;
@@ -63,8 +67,8 @@ export interface Scene {
   now: number;
   scroll: number;
   held: boolean[];
-  combo: number;
-  comboT: number;
+  /** 0..1: the song has ended and the field fades for the outro. */
+  outro: number;
   /** Seconds since page start (animations). */
   time: number;
   bursts: Burst[];
@@ -318,31 +322,43 @@ export function draw(g: CanvasRenderingContext2D, s: Scene): void {
     const k = (s.time - p.t) / POP_S;
     if (k >= 1) continue;
     const x = laneX(L, p.lane);
-    const y = L.hitY - L.padR - 26 - k * 22;
+    const y = L.hitY - L.padR - 34 - k * 22;
     g.globalAlpha = k < 0.7 ? 1 : (1 - k) / 0.3;
-    g.font = `900 ${p.text === 'PERFECT' ? 15 : 16}px system-ui, sans-serif`;
-    g.lineWidth = 4;
-    g.strokeStyle = 'rgba(10,6,16,0.8)';
+    // As large as the lane allows (PERFECT is the widest word).
+    const size = Math.min(22, Math.floor((L.laneW - 6) / (p.text.length * 0.68)));
+    g.font = `900 ${size}px system-ui, sans-serif`;
+    g.lineWidth = 5;
+    g.lineJoin = 'round';
+    g.strokeStyle = 'rgba(10,6,16,0.85)';
     g.strokeText(p.text, x, y);
     g.fillStyle = p.color;
     g.fillText(p.text, x, y);
+    if (p.strike) {
+      const w = g.measureText(p.text).width;
+      g.strokeStyle = 'rgba(10,6,16,0.85)';
+      g.lineWidth = 5;
+      g.beginPath();
+      g.moveTo(x - w / 2 - 3, y - size * 0.32);
+      g.lineTo(x + w / 2 + 3, y - size * 0.32);
+      g.stroke();
+      g.strokeStyle = p.color;
+      g.lineWidth = 2.5;
+      g.stroke();
+    }
     if (p.sub) {
-      g.font = '700 12px system-ui, sans-serif';
-      g.strokeText(p.sub, x, y + 15);
-      g.fillText(p.sub, x, y + 15);
+      g.font = '800 14px system-ui, sans-serif';
+      g.lineWidth = 4;
+      g.strokeStyle = 'rgba(10,6,16,0.85)';
+      g.strokeText(p.sub, x, y + 18);
+      g.fillText(p.sub, x, y + 18);
     }
   }
   g.globalAlpha = 1;
 
-  // Combo.
-  if (s.combo >= 4) {
-    const pulse = Math.max(0, 1 - (s.time - s.comboT) / 0.15);
-    g.font = `900 ${Math.round(44 + pulse * 8)}px system-ui, sans-serif`;
-    g.fillStyle = 'rgba(255,243,220,0.8)';
-    g.fillText(String(s.combo), L.w / 2, L.h * 0.3);
-    g.font = '800 11px system-ui, sans-serif';
-    g.fillStyle = 'rgba(255,243,220,0.5)';
-    g.fillText('C O M B O', L.w / 2, L.h * 0.3 + 18);
+  // Outro: the threads dim while the last bar rings out.
+  if (s.outro > 0) {
+    g.fillStyle = `rgba(18,13,27,${0.55 * s.outro})`;
+    g.fillRect(0, 0, L.w, L.hitY + L.padR + 8);
   }
 
   drawCloth(g, L, s.cloth);
@@ -360,6 +376,7 @@ export function draw(g: CanvasRenderingContext2D, s: Scene): void {
     g.fillText('tap a lane as its bead reaches the bar', L.w / 2, L.hitY - L.padR - 60);
   }
   if (s.title) {
+    g.globalAlpha = s.outro > 0 ? s.outro : 1;
     g.font = '900 26px system-ui, sans-serif';
     g.fillStyle = '#fff3e0';
     g.fillText(s.title, L.w / 2, L.h * 0.42);
@@ -368,6 +385,7 @@ export function draw(g: CanvasRenderingContext2D, s: Scene): void {
       g.fillStyle = 'rgba(255,243,220,0.7)';
       g.fillText(s.sub, L.w / 2, L.h * 0.42 + 26);
     }
+    g.globalAlpha = 1;
   }
   if (s.countdown !== null) {
     g.font = '900 72px system-ui, sans-serif';
@@ -449,6 +467,8 @@ export interface CalibScene {
   clicks: number;
   total: number;
   pulse: number;
+  /** Seconds since the guide ring's last click (large when the ring is off). */
+  ring: number;
   msg: string;
 }
 
@@ -465,13 +485,22 @@ export function drawCalib(g: CanvasRenderingContext2D, s: CalibScene): void {
   g.beginPath();
   g.arc(cx, cy, r + k * 10, 0, Math.PI * 2);
   g.stroke();
+  // The guide: a ring that flashes outward on each click.
+  const f = Math.max(0, 1 - s.ring / 0.3);
+  if (f > 0) {
+    g.strokeStyle = `rgba(143,230,200,${0.9 * f})`;
+    g.lineWidth = 4 + 6 * f;
+    g.beginPath();
+    g.arc(cx, cy, r + 18 + (1 - f) * 26, 0, Math.PI * 2);
+    g.stroke();
+  }
   g.textAlign = 'center';
   g.fillStyle = '#fff3e0';
   g.font = '900 22px system-ui, sans-serif';
   g.fillText('Tap with the click', cx, cy - 6);
   g.font = '600 14px system-ui, sans-serif';
   g.fillStyle = 'rgba(255,243,220,0.75)';
-  g.fillText(s.msg, cx, cy + 20);
+  s.msg.split('\n').forEach((line, i) => g.fillText(line, cx, cy + 20 + i * 19));
   // Tap errors on a ±250 ms scale.
   const y = L.h * 0.72, w = L.w - 64, x0 = 32;
   g.strokeStyle = 'rgba(255,255,255,0.25)';

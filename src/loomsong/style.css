@@ -7,9 +7,19 @@ body {
   --muted: #b3a6c8;
   --accent: #ffc857;
 }
-#hud { gap: 14px; background: #160f22; }
+#hud { gap: 12px; background: #160f22; }
 #hud .value { font-variant-numeric: tabular-nums; }
-#hud .score { min-width: 86px; }
+#hud .score { min-width: 84px; }
+#hud .acc { min-width: 64px; }
+#hud .combo { min-width: 50px; }
+#combo.hot { color: var(--accent); }
+@media (max-width: 400px) {
+  #hud { gap: 10px; padding-left: 10px; padding-right: 10px; }
+  #hud .value { font-size: 18px; }
+  #hud .score { min-width: 76px; }
+  #hud .acc { min-width: 56px; }
+  #hud .combo { min-width: 40px; }
+}
 #hud .songlbl { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; }
 #songName { font-size: 14px; font-weight: 800; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #songMeta { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
@@ -45,8 +55,15 @@ button.primary { color: #2a1a05; }
   min-height: 44px; padding: 0 4px; vertical-align: middle;
 }
 .card .meta2 { color: var(--muted); font-size: 13px; text-align: center; }
-.card .hint { font-size: 13px; text-align: center; }
-.card .hint button.link { display: block; margin: 0 auto; }
+.card .timing { font-size: 13px; line-height: 1.4; text-align: center; color: var(--muted); background: #150f20; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-height: 76px; }
+.card .timing button.link { min-height: 32px; padding: 0 2px; font-size: 13px; display: inline; vertical-align: baseline; }
+.card .nw { white-space: nowrap; }
+.card .calres { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.card .calres span { display: flex; flex-direction: column; align-items: center; background: #150f20; border: 1px solid var(--line); border-radius: 10px; padding: 6px 2px; font-size: 11px; color: var(--muted); }
+.card .calres b { font-size: 18px; color: var(--text); }
+.card .chips button.badge { position: relative; border-color: var(--accent); }
+.card .chips button.badge::after { content: ''; position: absolute; top: 6px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: #ff8a5c; }
+.toast.low { top: auto; bottom: calc(18px + env(safe-area-inset-bottom)); max-width: calc(100% - 32px); text-align: center; }
 
 .card .grade { display: flex; align-items: baseline; justify-content: center; gap: 10px; }
 .card .grade span { font-size: 54px; font-weight: 900; line-height: 1; }
