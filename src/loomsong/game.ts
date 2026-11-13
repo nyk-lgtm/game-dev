@@ -74,6 +74,9 @@ async function copyInto(btn: HTMLElement | null, text: string): Promise<void> {
   setTimeout(() => btn.isConnected && (btn.textContent = was), 1800);
 }
 
+/** A calibration result's buttons wake this long (ms) after it appears: the thumb is still tapping the beat. */
+export const CALIB_GUARD = 1500;
+
 /** A swipe this long (CSS px) is a flick. */
 const FLICK_PX = 26;
 /** The live judge runs this far behind the clock, so a touch delivered late still counts. */
@@ -155,6 +158,10 @@ export class Game {
     stage.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && (this.state === 'play' || this.state === 'countdown')) this.pause();
+    });
+    // Turning the phone (or resizing the window) mid-song pauses it; the resize handler does the rest.
+    screen.orientation?.addEventListener?.('change', () => {
+      if (this.state === 'play' || this.state === 'countdown') this.pause();
     });
     $('menuBtn').onclick = () => {
       if (this.state === 'play' || this.state === 'countdown') this.pause();
@@ -287,8 +294,11 @@ export class Game {
   }
 
   private showPause(): void {
+    // A phone held sideways leaves no room to read the beads in time.
+    const sideways = innerWidth > innerHeight && matchMedia('(pointer: coarse)').matches;
     showCard(
-      `<h2>Paused</h2><p class="meta2">${this.song.name} · ${LEVELS[this.level].name}</p>`,
+      `<h2 id="pauseCard">Paused</h2><p class="meta2">${this.song.name} · ${LEVELS[this.level].name}</p>
+       ${sideways ? '<p class="warn">Turn your phone upright to play. The song waits here, and Resume counts you back in.</p>' : ''}`,
       [
         { label: 'Resume', primary: true, onClick: () => this.resume() },
         { label: 'Restart song', onClick: () => this.play() },
@@ -354,7 +364,14 @@ export class Game {
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(h * dpr);
+    const prev = this.L;
     this.L = layout(w, h);
+    // A turned phone or a resized window mid-song: the field has moved under the fingers, so pause
+    // (a small height change, such as a browser bar, is let through).
+    const moved = Math.abs(w - prev.w) > 1 || Math.abs(h - prev.h) > 60;
+    if (!moved) return;
+    if (this.state === 'play' || this.state === 'countdown') this.pause();
+    else if (this.state === 'paused' && document.getElementById('pauseCard')) this.showPause();
   }
 
   private frame(t: number): void {
@@ -480,7 +497,7 @@ export class Game {
       title: intro || outro ? this.song.name : null,
       sub: intro ? `${LEVELS[this.level].name} · ${this.song.bpm} BPM${this.audio.silent ? ' · silent' : ''}` : outro ? (this.judge.combo === this.judged && this.judged > 0 ? 'Full combo! Woven…' : 'Woven…') : null,
       countdown: this.state === 'countdown' ? Math.max(1, Math.ceil((this.countEnd - performance.now()) / 800)) : null,
-      hint: playing && loadProfile().plays < 2 && now < first + 5000,
+      hint: playing && this.judged === 0 && now < first && loadProfile().plays < 2,
       fx: this.fx,
     });
   }
@@ -491,7 +508,7 @@ export class Game {
     const total = this.chart.objects || 1;
     const live = this.state === 'menu' ? 0 : Math.round((900_000 * this.sum) / total + (100_000 * this.judge.maxCombo) / total);
     $('score').textContent = fmtScore(this.result ? this.result.score : live);
-    $('acc').textContent = this.judged ? `${((100 * this.sum) / this.judged).toFixed(1)}%` : '—';
+    $('acc').textContent = this.judged && this.sum > 0 ? `${((100 * this.sum) / this.judged).toFixed(1)}%` : '—';
     const c = this.state === 'play' || this.state === 'paused' || this.state === 'countdown' ? this.judge.combo : 0;
     const ce = $('combo');
     ce.textContent = c ? String(c) : '—';
@@ -549,10 +566,11 @@ export class Game {
     const target = clampOffset(this.offset + r.meanDt);
     const avg = `On average you tapped <b class="nw">${ms} ms ${dir}</b>.`;
     if (this.shiftNote === 'same' && ms >= 15)
-      return `<div class="timing">${avg} The last shift didn’t change that, so you’re probably tapping by sight, which is fine: the beads and the judging always line up. No more shifts suggested.</div>`;
+      return `<div class="timing">${avg} Shift timing didn’t change that, so you probably tap by watching the beads. That’s fine: the beads are what you’re judged on.</div>`;
     if (ms < 15) return `<div class="timing">${avg} Right on.</div>`;
     if (target === Math.round(this.offset)) return `<div class="timing">${avg} Timing is already at its ${target > 0 ? 'latest' : 'earliest'} setting.</div>`;
-    return `<div class="timing">${avg} If you play by ear, <button class="link" id="fixTiming">shift the sound <span class="nw">${r.meanDt > 0 ? '+' : '−'}${Math.abs(target - Math.round(this.offset))} ms</span></button> to line it up with the beads. Tapping by sight? Then a shift won’t change this.</div>`;
+    const d = target - Math.round(this.offset);
+    return `<div class="timing"><p>${avg} If you tap to the music, shift timing to make up for it.</p><button class="secondary" id="fixTiming">Shift timing ${d > 0 ? '+' : '−'}${Math.abs(d)} ms</button></div>`;
   }
 
   showResults(r: Result, prevBest: number | null, improved: boolean, extra = '', recorded = false): void {
@@ -564,11 +582,11 @@ export class Game {
        <p class="meta2">${this.song.name} · ${LEVELS[this.level].name}${prevBest !== null ? ` · best ${fmtScore(prevBest)}` : ''}</p>
        <div class="stats">
          <span><b>${r.acc.toFixed(1)}%</b>accuracy</span>
-         <span><b>${r.maxCombo}</b>max combo of ${r.objects}</span>
+         <span><b>${r.maxCombo}<small>/${r.objects}</small></b>max combo</span>
          <span class="j0"><b>${r.perfect}</b>perfect</span>
          <span class="j1"><b>${r.good}</b>good</span>
          <span class="j2"><b>${r.miss}</b>miss</span>
-         <span><b>${r.early}·${r.late}</b>early·late</span>
+         <span class="el"><b>${r.early} <small>early</small></b><b>${r.late} <small>late</small></b></span>
        </div>
        <div class="cloth"></div>
        ${this.timingBox(r, recorded)}
@@ -594,14 +612,10 @@ export class Game {
         // Same box, same size: only the words change.
         const box = fix.parentElement!;
         box.style.height = `${box.offsetHeight}px`;
-        box.innerHTML = `Sound shifted: timing is now <b class="nw">${p.offset} ms</b>. The beads and judging stay put; play again and see if your error shrinks.`;
+        box.innerHTML = `<p>Timing is now <b class="nw">${p.offset} ms</b>. Play again and see if your taps land closer.</p>`;
       };
     this.wireLevels(() => this.play());
-    if (!recorded) {
-      const o = $('overlay');
-      o.style.pointerEvents = 'none';
-      setTimeout(() => (o.style.pointerEvents = ''), 600);
-    }
+    if (!recorded) this.guardOverlay(600);
   }
 
   /** Show the result of a recorded play (a bug report or shared link). */
@@ -763,8 +777,8 @@ export class Game {
          </g>
        </svg>
        <ul>
-         <li>Every song is <b>made up from its seed</b>: drums, bass, chords and a tune. The beads follow its kicks, snares and melody, so <b>play by ear</b>.</li>
-         <li><b>Tap</b> anywhere in a bead’s column as it meets the bar. <b>Yarn</b>: keep holding until it ends. <b>Chevron</b> beads: touch and <b>flick</b> (a quick swipe, any way). Beads joined by a <b>dashed thread</b>: tap both together.</li>
+         <li>Every song is <b>composed on your phone</b> from its song code: drums, bass, chords and a tune (the same code always gives the same song). The beads follow its kicks, snares and melody, so <b>play by ear</b>.</li>
+         <li><b>Tap</b> anywhere in a bead’s column as it meets the bar. <b>Hold</b> the long beads (yarn) until they end. <b>Chevron</b> beads: touch and <b>flick</b> (a quick swipe, any way). Beads joined by a <b>dashed thread</b>: tap both together.</li>
          <li><b>Perfect</b> within ${PERFECT} ms, <b>Good</b> within ${GOOD} ms; later or earlier is a miss. Stray taps cost nothing.</li>
          <li>Phones delay their sound by different amounts: <b>calibrate</b> once (song menu → Timing), or use “Shift timing” after a song.</li>
          <li>Each hit is woven into your cloth. Grades: <b>S Silk</b>, A Linen, B Cotton, C Wool, D Frayed.</li>
@@ -848,11 +862,11 @@ export class Game {
         if (performance.now() - c.asked > 2500) {
           this.calib = null;
           this.state = 'menu';
-          this.guardOverlay();
           showCard(`<h2>No sound yet</h2><p>The click didn’t start: the phone hasn’t let the page play sound. Check the volume, tap Try again, and keep the screen on.</p>`, [
             { label: 'Try again', primary: true, onClick: () => this.calibrate() },
             { label: 'Back', onClick: () => this.showMenu() },
           ], false);
+          this.guardOverlay();
         }
         return;
       }
@@ -882,13 +896,13 @@ export class Game {
     this.calib = null;
     this.state = 'menu';
     const errs = [...c.errs].sort((a, b) => a - b);
-    // Taps still landing as the card appears must not press its buttons.
-    this.guardOverlay();
+    // Taps still landing as the card appears (the thumb keeps the beat) must not press its buttons.
     if (errs.length < 8) {
       showCard(`<h2>Not enough taps</h2><p>Only ${errs.length} of your taps landed near a click (at least 8 are needed). Tap along with each click you hear.</p>`, [
         { label: 'Try again', primary: true, onClick: () => this.calibrate() },
         { label: 'Back', onClick: () => this.showMenu() },
       ], false);
+      this.guardOverlay();
       return;
     }
     const med = errs[Math.floor(errs.length / 2)];
@@ -917,6 +931,7 @@ export class Game {
         ],
         false,
       );
+      this.guardOverlay();
       return;
     }
     this.audio.chime();
@@ -931,13 +946,26 @@ export class Game {
       ],
       false,
     );
+    this.guardOverlay();
   }
 
-  /** Ignore taps on a card that has just appeared under a busy thumb. */
-  private guardOverlay(ms = 800): void {
+  /**
+   * Ignore taps on a card that has just appeared under a busy thumb: its buttons show
+   * disabled and fade in, and taps pass through to the (idle) stage meanwhile.
+   */
+  private guardOverlay(ms = CALIB_GUARD): void {
     const o = $('overlay');
+    const card = o.querySelector<HTMLElement>('.card');
+    const btns = [...o.querySelectorAll<HTMLButtonElement>('button:not([disabled])')];
     o.style.pointerEvents = 'none';
-    setTimeout(() => (o.style.pointerEvents = ''), ms);
+    card?.classList.add('waking');
+    card?.style.setProperty('--wake', `${ms}ms`);
+    for (const b of btns) b.disabled = true;
+    setTimeout(() => {
+      o.style.pointerEvents = '';
+      card?.classList.remove('waking');
+      for (const b of btns) b.disabled = false;
+    }, ms);
   }
 
   private reportText(): string {

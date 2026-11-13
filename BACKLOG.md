@@ -50,6 +50,12 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         ~2 s outro with a fade and "Woven…" before results; bigger judgement words, grey struck MISS, "DROPPED" only
         for holds you held, combo in the HUD; copy feedback on the buttons (no stacked toasts); one judgement per note
         (counts match the menu); the menu song persists; Good 0.75 and grade lines 950/880/760/600k (Good FC = B).
+  - [x] Second blind playtest fixes (no rules change): calibration result buttons wake after 1.5 s (a beat-keeping
+        thumb kept a bad offset); top bar fits "Daily · Normal" on one line and two-line song names at 390 px; resize or
+        rotation mid-song pauses (sideways note on the pause card); one name "Shift timing" (a 44 px button, plainer
+        note); judgement words under the pads (off the approach lane on Hard), hint hidden once notes arrive; help
+        says Hold; tiles "13 early / 34 late", "160/365 max combo"; accuracy "—" until a hit; the live cloth stops
+        short of the edge and fades its oldest rows.
   - [ ] Next: owner playtest on the phone. Watch: is the default timing guess close before calibrating, is
         calibration steady (spread), do the charts feel on the music (especially Hard's kick/lead chords), are flicks
         detected reliably, are songs varied enough (forms, grooves, lead tones), is ~1.2 notes/s right for Easy.
