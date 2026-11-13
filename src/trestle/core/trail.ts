@@ -13,7 +13,8 @@ export const DAILY_D = 0.55;
 export function trailLevel(n: number): Level {
   if (n <= TUTORIALS.length) return TUTORIALS[n - 1];
   const k = n - TUTORIALS.length;
-  return { ...makeLevel(trailSeed(k), diffOf(k - 1)), id: `n${n}` };
+  // Every third level of the trail is a lantern level.
+  return { ...makeLevel(trailSeed(k), diffOf(k - 1), undefined, k % 3 === 2 ? 'reach' : 'cross'), id: `n${n}` };
 }
 
 export interface Verdict {

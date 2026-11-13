@@ -13,21 +13,19 @@
   <body>
     <div id="app">
       <header id="hud">
-        <div class="stat lvl"><span id="levelLabel" class="label">Level 1</span><span id="levelName" class="name">…</span></div>
-        <div class="stat"><span class="label">Cost</span><span id="cost" class="value">0</span></div>
-        <div class="stat"><span class="label">Best</span><span id="best" class="value stars"></span></div>
-        <div class="spacer"></div>
+        <div class="stat lvl"><span class="label"><span id="levelLabel">Level 1</span> <span id="best" class="stars"></span></span><span id="levelName" class="name">…</span></div>
+        <div class="stat cost"><span class="label">Cost</span><span id="cost" class="value">0</span></div>
         <button id="helpBtn" class="icon-btn" aria-label="How to play">?</button>
         <button id="levelsBtn" class="icon-btn" aria-label="Levels">▦</button>
         <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>
       </header>
-      <main id="stage"><canvas id="board"></canvas></main>
+      <main id="stage"><canvas id="board"></canvas><div id="loading" hidden><span class="spin"></span>Surveying the gap…</div></main>
       <section id="controls">
         <div id="info"></div>
         <div id="mats">
-          <button data-m="0"><span class="ic"></span><span class="nm">Plank</span><span class="pr">10/u</span></button>
-          <button data-m="1"><span class="ic"></span><span class="nm">Twig</span><span class="pr">5/u</span></button>
-          <button data-m="2"><span class="ic"></span><span class="nm">Twine</span><span class="pr">3/u</span></button>
+          <button data-m="0"><span class="ic"></span><span class="nm">Plank</span><span class="pr"></span></button>
+          <button data-m="1"><span class="ic"></span><span class="nm">Twig</span><span class="pr"></span></button>
+          <button data-m="2"><span class="ic"></span><span class="nm">Twine</span><span class="pr"></span></button>
         </div>
         <div id="tools">
           <button id="undoBtn" class="tool" aria-label="Undo">↶</button>

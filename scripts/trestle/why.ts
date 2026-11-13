@@ -13,8 +13,7 @@ for (let i = 0; seen < n && i < n * 20; i++) {
   seen++;
   let why = 'ok';
   if (l.goal.kind === 'reach') {
-    const r = l.goal.ring;
-    if (l.anchors.some((a) => px(a) === px(r) && py(a) < py(r))) why = 'freebie';
+    for (const r of l.goal.rings) if (l.anchors.some((a) => px(a) === px(r) && py(a) < py(r))) why = 'freebie';
   }
   if (why === 'ok') {
     const s = survey(l);
@@ -24,7 +23,7 @@ for (let i = 0; seen < n && i < n * 20; i++) {
   reasons[why] = (reasons[why] ?? 0) + 1;
   if (process.env.V && why === 'unsolved') {
     const g = l.goal;
-    console.log(`d=${d.toFixed(2)} ${g.kind} anchors ${l.anchors.map((a) => `${a % COLS},${Math.floor(a / COLS)}`).join(' ')} ${g.kind === 'reach' ? `ring ${g.ring % COLS},${Math.floor(g.ring / COLS)} w ${g.weight}` : `span ${px(g.to) - px(g.from)} cart ${g.cart}`} rocks ${l.terrain.map((t) => `${t.kind}[${t.x0},${t.y0}..${t.x1}]`).join(' ')}`);
+    console.log(`d=${d.toFixed(2)} ${g.kind} anchors ${l.anchors.map((a) => `${a % COLS},${Math.floor(a / COLS)}`).join(' ')} ${g.kind === 'reach' ? `rings ${g.rings.map((r) => `${r % COLS},${Math.floor(r / COLS)}`).join(' ')} w ${g.weight}` : `span ${px(g.to) - px(g.from)} cart ${g.cart}`} rocks ${l.terrain.map((t) => `${t.kind}[${t.x0},${t.y0}..${t.x1}]`).join(' ')}`);
   }
 }
 console.log(reasons);

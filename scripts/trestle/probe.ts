@@ -27,6 +27,14 @@ for (let i = 0; i < n; i++) {
   genMs.push(performance.now() - t0);
   tries.push(info.tries);
   kinds[l.goal.kind] = (kinds[l.goal.kind] ?? 0) + 1;
+  const twists: [string, boolean][] = [
+    ['wind', !!l.wind],
+    ['twin', l.goal.kind === 'reach' && l.goal.rings.length > 1],
+    ['log', l.terrain.some((r) => r.kind === 'log')],
+    ['floor', l.terrain.some((r) => r.kind === 'floor')],
+    ['island', l.terrain.filter((r) => r.kind === 'bank').length > 2],
+  ];
+  for (const [k, on] of twists) if (on) kinds[k] = (kinds[k] ?? 0) + 1;
   const k0 = layout(mixSeed(base, i), d, 0).level.goal.kind;
   first[k0] = first[k0] ?? [0, 0];
   first[k0][1]++;

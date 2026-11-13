@@ -2,7 +2,7 @@
 // anchor pegs and a goal: roll the beetle's cart across, or hold a lantern up
 // at a ring. Pure data; gen.ts makes them from a seed, tutorials.ts by hand.
 
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 2;
 
 /** Grid size in points: x 0..COLS-1, y 0..ROWS-1 (y grows downward). */
 export const COLS = 13;
@@ -15,8 +15,9 @@ export interface Rock {
   y0: number;
   x1: number;
   y1: number;
-  /** Look only: a bank with grass on top, a bare boulder, a cliff wall. */
-  kind: 'bank' | 'rock' | 'wall';
+  /** Look only: a bank with grass on top, a stone spire, a cliff wall, a fallen
+   *  log over the gap, a stony floor close under the road. */
+  kind: 'bank' | 'rock' | 'wall' | 'log' | 'floor';
 }
 
 export type Goal =
@@ -34,9 +35,9 @@ export type Goal =
     }
   | {
       kind: 'reach';
-      /** Grid point that must carry the lantern. */
-      ring: number;
-      /** Lantern mass. */
+      /** Grid points that must each carry a lantern. */
+      rings: number[];
+      /** Mass of each lantern. */
       weight: number;
     };
 
@@ -56,9 +57,13 @@ export interface Level {
   tip?: string;
   /** The surveyor's build (actions), proof that the level can be done. */
   ref?: string;
+  /** Wind push per unit of catch at full gust (+ blows to the right); absent = calm. */
+  wind?: number;
 }
 
 export const pt = (x: number, y: number) => y * COLS + x;
+/** The lantern rings of a reach level (none for a crossing). */
+export const ringsOf = (l: Level): number[] => (l.goal.kind === 'reach' ? l.goal.rings : []);
 export const px = (p: number) => p % COLS;
 export const py = (p: number) => Math.floor(p / COLS);
 
