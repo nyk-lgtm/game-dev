@@ -28,10 +28,39 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
    Glyphwright bot refit: the refit bot wins ~83% (old 37% was a bot flaw); harder late waves/Lich only if the owner asks.
 4. Next: Lull second-pass fixes; Simmer fourth playtest (watch "buy everything" dominating); Gleam third pass if wanted.
 5. Grove: owner said keep it as is (board and balance); only bugs/clarity. Afterglow: leave alone unless asked.
+6. New games are welcome when the queue is quiet (recent additions: Ninefold, Summit, Quarry, Sungrazer, Kitbag,
+   Brink, Loomsong, Simmer, Gleam, Lull, Trestle). Ideas: a co-op-free social/daily puzzle. (The creative/sandbox toy is Lull.)
+   Trestle (new physics builder): first blind playtest next (see its item).
+7. Simmer: second blind playtest (see its item below). Gleam (new light puzzle): first blind playtest. Lull: first playtest fixes shipped;
+   second blind playtest and a real-phone sound check next.
+   Brink, Loomsong, Simmer). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle.
+7. Simmer: fourth blind playtest (see its item below).
 6. New games are welcome when the queue is quiet (recent: Ninefold, Summit, Quarry, Sungrazer, Kitbag, Brink, Loomsong,
    Simmer, Gleam, Lull). Ideas: a co-op-free social/daily puzzle, a short narrative roguelite, a physics builder.
 
 ## Now
+- [ ] **Trestle** (original physics builder: planks, twigs and twine on a peg grid; carry the beetle's cart over a gap or
+  hold a lantern at a ring; stars for matching the surveyor bot's cost and part count). Milestones:
+  - [x] Core (src/trestle/core, rules v1): XPBD sim at 480 Hz (rigid members, one-sided twine, smoothed forces snap past
+        strength, a 3-particle cart rolling on planks and rock, a lantern on a cord), builds as action strings with undo,
+        6 hand-made tutorials (one idea each: first plank, prop, truss, hanging road, lantern, spire) and generated levels
+        (crossings with face pegs/spires/hooks, lantern cantilevers from a cliff); the surveyor proves each within budget and
+        sets par/parts. Probe (200 levels): first layout proven 74% (crossings ~79%, lanterns ~62%), always within ≤ 6
+        layouts; par/budget median 0.72; gen median ~75 ms (max ~0.6 s, cached by the page); a test run ~2 ms. 12 tests.
+        Learned: self-weight dominated at first (twigs 0.3/unit broke long trusses under their own weight) → densities
+        plank 0.25 / twig 0.08 / twine 0.01; cantilevers carry ~4× a crossing's moment, so lanterns weigh 1.2-2.5 vs carts
+        2.3-3.9; a 1-long tilt step in the road (45°) stalls the cart, so the surveyor tilts on a 2-long plank; impact
+        spikes at slope changes needed ~85 ms force smoothing; rails merging before the ring left the tip on one pin.
+  - [x] UI: dusk ravine canvas (sky, hills, pines, water, mossy banks, stone spires, branches with hooks), planks/twigs/
+        twine with pegs, drag peg to peg with a 2× loupe above the finger, tap a piece's middle to remove, undo/clear,
+        pinch and ⤢ zoom (pan when zoomed), live runs coloured by stress with snaps (stubs, splinters, sound), pieces that
+        peaked ≥ 70% glow afterwards, result card with stars, levels card (the trail), daily (`?daily`), bug reports,
+        hub card (Puzzle) + Daily link + NEWS. Pixel 7 and 360×640 checked (a mouse-driven build of level 2 gets ★★★).
+  - [ ] Next: first blind playtest. Watch: is the loupe enough to aim at 31 px pegs, or is zoom needed by default on
+        small screens? Do tutorials 3-4 teach trusses and twine well enough for generated levels? Are budgets (×1.25-1.45
+        of the surveyor) too generous for ★, and is ★★★ (surveyor's part count) reachable by people? Do dynamic snaps at
+        bumps (cart landing on a slope change) read as fair? Maybe: a "show the surveyor's build" after a few failed runs,
+        springs, two-cart or moving-load levels, a ghost of the last run's sag.
 - [ ] **Lull** (original musical garden sandbox: plant singing plants, no fail state, shareable as a link). Milestones:
   - [x] Core (src/lull/core, rules v1): seeded pond (2-3 ellipses), six species with terrain rules and spacing, growth from
         `born`, watering (boost / flourish), dig; x = pentatonic column, y = lane (8th of the bar); `notesAt` (≤ 6 a step,

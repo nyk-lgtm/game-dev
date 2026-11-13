@@ -39,8 +39,35 @@ const loomsong = makeStore('loomsong.');
 const simmer = makeStore('simmer.');
 const gleam = makeStore('gleam.');
 const lull = makeStore('lull.');
+const trestle = makeStore('trestle.');
 
 const GAMES: GameCard[] = [
+  {
+    path: './trestle/',
+    title: 'Trestle',
+    tag: 'Physics builder',
+    pitch: 'Get the beetle’s acorn cart over the stream with a few planks, twigs and twine, or hang a lantern out over the drop. Drag peg to peg, press Go and watch it creak, hold or snap. Every level is proven buildable within budget; stars for building as lean as the surveyor.',
+    accent: '#e0b25a',
+    best: () => {
+      const p = trestle.load<{ stars?: Record<string, number>; top?: number } | null>('profile', null);
+      const n = Object.values(p?.stars ?? {}).reduce((a, b) => a + b, 0);
+      return n ? `${n} ★ · level ${p?.top ?? 1}` : null;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><defs><linearGradient id="trsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1d2547"/><stop offset="0.7" stop-color="#7a5f86"/><stop offset="1" stop-color="#f0b37a"/></linearGradient></defs>
+      <rect width="76" height="76" fill="url(#trsky)"/>
+      <circle cx="58" cy="14" r="5" fill="#fbefc8"/>
+      <rect y="62" width="76" height="14" fill="#2c4f63"/>
+      <rect x="-2" y="36" width="18" height="40" fill="#6b4a33"/><rect x="60" y="36" width="18" height="40" fill="#6b4a33"/>
+      <rect x="-2" y="35" width="18" height="3" fill="#5f9e4f"/><rect x="60" y="35" width="18" height="3" fill="#5f9e4f"/>
+      <path d="M16 36L26 46L36 36L46 46L56 36M26 46H46" stroke="#5d5233" stroke-width="3.6" fill="none" stroke-linejoin="round"/>
+      <path d="M16 36L26 46L36 36L46 46L56 36M26 46H46" stroke="#c9b27a" stroke-width="2" fill="none" stroke-linejoin="round"/>
+      <path d="M16 36H60" stroke="#5a3418" stroke-width="5" stroke-linecap="round"/><path d="M16 36H60" stroke="#b0773f" stroke-width="3.4" stroke-linecap="round"/>
+      <g fill="#2a2320" stroke="#e0b25a" stroke-width="1.4"><circle cx="16" cy="36" r="2.6"/><circle cx="60" cy="36" r="2.6"/></g>
+      <rect x="27" y="27" width="11" height="5" rx="1.5" fill="#8a5a32"/><circle cx="29.5" cy="26.5" r="1.8" fill="#c98a3e"/><circle cx="34" cy="26" r="1.8" fill="#c98a3e"/>
+      <path d="M38.5 30.5a3 2.6 0 0 1 6 0z" fill="#d0453a"/><circle cx="45" cy="30" r="1.1" fill="#1e1416"/>
+      <g fill="#5a3a20" stroke="#2a1a0e"><circle cx="29" cy="33" r="2.2"/><circle cx="36" cy="33" r="2.2"/></g>
+      <path d="M64 35v-9" stroke="#3a2a1c" stroke-width="1.2"/><path d="M64 26l5 2-5 2z" fill="#ffd36a"/></svg>`,
+  },
   {
     path: './lull/',
     title: 'Lull',
@@ -470,7 +497,7 @@ const GAMES: GameCard[] = [
 
 // Filter chips: the hub has grown long, so games can be narrowed by kind.
 const KINDS: Record<string, string[]> = {
-  Puzzle: ['gleam', 'triad', 'unspoken', 'grove', 'quarry', 'ninefold', 'summit'],
+  Puzzle: ['trestle', 'gleam', 'triad', 'unspoken', 'grove', 'quarry', 'ninefold', 'summit'],
   Action: ['loomsong', 'sungrazer', 'afterglow', 'nightline', 'hexhold'],
   Strategy: ['simmer', 'brink', 'kitbag', 'glyph', 'telegraph', 'rewild', 'hexhold', 'summit'],
   Story: ['lastlight', 'lantern', 'delve', 'unspoken'],
@@ -537,6 +564,7 @@ const DAILY = [
   { path: './loomsong/?daily', title: 'Loomsong', store: loomsong, accent: '#ffc857' },
   { path: './simmer/?daily', title: 'Simmer', store: simmer, accent: '#ffb35c' },
   { path: './gleam/?daily', title: 'Gleam', store: gleam, accent: '#ff5cf0' },
+  { path: './trestle/?daily', title: 'Trestle', store: trestle, accent: '#e0b25a' },
 ];
 const daily = document.getElementById('daily')!;
 daily.innerHTML = `<h3>Daily challenges <span>${prettyDay()}</span></h3><p>The same run for everyone today. A new one at midnight.</p>`;
