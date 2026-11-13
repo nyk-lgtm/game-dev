@@ -12,6 +12,8 @@ import { draw, fitView, type Aim, type Scene, type View } from './render/draw';
 
 export const store = makeStore('ninefold.');
 const $ = (id: string) => document.getElementById(id)!;
+/** How much of the roll the aim line shows (frames at 60 per second). */
+const PREVIEW_FRAMES = 45;
 
 interface Profile {
   rounds: number;
@@ -34,7 +36,7 @@ interface Playback {
 }
 
 const TIPS: Record<string, string> = {
-  first: '<b>Drag anywhere and pull back</b>, like a slingshot. The dotted line shows its path to the first bounce; a ring, where it stops. Let go to putt.',
+  first: '<b>Drag anywhere and pull back</b>, like a slingshot. The dotted line shows the start of its roll, up to the first bounce. Let go to putt.',
   sand: '<b>Sand</b> soaks up speed. Go round it, or hit harder to get through.',
   water: '<b>Water</b>: the ball is lost, one stroke penalty, and you play again from where you were.',
   slope: '<b>Slopes</b> tilt the ball the way the arrows drift.',
@@ -147,10 +149,14 @@ export class Game {
     const hole = this.r.holes[this.r.hole];
     const shot = decodeShot(encodeShot({ angle, power, tick: hole.mills.length ? Math.round(this.clock) : 0 }))!;
     const res = simulate(hole, this.r.ball, shot);
+    // Only the start of the roll: up to the first knock (any rail, post or windmill) or ~0.75 s,
+    // and never whether it drops; reading the green is still the player's job.
     const knock = res.hits.length ? res.hits[0].f : Infinity;
-    const end = Math.min(res.frames.length / 2 - 1, knock);
+    const last = res.frames.length / 2 - 1;
+    const end = Math.min(last, knock, PREVIEW_FRAMES);
     const path = res.frames.slice(0, (end + 1) * 2);
-    return { angle, power, path, stops: end < knock && res.outcome !== 'water' };
+    const stops = end === last && res.outcome === 'rest';
+    return { angle, power, path, stops: end < knock && stops };
   }
 
   private up(e: PointerEvent): void {
@@ -277,7 +283,7 @@ export class Game {
       const strokes = this.r.strokes[h];
       const name = pb.res.pickedUp ? 'Picked up' : scoreName(strokes, pb.hole.par);
       this.banner = { text: name, t: 0 };
-      $('info').innerHTML = `<b>${name}</b> ${pb.res.pickedUp ? 'after 8 strokes.' : `${strokes} stroke${strokes === 1 ? '' : 's'} on a par ${pb.hole.par}.`} Total ${fmtPar(toPar(this.r))}.`;
+      $('info').innerHTML = `<b>${name}${/[!.]$/.test(name) ? '' : '.'}</b> ${pb.res.pickedUp ? 'after 8 strokes.' : `${strokes} stroke${strokes === 1 ? '' : 's'} on a par ${pb.hole.par}.`} Total ${fmtPar(toPar(this.r))}.`;
       if (strokes === 1) {
         const p = loadProfile();
         p.aces++;
@@ -374,7 +380,7 @@ export class Game {
     showCard(
       `<h2>${this.daily ? 'Daily course' : 'Round over'}</h2>${this.card()}
        <p class="big">${total} strokes · <b class="${tp < 0 ? 'under' : tp > 0 ? 'over' : ''}">${fmtPar(tp)}</b></p>
-       <p class="meta2">${daily ? `Today’s best: ${daily.label}` : `Best round: ${p.best === null ? fmtPar(tp) : fmtPar(p.best)}`} · ${p.rounds} round${p.rounds === 1 ? '' : 's'} played${p.aces ? ` · ${p.aces} hole${p.aces === 1 ? '' : 's'} in one` : ''}</p>`,
+       <p class="meta2">${daily ? `Today’s best: ${daily.label}` : `Best round: ${p.best === null ? fmtPar(tp) : fmtPar(p.best)}`} · ${daily ? `${daily.plays} daily round${daily.plays === 1 ? '' : 's'}` : `${p.rounds} round${p.rounds === 1 ? '' : 's'}`} played${p.aces ? ` · ${p.aces} hole${p.aces === 1 ? '' : 's'} in one` : ''}</p>`,
       [
         { label: 'New course', primary: true, onClick: () => this.newCourse() },
         { label: this.daily ? 'Play the daily again' : 'Play this course again', onClick: () => this.start(this.r.seed, [], this.daily) },
@@ -400,7 +406,7 @@ export class Game {
       `<h2>Ninefold</h2>
        <p>Nine holes of mini-golf, grown fresh from a seed every round.</p>
        <ul>
-         <li><b>Drag anywhere and pull back</b> to aim, like a slingshot. The farther you pull, the harder the putt; the dotted line shows its path up to the first bounce, and a ring where it would stop. Let go to play it.</li>
+         <li><b>Drag anywhere and pull back</b> to aim, like a slingshot. The farther you pull, the harder the putt; the dotted line shows the start of the roll, up to the first bounce. Let go to play it.</li>
          <li>Sink the ball in as few strokes as you can. <b>Par</b> is a good score; under par is great.</li>
          <li>Sand slows the ball, water costs a stroke, slopes push it sideways, bumpers kick it back. After 8 strokes the ball is picked up.</li>
        </ul>`,

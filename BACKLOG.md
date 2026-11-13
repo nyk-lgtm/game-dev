@@ -153,6 +153,9 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         clock; a putt records the tick (`angle.power.tick`), so you can watch and time it; a ball never
         rests inside a bar's reach (the bar flings it out); no water next to a windmill; hint bar fixed
         height (the course no longer shifts mid-drag); shorter minimum putt.
+  - [x] Third playtest (−8/−4/−6 vs par: preview "too generous") and fixes (rules v7): preview shows ≤ 0.75 s
+        of the roll up to the first knock and never whether it drops; SINK_SPEED 75 → 55, cup pull 90 → 60 within
+        1.5·CUP_R; windmill arm 4.2 → 5.0 (no wall lane); power curve p^1.25; bogey punctuation; daily plays count.
   - [x] Aim preview runs the real physics (as the putt will be saved, windmill clock included) and draws
         the path to the first knock (a spark there) or a ring where the ball stops; slopes and sand show.
 - [ ] **Hexhold** (hex maze tower defense). Milestones:

@@ -6,7 +6,7 @@ import { BALL_R, CELL, COLS, CUP_R, type Hole, type Mill, type Zone } from './co
 export const STEP = 1 / 240;
 export const MAX_SPEED = 160;
 const MAX_STEPS = 240 * 14;
-const SINK_SPEED = 75;
+const SINK_SPEED = 55;
 const FRICTION = 30, DRAG = 0.35;
 const SLOPE = 34;
 /** How far a full-power putt rolls on open grass. */
@@ -56,7 +56,8 @@ const inZone = (z: Zone, x: number, y: number) => x >= z.x && x <= z.x + z.w && 
 export function simulate(hole: Hole, from: { x: number; y: number }, shot: Shot): ShotResult {
   let x = from.x, y = from.y;
   const tick0 = shot.tick ?? 0;
-  const speed0 = speedFor(Math.max(0, Math.min(1, shot.power)) * MAX_ROLL);
+  // A gentle curve at the low end, so short putts are easier to judge (full pull still rolls MAX_ROLL).
+  const speed0 = speedFor(Math.max(0, Math.min(1, shot.power)) ** 1.25 * MAX_ROLL);
   let vx = Math.cos(shot.angle) * speed0, vy = Math.sin(shot.angle) * speed0;
   const frames: number[] = [x, y];
   const hits: ShotResult['hits'] = [];
@@ -86,9 +87,9 @@ export function simulate(hole: Hole, from: { x: number; y: number }, shot: Shot)
     // The cup pulls a slow ball in a little.
     const cdx = hole.cup.x - x, cdy = hole.cup.y - y;
     const cd = Math.hypot(cdx, cdy);
-    if (cd < CUP_R * 2 && cd > 0.001) {
-      ax += (cdx / cd) * 90;
-      ay += (cdy / cd) * 90;
+    if (cd < CUP_R * 1.5 && cd > 0.001) {
+      ax += (cdx / cd) * 60;
+      ay += (cdy / cd) * 60;
     }
     if (sp > 0) {
       const k = Math.max(0, sp - fr * STEP) / sp;

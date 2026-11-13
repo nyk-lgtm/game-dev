@@ -227,7 +227,7 @@ export function makeHole(seed: number, n: number): Hole {
     } else if (kind === 'mill' && straight && mills.length < 2) {
       // Never beside water: a knock into a pond is luck, not skill.
       if (near(i, 'water')) continue;
-      mills.push({ x: cx(c), y: cy(c), arm: 4.2, a0: rng.int(0, 7) * (Math.PI / 8), w: (rng.next() < 0.5 ? -1 : 1) * (1.1 + rng.next() * 0.6) });
+      mills.push({ x: cx(c), y: cy(c), arm: 5.0, a0: rng.int(0, 7) * (Math.PI / 8), w: (rng.next() < 0.5 ? -1 : 1) * (1.1 + rng.next() * 0.6) });
       kindAt.set(c, 'mill');
     } else if (kind === 'sand') {
       // Never wider than half the lane, so there is always a way round.

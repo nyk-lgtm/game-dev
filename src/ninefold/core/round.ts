@@ -4,7 +4,7 @@
 import { HOLES, makeCourse, type Hole } from './course';
 import { simulate, type Shot, type ShotResult } from './physics';
 
-export const RULES_VERSION = 6;
+export const RULES_VERSION = 7;
 /** The hole clock wraps every 10 minutes (ticks are 1/240 s). */
 export const TICK_WRAP = 240 * 600;
 /** Strokes after which the ball is picked up (penalties count). */
