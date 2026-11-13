@@ -58,7 +58,7 @@ export const ENEMIES: EnemyDef[] = [
     id: 'house',
     name: 'The House',
     icon: '🎩',
-    hp: 168,
+    hp: 176,
     tier: 9,
     pattern: [{ atk: 14, hex: 1 }, { block: 16, buff: 2 }, { atk: 6, hits: 3 }, { wither: 2, atk: 11 }, { charge: true }, { atk: 36 }],
   },

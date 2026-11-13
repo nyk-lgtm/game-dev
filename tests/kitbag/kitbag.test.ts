@@ -19,6 +19,9 @@ import {
   previewPlace,
   replay,
   rngFor,
+  floorPoints,
+  foeStats,
+  openingSteps,
   slotSentence,
   type GearId,
   type Run,
@@ -366,6 +369,69 @@ describe('rules v2 fixes', () => {
     act(r, 'P0.0.0');
     expect(r.hp).toBe(r.maxHp);
     expect(r.block).toBe(3);
+  });
+
+  it('rules v3: no heal offered at full HP', () => {
+    for (let seed = 1; seed < 60; seed++) {
+      const q = newRun(seed);
+      act(q, 'M0');
+      q.fight!.enemy.hp = 1;
+      q.fight!.pool[0].locked = false;
+      act(q, 'P0.0.0');
+      expect(q.hp).toBe(q.maxHp);
+      expect(q.choice!.options.some((o) => o.gifts.some((g) => g.t === 'heal'))).toBe(false);
+    }
+  });
+
+  it('rules v3: fights never open on a wind-up or its blow', () => {
+    for (const e of ENEMIES) {
+      const p = e.pattern;
+      for (const i of openingSteps(e.id)) {
+        expect(p[i].charge).toBeFalsy();
+        expect(p[(i + p.length - 1) % p.length].charge).toBeFalsy();
+      }
+    }
+    for (let seed = 1; seed < 80; seed++) {
+      const r = newRun(seed);
+      act(r, 'M0');
+      const it = intentOf(r.fight!.enemy);
+      expect(it.charge).toBeFalsy();
+    }
+  });
+
+  it('rules v3: enemies grow through each stage', () => {
+    expect(foeStats('rat', 2).hp).toBeGreaterThan(foeStats('rat', 0).hp);
+    expect(foeStats('witch', 7).hp).toBeGreaterThan(foeStats('witch', 4).hp);
+    expect(foeStats('witch', 7).dmul).toBeGreaterThan(1);
+    expect(foeStats('house', 11).hp).toBe(enemyDef('house').hp);
+    expect(foeStats('wyvern', 8).big).toBe(32);
+  });
+
+  it('rules v3: block raised during a wind-up braces for the blow', () => {
+    const r = fightWith(['buckler'], [6]);
+    const e = r.fight!.enemy;
+    e.id = 'knight';
+    e.step = 1; // wind-up, then 24
+    act(r, 'P0.0.0'); // block 7
+    const hp = r.hp;
+    act(r, 'E');
+    expect(r.hp).toBe(hp);
+    expect(r.block).toBe(7);
+    act(r, 'E');
+    expect(r.hp).toBe(hp - (24 - 7));
+    expect(r.block).toBe(0);
+  });
+
+  it('rules v3: a run that got deeper scores more', () => {
+    expect(floorPoints(10)).toBeGreaterThan(floorPoints(9));
+    // Lost runs, by floor reached: every run two or more floors deeper outscores the shallower one.
+    const lost: { floor: number; score: number }[] = [];
+    for (let seed = 300; seed < 360; seed++) {
+      const r = playBot(seed);
+      if (!r.won) lost.push({ floor: r.floor, score: r.score });
+    }
+    expect(lost.length).toBeGreaterThan(20);
+    for (const a of lost) for (const b of lost) if (a.floor >= b.floor + 2) expect(a.score, `${a.floor} vs ${b.floor}`).toBeGreaterThan(b.score);
   });
 
   it('no dice rewards when the gear has no room for more dice', () => {

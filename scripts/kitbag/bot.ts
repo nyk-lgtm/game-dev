@@ -9,6 +9,7 @@ import {
   attackOf,
   diceFor,
   intentOf,
+  nextIntentOf,
   meets,
   needsReplace,
   slotsOf,
@@ -61,7 +62,8 @@ export function planTurn(r: Run, budget = 12000): { steps: Step[]; value: number
   const f = r.fight!;
   const e = f.enemy;
   const it = intentOf(e);
-  const incoming = attackOf(e, it);
+  // While it winds up, block braces for the blow (it carries over), so plan against that.
+  const incoming = it.charge && !e.stunned ? attackOf(e, nextIntentOf(e)) : attackOf(e, it);
   const dice: PDie[] = [];
   f.pool.forEach((p, pi) => {
     if (p.used || p.locked) return;

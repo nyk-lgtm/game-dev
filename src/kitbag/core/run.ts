@@ -24,12 +24,14 @@ import {
   type GearId,
 } from './gear';
 
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 export const FLOORS = 12;
 export const START_HP = 40;
 export const MAX_GEAR = 6;
 export const MAX_DICE = 5;
 export const WIN_BONUS = 1000;
+/** Points for completing floor f (0-based): deeper floors are worth more, so depth decides the score. */
+export const floorPoints = (f: number): number => 40 * (f + 1);
 /** Numbers a balance probe may tweak. */
 export const TUNE = {
   /** Enemy hit points ×. */
@@ -80,6 +82,8 @@ export interface Enemy {
   /** Index of the current intent in the pattern. */
   step: number;
   stunned: boolean;
+  /** Damage multiplier from the floor (enemies grow through each stage). */
+  dmul: number;
 }
 
 export interface Fight {
@@ -96,6 +100,8 @@ export interface Fight {
   /** Dice hexed / withered this turn (for the UI). */
   hexed: number;
   withered: number;
+  /** Block kept from the turn the enemy wound up (brace), handed to your next turn. */
+  brace: number;
 }
 
 export type Gift =
@@ -267,7 +273,31 @@ export const nextIntentOf = (e: Enemy): Intent => {
   return p[(e.step + 1) % p.length];
 };
 /** Damage of one hit of an intent, after strength and tuning. */
-export const hitOf = (e: Enemy, it: Intent): number => (it.atk ? Math.max(0, Math.round(it.atk * TUNE.dmg) + e.str) : 0);
+export const hitOf = (e: Enemy, it: Intent): number => (it.atk ? Math.max(0, Math.round(it.atk * TUNE.dmg * (e.dmul ?? 1)) + e.str) : 0);
+
+/** Floors into the current stage (0 on floors 1, 5 and 9). */
+const intoStage = (floor: number): number => (floor < 4 ? floor : floor < 8 ? floor - 4 : Math.min(2, floor - 8));
+/** Ordinary enemies and elites grow through each stage: +HP_STEP hit points and +DMG_STEP damage a floor. */
+export const HP_STEP = 0.08;
+export const DMG_STEP = 0.05;
+
+/** An enemy as it would appear on a floor: hit points, damage multiplier, and its biggest single blow. */
+export function foeStats(id: string, floor: number): { hp: number; dmul: number; big: number } {
+  const def = enemyDef(id);
+  const k = def.tier === 9 ? 0 : intoStage(floor);
+  const hp = Math.round(def.hp * TUNE.hp * (1 + HP_STEP * k));
+  const dmul = 1 + DMG_STEP * k;
+  const big = Math.max(...def.pattern.map((it) => (it.atk ? Math.round(it.atk * TUNE.dmg * dmul) * (it.hits ?? 1) : 0)));
+  return { hp, dmul, big };
+}
+
+/** Pattern steps a fight may open on: no wind-up, and not the blow right after one. */
+export function openingSteps(id: string): number[] {
+  const p = enemyDef(id).pattern;
+  const ok = p.map((it, i) => !it.charge && !p[(i + p.length - 1) % p.length].charge);
+  const steps = p.map((_, i) => i).filter((i) => ok[i]);
+  return steps.length ? steps : [0];
+}
 /** Total damage an intent would deal before block. */
 export const attackOf = (e: Enemy, it: Intent): number => hitOf(e, it) * (it.atk ? (it.hits ?? 1) : 0);
 
@@ -276,9 +306,10 @@ function startFight(r: Run, node: MapNode): void {
   const rng = rngFor(r.seed, T_FIGHT, r.floor);
   const elite = node.kind === 'elite';
   const boss = node.kind === 'boss';
-  const max = Math.round(def.hp * TUNE.hp);
+  const st = foeStats(def.id, r.floor);
+  const max = st.hp;
   r.fight = {
-    enemy: { id: def.id, hp: max, max, block: 0, poison: 0, str: 0, step: boss ? 0 : rng.int(0, def.pattern.length - 1), stunned: false },
+    enemy: { id: def.id, hp: max, max, block: 0, poison: 0, str: 0, step: boss ? 0 : rng.pick(openingSteps(def.id)), stunned: false, dmul: st.dmul },
     elite,
     boss,
     turn: 0,
@@ -289,9 +320,8 @@ function startFight(r: Run, node: MapNode): void {
     witherNext: 0,
     hexed: 0,
     withered: 0,
+    brace: 0,
   };
-  // A wind-up as the opening move would be a free turn; start on the blow's neighbour instead.
-  if (!boss && intentOf(r.fight.enemy).charge) r.fight.enemy.step = (r.fight.enemy.step + 2) % def.pattern.length;
   r.phase = 'fight';
   r.block = 0;
   r.poison = 0;
@@ -306,7 +336,9 @@ function startTurn(r: Run): void {
   const f = r.fight!;
   f.turn++;
   r.stats.turns++;
-  r.block = 0;
+  // Block resets, except what you braced while the enemy wound up.
+  r.block = f.brace;
+  f.brace = 0;
   r.hist = [];
   if (r.poison > 0) {
     hurtPlayer(r, r.poison, `${enemyDef(f.enemy.id).name} (poison)`);
@@ -544,6 +576,8 @@ function enemyTurn(r: Run): void {
   const name = enemyDef(e.id).name;
   if (e.stunned) e.stunned = false;
   else {
+    // Bracing: block you raise while it winds up still stands when the blow lands.
+    if (it.charge) f.brace = r.block;
     if (it.atk) {
       const hit = hitOf(e, it);
       for (let k = 0; k < (it.hits ?? 1); k++) {
@@ -568,7 +602,9 @@ function enemyTurn(r: Run): void {
 function winFight(r: Run): void {
   const f = r.fight!;
   r.hist = [];
-  r.score += f.enemy.max * (f.elite ? 2 : 1) + (f.boss ? 500 : 0);
+  r.score += f.enemy.max * (f.elite ? 1.5 : 1) + (f.boss ? 500 : 0);
+  r.score = Math.round(r.score);
+  r.score += floorPoints(r.floor);
   r.floor++;
   r.block = 0;
   r.poison = 0;
@@ -631,13 +667,15 @@ function openChoice(r: Run, kind: Choice['kind'], more: number, pick: number): v
     else options.push(one({ t: 'hone', die: weakestDie(r) }));
     // Third: heal when hurt, else another gear card or a hone.
     const hurt = r.hp < r.maxHp * 0.7;
-    if (hurt || rng.next() < 0.3) options.push(one({ t: 'heal', n: TUNE.heal }));
+    // Never a heal at full HP.
+    if (r.hp < r.maxHp && (hurt || rng.next() < 0.3)) options.push(one({ t: 'heal', n: TUNE.heal }));
     else if (rng.next() < 0.5) options.push(one({ t: 'gear', id: g2 }));
     else options.push(one({ t: 'hone', die: weakestDie(r) }));
   } else if (kind === 'rest') {
-    options.push(one({ t: 'heal', n: Math.round(r.maxHp * TUNE.rest) }));
+    if (r.hp < r.maxHp) options.push(one({ t: 'heal', n: Math.round(r.maxHp * TUNE.rest) }));
     for (const c of ups.slice(0, 2)) options.push(one({ t: 'up', card: c }));
     if (options.length < 3) options.push(one({ t: 'hone', die: weakestDie(r) }));
+    if (options.length < 3) options.push(one({ t: 'maxhp', n: 4 }));
   } else {
     // Shrines: a price in blood for something good, a gift, or walk on.
     const deals: Option[] = [];
@@ -648,7 +686,7 @@ function openChoice(r: Run, kind: Choice['kind'], more: number, pick: number): v
     deals.push({ cost: 0, gifts: [{ t: 'hone', die: weakestDie(r) }], label: 'Grindstone' });
     rng.shuffle(deals);
     options.push(...deals.slice(0, 2));
-    options.push({ cost: 0, gifts: [{ t: 'heal', n: 8 }], label: 'Rest a while' });
+    options.push(r.hp < r.maxHp ? { cost: 0, gifts: [{ t: 'heal', n: 8 }], label: 'Rest a while' } : { cost: 0, gifts: [], label: 'Walk on' });
   }
   r.choice = { kind, options, more, pick };
   r.phase = 'choice';
@@ -742,6 +780,7 @@ export function act(r: Run, a: string): Outcome | null {
     const node = row[k];
     if (node.kind === 'rest' || node.kind === 'shrine') {
       // Walking in completes the floor.
+      r.score += floorPoints(r.floor);
       r.floor++;
       openChoice(r, node.kind, 0, 0);
     }

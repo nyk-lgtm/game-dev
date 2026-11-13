@@ -18,6 +18,7 @@ import {
   act,
   attackOf,
   diceRoom,
+  foeStats,
   incomingOf,
   diceFor,
   dieDef,
@@ -103,7 +104,7 @@ function intentWords(e: Enemy, it: Intent): string {
   if (it.wither) parts.push(`wither your next roll (every die −${it.wither})`);
   if (it.heal) parts.push(`heal ${it.heal}`);
   if (it.buff) parts.push(`grow stronger (+${it.buff} to every hit)`);
-  if (it.charge) parts.push(`wind up: next turn it hits for ${attackOf(e, nextIntentOf(e))}`);
+  if (it.charge) parts.push(`wind up, then hit for ${attackOf(e, nextIntentOf(e))} (block placed now carries over)`);
   return parts.join(', ');
 }
 
@@ -768,6 +769,9 @@ export class Game {
     const r = this.r;
     const inc = incomingOf(r);
     const e = r.fight!.enemy;
+    const it = intentOf(e);
+    if (it.charge && !e.stunned && !(e.poison >= e.hp))
+      return `<b>Winding up for ${attackOf(e, nextIntentOf(e))}.</b> Block placed now carries over to it (brace)${r.block ? `: ${r.block} so far` : ''}.`;
     if (!inc.hit && !inc.tick) return e.poison >= e.hp ? `<span class="good">Its poison finishes it.</span>` : `${enemyDef(e.id).name} won’t attack this turn.`;
     const parts: string[] = [];
     if (inc.hit) parts.push(`Incoming <b>${inc.hit}</b>${r.block ? `, you block ${Math.min(inc.hit, r.block)}` : ''}`);
@@ -777,7 +781,10 @@ export class Game {
       : inc.total
         ? `<span class="warn">you lose ${inc.total}</span>`
         : '<span class="good">all blocked</span>';
-    return `${parts.join(', ')}: ${end}.`;
+    // A nudge (never a stop): a die left over could still soak some of it.
+    let could = 0;
+    if (inc.through > 0) for (const p of legalPlacements(r)) could = Math.max(could, previewPlace(r, p.die, p.card, p.slot)?.block ?? 0);
+    return `${parts.join(', ')}: ${end}.${could ? ` A die could still block <b>${Math.min(could, inc.through)}</b>.` : ''}`;
   }
 
   private renderInfo(): void {
@@ -801,12 +808,19 @@ export class Game {
 
   // ---------------------------------------------------------------- cards
 
-  private nodeLabel(n: MapNode): string {
-    const icon = n.foe && n.kind === 'fight' ? enemyDef(n.foe).icon : NODE_ICON[n.kind];
-    const name =
-      n.kind === 'fight' ? enemyDef(n.foe!).name : n.kind === 'elite' ? `${enemyDef(n.foe!).name}` : n.kind === 'boss' ? 'The House' : n.kind === 'rest' ? 'Campfire' : 'Shrine';
-    const sub = n.kind === 'elite' ? 'elite · 2 rewards' : n.kind === 'rest' ? 'heal or upgrade' : n.kind === 'shrine' ? 'a bargain' : n.kind === 'boss' ? 'boss' : '';
-    return `<span class="ni">${icon}</span><span>${name}${sub ? `<small>${sub}</small>` : ''}</span>`;
+  private nodeLabel(n: MapNode, floor: number): string {
+    if (!n.foe) {
+      const name = n.kind === 'rest' ? 'Campfire' : 'Shrine';
+      const sub = n.kind === 'rest' ? 'heal or upgrade' : 'a bargain';
+      return `<span class="ni">${NODE_ICON[n.kind]}</span><span>${name}<small>${sub}</small></span>`;
+    }
+    // Enemies show their own icon (elites wear a crown badge), their HP on that floor, and their biggest blow.
+    const d = enemyDef(n.foe);
+    const st = foeStats(n.foe, floor);
+    const threat = `${st.hp} HP · ${st.big >= 15 ? `<b class="big">💥${st.big}</b>` : `⚔≤${st.big}`}`;
+    const tag = n.kind === 'elite' ? '<i class="crown">👑</i>' : '';
+    const sub = n.kind === 'elite' ? `elite, 2 rewards · ${threat}` : n.kind === 'boss' ? `boss · ${threat}` : threat;
+    return `<span class="ni">${d.icon}${tag}</span><span>${d.name}<small>${sub}</small></span>`;
   }
 
   showMap(peek: boolean): void {
@@ -819,14 +833,14 @@ export class Game {
         const nodes = row
           .map((n, k) => {
             const live = state === 'now' && !peek;
-            return `<button class="node ${n.kind} ${k === took ? 'took' : ''}" data-k="${k}" ${live ? '' : 'disabled'}>${this.nodeLabel(n)}</button>`;
+            return `<button class="node ${n.kind} ${k === took ? 'took' : ''}" data-k="${k}" ${live ? '' : 'disabled'}>${this.nodeLabel(n, f)}</button>`;
           })
           .join('');
         return `<div class="mrow ${state} ${row.length === 1 ? 'boss' : ''}" data-f="${f}"><span class="fl">${f + 1}</span>${nodes}</div>`;
       })
       .reverse()
       .join('');
-    const title = peek ? 'The map' : r.floor === 0 ? 'The climb to The House' : `Floor ${r.floor + 1}: choose a path`;
+    const title = peek ? 'The map' : r.floor === 0 ? 'The climb to The House' : r.floor === FLOORS - 1 ? 'The House awaits' : `Floor ${r.floor + 1}: choose a room`;
     showCard(
       `<h2>${title}<span class="sub">${peek ? `Floor ${floorReached(r)} of ${FLOORS}. ` : ''}Pick either room on the lit row: rooms aren’t linked, so you can switch sides on any floor. The House waits on floor ${FLOORS}.</span></h2><div class="map">${rows}</div>`,
       peek ? [{ label: 'Back', primary: true, onClick: () => this.back() }] : [],
@@ -974,7 +988,7 @@ export class Game {
        <ul>
          <li>You start with three <b>bone dice</b> (plain d6s). Each turn you <b>roll your dice</b>. <b>Drag</b> each one onto a slot on your gear (or tap a die, then a slot). Slots say what they take: <b>any</b>, <b>≤3</b>, <b>even</b>, <b>5+</b>, a <b>pair</b>… Slots that fit glow and show exactly what they’d do.</li>
          <li>The enemy shows its <b>next move</b> in the top-right: ⚔ attack, 🛡 block, ☠ poison, 🔒 hex (locks your best die), 🥀 wither (lowers your roll), ⏳ winding up a big hit. Tap it for words.</li>
-         <li><b>Block</b> soaks hits until your next turn. Changed your mind? <b>↶</b> undoes a placement this turn. Then <b>End turn</b>.</li>
+         <li><b>Block</b> soaks hits until your next turn; block raised while the enemy ⏳ winds up carries over to its big hit (brace). Changed your mind? <b>↶</b> undoes a placement this turn. Then <b>End turn</b>.</li>
          <li>Win a fight: pick a <b>reward</b>: new gear (at most ${MAX_GEAR}), an upgrade, a new die (at most ${MAX_DICE}), or a heal. HP carries over. Elites give two picks; campfires heal or upgrade.</li>
        </ul>`,
       [{ label: this.r.phase === 'over' ? 'Back' : 'Got it', primary: true, onClick: () => this.back() }],

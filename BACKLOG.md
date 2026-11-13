@@ -46,8 +46,16 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         enemy's lingering block explained the first time; a pending "replace which?" survives a reload; used dice
         leave a gap in the tray; a bigger enemy panel with the intent in words. Enemies +5% HP on floors 5+, The House
         168. Bot (1000 + 500 runs): ~22% wins, first fights 100%.
-  - [ ] Next: owner playtest. Watch: is The House too much of a wall compared with the stage-3 fights? Are Powder Keg
-        and the Lucky Coin too strong? Do the tiny `≤3`/`pair` labels read at arm's length?
+  - [x] Second blind pass (lost to The House at 44/168, to the Mimic on floor 10, daily to the Iron Warden on floor 5;
+        "fast and readable, good tension"; every death one big hit) and fixes (rules v3): enemies grow through each
+        stage (+8% HP / +5% damage a floor), fights never open on a wind-up or its blow (Grave Knight's 24 or the
+        Wyvern's 32 on turn 1), the map shows each foe's HP and biggest blow (💥) with its own icon (elites get a crown
+        badge); block raised while the enemy winds up carries over to the blow (brace), with a hint; the info line
+        nudges "a die could still block N"; never a heal at full HP; the boss name wraps; "The House awaits" on
+        floor 12; score counts depth (40·floor per floor done), so a deeper run outscores a shallower one. The House
+        176. Bot (1,500 runs): ~23% wins, first two fights 100%, deaths spread out (House 39%).
+  - [ ] Next: owner playtest. Watch: is the brace rule clear? Are Powder Keg and the Lucky Coin too strong? Do the
+        tiny `≤3`/`pair` labels read at arm's length?
 - [ ] **Sungrazer** (one-thumb arcade: hold to swing a comet round a star, let go to fling). Milestones:
   - [x] Core (src/sungrazer/core, rules v1): fixed 240 Hz sim, lazily grown seeded sky (spine stars ≤ 40 apart,
         bonus stars, motes, cinders from altitude 450, pulsars 1000, giants and drifting cinders 1700, sparser past

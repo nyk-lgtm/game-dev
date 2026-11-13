@@ -66,7 +66,8 @@ body {
 @keyframes hit { 25% { transform: translateX(-6px) rotate(-6deg); filter: brightness(1.8); } 60% { transform: translateX(5px) rotate(4deg); } }
 @keyframes lunge { 40% { transform: translateY(18px) scale(1.12); } }
 #foeInfo { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
-#foeName { font-weight: 800; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#foeName { font-weight: 800; font-size: 16px; line-height: 1.15; overflow-wrap: anywhere; }
+#foeName small { white-space: nowrap; }
 #foeName small { color: var(--muted); font-weight: 600; font-size: 12px; margin-left: 4px; }
 #foeTags, #youTags { display: flex; flex-wrap: wrap; gap: 4px; min-height: 22px; }
 #intent {
@@ -265,7 +266,9 @@ body #info { flex: 1; min-height: 40px; max-height: 58px; overflow: hidden; font
   min-height: 46px; border-radius: 12px; border: 1px solid var(--line); background: #241b15; color: var(--muted);
   font: 700 13.5px/1.15 system-ui, sans-serif; display: flex; align-items: center; gap: 6px; padding: 4px 8px; text-align: left;
 }
-.node .ni { font-size: 20px; flex: none; }
+.node .ni { position: relative; font-size: 20px; flex: none; }
+.node .ni .crown { position: absolute; left: -6px; top: -9px; font-size: 12px; font-style: normal; }
+.node small b.big { color: #ff8a6a; font-weight: 800; }
 .node small { display: block; font-size: 11px; font-weight: 600; opacity: 0.8; }
 .mrow.now .node { color: var(--text); background: #3a2a20; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(232, 176, 74, 0.2); }
 .mrow.done .node { opacity: 0.35; }

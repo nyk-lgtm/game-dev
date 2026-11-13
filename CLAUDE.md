@@ -57,9 +57,9 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     delay, timing jitter, a two-level release planner; rules v3 (40 runs): novice median ~22 s (alt ~470), human
     ~50-70 s (alt ~700-900; seed noise is large), good ~115 s (alt ~1900, p75 ~158 s), perfect survives 10 min;
     most good-bot deaths are cinders it brushes after a jittered grab). `SG_MODE=s|t|m` for modes, `CHECK=1` verifies replays.
-  - Kitbag: `npx vite-node scripts/kitbag/balance.ts 1000` (planning bot, rules v2: first two fights 100%, median floor 12,
-    ~22% wins (24% seeds 1000+, 18% SEED=9000), ~32 turns a run; most losses at The House (~48% of runs), then stage-3
-    entry (floor 9-10: Golem, Wyvern, Mimic, the Lich elite) and the Iron Warden elite on floors 5-8). `TUNE=hp:1.04,dmg:1.05`
+  - Kitbag: `npx vite-node scripts/kitbag/balance.ts 1000` (planning bot, rules v3: first two fights 100%, median floor 12,
+    ~23% wins (24% seeds 1000+, 22% SEED=9000), ~35 turns a run; losses: The House ~39% of runs, floors 9-10 ~22%,
+    floors 3-8 ~11% (enemies grow through each stage, so the end of a stage bites). `TUNE=hp:1.04,dmg:1.05`
     tries numbers (win rate is touchy: hp ×1.04 alone ≈ −3 points); `trace.ts <seed>` prints a bot run turn by turn,
     `upto.ts <seed> <floorsDone> [phase] [extra]` gives actions for `?seed=&a=`.
   - Hexhold: `npx vite-node scripts/hexhold/balance.ts 32` (heuristic bot, rules v5: median wave ~27, ~7/32 wins);
@@ -193,9 +193,13 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   split/flip/bump push a die back into the pool (rerolls key on a per-turn counter that undo restores, so undo can't
   fish). `E`: enemy block resets, its poison ticks, then the intent (skipped if stunned). Wins open a `Choice`
   (reward: gear / upgrade-or-die / heal-or-more; elites `more: 1`; rests heal 35% or upgrade; shrines trade HP);
-  a full kit (6) needs `C<k>.<replace>`; dice are only offered while `diceRoom(r)` (dice the gear can spend a turn)
+  a full kit (6) needs `C<k>.<replace>`; no heal is offered at full HP; dice are only offered while `diceRoom(r)` (dice the gear can spend a turn)
   exceeds your dice. Heals past full HP become block. `incomingOf(r)` = the hit past block + the poison that ticks
-  next turn, `lethal` when it kills (red tag, info line, End-turn confirm). Map: 12 floors × 2 nodes, a free pick per
+  next turn, `lethal` when it kills (red tag, info line, End-turn confirm). Rules v3: `foeStats(id, floor)` scales
+  ordinary enemies and elites through each stage (+8% HP, +5% damage a floor into floors 1-4 / 5-8 / 9-11; the boss
+  is fixed) and gives the map its HP and 💥 biggest-blow labels; fights open only on `openingSteps` (never a wind-up
+  or the blow after it); block raised on the enemy's wind-up turn carries into its blow turn (`f.brace`); score =
+  enemy HP (elites ×1.5) + `floorPoints(f)` = 40·(f+1) per floor done + boss 500 + win 1000 + 10·HP, so depth rules. Map: 12 floors × 2 nodes, a free pick per
   floor (floors 1-2 fights, 6 rest|shrine, 11 rest|…, 12 The House; elites ≥ `ELITE_GAP` = 3 floors apart); walking
   into a rest/shrine completes the floor. Actions `M<k>`, `P<die>.<card>.<slot>`, `U`
   (undo within the turn, snapshots in `hist`), `E`, `C<k>[.<r>]`, `S`, `X`; `replay(seed, a)`; `previewPlace` runs a
