@@ -158,6 +158,8 @@ describe('simmer core', () => {
     const p = marketPrice(5, 0, 0).price;
     expect(act(r, 'b0.3')).toBe(true);
     expect(r.coins).toBe(TUNE.startCoins - 3 * p);
+    expect(actError(r, 'l3')).toBe('Not enough coins');
+    r.coins += 500;
     expect(act(r, 'l3')).toBe(true);
     expect(r.known[3]).toBe(true);
     expect(act(r, 'l3')).toBe(false);
@@ -195,8 +197,8 @@ describe('simmer core', () => {
     act(r, `b1.${Math.floor(r.coins / marketPrice(3, 0, 1).price)}`);
     expect(r.coins).toBeLessThan(8);
     act(r, 'o2x40');
-    expect(r.coins).toBeGreaterThanOrEqual(12);
-    expect(r.gifts).toBe(1);
+    expect(r.coins).toBe(TUNE.safety);
+    expect(r.gifts).toBeGreaterThan(0);
   });
 
   it('the forecast adds up and counts friends exactly', () => {

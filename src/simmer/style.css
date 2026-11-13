@@ -192,3 +192,6 @@ button.secondary.small { min-width: 64px; min-height: 44px; font-size: 13px; pad
 .request .ok { color: var(--good); font-weight: 800; font-size: 13px; white-space: nowrap; }
 .request button.mini { margin-left: 0; white-space: nowrap; }
 #rep small.full { font-size: 10px; font-weight: 800; color: var(--muted); margin-left: 3px; letter-spacing: 0.04em; text-transform: uppercase; }
+.badge.rival { background: #3a2230; color: #ffb0c0; }
+/* Toasts sit low, above the dock, never over the headings or a card's title. */
+.toast { top: auto; bottom: calc(96px + env(safe-area-inset-bottom)); max-width: calc(100% - 32px); text-align: center; }

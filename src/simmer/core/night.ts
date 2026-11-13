@@ -10,7 +10,7 @@ export function rngFor(seed: number, ...parts: number[]): Rng {
   for (const p of parts) h = mixSeed(h, p >>> 0);
   return new Rng(h);
 }
-export const T_CROWD = 0x637277, T_WEATHER = 0x776561, T_MARKET = 0x6d6b74, T_FEST = 0x666573, T_PREVIEW = 0x707276, T_REQ = 0x726571;
+export const T_CROWD = 0x637277, T_WEATHER = 0x776561, T_MARKET = 0x6d6b74, T_FEST = 0x666573, T_PREVIEW = 0x707276, T_REQ = 0x726571, T_RIVAL = 0x726976;
 
 /** What tonight is like, for worth and purses. */
 export interface NightCtx {
@@ -21,6 +21,8 @@ export interface NightCtx {
   cool?: boolean;
   /** Tonight's request: guests of kind `sp` ask for `dish`. */
   req?: { sp: number; dish: number };
+  /** A rival stall opens across the lane tonight. */
+  rival?: boolean;
 }
 
 export interface MenuItem {
@@ -37,6 +39,8 @@ export interface Guest {
   at: number;
   /** Came because a friend was delighted last night. */
   friend: boolean;
+  /** Came for the dish their kind asked for tonight. */
+  asked?: boolean;
 }
 
 /** How a dish's worth to a guest is built: base × each factor. */
@@ -59,6 +63,7 @@ export function worthOf(dish: number, sp: number, ctx: NightCtx): Worth {
   if (ctx.festival && d.tags.includes('sweet')) parts.push({ label: 'festival treat', x: TUNE.festSweet });
   if (ctx.cool && d.tags.includes('cold')) parts.push({ label: 'chilled in the cool box', x: TUNE.coolCold });
   if (isRequest(ctx, dish, sp)) parts.push({ label: 'they asked for it', x: TUNE.reqWorth });
+  if (ctx.rival) parts.push({ label: 'a rival stall to compare with', x: TUNE.rivalWorth });
   let w = d.base;
   for (const p of parts) w *= p.x;
   return { w: Math.round(w), parts };
@@ -91,7 +96,9 @@ export interface Choice {
  * menu order. `ws` are the dishes' worths to this guest, `stock(i)` says whether menu
  * item i can still be cooked.
  */
-export function chooseFrom(ws: number[], prices: number[], bases: number[], purse: number, stock: (i: number) => boolean): Choice {
+export function chooseFrom(ws: number[], prices: number[], bases: number[], purse: number, stock: (i: number) => boolean, prefer = -1): Choice {
+  // The dish a guest asked for wins whenever they can have it.
+  if (prefer >= 0 && prices[prefer] <= ws[prefer] && prices[prefer] <= purse && stock(prefer)) return { pick: prefer, wanted: prefer };
   let pick = -1, ps = -1, pw = -1;
   let wanted = -1, wsur = -1, ww = -1;
   let anyWorth = false;
@@ -121,8 +128,12 @@ export function choose(sp: number, purse: number, menu: MenuItem[], ctx: NightCt
     menu.map((m) => DISHES[m.dish].base),
     purse,
     stock,
+    preferOf(menu, ctx, sp),
   );
 }
+
+/** Menu index of the dish this kind asked for tonight, or -1. */
+export const preferOf = (menu: MenuItem[], ctx: NightCtx, sp: number): number => (ctx.req && ctx.req.sp === sp ? menu.findIndex((m) => m.dish === ctx.req!.dish) : -1);
 
 /** Worth of each menu item to each species tonight. */
 export const worthTable = (menu: MenuItem[], ctx: NightCtx): number[][] => SPECIES.map((_, sp) => menu.map((m) => worthOf(m.dish, sp, ctx).w));
@@ -138,6 +149,8 @@ export interface CrowdParams {
   bench: boolean;
   /** Species of last night's delighted guests (each brings a friend). */
   friends: number[];
+  /** Guests who come for tonight's asked-for dish. */
+  askers?: { sp: number; n: number };
 }
 
 /** Species that visit at this reputation. */
@@ -150,7 +163,7 @@ export function speciesWeights(rep: number, weather: WeatherId): number[] {
 
 /** Expected street guests before the ±15% night-to-night noise. */
 export function streetMean(rep: number, ctx: NightCtx, lanterns: boolean): number {
-  return (TUNE.street0 + TUNE.streetK * rep) * WEATHER[ctx.weather].crowd * (ctx.festival ? TUNE.festival : 1) * (lanterns ? TUNE.lanterns : 1);
+  return (TUNE.street0 + TUNE.streetK * rep) * WEATHER[ctx.weather].crowd * (ctx.festival ? TUNE.festival : 1) * (lanterns ? TUNE.lanterns : 1) * (ctx.rival ? TUNE.rivalCrowd : 1);
 }
 
 export const purseMult = (ctx: NightCtx): number => (ctx.payday ? TUNE.payday : 1) * (ctx.festival ? TUNE.festPurse : 1);
@@ -189,6 +202,10 @@ export function makeCrowd(p: CrowdParams, rng = rngFor(p.seed, T_CROWD, p.day)):
     }
   }
   for (const sp of p.friends.slice(0, TUNE.friendCap)) add(sp, true);
+  for (let k = 0; k < (p.askers?.n ?? 0); k++) {
+    add(p.askers!.sp, false);
+    out[out.length - 1].asked = true;
+  }
   out.sort((a, b) => a.at - b.at);
   out.forEach((g, i) => (g.id = i));
   return out;
@@ -272,7 +289,7 @@ export function simulate(guests: Guest[], menu: MenuItem[], ctx: NightCtx, stove
       // The next guest steps up; one who leaves frees the counter for the next.
       while (queue.length && busy[s] <= t) {
         const g = queue.shift()!;
-        const c = chooseFrom(W[g.sp], prices, bases, g.purse, canCook);
+        const c = chooseFrom(W[g.sp], prices, bases, g.purse, canCook, preferOf(menu, ctx, g.sp));
         const waited = t - g.at;
         const slow = waited * 2 > g.patience;
         if (c.pick < 0) {

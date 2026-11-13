@@ -168,7 +168,17 @@ export const TUNE = {
   reqWorth: 1.4,
   reqTip: 14,
   /** At full renown, each ♥ that can't be added comes back as this many coins in regulars' tips. */
-  fullTip: 10,
+  fullTip: 25,
+  /** Recipe and upgrade prices × (the listed `learn` / `cost` are the base). */
+  learnMul: 2,
+  upMul: 1.8,
+  /** Guests of the asking kind who come just for the dish they asked for. */
+  reqGuests: 3,
+  /** A rival stall's night: passers-by × and worth × (they compare). */
+  rivalCrowd: 0.8,
+  rivalWorth: 0.9,
+  /** In the morning a nearly broke stall is topped up to this many coins by a neighbour. */
+  safety: 30,
   /** Score = coins + repPts × renown. */
   repPts: 10,
 };
@@ -182,4 +192,4 @@ export const SERVE = 2;
 export const MAX_PRICE = 40;
 
 /** Score lines for one, two and three stars. */
-export const STARS = [1200, 3000, 4400];
+export const STARS = [1500, 3400, 5000];

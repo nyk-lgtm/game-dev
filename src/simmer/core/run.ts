@@ -19,9 +19,9 @@ import {
   UPGRADES,
   type WeatherId,
 } from './data';
-import { T_FEST, T_MARKET, T_REQ, T_WEATHER, makeCrowd, rngFor, simulate, speciesWeights, streetMean, type MenuItem, type NightCtx, type NightResult, type Why } from './night';
+import { T_FEST, T_MARKET, T_REQ, T_RIVAL, T_WEATHER, makeCrowd, rngFor, simulate, speciesWeights, streetMean, type MenuItem, type NightCtx, type NightResult, type Why } from './night';
 
-export const RULES_VERSION = 4;
+export const RULES_VERSION = 5;
 
 export interface Batch {
   ing: number;
@@ -86,6 +86,8 @@ export interface Run {
   ledgers: Ledger[];
   /** Last evening, for the animation (not saved; replay rebuilds it). */
   night: NightResult | null;
+  /** The rival stall's night (-1: none). */
+  rival: number;
   /** Species met so far (their tastes show in the guest book). */
   met: boolean[];
   gifts: number;
@@ -129,6 +131,7 @@ export function makeFestivals(seed: number): number[] {
 
 export function ctxOf(r: Run, d = r.day): NightCtx {
   const ctx: NightCtx = { weather: r.weather[Math.min(d, r.weather.length - 1)], festival: r.festivals.includes(d), payday: isPayday(d), cool: r.ups[UP.cool] > 0 };
+  if (d === r.rival) ctx.rival = true;
   if (d === r.day) ctx.req = requestOf(r, ctx);
   return ctx;
 }
@@ -137,6 +140,18 @@ export function ctxOf(r: Run, d = r.day): NightCtx {
  * Tonight's request (from night `TUNE.reqFrom` on): a kind expected tonight, picked by its
  * share of the crowd, asks for one of the dishes it loves (known or not). Seeded per night.
  */
+/** The guests who come for tonight's asked-for dish. */
+export const askersOf = (ctx: NightCtx): { sp: number; n: number } | undefined => (ctx.req ? { sp: ctx.req.sp, n: TUNE.reqGuests } : undefined);
+
+/** The night a rival stall opens across the lane: one late night that isn't a festival. */
+export function makeRival(seed: number, festivals: number[]): number {
+  const rng = rngFor(seed, T_RIVAL);
+  const n = TUNE.days;
+  const options: number[] = [];
+  for (let d = Math.floor(n * 0.6); d < n - 2; d++) if (!festivals.includes(d)) options.push(d);
+  return options.length ? rng.pick(options) : -1;
+}
+
 export function requestOf(r: Run, ctx: NightCtx): { sp: number; dish: number } | undefined {
   if (r.day < TUNE.reqFrom) return undefined;
   const rng = rngFor(r.seed, T_REQ, r.day);
@@ -199,6 +214,7 @@ export function newRun(seed: number): Run {
     friends: [],
     weather: makeWeather(seed >>> 0),
     festivals: makeFestivals(seed >>> 0),
+    rival: makeRival(seed >>> 0, makeFestivals(seed >>> 0)),
     spentFood: 0,
     spentShop: 0,
     lastMenu: DISHES.map((d, i) => ({ dish: i, price: d.base })).filter((m) => DISHES[m.dish].learn === 0).slice(0, START_MENU),
@@ -219,7 +235,12 @@ export function wageOf(r: Run, d = r.day): number {
   return Math.round(TUNE.wage + TUNE.wagePer * guests);
 }
 
-export const upCost = (r: Run, k: number): number | null => UPGRADES[k].cost[r.ups[k]] ?? null;
+export const upCost = (r: Run, k: number): number | null => {
+  const c = UPGRADES[k].cost[r.ups[k]];
+  return c === undefined ? null : Math.round(c * TUNE.upMul);
+};
+/** What learning a recipe costs. */
+export const learnCost = (d: number): number => Math.round(DISHES[d].learn * TUNE.learnMul);
 
 /** Why an action can't be taken now, or null. */
 export function actError(r: Run, a: string): string | null {
@@ -235,7 +256,7 @@ export function actError(r: Run, a: string): string | null {
     const d = Number(a.slice(1));
     if (!DISHES[d] || !/^l\d+$/.test(a)) return 'No such recipe';
     if (r.known[d]) return 'Already known';
-    if (DISHES[d].learn > r.coins) return 'Not enough coins';
+    if (learnCost(d) > r.coins) return 'Not enough coins';
     return null;
   }
   if (a[0] === 'u') {
@@ -290,8 +311,8 @@ export function act(r: Run, a: string): boolean {
   } else if (k === 'l') {
     const d = Number(a.slice(1));
     r.known[d] = true;
-    r.coins -= DISHES[d].learn;
-    r.spentShop += DISHES[d].learn;
+    r.coins -= learnCost(d);
+    r.spentShop += learnCost(d);
   } else if (k === 'u') {
     const u = Number(a.slice(1));
     const c = upCost(r, u)!;
@@ -308,7 +329,7 @@ function openStall(r: Run, plan: { helper: boolean; menu: MenuItem[] }): void {
   const ctx = ctxOf(r);
   const wage = plan.helper ? wageOf(r) : 0;
   r.coins -= wage;
-  const guests = makeCrowd({ seed: r.seed, day: r.day, rep: r.rep, ctx, lanterns: r.ups[UP.lantern] > 0, bench: r.ups[UP.bench] > 0, friends: r.friends });
+  const guests = makeCrowd({ seed: r.seed, day: r.day, rep: r.rep, ctx, lanterns: r.ups[UP.lantern] > 0, bench: r.ups[UP.bench] > 0, friends: r.friends, askers: askersOf(ctx) });
   const have = onHand(r);
   const night = simulate(guests, plan.menu, ctx, stovesOf(r, plan.helper), have);
   // Take what was cooked from the stock, oldest first.
@@ -375,10 +396,11 @@ function openStall(r: Run, plan: { helper: boolean; menu: MenuItem[] }): void {
   r.spentShop = 0;
   r.day++;
   if (r.day >= TUNE.days) r.over = true;
-  else if (r.coins < 8) {
-    // A neighbour lends a hand so a broke stall can always open again.
-    r.coins += 12;
-    r.gifts++;
+  else if (r.coins < TUNE.safety) {
+    // A neighbour tops up a nearly broke stall, so it can always stock up and open again.
+    const gift = TUNE.safety - r.coins;
+    r.coins += gift;
+    r.gifts += gift;
     r.giftFor = r.day;
   }
 }

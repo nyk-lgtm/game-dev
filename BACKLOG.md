@@ -34,7 +34,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 7. Simmer: second blind playtest (see its item below). Gleam (new light puzzle): first blind playtest. Lull: first playtest fixes shipped;
    second blind playtest and a real-phone sound check next.
    Brink, Loomsong, Simmer). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle.
-7. Simmer: fourth blind playtest (see its item below).
+7. Simmer: fifth blind playtest (see its item below).
 6. New games are welcome when the queue is quiet (recent: Ninefold, Summit, Quarry, Sungrazer, Kitbag, Brink, Loomsong,
    Simmer, Gleam, Lull). Ideas: a co-op-free social/daily puzzle, a short narrative roguelite, a physics builder.
 
@@ -184,9 +184,19 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         "stock covers ~N" and stocked takings split shared ingredients (`allocateStock`); the folded pantry says when coins
         ran short; the guest log is sorted by time; kind sheets say "~N orders from them". Stars 1200/3000/4400. Bots (100
         seasons): naive ~2030 1★, lazy ~3140 (2★ 69%), middle ~3960 (3★ 8%), careful ~4520 (3★ 59%), clever ~4250-4410, 3★ 44-51% (its price search over-prices now that requests pay: ~25% walk off as pricey).
-  - [ ] Next: fourth blind playtest. Watch: do requests read as a fun nightly twist or a chore? Is learning a recipe for
-        one night's request tempting in a bad way (the card offers it)? Does full-renown tipping feel like a payoff?
-        Bot note: "buy every recipe and upgrade" (builder ~4770) now tops the bots; clever's price search over-prices.
+  - [x] Fourth blind playtest (seed 446297413: careful 4,343 ★★, lazy 3,396 ★★, buy everything after stock 4,672 ★★★ =
+        dominant; buy everything before stock → 0¢, sold out every night, renown 0, no recovery) and fixes (rules v5):
+        recipes ×2 and upgrades ×1.8 in price so fit matters (buyall now ~4,540 vs careful ~5,080); a purchase that leaves
+        less than tonight's stock asks first; a broke stall is topped up to 30¢; requests bring 3 guests of the asking
+        kind, who take their dish whenever they can afford it, "Put it on" prices it within their purses and the card says
+        how many order it and that other kinds want it too; a dish priced down for a request goes back to its listed price
+        next morning; a rival stall night late in the season; regulars' tips 25¢ per ♥ past 100; "Same seed again" starts
+        from the default menu; toasts sit above the dock; a reload after a night closed goes on to the morning/season end;
+        help says a long wait cancels a request's delight; kind sheets give a likely range. Stars 1500/3400/5000. Bots (100
+        seasons, two seed sets): naive ~2070 1★, lazy ~3520 (2★ ~64%), middle ~4440 (3★ ~10%), careful ~5080 (3★ ~58%),
+        buyall ~4540 (3★ ~22%), clever ~5330 (3★ ~74%).
+  - [ ] Next: fifth blind playtest. Watch: do the dearer recipes feel worth it when they fit? Does the rival night read?
+        Is the 30¢ top-up enough to recover from a bad spree?
 
 - [ ] **Loomsong** (original rhythm game with procedurally generated music). Milestones:
   - [x] Core (src/loomsong/core, rules v1): seeded songs (key, mode, 90-140 BPM, verse/chorus progressions, a form

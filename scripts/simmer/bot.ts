@@ -31,6 +31,8 @@ import {
   REP_MAX,
   QUEUE_WARN,
   helperPayback,
+  learnCost,
+  askPrice,
   wageOf,
   fillNeed,
   upgradePayback,
@@ -66,6 +68,8 @@ export interface Strat {
   repPerDay: number;
   /** Keep every menu line filled (a person rarely leaves one empty). */
   fillMenu?: boolean;
+  /** Buy every recipe and upgrade it can afford once tonight's stock is covered (no thinking). */
+  buyAll?: boolean;
   /** Learn and serve the dish guests ask for. */
   requests?: boolean;
   /** Only these dishes may go on the menu (single-minded strategies). */
@@ -109,6 +113,25 @@ export const STRATS: Record<string, Strat> = {
   // Careful: the middle way's two upgrades, plus menus that delight (renown valued), and learning and
   // serving the dish guests ask for.
   careful: { ...BASE, name: 'careful', price: 'base', stock: 'fill', bulk: false, helper: 'warn', fillMenu: true, learn: 'order', learnMax: 0, ups: [], upAt: [[UP.lantern, 3], [UP.stove, 6]] },
+  // The fourth playtester's "buy everything after stock": careful's daily habits, plus every recipe and
+  // upgrade as soon as the coins beyond tonight's stock allow, in list order.
+  buyall: {
+    ...BASE,
+    name: 'buyall',
+    price: 'base',
+    stock: 'fill',
+    bulk: false,
+    helper: 'warn',
+    fillMenu: true,
+    learn: 'order',
+    learnMax: 10,
+    order: [3, 4, 5, 6, 7, 8, 9],
+    ups: [UP.board, UP.board, UP.lantern, UP.stove, UP.bench, UP.cool],
+    upMode: 'rule',
+    upMinDaysLeft: 0,
+    reserve: 0,
+    buyAll: true,
+  },
   lazynohelp: { ...BASE, name: 'lazynohelp', menu: 'fixed', price: 'base', stock: 'fill', bulk: false, learn: 'none', ups: [], helper: 'never' },
   // A careful player using the page: dishes by their "~N orders", listed prices, Fill to forecast,
   // a helper when warned, recipes and upgrades whose payback lines look good.
@@ -131,7 +154,11 @@ export const STRATS: Record<string, Strat> = {
     repValue: 0,
     repPerDay: 0,
   },
-  clever: BASE,
+  // Clever: careful's shopping, plus prices searched against the purses (within 0.8-1.3 of the list), a forecast stock
+  // with cheap-day stock-ups, and a helper whenever it pays.
+  clever: { ...BASE, name: 'clever', fillMenu: true, learn: 'order', learnMax: 0, ups: [], upAt: [[UP.lantern, 3], [UP.stove, 6]] },
+  // The old clever: payback shopping for recipes and upgrades.
+  payback: BASE,
   // Single-minded strategies, to check none of them dominates.
   cheap: { ...BASE, name: 'cheap', price: 'base', mul: 0.8, add: 0 },
   premium: { ...BASE, name: 'premium', price: 'base', mul: 1.35, add: 0 },
@@ -176,7 +203,7 @@ function optPrices(r: Run, s: Strat, menu: MenuItem[], f: Forecast, stoves: numb
       if (only >= 0 && i !== only) continue;
       const base = DISHES[menu[i].dish].base;
       let bp = menu[i].price;
-      for (let p = Math.max(1, Math.floor(base * 0.6)); p <= Math.ceil(base * 2.2); p++) {
+      for (let p = Math.max(1, Math.floor(base * Number(process.env.PLO ?? 0.8))); p <= Math.ceil(base * Number(process.env.PHI ?? 1.3)); p++) {
         if (p === bp) continue;
         menu[i].price = p;
         const v = value(r, s, menu, f, stoves, lam).v;
@@ -198,7 +225,7 @@ export function planMenu(r: Run, s: Strat, f = forecast(r), stoves = stovesOf(r)
   const menu: MenuItem[] = [];
   // A careful player puts tonight's asked-for dish on the menu when they know it.
   const req = f.ctx.req;
-  if (s.requests && req && pool.includes(req.dish)) menu.push({ dish: req.dish, price: priceFor(s, req.dish) });
+  if (s.requests && req && pool.includes(req.dish)) menu.push({ dish: req.dish, price: askPrice(f.ctx) });
   let cur = -Infinity;
   const size = Math.min(menuSize(r), pool.length);
   while (menu.length < size) {
@@ -253,25 +280,25 @@ export function planDay(r: Run, s: Strat): string[] {
   const stockBudget = () => costOf(r, needFor(r, s, planMenu(r, s, f, stovesOf(r), lam).menu, f, false)) + s.reserve;
   // The asked-for dish: learn it if it is affordable and the season has nights left.
   const rq = f.ctx.req;
-  if (s.requests && s.learn !== 'none' && rq && !r.known[rq.dish] && daysLeft(r) >= 3 && (!s.only || s.only.includes(rq.dish)) && r.coins >= DISHES[rq.dish].learn + stockBudget()) doAct(`l${rq.dish}`);
+  if (s.requests && s.learn !== 'none' && rq && !r.known[rq.dish] && daysLeft(r) >= 3 && (!s.only || s.only.includes(rq.dish)) && r.coins >= learnCost(rq.dish) + stockBudget()) doAct(`l${rq.dish}`);
   // Recipes.
   const nKnown = () => r.known.filter(Boolean).length - 3;
   if (s.learn === 'order') {
     for (const d of s.order) {
       if (nKnown() >= s.learnMax) break;
       if (r.known[d]) continue;
-      if (r.coins >= DISHES[d].learn + stockBudget() && daysLeft(r) >= 6) doAct(`l${d}`);
-      break;
+      if (r.coins >= learnCost(d) + stockBudget() && (s.buyAll || daysLeft(r) >= 6)) doAct(`l${d}`);
+      if (!s.buyAll) break;
     }
   } else if (s.learn === 'value' && daysLeft(r) >= 4) {
     const now = planMenu(r, s, f, stovesOf(r), lam).v;
     const room = r.coins - stockBudget();
     let best = -1, gain = 0;
     for (let d = 0; d < DISHES.length; d++) {
-      if (r.known[d] || (s.only && !s.only.includes(d)) || DISHES[d].learn > room) continue;
+      if (r.known[d] || (s.only && !s.only.includes(d)) || learnCost(d) > room) continue;
       const k = r.known.slice();
       k[d] = true;
-      const g = (planMenu(r, s, f, stovesOf(r), lam, k).v - now) * daysLeft(r) * 0.6 - DISHES[d].learn;
+      const g = (planMenu(r, s, f, stovesOf(r), lam, k).v - now) * daysLeft(r) * 0.6 - learnCost(d);
       if (g > gain) (gain = g), (best = d);
     }
     if (best >= 0) doAct(`l${best}`);
@@ -296,13 +323,16 @@ export function planDay(r: Run, s: Strat): string[] {
     for (const k of s.ups) {
       const c = upCost(r, k);
       if (c === null) continue;
-      if (r.coins < c + stockBudget() || daysLeft(r) < s.upMinDaysLeft) break;
-      if (k === UP.stove && s.name !== 'builder') {
+      if (r.coins < c + stockBudget() || daysLeft(r) < s.upMinDaysLeft) {
+        if (s.buyAll) continue;
+        break;
+      }
+      if (k === UP.stove && !s.buyAll && s.name !== 'builder') {
         const d = demand(r, planMenu(r, s, f, 1, lam).menu, f, 1);
         const queued = last ? (last.left.slow ?? 0) + (last.left.closed ?? 0) : 0;
         if (d.cookMins < d.capacity * 0.6 && queued < 3) continue;
       }
-      if (k === UP.bench && s.name !== 'builder' && last && (last.left.slow ?? 0) < 2) continue;
+      if (k === UP.bench && !s.buyAll && s.name !== 'builder' && last && (last.left.slow ?? 0) < 2) continue;
       doAct(`u${k}`);
       break;
     }

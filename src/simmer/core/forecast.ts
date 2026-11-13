@@ -3,8 +3,8 @@
 // order off a given menu. It never looks at tonight's actual crowd.
 
 import { DISHES, INGS, OPEN_MINUTES, SERVE, SPECIES, TUNE, UP, UPGRADES } from './data';
-import { chooseFrom, delights, isRequest, purseRange, speciesWeights, streetMean, worthTable, type MenuItem, type NightCtx, type Why } from './night';
-import { ctxOf, marketPrice, menuSize, stovesOf, wageOf, type Run } from './run';
+import { chooseFrom, delights, isRequest, preferOf, purseRange, speciesWeights, streetMean, worthTable, type MenuItem, type NightCtx, type Why } from './night';
+import { askersOf, ctxOf, marketPrice, menuSize, stovesOf, wageOf, type Run } from './run';
 import { T_PREVIEW, makeCrowd, rngFor, simulate } from './night';
 
 export interface Forecast {
@@ -27,6 +27,7 @@ export function forecast(r: Run, d = r.day, lanterns = r.ups[UP.lantern] > 0): F
   const fr = d === r.day ? r.friends.slice(0, TUNE.friendCap) : [];
   const mix = wts.map((w) => (mean * w) / tot);
   for (const sp of fr) mix[sp]++;
+  if (ctx.req) mix[ctx.req.sp] += TUNE.reqGuests;
   return { ctx, street: mean, lo: Math.round(mean * 0.85), hi: Math.round(mean * 1.15), friends: fr.length, mix };
 }
 
@@ -76,7 +77,7 @@ export function demand(r: Run, menu: MenuItem[], f = forecast(r), stoves = 1 + r
     const k = hi - lo + 1;
     let delight = 0, happy = 0;
     for (let p = lo; p <= hi; p++) {
-      const c = chooseFrom(W[sp], prices, bases, p, all);
+      const c = chooseFrom(W[sp], prices, bases, p, all, preferOf(menu, f.ctx, sp));
       if (c.pick < 0) continue;
       share[c.pick] += 1 / k;
       const w = W[sp][c.pick];
@@ -216,7 +217,7 @@ export function queuePreview(r: Run, menu: MenuItem[], stoves: number, samples =
   for (let k = 0; k < samples; k++) {
     const before = slow + closed;
     const guests = makeCrowd(
-      { seed: r.seed, day: r.day, rep: r.rep, ctx, lanterns: r.ups[UP.lantern] > 0, bench: r.ups[UP.bench] > 0, friends: r.friends },
+      { seed: r.seed, day: r.day, rep: r.rep, ctx, lanterns: r.ups[UP.lantern] > 0, bench: r.ups[UP.bench] > 0, friends: r.friends, askers: askersOf(ctx) },
       rngFor(r.seed, T_PREVIEW, r.day, k),
     );
     const night = simulate(guests, menu, ctx, stoves, INGS.map(() => 999));
@@ -284,4 +285,11 @@ export function allocateStock(menu: MenuItem[], orders: number[], have: number[]
     }
   }
   return served;
+}
+
+/** A price for the asked-for dish that most of the asking kind can afford (the listed price at most). */
+export function askPrice(ctx: NightCtx): number {
+  if (!ctx.req) return 0;
+  const [lo, hi] = purseRange(ctx.req.sp, ctx);
+  return Math.max(1, Math.min(DISHES[ctx.req.dish].base, Math.round(lo + (hi - lo) * 0.25)));
 }
