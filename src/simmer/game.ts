@@ -42,7 +42,9 @@ import {
   stovesOf,
   upCost,
   worthOf,
-  STOVE_WARN,
+  QUEUE_WARN,
+  helperPayback,
+  wageOf,
   dishCost,
   fillNeed,
   recipePreview,
@@ -75,7 +77,7 @@ const clockOf = (min: number) => {
 };
 const sprite = (sp: number, size = 28) => `<img class="sprite" src="${spriteURL(sp, 40)}" width="${size}" height="${size}" alt="${SPECIES[sp].name}">`;
 const tagsOf = (d: number) => DISHES[d].tags.map((t) => TAG_WORD[t]).join(' · ');
-const usesOf = (d: number) => DISHES[d].uses.map((u) => INGS[u].icon).join('');
+const usesOf = (d: number) => `<span class="nw">${DISHES[d].uses.map((u) => INGS[u].icon).join('')}</span>`;
 const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n);
 
 const WHY_TEXT: Record<Why, string> = {
@@ -102,6 +104,8 @@ interface Draft {
   buys: number[];
   menu: MenuItem[];
   helper: boolean;
+  /** The pantry was filled by "Fill to forecast" and is shown folded. */
+  filled?: boolean;
 }
 
 export class Game {
@@ -115,6 +119,8 @@ export class Game {
   private speeds = [8, 24];
   private speedIx = 0;
   private clockText = '';
+  private savedT = 0;
+  private muted = false;
   /** The evening has finished playing (the ledger is up or was closed). */
   private nightOver = false;
 
@@ -125,6 +131,11 @@ export class Game {
       onDone: () => this.nightDone(),
       onTap: (v) => this.explain(v, this.lastLedger()!),
       onFrame: (t) => {
+        // Remember roughly where the evening is, so a reload can pick it up there.
+        if (t - this.savedT >= 15) {
+          this.savedT = t;
+          store.save('evening', { seed: this.r.seed, n: this.r.actions.length, t });
+        }
         const c = t < 0 ? 'Opening…' : clockOf(Math.min(t, OPEN_MINUTES));
         if (this.clockText !== c) $('clock').textContent = this.clockText = c;
       },
@@ -165,9 +176,9 @@ export class Game {
     this.save();
     this.loadDraft();
     // A reload while the stall was open plays that evening again (its ledger follows).
-    const pend = store.load<{ seed: number; n: number } | null>('evening', null);
+    const pend = store.load<{ seed: number; n: number; t?: number } | null>('evening', null);
     const last = this.r.actions[this.r.actions.length - 1];
-    if (pend && pend.seed === this.r.seed && pend.n === this.r.actions.length && last?.[0] === 'o' && this.r.night) return this.playEvening();
+    if (pend && pend.seed === this.r.seed && pend.n === this.r.actions.length && last?.[0] === 'o' && this.r.night) return this.playEvening(pend.t ?? 0);
     this.setMode('morning');
     if (this.r.over) this.showEnd();
   }
@@ -217,7 +228,7 @@ export class Game {
     d.buys = INGS.map((_, i) => Math.max(0, Math.min(99, Math.floor(d.buys[i] ?? 0))));
     d.menu = d.menu.filter((m, i, a) => r.known[m.dish] && a.findIndex((x) => x.dish === m.dish) === i).slice(0, menuSize(r));
     for (const m of d.menu) m.price = Math.max(1, Math.min(MAX_PRICE, Math.round(m.price)));
-    if (d.helper && this.spend() + TUNE.wage > r.coins) d.helper = false;
+    if (d.helper && this.spend() + wageOf(r) > r.coins) d.helper = false;
     while (this.spend() > r.coins) {
       const i = d.buys.findIndex((b) => b > 0);
       if (i < 0) break;
@@ -227,7 +238,7 @@ export class Game {
 
   /** Coins the draft's purchases cost. */
   private spend(): number {
-    return this.draft.buys.reduce((a, n, u) => a + n * marketPrice(this.r.seed, this.r.day, u).price, 0) + (this.draft.helper ? TUNE.wage : 0);
+    return this.draft.buys.reduce((a, n, u) => a + n * marketPrice(this.r.seed, this.r.day, u).price, 0) + (this.draft.helper ? wageOf(this.r) : 0);
   }
 
   private lastLedger(): Ledger | undefined {
@@ -318,10 +329,18 @@ export class Game {
       })
       .join('');
     const canAdd = d.menu.length < size && r.known.some((k, i) => k && !d.menu.some((m) => m.dish === i));
-    const cap = dem.cookMins > dem.capacity * 0.85;
+    const q = d.menu.length ? helperPayback(r, d.menu) : null;
+    const queued = q ? (d.helper ? q.after : q.before) : 0;
+    const qNote = !q
+      ? ''
+      : queued < 0.5
+        ? `The queue keeps moving: nobody should give up tonight${d.helper ? ' with your helper' : ''}.`
+        : `In a typical evening tonight ~${Math.round(queued)} guests give up queueing or are still waiting at closing${d.helper ? ' even with your helper' : ''}.${
+            !d.helper && q.saved >= 0.5 ? ` A helper (${q.wage}¢) would save ~${Math.round(q.saved)} (worth ~${Math.round(q.value)}¢).` : ''
+          }`;
     const menu = `<section class="panel"><h3>Tonight’s menu <small>${d.menu.length}/${size} dishes · tap a dish to swap it</small></h3>${rows}
       ${canAdd ? '<button class="add" data-add="1">＋ Add a dish</button>' : ''}
-      <p class="note ${cap ? 'warn' : ''}">Orders need ~${Math.round(dem.cookMins)} of ${dem.capacity} stove minutes${cap ? ': a long queue, some guests will give up (a helper or a second stove cooks twice as fast)' : ''}. Expected takings ~${Math.round(dem.revenue)}¢.</p></section>`;
+      <p class="note ${queued >= QUEUE_WARN ? 'warn' : ''}">${qNote} Expected takings ~${Math.round(dem.revenue)}¢.</p></section>`;
 
     // Pantry and market.
     const pantry = INGS.map((g, u) => {
@@ -335,7 +354,14 @@ export class Game {
         <span class="buy"><button data-buy="${u}" data-db="-1" aria-label="Buy fewer">−</button><span>${d.buys[u] ? `+${d.buys[u]}` : '0'}</span><button data-buy="${u}" data-db="1" aria-label="Buy more">+</button></span>
       </div>`;
     }).join('');
-    const market = `<section class="panel"><h3>Pantry &amp; market <button class="mini" data-fill="1">Fill to forecast</button></h3>${pantry}
+    const buying = d.buys.map((n, u) => (n ? `${n}${INGS[u].icon}` : '')).filter(Boolean).join(' ');
+    const spoil = exp.some((n) => n > 0);
+    const market = d.filled
+      ? `<section class="panel"><h3>Pantry &amp; market <button class="mini" data-unfold="1">Change</button></h3>
+         <p class="note">Filled to the forecast: buying ${buying ? `<span class="nw">${buying}</span>` : 'nothing (enough on hand)'} for ${
+           this.spend() - (d.helper ? wageOf(r) : 0)
+         }¢.${spoil ? ' <em class="warn">Some stock spoils tonight.</em>' : ''}</p></section>`
+      : `<section class="panel"><h3>Pantry &amp; market <button class="mini" data-fill="1">Fill to forecast</button></h3>${pantry}
       <p class="note">Each dish uses one of each ingredient shown with it. Anything left on its last night is thrown out.</p></section>`;
 
     const learnable = r.known.filter((k) => !k).length;
@@ -343,7 +369,7 @@ export class Game {
     const shop = `<section class="panel shop">
       <button class="secondary" data-recipes="1">📜 Recipes${learnable ? ` <small>${learnable} to learn</small>` : ''}</button>
       <button class="secondary" data-ups="1">🛠️ Upgrades${ups ? ` <small>${ups} to buy</small>` : ''}</button>
-      <label class="helper"><input type="checkbox" data-helper="1" ${d.helper ? 'checked' : ''}> Hire a helper tonight <small>${TUNE.wage}¢ · cooks alongside you (${stovesOf(r) + 1} at once)</small></label>
+      <label class="helper"><input type="checkbox" data-helper="1" ${d.helper ? 'checked' : ''}> Hire a helper tonight <small>${wageOf(r)}¢ (12¢ + 1¢ per expected guest) · cooks alongside you (${stovesOf(r) + 1} at once)</small></label>
     </section>`;
     $('morning').innerHTML = tonight + menu + market + shop;
     const sp = this.spend();
@@ -369,7 +395,8 @@ export class Game {
         return;
       }
       d.buys[u] = Math.max(0, Math.min(99, d.buys[u] + dn));
-    } else if (ds.fill) this.fill();
+    } else if (ds.fill) (this.fill(), (d.filled = true));
+    else if (ds.unfold) d.filled = false;
     else if (ds.swap !== undefined) return this.pickDish(Number(ds.swap));
     else if (ds.add) return this.pickDish(-1);
     else if (ds.sp !== undefined) return this.showKind(Number(ds.sp));
@@ -378,26 +405,28 @@ export class Game {
     else if (ds.recipes) return this.showRecipes();
     else if (ds.ups) return this.showUpgrades();
     else if (ds.helper) {
-      if (!d.helper && this.spend() + TUNE.wage > r.coins) {
+      if (!d.helper && this.spend() + wageOf(r) > r.coins) {
         (el as HTMLInputElement).checked = false;
         toast('Not enough coins for a helper');
         return;
       }
       d.helper = !d.helper;
     } else return;
+    // A folded, filled pantry follows menu, price and helper changes.
+    if (d.filled && !ds.fill) this.fill(true);
     this.saveDraft();
     this.renderMorning();
   }
 
   /** Buys what tonight's expected orders need, with a little spare, as far as coins go. */
-  private fill(): void {
+  private fill(quiet = false): void {
     const r = this.r;
     const d = this.draft;
     const need = fillNeed(r, d.menu, stovesOf(r, d.helper));
     const have = onHand(r);
     d.buys = INGS.map(() => 0);
     const want = need.map((n, u) => Math.max(0, n - have[u]));
-    let budget = r.coins - (d.helper ? TUNE.wage : 0);
+    let budget = r.coins - (d.helper ? wageOf(r) : 0);
     const total = want.reduce((a, n, u) => a + n * marketPrice(r.seed, r.day, u).price, 0);
     const scale = total > budget ? budget / total : 1;
     want.forEach((n, u) => {
@@ -406,7 +435,7 @@ export class Game {
       d.buys[u] = k;
       budget -= k * p;
     });
-    if (scale < 1) toast('Coins only cover part of it');
+    if (scale < 1 && !quiet) toast('Coins only cover part of it');
   }
 
   private pickDish(slot: number): void {
@@ -429,6 +458,7 @@ export class Game {
         const item = { dish, price: DISHES[dish].base };
         if (slot < 0) d.menu.push(item);
         else d.menu[slot] = item;
+        if (d.filled) this.fill(true);
         this.saveDraft();
         closeOverlay();
         this.renderMorning();
@@ -538,23 +568,34 @@ export class Game {
     const need = INGS.map(() => 0);
     d.menu.forEach((m, i) => DISHES[m.dish].uses.forEach((u) => (need[u] += dem.orders[i])));
     const short = INGS.map((g, u) => (need[u] > after[u] + 1.5 ? g.icon : '')).join('');
-    const busy = dem.cookMins > dem.capacity * STOVE_WARN;
+    const q = helperPayback(r, d.menu);
+    const queued = d.helper ? q.after : q.before;
+    const busy = queued >= QUEUE_WARN;
+    const pays = !d.helper && q.value > q.wage;
     const loss = d.menu.filter((m) => m.price < dishCost(r, m.dish));
     const warn: string[] = [];
     if (short) warn.push(`<p><b>Short on stock:</b> tonight’s expected orders need more ${short} than you’ll have. Guests who find their dish sold out leave let down.</p>`);
     if (busy)
       warn.push(
-        `<p><b>The stove can’t keep up:</b> orders need ~${Math.round(dem.cookMins)} of ${dem.capacity} stove minutes. Expect a long queue: guests give up or are still waiting at closing, let down.${
-          d.helper ? '' : ` A helper (${TUNE.wage}¢) cooks alongside you tonight.`
-        }</p>`,
+        `<p><b>A long queue:</b> in a typical evening tonight ~${Math.round(queued)} guests give up waiting or are still queueing at closing${d.helper ? ', even with your helper' : ''}, let down.${
+          d.helper
+            ? ''
+            : ` A helper (${q.wage}¢) would cut that to ~${Math.round(q.after)}: ~${Math.round(q.saved)} saved, worth ~${Math.round(q.value)}¢ (their orders and renown)${pays ? '' : ', less than the wage'}.`
+        }${(d.helper ? q.after : q.after) >= QUEUE_WARN ? ' One helper isn’t enough tonight; a second stove (🛠️ Upgrades) cooks alongside you every night.' : ''}</p>`,
       );
     if (loss.length) warn.push(`<p><b>Below cost:</b> ${loss.map((m) => `${DISHES[m.dish].icon} ${m.price}¢ costs ${dishCost(r, m.dish)}¢`).join(', ')} to make, so each one sold loses coins.</p>`);
     if (warn.length) {
-      const canHire = busy && !d.helper && this.spend() + TUNE.wage <= r.coins;
+      const canHire = busy && !d.helper && this.spend() + wageOf(r) <= r.coins;
+      // The default is whatever pays: the helper when it saves more than the wage, else open as planned.
+      const hire = { label: `Hire a helper (${wageOf(r)}¢) and open`, primary: canHire && pays, onClick: () => ((d.helper = true), this.open()) };
+      const go = { label: 'Open anyway', primary: !(canHire && pays) && !short && !loss.length, onClick: () => this.open() };
+      const back = { label: 'Back to planning', primary: !hire.primary && !go.primary, onClick: () => closeOverlay() };
       showCard(`<h2>Before you open</h2>${warn.join('')}<p class="small">Let-downs cost renown: every two a ♥, at most ${TUNE.lossCap} a night.</p>`, [
-        ...(canHire ? [{ label: `Hire a helper (${TUNE.wage}¢) and open`, primary: true, onClick: () => ((d.helper = true), this.open()) }] : []),
-        { label: 'Back to planning', primary: !canHire, onClick: () => closeOverlay() },
-        { label: 'Open anyway', onClick: () => this.open() },
+        ...(canHire && pays ? [hire] : []),
+        ...(go.primary ? [go] : []),
+        ...(canHire && !pays ? [hire] : []),
+        back,
+        ...(go.primary ? [] : [go]),
       ]);
       return;
     }
@@ -584,10 +625,11 @@ export class Game {
   }
 
   /** Plays the last opened night (also after a reload mid-evening). */
-  private playEvening(): void {
+  private playEvening(resumeAt = 0): void {
     const r = this.r;
     const l = this.lastLedger()!;
-    store.save('evening', { seed: r.seed, n: r.actions.length });
+    store.save('evening', { seed: r.seed, n: r.actions.length, t: resumeAt });
+    this.savedT = resumeAt;
     this.nightOver = false;
     this.tally = { coins: l.coins - l.revenue, served: 0, left: 0 };
     $('log').innerHTML = '';
@@ -598,6 +640,12 @@ export class Game {
     this.renderSpeed();
     this.renderTally();
     this.scene.play(r.night!, l.ctx, l.menu, stovesOf(r, l.helper));
+    if (resumeAt > 0) {
+      this.muted = true;
+      this.scene.seek(resumeAt);
+      this.muted = false;
+      toast(`Back at the stall: ${clockOf(resumeAt)}`);
+    }
   }
 
   private renderEveningDock(): void {
@@ -639,12 +687,13 @@ export class Game {
       const dishes = [v.pick, v.pick2].filter((i) => i >= 0).map((i) => DISHES[l.menu[i].dish].icon).join(' + ');
       const mood = v.mood === 'delighted' ? '<b class="love">delighted ♥</b>' : v.mood === 'meh' ? 'grumbled at the wait' : 'happy';
       line = `${dishes} for ${v.paid}¢ · ${mood}`;
-      if (v.mood === 'delighted') this.sfx.heart();
+      if (this.muted) void 0;
+      else if (v.mood === 'delighted') this.sfx.heart();
       else this.sfx.coin();
     } else {
       this.tally.left++;
       line = `${WHY_ICON[v.why!]} left: ${WHY_SHORT[v.why!]}${v.rep < 0 ? ' <b class="bad">let down</b>' : ''}`;
-      if (v.rep < 0) this.sfx.sad();
+      if (v.rep < 0 && !this.muted) this.sfx.sad();
     }
     const el = document.createElement('button');
     el.className = 'logline';
@@ -736,7 +785,9 @@ export class Game {
       <table class="ledger">${rows}<tr class="sum"><td>Today</td><td>${net >= 0 ? '+' : '−'}${Math.abs(net)}¢</td></tr><tr><td>Coins now</td><td><b>${fmt(l.coins)}¢</b></td></tr></table>
       <div class="chips">${sold}</div>
       <p><b>${l.served}</b> of ${l.guests} guests served${l.friends ? ` (${plural(l.friends, 'friend')} came)` : ''}. ${lefts ? `Walked off:` : 'Nobody walked off.'}</p>${lefts ? `<div class="chips">${lefts}</div>` : ''}
-      <p>Renown ♥ ${before} → <b>${l.repAfter}</b>: ${l.delighted} delighted × ${REP_MAX - before}% not yet heard of you = +${l.repGain}${
+      <p>Renown ♥ ${before} → <b>${l.repAfter}</b>: ${l.delighted} delighted × ${Math.max(Math.round(TUNE.gainFloor * 100), REP_MAX - before)}% ${
+        REP_MAX - before < TUNE.gainFloor * 100 ? `(a delight always spreads at least ${Math.round(TUNE.gainFloor * 100)}%)` : 'not yet heard of you'
+      } = +${l.repGain}${
         l.letdowns ? `; ${plural(l.letdowns, 'guest')} let down = −${l.repLoss} (every two a ♥${l.letdowns * TUNE.lossPer > TUNE.lossCap ? `, capped at ${TUNE.lossCap}` : ''})` : ''
       }. ${l.delighted && !r.over ? `${plural(Math.min(l.delighted, TUNE.friendCap), 'friend')} will come tomorrow.` : ''}</p>
       ${waste ? `<p class="warn">Thrown out: ${waste} (${l.wasteCost}¢ worth).</p>` : '<p>Nothing went to waste.</p>'}`;
@@ -779,7 +830,8 @@ export class Game {
     const guests = ls.reduce((a, l) => a + l.guests, 0);
     const delighted = ls.reduce((a, l) => a + l.delighted, 0);
     const waste = ls.reduce((a, l) => a + l.wasteCost, 0);
-    const best = ls.reduce((b, l) => (l.revenue > b.revenue ? l : b), ls[0]);
+    const netOf = (l: Ledger) => l.revenue - l.bought - l.shop - l.wage;
+    const best = ls.reduce((b, l) => (netOf(l) > netOf(b) ? l : b), ls[0]);
     const next = STARS.find((s) => s > score);
     this.setMode('morning');
     showCard(
@@ -788,7 +840,7 @@ export class Game {
        <table class="ledger"><tr><td>Coins</td><td>${fmt(r.coins)}</td></tr><tr><td>Renown ♥ ${r.rep} × ${TUNE.repPts}</td><td>${fmt(TUNE.repPts * r.rep)}</td></tr><tr class="sum"><td>Score</td><td>${fmt(score)}</td></tr></table>
        <p class="meta2">Stars at ${STARS.map(fmt).join(' / ')}${next ? ` · ${fmt(next - score)} more for the next` : ''}</p>
        <div class="stats"><div><b>${served}/${guests}</b>guests served</div><div><b>${delighted}</b>delighted</div>
-         <div><b>${best ? `${best.revenue}¢` : '-'}</b>best night (${best ? `N${best.day + 1}` : ''})</div><div><b>${waste}¢</b>thrown out</div></div>
+         <div><b>${best ? `+${netOf(best)}¢` : '-'}</b>best night, after costs (${best ? `N${best.day + 1}` : ''})</div><div><b>${waste}¢</b>thrown out</div></div>
        ${daily ? `<p class="meta2">Today’s best: ${daily.label} · ${plural(daily.plays, 'try', 'tries')}</p>` : p.seasons ? `<p class="meta2">Best ${fmt(p.best)} ${stars(p.bestStars)} · ${plural(p.seasons, 'season')}</p>` : ''}`,
       [
         { label: 'New season', primary: true, onClick: () => this.newGame() },

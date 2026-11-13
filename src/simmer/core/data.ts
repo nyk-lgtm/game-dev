@@ -155,6 +155,10 @@ export const TUNE = {
   wage: 12,
   /** Renown lost per guest let down (rounded up), and at most this much a night. */
   lossPer: 0.5,
+  /** A delight always spreads at least this share of a ♥, however famous the stall. */
+  gainFloor: 0.2,
+  /** Helper's wage on top of `wage`, per expected guest. */
+  wagePer: 1,
   /** Cold dishes are worth this much more with a cool box. */
   coolCold: 1.15,
   lossCap: 5,

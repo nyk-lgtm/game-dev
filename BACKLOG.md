@@ -18,7 +18,7 @@ Ground rules: never break saves without bumping RULES_VERSION; never leave main 
 keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 
 ## Start here (summary, 2026-11-13)
-20 games are live; all but the newest (Simmer, one playtest so far) have had at least two blind playtests and the fixes shipped. Open threads, in order:
+20 games are live; all but the newest (Simmer, two playtests so far) have had at least two blind playtests and the fixes shipped. Open threads, in order:
 1. Owner feedback first: anything the owner reports beats this list.
 2. Loomsong: needs a real-phone check of sound and timing (headless has no audio); then a second playtest.
 3. Third playtests done (2026-11-13) and shipped: Summit v4, Kitbag v4, Sungrazer v4 (+ frame cost cut ~3x), Brink AI v4
@@ -28,7 +28,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 5. Grove: owner said keep it as is (board and balance); only bugs/clarity. Afterglow: leave alone unless asked.
 6. New games are welcome when the queue is quiet (recent additions: Ninefold, Summit, Quarry, Sungrazer, Kitbag,
    Brink, Loomsong, Simmer). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle.
-7. Simmer: second blind playtest (see its item below).
+7. Simmer: third blind playtest (see its item below).
 
 ## Now
 - [ ] **Simmer** (cozy management sim: a night-market food stall for 20 nights, critter guests). Milestones:
@@ -59,8 +59,18 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         seasons): naive 1★, lazy ~2560 (2★ 10-19%), lazy + helper when warned ~3210 (2★), decent ~3650 (3★ ~27%),
         clever ~4140 (3★ ~65%); nothing single-minded beats clever. The bots' lazy (~3290 under v1) scored ~1,000 above the
         tester's lazy run; unexplained (maybe Fill wasn't pressed every night).
-  - [ ] Next: second blind playtest. Watch: is the 2★ line at 2,700 right for lazy play (bot says just under)? Do people
-        find the payback lines and the helper? Is the morning still too much reading? Does renown near 100 still feel harsh?
+  - [x] Second blind playtest (lazy 3,480 / 3,276 / 3,476 ★★ on seeds 777/2024/31 because the warning card's default hired
+        the cheap helper every busy night; careful 4,110 ★★★, only ~600 above) and fixes (rules v3): the lazy bot now taps what
+        a person taps (card default included); the queue warning plays 4 typical evenings with the real queue model
+        (`queuePreview`), so it fires whenever guests would give up (it missed N8-N9 at 175-185 min and cried wolf at 208/240),
+        says how many, what a helper saves and when one helper isn't enough; its default hires only when that pays; helpers
+        cost 12¢ + 1¢ per expected guest (the second stove now pays: clever and decent buy it); a delight spreads at least
+        20% of a ♥ at high renown; the cool box hint names its cold dishes; the end card's best night is net; the shared card
+        hint no longer covers a last button that is in view; a reload mid-evening fast-forwards to where it was; the pantry
+        folds to one line after Fill (morning ~1.2 screens); ingredient emojis don't wrap. Bots (100 seasons, two seed sets):
+        naive ~1880 1★, lazy ~2860 (2★ 82-89%), decent ~3820 (3★ 30-34%), clever ~4150 (3★ 63-68%).
+  - [ ] Next: third blind playtest. Watch: does lazy play now land low 2★ for a person too? Do people buy the second stove
+        when the warning says one helper isn't enough? Is the helper wage clear (12¢ + 1¢ a guest)?
 
 - [ ] **Loomsong** (original rhythm game with procedurally generated music). Milestones:
   - [x] Core (src/loomsong/core, rules v1): seeded songs (key, mode, 90-140 BPM, verse/chorus progressions, a form

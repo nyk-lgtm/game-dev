@@ -73,16 +73,15 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     Hard ~25 / 5 / 32; lanes ~21/29/28/22%; same-lane runs ≤ 4). `botrun.ts <seed> [lv] [jitter] [skip]` prints a bot play
     and its `?seed=&lv=&a=` (N=100 gives the grade spread, rules v2: Normal, 2% skipped, jitter 15 ms → A 86 / S 12, 30 → A 65 / B 31, 45 → B,
     60 → C; a full combo of Goods is a B).
-  - Simmer: `npx vite-node scripts/simmer/balance.ts 100 [naive,lazy,lazyhelp,decent,clever,steady,cheap,premium,greedy,fame,hoard,builder,sweets,fishy,overstock,understock]`
-    (bots plan from the forecast only, never the real crowd; rules v2, 100 seasons, stars 1200/2700/4000: naive (start menu,
-    listed prices, 6 portions each, no shop) ~1880 = 1★ 100%; lazy (start menu, listed prices, Fill to forecast, no shop; the
-    playtester's lazy run) ~2560, 2★ 10-19%; lazyhelp (lazy + a helper whenever the open warning says the stove is short)
-    ~3210 = 2★ 100%; decent (menu lines kept full by expected orders, listed prices, Fill, helper when warned, recipes and
-    upgrades by the page's payback lines) ~3650, 3★ 26-28%; clever (prices searched against the purses, renown valued,
-    cheap-day stock-ups, payback shopping, helper when it pays) ~4140, 3★ 61-68%. Nothing single-minded beats clever (builder
-    ~4030, fame ~3970, fishy ~3940, overstock ~3780, cheap ×0.8 ~3200, understock ~3170, greedy ~3010, steady (the v1 decent)
-    ~2870, hoard ~2720, sweets ~1800, premium ×1.35 ~830). Clever ~1.2 s a season. `trace.ts <seed> [strat]` prints a season
-    night by night, `upto.ts <seed> <nights> [strat]` gives `?seed=&a=`. Env RV/RD/COVER/PAD tune the clever bot, TUNE=k:v the rules.
+  - Simmer: `npx vite-node scripts/simmer/balance.ts 100 [naive,lazy,lazynohelp,decent,clever,steady,cheap,premium,greedy,fame,hoard,builder,sweets,fishy,overstock,understock]`
+    (bots plan from the forecast only, never the real crowd; rules v3, 100 seasons, stars 1200/2700/4000: naive (start menu,
+    listed prices, 6 portions each, no shop) ~1880 = 1★; lazy = what a lazy person taps (start menu, listed prices, Fill to
+    forecast, Open, the warning card's default: hire only when the card says it pays) ~2860, 2★ 82-89% (tester's v2 lazy
+    seeds 777/2024/31: 3133/2983/3183 now); lazynohelp ~2560; decent (menu lines kept full, listed prices, Fill, helper when
+    the card says, recipes and upgrades by the page's payback lines) ~3820, 3★ 30-34%; clever (prices searched against the
+    purses, renown valued, cheap-day stock-ups, payback shopping incl. the second stove) ~4150, 3★ 63-68%. Nothing
+    single-minded beats clever (fame ~3940, fishy ~3870, builder ~3780, overstock ~3620, greedy ~3550, understock ~3160, cheap ×0.8 ~3070, steady (the v1 decent) ~2760, hoard ~2730, sweets ~1710, premium ×1.35 ~830). Clever ~1 s a season. `trace.ts <seed> [strat]` prints a season night by night,
+    `upto.ts <seed> <nights> [strat]` gives `?seed=&a=`. Env RV/RD/COVER/PAD tune the clever bot, TUNE=k:v the rules.
   - Brink: `npx vite-node scripts/brink/selfplay.ts 40 [hard,hard normal,easy …]` (AI vs AI per pairing: wins, first-mover
     wins, plies, time per move, shove-backs a game and the longest run, repeated layouts (and "cheap" ones, re-searched
     exactly); rules v1, AI v4 (80 games Easy/Normal, 40 Hard): first mover 45% Easy, 49% Normal, ~42% Hard mirrors; Hard
@@ -301,31 +300,35 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   judgement words sit under the pads (`L.popY`), off the beads' approach; the opening hint goes at the first note.
   The menu song persists (`profile.song`). Songs play out (~2 s fade) before results. `?song=CODE` (base-36 seed), `?seed=&lv=&a=` shows a recorded play rescored; `__game.auto = true`
   plays a bot (screenshots). Reports `LOOMSONG v… seed=… lv=… off=… a=…`.
-- Simmer (src/simmer/core, rules v2): `TUNE.days` (20) nights. data.ts: 6 ingredients (`marketPrice(seed, day, ing)`: cheap
+- Simmer (src/simmer/core, rules v3): `TUNE.days` (20) nights. data.ts: 6 ingredients (`marketPrice(seed, day, ing)`: cheap
   18% / usual / dear 20%; `keeps` nights counting the night bought: fish 1, greens/berries 2, mushrooms 3, rice/flour 6; the
   cool box adds 1, also to stock on hand, and cold dishes are worth ×1.15 with it: `NightCtx.cool`), 10 dishes (one unit of each listed ingredient, `base` worth, `cook` minutes, tags; 3
   known, the rest learned for coins), 8 critter kinds (`SPECIES`: loves/dislikes one tag, purse range, patience, arrival
   window, renown to unlock 0/0/0/10/20/35/55/80, weather likes, badgers eat two), weather drifting warm → chilly
-  (`makeWeather`, 40% repeats), festivals (two seeded + the last night), paydays every 5th night, 5 upgrades and a 12¢
-  helper per night (+1 stove). night.ts: `worthOf` = base × love 1.4 / dislike 0.6 × weather tag × festival sweets, rounded;
+  (`makeWeather`, 40% repeats), festivals (two seeded + the last night), paydays every 5th night, 5 upgrades and a helper per
+  night (+1 stove; `wageOf` = 12¢ + 1¢ per expected guest, so busy nights make the second stove worth buying). night.ts: `worthOf` = base × love 1.4 / dislike 0.6 × weather tag × festival sweets, rounded;
   `chooseFrom`: the most worth left over (worth − price) among dishes in stock, priced ≤ worth and ≤ purse, else why
   (soldout/pricey/worth/nolike); `simulate` is a minute-by-minute FIFO queue over the stoves (SERVE 2 + cook minutes per
   guest), walk-offs at their patience, closing at 240 (arrivals end at LAST_CALL 225). Delighted (`delights`) = a dish with
   the tag they love and ≥ 25% of its worth left; settling for a second choice or waiting > half their patience takes a step
-  off. run.ts: renown 0-100 (`repChange`): + round(delighted × (100 − renown)%) − `lossFor(letdowns)` = ceil(let-downs / 2),
+  off. run.ts: renown 0-100 (`repChange`): + round(delighted × max(20% `gainFloor`, (100 − renown)%)) − `lossFor(letdowns)` = ceil(let-downs / 2),
   at most `TUNE.lossCap` 5 a night (v1 took a full ♥ each: festival queues cost testers ♥18-25 a night); each delighted guest brings a friend next night (≤ 10); street crowd = (8 + 0.25·renown) × weather × festival 1.6
   × lanterns 1.2 × ±15%; stock is used oldest first and batches on their last night are thrown out (ledger `wasted`); under
   8¢ in the morning a neighbour gives 12¢ (`giftFor`). Score = coins + 10·renown; `STARS` 1200/2700/4000. forecast.ts:
   `forecast` (expected mix; never the real crowd) and `demand` (exact expectation over each kind's purses) feed the page's
   "~N orders", Fill to forecast (`fillNeed`, ×1.1) and the bots; `recipePreview` (orders tonight at the listed price, in
   place of the weakest dish when the board is full, who loves it), `upgradePayback` (¢ a night: profit diffs via `profitOf`,
-  which drops orders past 85% of the stove minutes; bench from last night's walk-offs; cool box from chilled cold dishes +
-  past waste) and `STOVE_WARN` (0.85) feed the shop cards, the open warning and the bots. Actions `b<ing>.<n>`, `l<dish>`, `u<k>`, `o[h]<dish>x<price>.…` (open
+  which drops orders past 85% of the stove minutes; stove via `helperPayback`; bench from last night's walk-offs; cool box
+  from chilled cold dishes + past waste), `queuePreview` (4 typical evenings: crowds from their own `T_PREVIEW` stream,
+  unlimited stock, the real `simulate`; average guests who give up or are turned away at closing) and `helperPayback`
+  (let-downs with one cook more, each worth its profit + half a ♥) feed the menu's queue line, the open warning
+  (`QUEUE_WARN` 1 let-down; says when one helper isn't enough; its default hires only when that pays) and the bots. Actions `b<ing>.<n>`, `l<dish>`, `u<k>`, `o[h]<dish>x<price>.…` (open
   the night; h = helper); `replay(seed, a)`. The morning is a draft (store `draft`) turned into actions on Open; recipes and
   upgrades apply at once, and this morning's (actions after the last `o`) can be undone by replaying without them. Open
   warns (one card) about short stock, a stove that can't keep up (with "Hire a helper and open") and prices below cost.
-  Store `evening` = {seed, n} while a night plays, so a reload replays that evening; the ledger closes to the guest log
-  (dock: Ledger / Night N ▶). UI: DOM morning (forecast with tappable crowd/kinds, menu with price steppers and who-orders sprites,
+  Store `evening` = {seed, n, t} while a night plays, so a reload fast-forwards that evening to where it was (`Scene.seek`);
+  the ledger closes to the guest log (dock: Ledger / Night N ▶). After Fill to forecast the pantry folds to one line
+  (`draft.filled`; Change unfolds) and refills itself when the menu, prices or helper change. UI: DOM morning (forecast with tappable crowd/kinds, menu with price steppers and who-orders sprites,
   pantry with spoil warnings, recipe/upgrade cards), canvas evening (scene.ts: original critter sprites, the red-panda keeper,
   weather; guests set off 16 sim minutes early so they reach the stall on time), a log and guest taps that spell out purse,
   worth factors and the reason, a ledger card per night, guest book (📖). `SIMMER v… seed=… a=…` reports.

@@ -29,7 +29,9 @@ import {
   type MenuItem,
   type Run,
   REP_MAX,
-  STOVE_WARN,
+  QUEUE_WARN,
+  helperPayback,
+  wageOf,
   fillNeed,
   upgradePayback,
 } from '../../src/simmer/core';
@@ -93,10 +95,11 @@ const BASE: Strat = {
 
 export const STRATS: Record<string, Strat> = {
   naive: { ...BASE, name: 'naive', menu: 'fixed', price: 'base', stock: 'flat', flat: 6, bulk: false, learn: 'none', ups: [], helper: 'never' },
-  // The tester's lazy play: starting menu at listed prices, Fill to forecast, never shops.
-  lazy: { ...BASE, name: 'lazy', menu: 'fixed', price: 'base', stock: 'fill', bulk: false, learn: 'none', ups: [], helper: 'never' },
-  // ...plus a helper whenever the page warns the stoves are short.
-  lazyhelp: { ...BASE, name: 'lazyhelp', menu: 'fixed', price: 'base', stock: 'fill', bulk: false, learn: 'none', ups: [], helper: 'warn' },
+  // Lazy play, tap for tap: the starting menu at listed prices, Fill to forecast, Open, and the
+  // warning card's default button (it hires the helper when the queue warning shows).
+  lazy: { ...BASE, name: 'lazy', menu: 'fixed', price: 'base', stock: 'fill', bulk: false, learn: 'none', ups: [], helper: 'warn' },
+  // The same, but never hiring (always "Open anyway").
+  lazynohelp: { ...BASE, name: 'lazynohelp', menu: 'fixed', price: 'base', stock: 'fill', bulk: false, learn: 'none', ups: [], helper: 'never' },
   // A careful player using the page: dishes by their "~N orders", listed prices, Fill to forecast,
   // a helper when warned, recipes and upgrades whose payback lines look good.
   decent: { ...BASE, name: 'decent', price: 'base', stock: 'fill', bulk: false, helper: 'warn', repValue: 0, repPerDay: 0, fillMenu: true },
@@ -285,15 +288,17 @@ export function planDay(r: Run, s: Strat): string[] {
     }
   // Helper tonight?
   let helper = false;
-  if (s.helper === 'festival') helper = f.ctx.festival && r.coins >= TUNE.wage + stockBudget();
+  if (s.helper === 'festival') helper = f.ctx.festival && r.coins >= wageOf(r) + stockBudget();
   else if (s.helper === 'warn') {
-    const d = demand(r, planMenu(r, s, f, stovesOf(r), lam).menu, f);
-    helper = d.cookMins > d.capacity * STOVE_WARN && r.coins >= TUNE.wage + stockBudget();
+    // The page's card: shown when typical evenings let guests down; its default hires if affordable.
+    const menu = planMenu(r, s, f, stovesOf(r), lam).menu;
+    const cost = costOf(r, needFor(r, s, menu, f, false));
+    const h = helperPayback(r, menu);
+    helper = h.before >= QUEUE_WARN && h.value > h.wage && r.coins >= wageOf(r) + Math.min(cost, r.coins);
   }
-  else if (s.helper === 'busy' && r.coins >= TUNE.wage + stockBudget()) {
-    const one = planMenu(r, s, f, stovesOf(r), lam).v;
-    const two = planMenu(r, s, f, stovesOf(r, true), lam).v;
-    helper = two - one > TUNE.wage + 2;
+  else if (s.helper === 'busy' && r.coins >= wageOf(r) + stockBudget()) {
+    const h = helperPayback(r, planMenu(r, s, f, stovesOf(r), lam).menu);
+    helper = h.value > h.wage + 2;
   }
   const { menu } = planMenu(r, s, f, stovesOf(r, helper), lam);
   // Ingredients: tonight's needs (scaled down if coins are short), then (clever) a
@@ -301,7 +306,7 @@ export function planDay(r: Run, s: Strat): string[] {
   const need = needFor(r, s, menu, f, helper);
   const have = onHand(r);
   const exp = expiring(r);
-  const wage = helper ? TUNE.wage : 0;
+  const wage = helper ? wageOf(r) : 0;
   const cost = costOf(r, need);
   const scale = cost > r.coins - wage ? (r.coins - wage) / cost : 1;
   for (let u = 0; u < INGS.length; u++) {
