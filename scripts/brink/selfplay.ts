@@ -5,7 +5,7 @@
 // plus hard-normal, normal-easy, hard-easy.
 // TUNE=target:3,crumbleStart:6 tries other rules; W=threat:60 other weights; SETUP=1 another start.
 
-import { LEVELS, W, chooseMove, type Level } from '../../src/brink/core/ai';
+import { LEVELS, W, chooseMove, loopPenalty, type Level } from '../../src/brink/core/ai';
 import { DARK, LIGHT, TUNE, newGame, play, useSetup, type Side } from '../../src/brink/core/rules';
 
 const n = Number(process.argv[2] ?? 20);
@@ -38,6 +38,7 @@ for (const [A, B] of pairs) {
   let winsA = 0;
   let firstWins = 0;
   let crumbleEnds = 0;
+  let undos = 0;
   const plies: number[] = [];
   for (let k = 0; k < n; k++) {
     const seed = seed0 + k;
@@ -45,12 +46,16 @@ for (const [A, B] of pairs) {
     const aSide: Side = k % 2 === 0 ? LIGHT : DARK;
     const s = newGame(seed, LIGHT);
     let lastCrumble = false;
+    const moves: number[] = [];
     while (!s.winner && s.ply < 200) {
       const lvl = s.turn === aSide ? A : B;
       const t0 = performance.now();
-      const ch = chooseMove(s, lvl);
+      const ch = chooseMove(s, lvl, moves);
       times[lvl].push(performance.now() - t0);
       if (ch.move < 0) throw new Error(`no move on seed ${seed} ply ${s.ply}`);
+      // Shove-backs: pushing the line the opponent just shoved straight back.
+      if (moves.length && loopPenalty(moves)(ch.move) >= W.loop) undos++;
+      moves.push(ch.move);
       const ev = play(s, ch.move);
       lastCrumble = !!ev.crumbleTook;
     }
@@ -61,7 +66,7 @@ for (const [A, B] of pairs) {
   }
   console.log(
     `${A.padEnd(6)} vs ${B.padEnd(6)}: ${A} wins ${pct(winsA, n)}, first mover wins ${pct(firstWins, n)}, ` +
-      `median ${median(plies)} plies (min ${Math.min(...plies)}, max ${Math.max(...plies)}), last stone to a crumble ${pct(crumbleEnds, n)}`,
+      `median ${median(plies)} plies (min ${Math.min(...plies)}, max ${Math.max(...plies)}), last stone to a crumble ${pct(crumbleEnds, n)}, shove-backs ${(undos / n).toFixed(1)} a game`,
   );
 }
 for (const l of Object.keys(LEVELS) as Level[]) {

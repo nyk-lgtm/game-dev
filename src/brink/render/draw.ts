@@ -36,9 +36,14 @@ export interface Sprite {
 export interface Target {
   cell: number;
   from: number;
-  /** step: an empty tile; shove: pushes stones; kill: pushes an enemy off; oops: pushes your own off. */
-  kind: 'step' | 'shove' | 'kill' | 'oops';
+  /** A shove (arrow) rather than a step (dot). */
+  push: boolean;
+  /** plain; kill: an enemy stone is lost (over, into a hole, or with a falling tile); oops: one of yours is. */
+  kind: 'plain' | 'kill' | 'oops';
 }
+
+/** Colours for the next tiles to fall: 1st, 2nd, 3rd. */
+export const DOOM_COLOR = ['', '#ff5a4a', '#ff9a4a', '#ffd27a'];
 
 export interface Scene {
   cells: Int8Array;
@@ -51,7 +56,7 @@ export interface Scene {
   doom: Map<number, number>;
   selected: number;
   targets: Target[];
-  last: { from: number; to: number; side: Side } | null;
+  last: { from: number; to: number; side: Side; pushed: [number, number, Side][] } | null;
   hint: { from: number; to: number } | null;
   /** Cells to ring red (where a stone would go over). */
   danger: number[];
@@ -108,16 +113,18 @@ function tile(g: CanvasRenderingContext2D, x: number, y: number, s: number, doom
   g.lineWidth = 1;
   g.stroke();
   if (doom) {
+    // Bigger, darker cracks the sooner a tile falls: 4 long ones, then 3, then 2 short.
     const lines = CRACKS[i].slice(0, doom === 1 ? 4 : doom === 2 ? 3 : 2);
+    const len = doom === 1 ? 1 : doom === 2 ? 0.75 : 0.5;
     g.save();
-    g.strokeStyle = doom === 1 ? 'rgba(20,6,4,0.95)' : 'rgba(18,24,22,0.8)';
-    g.lineWidth = doom === 1 ? 2.2 : doom === 2 ? 1.6 : 1.1;
+    g.strokeStyle = doom === 1 ? 'rgba(20,6,4,0.95)' : 'rgba(18,24,22,0.85)';
+    g.lineWidth = doom === 1 ? 2.4 : doom === 2 ? 1.7 : 1.2;
     g.lineCap = 'round';
     g.lineJoin = 'round';
     for (const p of lines) {
       g.beginPath();
-      g.moveTo(x + p[0] * s, y + p[1] * s);
-      for (let k = 2; k < p.length; k += 2) g.lineTo(x + p[k] * s, y + p[k + 1] * s);
+      g.moveTo(x + p[0] * s * len, y + p[1] * s * len);
+      for (let k = 2; k < p.length; k += 2) g.lineTo(x + p[k] * s * len, y + p[k + 1] * s * len);
       g.stroke();
     }
     g.restore();
@@ -213,6 +220,20 @@ export function drawScene(g: CanvasRenderingContext2D, v: View, sc: Scene): void
     g.moveTo(a.x, a.y);
     g.lineTo(b.x, b.y);
     g.stroke();
+    // Stones it shoved: a fainter trail each (over the edge: toward the void).
+    g.lineWidth = 1.6;
+    for (const [from, to, side] of sc.last.pushed) {
+      const p0 = cellPx(v, from);
+      const p1 = to >= 0 ? cellPx(v, to) : { x: p0.x + (b.x - a.x) * 0.8, y: p0.y + (b.y - a.y) * 0.8 };
+      g.strokeStyle = g.fillStyle = side === LIGHT ? '#fbf6ea' : '#ff8a6e';
+      g.beginPath();
+      g.arc(p0.x, p0.y, s * 0.1, 0, Math.PI * 2);
+      g.fill();
+      g.beginPath();
+      g.moveTo(p0.x, p0.y);
+      g.lineTo(p1.x, p1.y);
+      g.stroke();
+    }
     g.restore();
   }
   // Selection ring under the stone.
@@ -232,6 +253,40 @@ export function drawScene(g: CanvasRenderingContext2D, v: View, sc: Scene): void
     drawStone(g, p.x, p.y, s * 0.6, v0 as Side);
   }
   for (const sp of sc.sprites) drawStone(g, sp.x, sp.y, s * 0.6 * sp.scale, sp.side, sp.alpha);
+  // The next tiles to fall: a numbered badge (1 = right after this move), and a
+  // dashed ring round any stone standing on one, so it shows on top of the stone.
+  for (const [i, k] of sc.doom) {
+    if (k > 3 || sc.falling.has(i)) continue;
+    const p = cellPx(v, i);
+    const col = DOOM_COLOR[k];
+    const onStone = (sc.cells[i] === LIGHT || sc.cells[i] === DARK) && !sc.hide.has(i);
+    if (onStone) {
+      g.save();
+      g.strokeStyle = col;
+      g.lineWidth = k === 1 ? 3 : 2.2;
+      g.setLineDash([4, 3]);
+      g.beginPath();
+      g.arc(p.x, p.y, s * 0.68, 0, Math.PI * 2);
+      g.stroke();
+      g.restore();
+    }
+    const bx = p.x + s * 0.5;
+    const by = p.y - s * 0.52;
+    const br = Math.max(7, s * 0.24);
+    g.fillStyle = 'rgba(10,14,24,0.9)';
+    g.beginPath();
+    g.arc(bx, by, br + 1.5, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = col;
+    g.beginPath();
+    g.arc(bx, by, br, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#1a0c08';
+    g.font = `800 ${Math.round(br * 1.4)}px system-ui, sans-serif`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(String(k), bx, by + 0.5);
+  }
   // Danger rings: stones that a selected shove would push over.
   for (const c of sc.danger) {
     const p = cellPx(v, c);
@@ -246,10 +301,10 @@ export function drawScene(g: CanvasRenderingContext2D, v: View, sc: Scene): void
   // Move targets.
   for (const t of sc.targets) {
     const p = cellPx(v, t.cell);
-    if (t.kind === 'step') {
-      g.fillStyle = 'rgba(255,215,122,0.85)';
+    if (!t.push) {
+      g.fillStyle = t.kind === 'oops' ? '#b06cff' : 'rgba(255,215,122,0.85)';
       g.beginPath();
-      g.arc(p.x, p.y, s * 0.2, 0, Math.PI * 2);
+      g.arc(p.x, p.y, s * (t.kind === 'oops' ? 0.24 : 0.2), 0, Math.PI * 2);
       g.fill();
     } else {
       const a = cellPx(v, t.from);

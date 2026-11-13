@@ -5,7 +5,7 @@
 
 import { MIRROR, N, cellAt } from './board';
 import { POOL } from './pool';
-import { DARK, HOLE, LIGHT, after, clone, crumbleOrder, legalMoves, type Side, type State } from './rules';
+import { DARK, HOLE, LIGHT, after, clone, crumbleOrder, isShove, legalMoves, moveCell, play, type Side, type State } from './rules';
 
 let budget = Infinity;
 
@@ -74,13 +74,22 @@ export function fastestWin(s: State, max: number, maxNodes = Infinity): number {
 export function bestDefence(s: State, n: number): number {
   const me = s.turn;
   const moves = legalMoves(s, []);
+  // Stones the attacker could shove off right now: among equal defences, try to save one of
+  // those (or shove back) rather than move a bystander, so the puzzle's point gets tested.
+  const att = clone(s);
+  att.turn = (3 - me) as Side;
+  const threatened = new Set<number>();
+  for (const m of legalMoves(att, [])) {
+    const ev = play(clone(att), m);
+    if (ev.shovedOff?.side === me) threatened.add(ev.shovedOff.from);
+  }
   let best = moves[0];
   let bestKey = -Infinity;
   for (const m of moves) {
     const t = after(s, m);
     let key: number;
-    if (t.winner === me) key = 1000;
-    else if (t.winner) key = -1000;
+    if (t.winner === me) key = 100000;
+    else if (t.winner) key = -100000;
     else {
       // How many attacker moves until it wins from here (bigger = better defence).
       const attacker = t.turn === me ? null : t;
@@ -94,8 +103,10 @@ export function bestDefence(s: State, n: number): number {
           }
         }
       }
-      key = k * 10 - t.lost[me];
+      key = k * 100 - t.lost[me] * 10;
     }
+    if (threatened.has(moveCell(m))) key += 3;
+    if (isShove(s, m)) key += 1;
     if (key > bestKey) {
       bestKey = key;
       best = m;
@@ -232,7 +243,7 @@ export const LESSONS: Lesson[] = [
   {
     id: 'crumble',
     title: 'Crumble',
-    text: 'From move 4 a tile falls after every move. The red, cracked one falls right after yours, with whatever stands on it.',
+    text: 'From move 4 a tile falls after every move. The one marked 1 falls right after yours, with whatever stands on it: shove a coral stone onto it.',
     n: 1,
     light: [[0, 1], [1, 1]],
     dark: [[-1, 2], [1, -1]],
@@ -241,7 +252,7 @@ export const LESSONS: Lesson[] = [
   {
     id: 'brace',
     title: 'Brace',
-    text: 'Win in two: corner their rim stone so it can’t get away, with two of yours lined up behind you. Three in a row can’t be shoved back.',
+    text: 'Win in two: corner their rim stone so it can’t get away, with two of yours lined up behind you. Three in a row can’t be shoved back, so wherever it steps, you push it off.',
     n: 2,
     light: [[0, 0], [1, 0], [1, 1]],
     dark: [[3, 0], [-1, -1]],

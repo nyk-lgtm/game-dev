@@ -16,12 +16,14 @@ import {
   LIGHT,
   RULES_VERSION,
   TUNE,
-  after,
   bestDefence,
   cellAt,
   chooseMove,
   clone,
   crumbleAfter,
+  dirTo,
+  lineCount,
+  HOLE,
   dailyPuzzle,
   decodeMove,
   encodeMove,
@@ -125,7 +127,7 @@ export class Game {
   private targets: Target[] = [];
   private danger: number[] = [];
   private hint: { from: number; to: number } | null = null;
-  private last: { from: number; to: number; side: Side } | null = null;
+  private last: Scene['last'] = null;
   private anim: Anim | null = null;
   private gen = 0;
   private shake = 0;
@@ -147,7 +149,9 @@ export class Game {
       this.snd.unlock();
       this.downCell = this.cellAtEvent(e);
       this.downSelected = false;
-      if (this.downCell >= 0 && this.canPlay() && this.s.cells[this.downCell] === LIGHT && this.downCell !== this.selected) {
+      // A press on your own stone selects it, unless it is a target of the selected stone
+      // (a shove with your own stone in front): then the tap plays that shove.
+      if (this.downCell >= 0 && this.canPlay() && this.s.cells[this.downCell] === LIGHT && this.downCell !== this.selected && !this.targets.some((t) => t.cell === this.downCell)) {
         this.select(this.downCell);
         this.downSelected = true;
       }
@@ -199,16 +203,18 @@ export class Game {
     this.s = replay(this.seed, [], this.first);
     this.moves = [];
     this.who = [];
+    this.last = null;
     for (const m of moves) {
       if (!isLegal(this.s, m)) break;
-      this.who.push(this.s.turn);
-      play(this.s, m);
+      const mover = this.s.turn;
+      this.who.push(mover);
+      this.last = lastOf(m, play(this.s, m), mover, this.s);
       this.moves.push(m);
     }
-    this.last = this.moves.length ? { from: moveCell(this.moves[this.moves.length - 1]), to: moveTo(this.moves[this.moves.length - 1]), side: this.who[this.who.length - 1] } : null;
   }
 
   private resetUi(): void {
+    this.lastSay = '';
     this.selected = -1;
     this.targets = [];
     this.danger = [];
@@ -256,12 +262,12 @@ export class Game {
     for (const t of moves) {
       const m = decodeMove(t);
       if (!isLegal(this.s, m)) break;
-      this.who.push(this.s.turn);
-      play(this.s, m);
+      const mover = this.s.turn;
+      this.who.push(mover);
+      this.last = lastOf(m, play(this.s, m), mover, this.s);
       this.moves.push(m);
-      if (this.who[this.who.length - 1] === LIGHT) this.puzzleLeft--;
+      if (mover === LIGHT) this.puzzleLeft--;
     }
-    if (this.moves.length) this.last = { from: moveCell(this.moves[this.moves.length - 1]), to: moveTo(this.moves[this.moves.length - 1]), side: this.who[this.who.length - 1] };
     this.resetUi();
     this.save();
     if (this.s.winner === LIGHT) setTimeout(() => this.puzzleSolved(false), 300);
@@ -342,7 +348,11 @@ export class Game {
       if (c === this.selected) return this.deselect();
       return this.select(c);
     }
-    if (this.s.cells[c] === DARK) this.info('That’s an AI stone. Tap one of your <b>ivory</b> stones, then an arrow pointing at it.');
+    if (this.s.cells[c] === DARK) {
+      const d = this.selected >= 0 ? dirTo(this.selected, c) : -1;
+      if (d >= 0 && lineCount(this.s.cells, c, d) < 0) this.info('<b>Three in a row won’t budge.</b> That line is too long to shove.');
+      else this.info('That’s an AI stone. Tap one of your <b>ivory</b> stones first; arrows show what it can shove.');
+    }
     this.deselect(false);
   }
 
@@ -356,24 +366,21 @@ export class Game {
     this.danger = [];
     for (const m of out) {
       const to = moveTo(m);
-      if (!isShove(this.s, m)) {
-        this.targets.push({ cell: to, from: c, kind: 'step' });
-        continue;
-      }
-      const t = after(this.s, m);
+      // Play it on a copy: what is lost, shoved over or taken by the falling tile?
+      const t = clone(this.s);
+      const ev = play(t, m);
       const lostThem = t.lost[DARK] - this.s.lost[DARK];
       const lostUs = t.lost[LIGHT] - this.s.lost[LIGHT];
-      // Which stone goes over (shoved, not crumbled)? Find it by replaying on a copy.
-      const ev = play(clone(this.s), m);
       if (ev.shovedOff) this.danger.push(ev.shovedOff.from);
-      this.targets.push({ cell: to, from: c, kind: ev.shovedOff ? (ev.shovedOff.side === DARK ? 'kill' : 'oops') : lostUs > lostThem ? 'oops' : 'shove' });
+      if (ev.crumbleTook) this.danger.push(ev.crumbled);
+      this.targets.push({ cell: to, from: c, push: isShove(this.s, m), kind: lostUs > 0 ? 'oops' : lostThem > 0 ? 'kill' : 'plain' });
     }
     if (!this.targets.length) this.info('This stone is stuck: holes and lines of three all round. Try another.');
     else {
       const kill = this.targets.some((t) => t.kind === 'kill');
       const oops = this.targets.some((t) => t.kind === 'oops');
       this.info(
-        `${this.targets.some((t) => t.kind === 'step') ? 'Dots step. ' : ''}${this.targets.some((t) => t.kind !== 'step') ? 'Arrows shove. ' : ''}${kill ? '<b class="good">A red arrow pushes their stone off!</b> ' : ''}${oops ? '<b class="bad">Purple pushes your own stone off.</b>' : ''}`,
+        `${this.targets.some((t) => !t.push) ? 'Dots step. ' : ''}${this.targets.some((t) => t.push) ? 'Arrows shove. ' : ''}${kill ? '<b class="good">Red loses them a stone!</b> ' : ''}${oops ? '<b class="bad">Purple loses one of yours.</b>' : ''}`,
       );
     }
     this.draw();
@@ -424,7 +431,7 @@ export class Game {
     const ev = play(this.s, m);
     this.moves.push(m);
     this.who.push(mover);
-    this.last = { from: moveCell(m), to: moveTo(m), side: mover };
+    this.last = lastOf(m, ev, mover, this.s, before);
     this.save();
     // Sounds and haptics.
     if (ev.slid.length > 1) this.snd.shove(ev.slid.length - 1);
@@ -435,6 +442,7 @@ export class Game {
     else navigator.vibrate?.(6);
     this.say(ev, mover, lostBefore);
     this.startAnim(before, ev, m, next);
+    this.refresh();
   }
 
   /** A line about what just happened. */
@@ -442,7 +450,8 @@ export class Game {
     const you = mover === LIGHT;
     const parts: string[] = [];
     if (ev.shovedOff) {
-      if (ev.shovedOff.side === DARK) parts.push(you ? '<b class="good">Over the edge!</b>' : 'The AI shoved its own stone off!');
+      const where = ev.shovedOff.intoHole ? 'Into the hole!' : 'Over the edge!';
+      if (ev.shovedOff.side === DARK) parts.push(you ? `<b class="good">${where}</b>` : 'The AI shoved its own stone off!');
       else parts.push(you ? '<b class="bad">You shoved your own stone off.</b>' : '<b class="bad">The AI shoved one of yours off.</b>');
     } else if (ev.slid.length > 1 && !you) parts.push('The AI shoved.');
     if (ev.crumbleTook) parts.push(ev.crumbleTook === LIGHT ? '<b class="bad">A tile crumbled under your stone.</b>' : '<b class="good">A tile crumbled under an AI stone.</b>');
@@ -477,7 +486,7 @@ export class Game {
     setTimeout(() => {
       if (g !== this.gen) return;
       const t0 = performance.now();
-      const ch = chooseMove(this.s, this.level);
+      const ch = chooseMove(this.s, this.level, this.moves);
       const wait = Math.max(0, 420 - (performance.now() - t0));
       setTimeout(() => {
         if (g !== this.gen) return;
@@ -495,7 +504,7 @@ export class Game {
     setTimeout(() => {
       if (g !== this.gen) return;
       // On track: the defence that holds out longest; off track: the AI's best move.
-      const m = this.puzzleFailed ? chooseMove(this.s, 'normal').move : bestDefence(this.s, this.puzzleLeft);
+      const m = this.puzzleFailed ? chooseMove(this.s, 'normal', this.moves).move : bestDefence(this.s, this.puzzleLeft);
       setTimeout(() => {
         if (g !== this.gen) return;
         this.thinking = false;
@@ -692,7 +701,7 @@ export class Game {
     if (!s.winner) {
       const until = TUNE.crumbleStart - s.ply;
       if (until > 0) right = `Crumbling in ${Math.ceil(until / 2)} move${Math.ceil(until / 2) === 1 ? '' : 's'}`;
-      else if (crumbleAfter(s, s.ply) >= 0) right = '<span class="red">■</span> falls after this move';
+      else if (crumbleAfter(s, s.ply) >= 0) right = '<span class="badge">1</span> falls after this move';
     }
     $('status').innerHTML = `<span>${left}</span><span>${right}</span>`;
     // Info line.
@@ -812,7 +821,7 @@ export class Game {
         <li><b>Move</b> one of your stones one step to a neighbouring tile.</li>
         <li><b>Shove</b> by stepping into a stone: the line in front moves one tile on. You can shove up to <b>two</b> stones (either colour); <b>three in a row won’t budge</b>.</li>
         <li>A stone shoved off the edge or into a hole is <b>gone</b>. You can never step off yourself.</li>
-        <li>From move ${Math.floor(TUNE.crumbleStart / 2) + 1} the island <b>crumbles</b>: after every move one tile falls, with any stone on it. Cracks show which go next; the <span style="color:#ff8a6e">red</span> one falls right after this move.</li>
+        <li>From move ${Math.floor(TUNE.crumbleStart / 2) + 1} the island <b>crumbles</b>: after every move one tile falls, with any stone on it. Numbered badges show the order: <b style="color:#ff5a4a">1</b> falls right after this move, then <b style="color:#ff9a4a">2</b>, then <b style="color:#ffd27a">3</b>; a dashed ring marks a stone standing on one.</li>
         <li>Shove <b>${TUNE.target} coral stones</b> off to win.</li>
       </ul>
       <p>Tap a stone to see its moves: dots step, arrows shove, a red arrow pushes a stone off. <b>Puzzles</b> has five short lessons and a daily win-in-2 or 3.</p>`,
@@ -892,6 +901,18 @@ export class Game {
         : `BRINK v${RULES_VERSION} puzzle=${this.puzzle?.id} a=${a}\n${base}?puzzle=${this.puzzle?.id}&a=${a}`;
     toast((await copyText(text)) ? 'Bug report copied' : 'Copy failed');
   }
+}
+
+/** The last-move marker: the mover's trail plus a trail for each stone it shoved. */
+function lastOf(m: number, ev: MoveEvents, mover: Side, s: State, before?: Int8Array): Scene['last'] {
+  const pushed: [number, number, Side][] = [];
+  for (const [from, to] of ev.slid) {
+    if (from === moveCell(m)) continue;
+    // The side of a shoved stone: where it landed now, or (gone) from the cells before the move.
+    const side = (to >= 0 && s.cells[to] !== HOLE ? s.cells[to] : before ? before[from] : mover === LIGHT ? DARK : LIGHT) as Side;
+    pushed.push([from, to, side]);
+  }
+  return { from: moveCell(m), to: moveTo(m), side: mover, pushed };
 }
 
 /** The help card's picture: your stone shoves two coral stones; the far one goes over. */

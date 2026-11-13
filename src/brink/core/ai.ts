@@ -10,9 +10,9 @@ import { DARK, EMPTY, HOLE, LIGHT, TUNE, clone, legalMoves, moveCell, moveDir, m
 export type Level = 'easy' | 'normal' | 'hard';
 
 export const LEVELS: Record<Level, { name: string; depth: number; nodes: number; noise: number; text: string }> = {
-  easy: { name: 'Easy', depth: 2, nodes: 3000, noise: 160, text: 'Looks one move ahead and sometimes slips.' },
-  normal: { name: 'Normal', depth: 3, nodes: 8000, noise: 0, text: 'Reads a few moves ahead.' },
-  hard: { name: 'Hard', depth: 12, nodes: 90000, noise: 0, text: 'Reads deep and punishes loose stones.' },
+  easy: { name: 'Easy', depth: 2, nodes: 3000, noise: 160, text: 'Sees your reply coming, but often settles for a weaker move.' },
+  normal: { name: 'Normal', depth: 2, nodes: 8000, noise: 0, text: 'Sees your reply coming and never takes a loose step.' },
+  hard: { name: 'Hard', depth: 12, nodes: 70000, noise: 0, text: 'Reads five or six moves deep, watches the falling tiles and punishes loose stones.' },
 };
 
 const WIN = 100000;
@@ -26,29 +26,39 @@ export const W = {
   edge: [0, -70, -18, 0, 6],
   /** Per ring (centre is best). */
   ring: [24, 16, 6, 0],
-  /** A stone on a tile that falls within 4 plies. */
-  doomed: [0, -400, -250, -120, -50],
+  /** A stone on a tile that falls k plies from now: the side to move's own stones (it can step one off now)… */
+  doomUs: [0, -320, -300, -90, -60, -30, -20],
+  /** …and the other side's (k = 1 falls right after this move: as good as gone). */
+  doomThem: [0, -900, -260, -240, -60, -30, -20],
+  /** An edge stone (void right behind it on a line) with an enemy within 1 / 2 steps of the tile it would be shoved from. */
+  near: [0, -60, -25],
+  /** Mild weight on how many tiles a stone can step to (stuck stones can't escape crumbles). */
+  mobility: 3,
   /** Each enemy stone this one could shove off right now (side to move only counts once). */
   threat: 90,
   /** Lines of three own stones (they can't be shoved along that line). */
   brace: 8,
+  /** Root penalty for undoing the opponent's last shove (half for stepping back). */
+  loop: 70,
 };
 
 /** Steps to the void from cell i going in dir d (1 = the next tile is the void). */
 function voidDist(c: Int8Array, i: number, d: number): number {
   let n = 1;
   let k = NB[i * 6 + d];
-  while (k >= 0 && c[k] !== HOLE) {
+  // Only distances up to 4 matter to the evaluation.
+  while (k >= 0 && c[k] !== HOLE && n < 4) {
     n++;
     k = NB[k * 6 + d];
   }
   return n;
 }
 
-/** Plies until each tile falls (from the side-to-move's point of view), capped. */
+/** Plies until each tile falls (1 = right after the side to move's move), up to 6. */
+const DOOM = new Int8Array(N);
 function doomTable(s: State): Int8Array {
-  const t = new Int8Array(N);
-  for (let k = 1; k <= 4; k++) {
+  const t = DOOM.fill(0);
+  for (let k = 1; k <= 6; k++) {
     const idx = s.ply - 1 + k - TUNE.crumbleStart;
     if (idx >= 0 && idx < s.order.length) t[s.order[idx]] = k;
   }
@@ -75,6 +85,31 @@ function knocksOff(c: Int8Array, from: number, dir: number, victim: Side): boole
   return (k < 0 || c[k] === HOLE) && c[last] === victim;
 }
 
+/** Steps from every tile to the nearest stone of `side` (holes block; up to 2, else 9), into reused buffers. */
+const NEAR = [new Int8Array(N), new Int8Array(N), new Int8Array(N)];
+const QUEUE = new Int8Array(N);
+function nearest(c: Int8Array, side: number): Int8Array {
+  const d = NEAR[side].fill(9);
+  let tail = 0;
+  for (let i = 0; i < N; i++)
+    if (c[i] === side) {
+      d[i] = 0;
+      QUEUE[tail++] = i;
+    }
+  for (let h = 0; h < tail; h++) {
+    const i = QUEUE[h];
+    if (d[i] >= 2) continue;
+    for (let k = 0; k < 6; k++) {
+      const j = NB[i * 6 + k];
+      if (j >= 0 && c[j] !== HOLE && d[j] > d[i] + 1) {
+        d[j] = d[i] + 1;
+        QUEUE[tail++] = j;
+      }
+    }
+  }
+  return d;
+}
+
 /** Knock-off moves for the side to move, found by the last `evaluate` call. */
 const lastKnocks: number[] = [];
 
@@ -84,6 +119,10 @@ export function evaluate(s: State): number {
   if (s.winner) return s.winner === s.turn ? WIN : -WIN;
   const c = s.cells;
   const doom = doomTable(s);
+  // Steps from each tile to the nearest stone of each side (BFS over tiles), for exposure.
+  const distTo = [null, nearest(c, LIGHT), nearest(c, DARK)] as const;
+  const doomUs = W.doomUs;
+  const doomThem = W.doomThem;
   let score = W.stone * (s.lost[other(s.turn)] - s.lost[s.turn]);
   let threatsUs = 0;
   let threatsThem = 0;
@@ -92,13 +131,18 @@ export function evaluate(s: State): number {
     if (v !== LIGHT && v !== DARK) continue;
     let p = W.ring[RING[i]];
     let worst = 9;
+    let close = 9;
+    const foeDist = distTo[(3 - v) as Side]!;
     for (let d = 0; d < 6; d++) {
       const vd = voidDist(c, i, d);
       // Only a line with room for a pusher behind counts as exposed.
-      if (vd < worst) {
-        const back = NB[i * 6 + ((d + 3) % 6)];
-        if (back >= 0 && c[back] !== HOLE) worst = vd;
+      const back = NB[i * 6 + ((d + 3) % 6)];
+      if (back >= 0 && c[back] !== HOLE) {
+        if (vd < worst) worst = vd;
+        if (vd === 1 && foeDist[back] < close) close = foeDist[back];
       }
+      const step = NB[i * 6 + d];
+      if (step >= 0 && c[step] === EMPTY) p += W.mobility;
       // Shoves this stone could make that drop an enemy stone.
       if (knocksOff(c, i, d, (3 - v) as Side)) {
         if (v === s.turn) {
@@ -113,7 +157,8 @@ export function evaluate(s: State): number {
       }
     }
     p += W.edge[Math.min(4, worst)];
-    if (doom[i]) p += W.doomed[doom[i]];
+    if (close <= 2) p += W.near[Math.max(1, close)];
+    if (doom[i]) p += (v === s.turn ? doomUs : doomThem)[doom[i]];
     score += v === s.turn ? p : -p;
   }
   // The side to move cashes one threat; the other side's threats are worth less (we may parry).
@@ -281,7 +326,26 @@ export interface Choice {
 }
 
 /** Scores every root move to `maxDepth` (iterative deepening within the node cap). */
-export function search(s: State, maxDepth: number, cap: number, exact = false): Choice {
+/**
+ * Root penalties against shove-back loops: undoing the opponent's last shove
+ * (pushing the same line straight back) or stepping your own last stone back.
+ * Small next to a stone, so it only breaks ties between quiet moves.
+ */
+export function loopPenalty(recent: readonly number[]): (m: number) => number {
+  const opp = recent.length ? recent[recent.length - 1] : -1;
+  const own = recent.length > 1 ? recent[recent.length - 2] : -1;
+  let undoShove = -1;
+  if (opp >= 0) {
+    const b = moveTo(opp);
+    const d = moveDir(opp);
+    const behind = NB[b * 6 + d];
+    if (behind >= 0) undoShove = behind * 64 + b;
+  }
+  const stepBack = own >= 0 ? moveTo(own) * 64 + moveCell(own) : -1;
+  return (m) => (m === undoShove ? W.loop : 0) + (m === stepBack ? W.loop / 2 : 0);
+}
+
+export function search(s: State, maxDepth: number, cap: number, exact = false, penalty: (m: number) => number = () => 0): Choice {
   const ctx = makeCtx(cap);
   const moves = legalMoves(s);
   let ranked = moves.map((move) => ({ move, score: 0 }));
@@ -298,12 +362,14 @@ export function search(s: State, maxDepth: number, cap: number, exact = false): 
       let sc: number;
       const sign = t.turn === s.turn ? 1 : -1;
       const run = (a: number, b: number) => (sign === 1 ? negamax(t, d - 1, a, b, ctx, 1) : -negamax(t, d - 1, -b, -a, ctx, 1));
+      const pen = penalty(m);
       if (alpha === -Infinity || exact) sc = run(-Infinity, Infinity);
       else {
-        sc = run(alpha - 1, alpha);
-        if (!ctx.stop && sc >= alpha) sc = run(alpha - 1, Infinity);
+        sc = run(alpha + pen - 1, alpha + pen);
+        if (!ctx.stop && sc >= alpha + pen) sc = run(alpha + pen - 1, Infinity);
       }
       if (ctx.stop) break;
+      sc -= pen;
       scores.push({ move: m, score: sc });
       if (sc > alpha) alpha = sc;
     }
@@ -319,9 +385,9 @@ export function search(s: State, maxDepth: number, cap: number, exact = false): 
 }
 
 /** The AI's move at a level. Deterministic: Easy's slips come from the game seed and ply. */
-export function chooseMove(s: State, level: Level): Choice {
+export function chooseMove(s: State, level: Level, recent: readonly number[] = []): Choice {
   const L = LEVELS[level];
-  const ch = search(s, L.depth, L.nodes, L.noise > 0);
+  const ch = search(s, L.depth, L.nodes, L.noise > 0, loopPenalty(recent));
   if (L.noise > 0 && ch.ranked.length > 1) {
     const rng = new Rng(mixSeed(s.seed ^ 0xea5e, s.ply));
     // Pick among moves within `noise` of the best (never one that throws away a stone outright).

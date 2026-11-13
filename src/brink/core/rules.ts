@@ -180,7 +180,7 @@ export interface MoveEvents {
   /** Stones that slid: [from, to] (to = -1: over the edge or into a hole). */
   slid: [number, number][];
   /** A stone that went over: the side that lost it, and the cell it left. */
-  shovedOff: { side: Side; from: number } | null;
+  shovedOff: { side: Side; from: number; intoHole: boolean } | null;
   /** The tile that crumbled after the move, and the stone (side) it took. */
   crumbled: number;
   crumbleTook: 0 | Side;
@@ -217,7 +217,7 @@ export function play(s: State, m: number): MoveEvents {
     ev.slid.push([at, to]);
     if (to < 0) {
       s.lost[who]++;
-      ev.shovedOff = { side: who, from: at };
+      ev.shovedOff = { side: who, from: at, intoHole: NB[at * 6 + dir] >= 0 };
     } else c[to] = who;
     c[at] = EMPTY;
   }

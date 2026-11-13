@@ -42,8 +42,20 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         result card with won–lost per level and "Try Normal/Hard", new-game card (level, who starts: you / AI / take
         turns), puzzles card, help card with a shove diagram, synth sounds, bug report, `?daily`, hub card + Daily link.
         Pixel 7 checked: help, selection, mid-game, lesson, daily, result, new game.
-  - [ ] Next: owner playtest. Watch: does the AI's waiting (it shuffles while the rim crumbles) feel dull? Is Hard
-        hard enough for a person (it beats Normal only 63%)? Are the 2-3-ply cracks readable? Easy may blunder too much.
+  - [x] Blind playtest (lessons and daily first try; Easy 3-1 won / 2-3 lost; Normal lost 0-3, 1-3, 0-3; Hard lost
+        2-3; "short and tactically rich") and fixes (AI v2, rules unchanged, replays unchanged): shoves with your own
+        stone in front were unplayable (the press re-selected that stone) → a tap on any arrow target plays it; tiles
+        falling next carry 1/2/3 badges, cracks scale with the order, a dashed ring marks a stone on one; targets turn
+        red/purple when a falling tile takes a stone (Crumble lesson arrow is red); "Into the hole!", "Three in a row
+        won't budge", trails for shoved stones, status cleared between games and fixed at one line (no board jump);
+        Brace lesson defence moves the cornered stone. AI: side-aware doom penalties 6 plies ahead, edge exposure
+        weighted by enemy distance, mobility; root `loopPenalty` against shove-backs (4.0-4.5 → 0.4-1.8 a game);
+        Normal depth 3 → 2 (odd depth skewed mirror games: 23% first-mover wins at depth 3 with the new eval), Hard
+        90k → 70k nodes. Self-play (80 games): Hard–Normal 63% → 80%, Hard–Easy 100%, Normal–Easy 95% → 90%; first
+        mover Easy 39%, Normal 63%, Hard ~40% (was 58/58/43). Hard ~130-155 ms a move (p90 ~200) on a laptop.
+        The daily pool was generated with the v1 Normal (still verified exact; regenerating would change it).
+  - [ ] Next: owner playtest. Watch: does Hard's waiting while the rim crumbles feel dull? Is Normal now the right
+        middle step? First-mover rates swing 39-63% by level in AI mirrors: watch for a side bias with people.
 - [ ] **Kitbag** (dice-placement roguelite: roll dice, slot them into gear cards, 12 floors to The House). Milestones:
   - [x] Core (src/kitbag/core, rules v1): 19 gear cards with conditioned slots (any / even / odd / ≤2 / ≤3 / 2+ / 4+ /
         5+ / 6 / pair / any two) and effects (deal, pierce, block, spike, heal, poison, reroll, split, flip, +1/+2,

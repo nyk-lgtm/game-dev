@@ -20,8 +20,16 @@ body {
 .pip.on { border: 0; }
 #status {
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
-  padding: 6px 12px; min-height: 32px; font-size: 13.5px; color: var(--muted);
-  border-bottom: 1px solid var(--line);
+  padding: 0 12px; height: 34px; flex: none; font-size: 13.5px; color: var(--muted);
+  border-bottom: 1px solid var(--line); overflow: hidden;
+}
+/* One line each, so the board never jumps when the text changes. */
+#status > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#status > span:first-child { flex: 1 1 auto; }
+#status > span:last-child { flex: 0 1 auto; }
+#status .badge {
+  display: inline-flex; width: 17px; height: 17px; border-radius: 50%; align-items: center; justify-content: center;
+  background: #ff5a4a; color: #1a0c08; font-weight: 800; font-size: 11px; vertical-align: 1px;
 }
 #status b { color: var(--text); }
 #status .good, #info .good { color: var(--heal); }
@@ -33,7 +41,7 @@ body {
   padding: 8px 12px max(12px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--line); background: var(--panel);
 }
-body #info { min-height: 40px; height: 40px; overflow-y: auto; font-size: 13.5px; line-height: 1.4; color: var(--muted); }
+body #info { min-height: 40px; height: 40px; flex: none; overflow-y: auto; font-size: 13.5px; line-height: 1.4; color: var(--muted); }
 #info svg { vertical-align: -3px; }
 #tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 #tools button {

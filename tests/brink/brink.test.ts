@@ -13,7 +13,11 @@ import {
   RING,
   TUNE,
   after,
+  bestDefence,
   boardText,
+  clone,
+  loopPenalty,
+  W,
   cellAt,
   chooseMove,
   crumbleAfter,
@@ -110,6 +114,12 @@ describe('shoves', () => {
     expect(isLegal(s, cellAt(0, -2) * 64 + cellAt(1, -2))).toBe(false);
   });
 
+  it('says whether a stone went over the edge or into a hole', () => {
+    const s = position([[0, -2], [1, 0]], [[0, -3], [1, -1]], [[1, -2]]);
+    expect(play(clone(s), mv([0, -2], [0, -3])).shovedOff).toMatchObject({ side: DARK, intoHole: false });
+    expect(play(clone(s), mv([1, 0], [1, -1])).shovedOff).toMatchObject({ side: DARK, intoHole: true });
+  });
+
   it('your own stones count in the line, and can go over too', () => {
     const s = position([[0, -1], [0, -2]], [[0, -3], [2, 0]]);
     const t = after(s, mv([0, -1], [0, -2]));
@@ -197,6 +207,17 @@ describe('AI', () => {
     expect(ch.nodes).toBeLessThan(4000 * 3);
   });
 
+  it('the AI is discouraged from shoving straight back what was just shoved', () => {
+    const s = newGame(2);
+    const last = mv([0, -1], [0, 0]);
+    // Their stone at (0,-1) shoved ours from (0,0) to (0,1): pushing back is (0,1) -> (0,0).
+    expect(loopPenalty([last])(mv([0, 1], [0, 0]))).toBe(W.loop);
+    expect(loopPenalty([last])(mv([1, 0], [1, -1]))).toBe(0);
+    // Stepping your own last stone straight back costs half.
+    expect(loopPenalty([mv([1, 1], [1, 0]), last])(mv([1, 0], [1, 1]))).toBe(W.loop / 2);
+    void s;
+  });
+
   it('AI games end in a sensible number of moves', () => {
     const s = newGame(21);
     while (!s.winner && s.ply < 200) play(s, chooseMove(s, 'easy').move);
@@ -214,6 +235,13 @@ describe('puzzles', () => {
       if (p.n > 1) expect(winningMoves(p.state, p.n - 1), p.id).toEqual([]);
     }
     expect(LESSONS.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('in a puzzle the defence tries to save the threatened stone (Brace)', () => {
+    const p = lessonPuzzles().find((l) => l.id === 'brace')!;
+    const s = after(p.state, winningMoves(p.state, 2)![0]);
+    const reply = bestDefence(s, 1);
+    expect(reply >> 6).toBe(cellAt(3, 0));
   });
 
   it('daily pool puzzles (a sample) are wins in exactly N with one winning first move', () => {
