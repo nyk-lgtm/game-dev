@@ -15,6 +15,8 @@ export interface Overlay {
   /** Wisp id -> its next step, drawn as an arrow. */
   plans: { from: Hex; to: Hex }[];
   selected: Hex | null;
+  /** The selected bolt target is a big piece it would destroy: draw the selection in red. */
+  danger?: boolean;
   outcome: Outcome | null;
   /** The piece that would be placed at `selected`. */
   ghost: Drawable | null;
@@ -100,7 +102,12 @@ export function drawBoard(
   if (ov.selected) {
     const { x, y } = hexToPx(L, ov.selected.q, ov.selected.r);
     hexPath(ctx, x, y, S * 0.86);
-    ctx.strokeStyle = G.select;
+    if (ov.danger) {
+      const pulse = 0.5 + 0.5 * Math.sin(time / 160);
+      ctx.fillStyle = `rgba(255,77,109,${0.12 + 0.14 * pulse})`;
+      ctx.fill();
+    }
+    ctx.strokeStyle = ov.danger ? '#ff4d6d' : G.select;
     ctx.lineWidth = 3;
     ctx.stroke();
     const out = ov.outcome;

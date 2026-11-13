@@ -9,6 +9,7 @@ import {
   RULES_VERSION,
   applyAction,
   cellAt,
+  emptyCells,
   encodeAction,
   eq,
   isLegal,
@@ -59,9 +60,13 @@ const PIECE_HELP: Record<string, string> = {
   plant: '3 touching identical pieces merge into the next tier where the last one lands.',
   stone: 'Trapped wisps become stones. 3 stones make a Cairn, 3 cairns a Monolith.',
   wisp: 'Wanders one hex per turn (the arrow shows where). With no empty neighbor it turns to stone.',
-  crystal: 'Becomes whatever makes the best merge where you put it — or a stone.',
-  bolt: 'Clears any piece. Zap a wisp to turn it into a stone.',
+  crystal: 'Becomes whatever makes the best merge where you put it, any tier (next to two Trees, a Tree) — or a stone.',
+  bolt: 'Clears any piece, even a Grove. Zap a wisp to turn it into a stone; on an empty hex it fizzles.',
 };
+
+/** Pieces a bolt would wreck: Grove and Spirit Tree, Monolith. */
+export const isPrecious = (c: Cell): boolean =>
+  c !== null && ((c.kind === 'plant' && c.tier >= 4) || (c.kind === 'stone' && c.tier >= 2));
 
 export class Game {
   private state!: GameState;
@@ -78,6 +83,8 @@ export class Game {
   /** Empty hexes where the piece in hand merges at once (refreshed per turn). */
   private hints: Hex[] = [];
   private last = 0;
+  /** True while a bolt is aimed at a Grove, Spirit Tree or Monolith (red preview). */
+  private destroying = false;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -147,6 +154,13 @@ export class Game {
     }
     const a: Action = { type: 'place', at: h };
     const bolt = s.current.kind === 'bolt';
+    if (!bolt && emptyCells(s).length === 0) {
+      // Nowhere to place: keep the "board full" advice up and point at the stash.
+      this.clearSelection();
+      this.nudgeStash();
+      this.refreshUi();
+      return;
+    }
     if (isLegal(s, a) && (bolt || cellAt(s, h) === null)) {
       if (this.selected && eq(this.selected, h)) {
         this.commit(a);
@@ -155,7 +169,8 @@ export class Game {
       this.clearSelection();
       this.selected = h;
       this.outcome = previewAction(s, a);
-      navigator.vibrate?.(8);
+      this.destroying = bolt && isPrecious(cellAt(s, h));
+      navigator.vibrate?.(this.destroying ? [20, 50, 20] : 8);
     } else {
       this.clearSelection();
       this.inspect = h;
@@ -167,6 +182,16 @@ export class Game {
     this.selected = null;
     this.outcome = null;
     this.inspect = null;
+    this.destroying = false;
+  }
+
+  /** Replay the stash's pulse so a tap on a full board visibly points at it. */
+  private nudgeStash(): void {
+    const b = $('stashBtn');
+    b.classList.remove('nudge');
+    void b.offsetWidth;
+    b.classList.add('nudge');
+    navigator.vibrate?.([12, 40, 12]);
   }
 
   private commit(a: Action): void {
@@ -200,7 +225,10 @@ export class Game {
 
     const info = $('info');
     const btn = $<HTMLButtonElement>('actBtn');
+    const stashBtn = $('stashBtn');
     btn.hidden = true;
+    btn.classList.remove('danger');
+    stashBtn.classList.remove('urge');
     if (busy) {
       info.innerHTML = '';
       return;
@@ -215,24 +243,43 @@ export class Game {
     if (this.selected && this.outcome) {
       const o = this.outcome;
       const parts: string[] = [];
+      let hint = 'Tap again or press Place.';
+      let label = 'Place';
+      if (s.current.kind === 'bolt') {
+        const c = cellAt(s, this.selected);
+        if (!c) {
+          parts.push('<span class="bad">Fizzles: wasted</span>');
+          hint = 'Nothing to zap: the Bolt is wasted and wisps still move.';
+        } else if (this.destroying) {
+          parts.push(`<span class="bad">Destroys ${pieceName(c)}</span>`);
+          hint = `The ${pieceName(c)} is gone for good. Tap it again (or press Destroy) to zap it.`;
+          label = 'Destroy';
+        } else if (c.kind === 'wisp') parts.push('Wisp turns to Stone');
+        else parts.push(`Clears ${pieceName(c)}`);
+      }
       if (o.crystal) parts.push(`Becomes ${nameOf(o.crystal.kind, o.crystal.tier)}`);
       if (o.creates) parts.push(`<span class="good">Makes ${nameOf(o.creates.kind, o.creates.tier)}</span>`);
       if (o.trapped) parts.push(`<span class="good">Traps ${o.trapped} wisp${o.trapped > 1 ? 's' : ''}</span>`);
-      if (s.current.kind === 'bolt') {
-        const c = cellAt(s, this.selected);
-        parts.push(c ? `Zap ${pieceName(c)}` : 'Fizzles on an empty hex');
-      }
       parts.push(o.points > 0 ? `+${o.points}` : 'No points');
       if (o.over) parts.push('<span class="bad">Fills the board</span>');
       const placed = o.crystal ?? (s.current.kind === 'plant' ? s.current : null);
-      const hint =
-        o.group === 2 && placed
-          ? `Makes a pair: one more ${nameOf(placed.kind, placed.tier)} next to it merges.`
-          : 'Tap again or press Place.';
+      if (o.group === 2 && placed) hint = `Makes a pair: one more ${nameOf(placed.kind, placed.tier)} next to it merges.`;
       info.innerHTML = `<div class="title">${parts.join(' · ')}</div>${hint}`;
       btn.hidden = false;
-      btn.textContent = 'Place';
+      btn.textContent = label;
+      btn.classList.toggle('danger', this.destroying);
       btn.onclick = () => this.selected && this.commit({ type: 'place', at: this.selected });
+      return;
+    }
+    const p = s.current;
+    if (emptyCells(s).length === 0) {
+      // The rules only end the game when no Bolt is left; say what keeps it going.
+      if (p.kind === 'bolt')
+        info.innerHTML = `<div class="title">Board full: zap a piece with your Bolt</div>Tap any piece to clear its hex and make room.`;
+      else if (s.stash?.kind === 'bolt') {
+        info.innerHTML = `<div class="title">Board full: swap in your Bolt from the stash</div>Tap the Stash, then zap a piece to make room.`;
+        stashBtn.classList.add('urge');
+      } else info.innerHTML = `<div class="title">Board full</div>No Bolt left to make room.`;
       return;
     }
     if (this.inspect) {
@@ -242,7 +289,6 @@ export class Game {
         return;
       }
     }
-    const p = s.current;
     info.innerHTML = `<div class="title">Place a ${pieceName(p)}</div>${PIECE_HELP[p.kind]}`;
   }
 
@@ -261,14 +307,13 @@ export class Game {
     showCard(
       `<h2>How to play Grove</h2>
       <ul>
-        <li><b>Tap an empty hex</b> to preview, <b>tap again</b> (or press Place) to place the piece shown in the tray.</li>
-        <li><b>3 or more touching identical pieces merge</b> into the next tier, right where the last one landed. Merges can chain. Bigger groups score more.</li>
-        <li><span class="c-plant">Seed → Sprout → Bush → Tree → Grove → Spirit Tree</span></li>
-        <li><span class="c-wisp">Wisps</span> wander one hex per turn — the little arrow shows their next step. Wisps never merge with each other. A wisp with no empty neighbor turns to <span class="c-stone">stone</span> (+50, or +100 each when you trap two or more at once). Stone → Cairn → Monolith, worth a lot.</li>
-        <li><span class="c-crystal">Crystal</span>: becomes whatever makes the best merge where you put it.</li>
-        <li><span class="c-bolt">Bolt</span>: clears any piece; zap a wisp to turn it to stone.</li>
-        <li><b>Stash</b>: tap it to set the current piece aside, or swap it back later.</li>
-        <li>The game ends when the board is full.</li>
+        <li><b>Tap an empty hex</b> to preview, <b>tap again</b> (or press Place) to place the piece in the tray. Placing scores: Seed +5, Sprout +20, Bush +100.</li>
+        <li><b>3+ touching identical pieces merge</b> into the next tier where the last one landed, scoring that tier (4 pieces ×1.5, 5 ×2). Merges chain.</li>
+        <li><span class="c-plant">Seed → Sprout → Bush → Tree → Grove → Spirit Tree</span><br><span class="c-stone">Stone → Cairn (+250) → Monolith (+1500)</span></li>
+        <li><span class="c-wisp">Wisps</span> step one hex a turn (arrow; a new one waits a turn). <b>All wisps move first</b>, then any with no empty neighbor turns to stone: +50, or +100 each for two or more. So a wisp boxed in by a wisp that steps away goes free. One you drop into a closed hole turns to stone with no trap points.</li>
+        <li><span class="c-crystal">Crystal</span>: becomes the best merge where it lands, any tier: next to two Trees it makes a Grove. No merge: a stone.</li>
+        <li><span class="c-bolt">Bolt</span>: clears any piece (red warning before a Grove, Spirit Tree or Monolith); a zapped wisp turns to stone; an empty hex fizzles.</li>
+        <li><b>Stash</b>: tap to set the piece aside or swap it back. The game ends when the board is full and no Bolt is in hand or stash.</li>
       </ul>`,
       [{ label: 'Got it', primary: true, onClick: closeOverlay }],
     );
@@ -348,6 +393,7 @@ export class Game {
               })
             : [],
           selected: idle ? this.selected : null,
+          danger: idle && this.destroying,
           outcome: idle ? this.outcome : null,
           ghost: idle ? s.current : null,
           targets: idle && s.current.kind === 'bolt' ? CELLS.filter((h) => cellAt(s, h) !== null) : [],

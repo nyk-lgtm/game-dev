@@ -449,6 +449,17 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Grove: owner wants it kept as is (no smaller board).
 
 ## Done (recent)
+- Grove UI fixes (rules v2 unchanged, replays unchanged; owner: keep Grove as it is): #info is a fixed 60 px box
+  (`#tray #info`), so the board no longer shifts ~9 px when the Place button and one-line preview replace the two-line
+  idle help; a full board says what to do ("Board full: swap in your Bolt from the stash", stash pulses yellow, a tap
+  on the board nudges it; with the Bolt in hand "zap a piece"); the rules already end the game when the board is
+  full with no Bolt in hand or stash (new test tests/grove/fullboard.test.ts checks random games never leave a full
+  board in play without one); a Bolt aimed at a Grove, Spirit Tree or Monolith (`isPrecious`) previews in red
+  ("Destroys Grove", red hex, red Destroy button; still tap-to-preview, second tap to zap); a Bolt on an empty hex
+  says "Fizzles: wasted"; help (fits a Pixel 7 card without scrolling) adds placement points, merge multipliers,
+  stone values, wisps-move-then-trap, no trap points for a wisp dropped into a closed hole, crystals at any tier,
+  and when the game really ends. Not done: a "couldn't load" retry screen (Grove has no lazy chunk; a 404 on the
+  entry script runs no JS at all).
 - Second technical QA sweep (360×640 and Pixel 7, UI only, no RULES_VERSION changes): shared cards take `pin: true`
   on a secondary button so a long card's sticky footer holds both main actions (Brink help: Play + Lessons; Triad help);
   Brink status bar wraps to two lines inside its 34 px at ≤380 px (board never moves); Kitbag foe grid column is
