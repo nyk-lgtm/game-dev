@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   ALL_CONCEPTS,
   CHAPTERS2,
+  CONCEPTS,
+  makeWorld,
+  glyphsAlike,
   adjShown2,
   linkActions,
   unlinkActions,
@@ -21,6 +24,7 @@ import {
   type Action,
   type Frame,
   type NP,
+  type Stroke,
   type State,
   type Token,
 } from '../../src/unspoken/core';
@@ -50,12 +54,58 @@ describe('village 1 is unchanged', () => {
       98765: 'cdb6d624',
       4000000000: '6a869cf9',
     };
+    // The raw language (before the look-alike glyph fix) is exactly the old one; the world never depends on
+    // glyph shapes, so the real game's world is the old world too.
     for (const [seed, h] of Object.entries(before)) {
+      const raw = makeLanguage(+seed, 1, false);
       const s = newGame(+seed);
       expect(s.village).toBe(1);
-      expect(fnv(JSON.stringify({ lang: s.lang, world: s.world })), seed).toBe(h);
-      expect(newGame(+seed, 1).world).toEqual(s.world);
+      expect(fnv(JSON.stringify({ lang: raw, world: makeWorld(raw) })), seed).toBe(h);
+      expect(s.world).toEqual(makeWorld(raw));
     }
+  });
+
+  it('the look-alike fix only redraws glyphs that looked like an earlier one', () => {
+    let fixed = 0;
+    for (let seed = 0; seed < 200; seed++) {
+      for (const village of [1, 2]) {
+        const raw = makeLanguage(seed, village, false);
+        const L = makeLanguage(seed, village);
+        expect({ ...L, glyphs: null }).toEqual({ ...raw, glyphs: null });
+        const shapes: Stroke[][] = [];
+        for (const c of village === 2 ? ALL_CONCEPTS : CONCEPTS) {
+          const g = raw.glyphs[c.id];
+          if (!g || g.mark || !g.strokes.length) continue;
+          const same = JSON.stringify(L.glyphs[c.id]) === JSON.stringify(g);
+          if (!same) fixed++;
+          // Changed exactly when it looked like a glyph before it (in the fixed language).
+          expect(same, `${seed}/${village} ${c.id}`).toBe(!shapes.some((o) => glyphsAlike(o, g.strokes)));
+          shapes.push(L.glyphs[c.id].strokes);
+        }
+      }
+    }
+    expect(fixed).toBeGreaterThan(0);
+  });
+
+  it('never gives two meanings look-alike glyphs (both villages)', () => {
+    for (let seed = 0; seed < 300; seed++) {
+      for (const village of [1, 2]) {
+        const L = makeLanguage(seed * 2654435761 >>> 0, village);
+        const seen: [string, Stroke[]][] = [];
+        for (const [id, g] of Object.entries(L.glyphs)) {
+          if (g.mark || !g.strokes.length) continue;
+          const twin = seen.find(([, o]) => glyphsAlike(o, g.strokes));
+          expect(twin?.[0], `${seed}/${village} ${id}`).toBeUndefined();
+          seen.push([id, g.strokes]);
+        }
+      }
+    }
+    // The playtest's language: "before" and "what?" were the same arc, a quarter box apart.
+    const raw = makeLanguage(2043983302, 1, false);
+    expect(glyphsAlike(raw.glyphs.PAST.strokes, raw.glyphs.Q.strokes)).toBe(true);
+    const L = makeLanguage(2043983302);
+    expect(glyphsAlike(L.glyphs.PAST.strokes, L.glyphs.Q.strokes)).toBe(false);
+    expect(L.glyphs.PAST).toEqual(raw.glyphs.PAST);
   });
 
   it('has none of the second village grammar', () => {

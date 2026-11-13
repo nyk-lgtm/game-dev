@@ -486,6 +486,13 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   burns low with smoke, village-2 riddles only use adjectives the art shows (adjShown2; village-2 save v3), one-line
   glyph labels, long places get a "3 / 17" counter strip, steady writing palette, toast at the top, the ending
   counts wrong readings. Not done: vaguer Grammar chip names ("doer"/"done-to"/"many do" give the meaning away).
+- Unspoken village-1 blind pass (seed 2043983302: 46/46, 2 wrong readings) and fixes: look-alike glyphs (same strokes
+  moved/resized, e.g. "before" and "what?" one arc a quarter box apart; ~12% of languages, mostly particles) are
+  redrawn deterministically; the fisher is a clean-shaven man with a rod ("the fisher in the yellow hat"), not a
+  second old man; carried animals are lifted into the arms (big ones drawn at half the carrier's height, adjective
+  kept); a broken thing stays one cracked object; many carried things are a pile in the front carrier's arms; riddle
+  hint "Each wrong scene changes one thing from the right one"; tab cues sit beside the strip; every place uses the
+  counter strip; "Go to" never empty; the word bank only marks meanings already proven elsewhere (quiet ✓).
 - Grove blind playtest (agent: 24,775, Spirit Tree, 209 turns; "too forgiving, too long") and fixes
   (rules v2): trapping pays 50 per wisp (×2 for 2+ at once); crystals 5% → 4.5%, bolts 6% → 4.5%,
   wisps 20% → 22% (bot: 276 → 248 turns, Spirit Tree 49/60 → 30/60); help says wisps never merge and

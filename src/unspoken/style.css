@@ -33,15 +33,17 @@ body .icon-btn { background: transparent; border-color: var(--line); color: var(
 }
 #places::-webkit-scrollbar { display: none; }
 /* A "›" / "‹" cue over the faded edge while more places hide that way. */
-#placesBar { position: relative; flex: none; }
+/* The cues take their own room beside the strip (never over a label). */
+#placesBar { position: relative; flex: none; display: flex; align-items: center; background: var(--bg); border-bottom: 1px solid var(--line); }
+#placesBar > #places { flex: 1; min-width: 0; border-bottom: 0; }
 #placesBar::before, #placesBar::after {
-  position: absolute; top: 50%; transform: translateY(-50%); pointer-events: none;
+  flex: none; pointer-events: none; margin: 0 2px;
   width: 26px; height: 26px; border-radius: 50%; display: none; align-items: center; justify-content: center;
   background: var(--panel); border: 1px solid var(--line); color: var(--text); font-size: 18px; font-weight: 700; line-height: 1;
   box-shadow: 0 1px 4px rgba(43, 33, 24, 0.18);
 }
-#placesBar::before { content: '‹'; left: 4px; }
-#placesBar::after { content: '›'; right: 4px; }
+#placesBar::before { content: '‹'; margin-left: 6px; }
+#placesBar::after { content: '›'; margin-right: 6px; }
 #placesBar:has(> #places.more-left)::before, #placesBar:has(> #places.more-right)::after { display: flex; }
 #places.more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
 #places.more-left { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent); }
@@ -210,7 +212,7 @@ body .icon-btn { background: transparent; border-color: var(--line); color: var(
 #sheet .chips button { min-height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font-size: 15px; font-weight: 600; }
 #sheet .chips button.on { background: var(--accent); color: #fff7ea; border-color: var(--accent); }
 #sheet .chips button.taken { color: var(--muted); }
-#sheet .chips button.taken::after { content: ' •'; color: var(--accent); }
+#sheet .chips button.taken::after { content: ' ✓'; color: var(--faint); font-size: 12px; }
 #sheet .marks { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
 #sheet .marks button { display: flex; gap: 6px; align-items: center; min-height: 44px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
 #sheet .actions { display: flex; gap: 8px; }

@@ -191,9 +191,9 @@ const key = (strokes: Stroke[]) =>
 
 const INKS = ['#2b2118', '#3a1f4a', '#123b3a', '#4a1d1d', '#1d2f4a'];
 
-/** The language of a village. Village 1 is the original game (unchanged by village 2's
+/** The language of a village (`unique = false` skips the look-alike fix, for tests that compare with old builds). Village 1 is the original game (unchanged by village 2's
  *  additions: everything new happens only when village === 2, after a different seed mix). */
-export function makeLanguage(seed: number, village = 1): Language {
+export function makeLanguage(seed: number, village = 1, unique = true): Language {
   const v2 = village === 2;
   const rng = new Rng(mixSeed(seed, v2 ? 2702 : 1701));
 
@@ -322,10 +322,69 @@ export function makeLanguage(seed: number, village = 1): Language {
     glyphs.SUBJ = { strokes: particle(), frame: false, mark: null };
     glyphs.OBJ = { strokes: particle(), frame: false, mark: null };
     glyphs.PLV = mark('under');
-    return { seed, village: 2, name: langName, grammar, style, glyphs, words };
   }
 
-  return { seed, name: langName, grammar, style, glyphs, words };
+  // No two glyphs may look alike: the same shape moved or resized, or drawn stroke by stroke in another
+  // direction, counts as the same. A later look-alike is redrawn from its own seed stream, so every other
+  // glyph (and everything else about the language) stays exactly as it was.
+  const fix = new Rng(mixSeed(seed, v2 ? 9702 : 9701));
+  const shapes: Stroke[][] = [];
+  const clash = (st: Stroke[]) => shapes.some((o) => glyphsAlike(o, st));
+  for (const c of v2 ? ALL_CONCEPTS : CONCEPTS) {
+    const g = glyphs[c.id];
+    if (!unique || !g || g.mark || g.strokes.length === 0) continue;
+    for (let t = 0; clash(g.strokes) && t < 60; t++) {
+      if (c.cat === 'grammar') g.strokes = randomBody(fix, fix.int(1, 2), style.curvy).map((x) => place(x, 0.25, 0.25, 0.5, 0.5));
+      else {
+        const body = randomBody(fix, fix.int(2, 3), style.curvy);
+        g.strokes =
+          c.cat === 'name'
+            ? body.map((x) => place(x, 0.18, 0.18, 0.64, 0.64))
+            : [...(radicals[c.cat] ?? []).map((x) => place(x, radBox[0], radBox[1], radBox[2], radBox[3])), ...body.map((x) => place(x, bodyBox[0], bodyBox[1], bodyBox[2], bodyBox[3]))];
+      }
+    }
+    shapes.push(g.strokes);
+  }
+
+  return v2 ? { seed, village: 2, name: langName, grammar, style, glyphs, words } : { seed, name: langName, grammar, style, glyphs, words };
+}
+
+/** A glyph's strokes moved and scaled into a unit box, each stroke's ends in a fixed order. */
+function normalize(strokes: Stroke[]): { k: string; p: number[][] }[] {
+  const pts: number[][] = [];
+  for (const s of strokes) {
+    if (s.k === 'L') pts.push([s.x1, s.y1], [s.x2, s.y2]);
+    else if (s.k === 'Q') pts.push([s.x1, s.y1], [s.cx, s.cy], [s.x2, s.y2]);
+    else if (s.k === 'O') pts.push([s.x - s.r, s.y - s.r], [s.x + s.r, s.y + s.r]);
+    else pts.push([s.x, s.y]);
+  }
+  const x0 = Math.min(...pts.map((p) => p[0]));
+  const y0 = Math.min(...pts.map((p) => p[1]));
+  const size = Math.max(0.05, ...pts.map((p) => p[0] - x0), ...pts.map((p) => p[1] - y0));
+  const n = (x: number, y: number) => [(x - x0) / size, (y - y0) / size];
+  const ends = (a: number[], b: number[]) => (a[0] < b[0] || (a[0] === b[0] && a[1] <= b[1]) ? [a, b] : [b, a]);
+  return strokes.map((s) => {
+    if (s.k === 'L') return { k: 'L', p: ends(n(s.x1, s.y1), n(s.x2, s.y2)) };
+    if (s.k === 'Q') return { k: 'Q', p: [...ends(n(s.x1, s.y1), n(s.x2, s.y2)), n(s.cx, s.cy)] };
+    if (s.k === 'O') return { k: 'O', p: [n(s.x, s.y), [s.r / size, 0]] };
+    return { k: 'D', p: [n(s.x, s.y)] };
+  });
+}
+
+/** Do two glyphs look alike: the same strokes, give or take a little, wherever they sit and however big? */
+export function glyphsAlike(a: Stroke[], b: Stroke[], tol = 0.15): boolean {
+  if (a.length !== b.length || a.length === 0) return false;
+  const A = normalize(a);
+  const B = normalize(b);
+  const close = (x: { k: string; p: number[][] }, y: { k: string; p: number[][] }) =>
+    x.k === y.k && x.p.every((pt, i) => Math.abs(pt[0] - y.p[i][0]) <= tol && Math.abs(pt[1] - y.p[i][1]) <= tol);
+  const used = new Set<number>();
+  return A.every((x) => {
+    const j = B.findIndex((y, k) => !used.has(k) && close(x, y));
+    if (j < 0) return false;
+    used.add(j);
+    return true;
+  });
 }
 
 /** Grammar concepts that are actually written in this language. */

@@ -394,7 +394,8 @@ export class Game {
     // Long places get a counter over a slim one-row strip instead of dots that would wrap.
     const dots = $('dots');
     dots.innerHTML = '';
-    const compact = pages.length > 13;
+    // Every place uses the same counter strip, so the pager never changes shape between places.
+    const compact = true;
     dots.classList.toggle('compact', compact);
     let row: HTMLElement = dots;
     if (compact) {
@@ -417,7 +418,8 @@ export class Game {
   /** Short name of a place for the tabs and the way-on button. */
   private placeName(i: number): string {
     const ch = this.s.world.chapters[i];
-    return this.village === 2 ? ch.title.replace(/^The /, '') : PLACE[ch.backdrop];
+    if (!ch) return '';
+    return (this.village === 2 ? ch.title.replace(/^The /, '') : PLACE[ch.backdrop]) || ch.title;
   }
 
   private kicker(text: string): HTMLElement {
@@ -501,11 +503,13 @@ export class Game {
       return;
     }
     const next = s.world.chapters[this.view + 1];
+    if (!next) return;
     box.appendChild(this.kicker('Onward'));
     box.appendChild(el('h1', 'chapter-title', next.title));
     box.appendChild(el('p', 'journal', next.intro.split('. ')[0] + '.'));
     const b = el('button', 'primary wide');
-    b.textContent = `Go to ${this.placeName(this.view + 1)}`;
+    // Never a bare "Go to": fall back to the place's title, then to plain words.
+    b.textContent = `Go to ${this.placeName(this.view + 1) || next?.title || 'the next place'}`;
     b.onclick = () => this.goChapter(this.view + 1);
     box.appendChild(b);
   }
@@ -542,7 +546,7 @@ export class Game {
             : 'Not that one. Look at what differs between the scenes.'
           : c.tests === 'roles'
             ? 'Careful: the order of the words may not tell you who does what.'
-            : 'The three scenes differ in just one thing.';
+            : 'Each wrong scene changes one thing from the right one.';
         box.appendChild(el('p', 'tip', hint));
       }
       return;
@@ -755,7 +759,8 @@ export class Game {
       if (guess) this.tab = Math.max(0, TABS.findIndex((t) => t.cats.includes(CONCEPT.get(guess)!.cat)));
       const tabs = el('div', 'tabs');
       const chips = el('div', 'chips');
-      const taken = new Set(Object.entries(s.notebook).filter(([g]) => g !== id).map(([, m]) => m));
+      // Only meanings already proven for another glyph get a (quiet) mark: a guess elsewhere doesn't rule a meaning out.
+      const taken = new Set(Object.entries(s.notebook).filter(([g]) => g !== id && s.confirmed.includes(g)).map(([, m]) => m));
       const showTab = () => {
         tabs.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === this.tab));
         chips.innerHTML = '';

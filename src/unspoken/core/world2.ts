@@ -51,7 +51,7 @@ export const CHAPTERS2: ChapterDef2[] = [
     title: 'The Lake',
     backdrop: 'lake',
     intro:
-      'A high lake, cold and still. People fish from the stones, and two of them wear river clothes: the old fisher, and the woman in red. When many do something here, the sign changes in two places.',
+      'A high lake, cold and still. People fish from the stones, and two of them wear river clothes: the fisher in the yellow hat, and the woman in red. When many do something here, the sign changes in two places.',
     focus: ['AGR', 'PL', 'TO'],
     riddles: ['roles', 'compose', 'pick', 'compose'],
     panels: [

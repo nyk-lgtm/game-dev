@@ -16,7 +16,7 @@ export const CONCEPTS: Concept[] = [
   // Three villagers with names (drawn as distinct characters).
   c('ama', 'the woman in red', 'name'),
   c('tor', 'the boy in the cap', 'name'),
-  c('sef', 'the old fisher', 'name'),
+  c('sef', 'the fisher in the yellow hat', 'name'),
   // People
   c('person', 'person', 'person'),
   c('child', 'child', 'person'),

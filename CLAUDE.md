@@ -111,7 +111,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   in `village`; bug links add `&v=2`. Notebook shows `grammarRules` as their glyphs are proven. Village 2 saves have
   their own version (`RULES_VERSION2`, `rulesVersion(village)`); its riddles only use `adjShown2` adjectives. Copied
   links hide answers: `linkActions`/`unlinkActions` turn `G<glyph>=<guess>` into `g<code>-<code>` (old links still
-  load), and a link-opened run becomes the current saved run of its village.
+  load), and a link-opened run becomes the current saved run of its village. Glyphs never look alike: after
+  generating, `glyphsAlike` (strokes moved/scaled to a unit box, ends unordered, ±0.15) redraws a later look-alike
+  from its own seed stream (only that glyph changes; world and saves don't depend on shapes). The hash test pins
+  `makeLanguage(seed, 1, false)` (the pre-fix language) and checks only look-alikes were redrawn.
 - Hexhold runs are a seed + tick-stamped actions (`<tick>:B<cell>.<tower>`, `U`, `S`, `W`); enemies follow a
   flow field (src/hexhold/core/board.ts) rebuilt on every build/sell; `buildError` forbids sealing any portal. Flyers use `FLY_DIST`, burrowers
   `s.dig` (the tower-less field); `distFor` picks. ~1/3 of maps have two portals (`s.portals`).

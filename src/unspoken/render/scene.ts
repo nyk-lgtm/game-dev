@@ -225,6 +225,10 @@ function drawPerson(r: R, n: string, g: PG, pose: string, part: 'all' | 'body' |
     cap(r, 2, sh + 4, h[0], h[1], 3.5, col); circ(r, h[0], h[1], 3.2, P.skin);
   }; if (part === 'arm') return arm(g.hf, body); const c = r.c;
   if (n === 'elder' && pose !== 'lie') tube(r, [g.hb[0] + 1, g.hb[1] - 12, g.hb[0] - 1, Math.min(0, g.hb[1] + 46)], 3.4, '#8a6a48');
+  // The fisher carries his rod over his back shoulder (he is not old: dark beard, a rod, a yellow hat).
+  if (n === 'sef' && pose !== 'lie') {
+    tube(r, [-3, sh + 14, -27, sh - 30], 1.8, '#8a6a48'); line(r, [-27, sh - 30, -31, sh - 8], '#5a5048', 0.9);
+  }
   arm(g.hb, mix(body, '#3a2a20', 0.18)); const [ff, bf] = g.feet;
   for (const fx of [bf, ff]) {
     cap(r, fx < 0 ? -3.5 : 3.5, P.hem - 2, fx, -3.5, 3.3, P.legs); ell(r, fx + 2.2, -2.4, 4.6, 2.6, '#4a3a30');
@@ -243,7 +247,7 @@ function drawPerson(r: R, n: string, g: PG, pose: string, part: 'all' | 'body' |
     ell(r, cx - hr * 0.2, cy - hr * 0.1, hr * 1.02, hr * 1.06, '#4a2c22'); circ(r, cx - hr * 0.95, cy - hr * 0.45, hr * 0.48, '#4a2c22');
   }
   if (n === 'elder') bumpy(r, cx - hr * 0.55, cy - hr * 0.15, hr * 0.72, hr * 0.85, 6, 0.28, '#f6f3ec'); circ(r, cx, cy, hr, P.skin);
-  face(r, cx, cy, hr, ps.eyes, ps.mouth, n === 'sef');
+  face(r, cx, cy, hr, ps.eyes, ps.mouth, false);
   switch (n) {
     case 'ama':
       hairCap(r, cx, cy, hr, '#4a2c22', 0.05); break;
@@ -252,9 +256,7 @@ function drawPerson(r: R, n: string, g: PG, pose: string, part: 'all' | 'body' |
       paint(r, '#2f6db3'); ell(r, cx + hr * 1.05, cy - hr * 0.16, hr * 0.78, hr * 0.24, '#245a9a');
       circ(r, cx, cy - hr * 1.18, hr * 0.15, '#245a9a'); break;
     case 'sef':
-      ell(r, cx - hr * 0.75, cy + hr * 0.15, hr * 0.35, hr * 0.45, '#c9c4bb');
-      smooth(r, [cx - hr * 0.15, cy + hr * 0.05, cx + hr * 1.0, cy + hr * 0.12, cx + hr * 0.9, cy + hr * 0.95, cx + hr * 0.4, cy + hr * 1.7, cx - hr * 0.1, cy + hr * 0.9], '#d2cdc5');
-      line(r, [cx + hr * 0.25, cy + hr * 0.42, cx + hr * 0.55, cy + hr * 0.25, cx + hr * 0.9, cy + hr * 0.42], '#b0aaa0', hr * 0.16, true);
+      hairCap(r, cx, cy, hr, '#5a3c28', 0.12);
       c.beginPath(); c.arc(cx, cy - hr * 0.2, hr * 1.06, Math.PI, TAU); c.closePath(); paint(r, '#e4ae36');
       ell(r, cx - hr * 0.15, cy - hr * 0.22, hr * 1.7, hr * 0.32, '#d29a2c', 0.1); break;
     case 'person':
@@ -588,7 +590,7 @@ function one(r: R, n: string, x: number, y: number, sc: number, o: PO, v: number
     for (let i = 0; i <= 6; i++) jag.push(mx + (i % 2 ? 4 : -3) * sc, t0 + ((t1 - t0) * i) / 6);
     for (const s of [-1, 1]) {
       c.save(); c.beginPath(); c.moveTo(mx + s * 400, t0); for (let i = 0; i < jag.length; i += 2) c.lineTo(jag[i], jag[i + 1]);
-      c.lineTo(mx + s * 400, t1); c.closePath(); c.clip(); c.translate(mx + s * 6, got.y1); c.rotate(s * 0.2); c.translate(-mx, -got.y1);
+      c.lineTo(mx + s * 400, t1); c.closePath(); c.clip(); c.translate(mx + s * 2.5, got.y1); c.rotate(s * 0.07); c.translate(-mx, -got.y1);
       body(); c.restore();
     }
   } else if (o.half && isFront) {
@@ -790,7 +792,7 @@ const besideBody = (g: Got, x: number, ow: number) => Math.max(x, g.cx + 18 + ow
 const gripAt = (x: number, y: number, ow: number, oh: number): Pt => [x - ow / 2 + 4, y + oh * 0.25];
 /** Draw something held at hand height (a plural thing becomes a little pile). */
 function heldThing(r: R, np: NP, cx: number, cy: number, o: PO = {}) {
-  const [, oh] = sizeOf(np); const isSky = SKY.has(np.n);
+  const [, oh0] = sizeOf(np); const oh = oh0 * (o.scale ?? 1); const isSky = SKY.has(np.n);
   return place(r, np, cx, isSky ? cy : cy + oh / 2, { layout: 'stack', ...o, q: [30, 28] });
 }
 
@@ -854,10 +856,18 @@ function compose(r: R, f: Frame): Pt {
     case 'carry': {
       const sx = W * (f.d ? (s.pl ? 0.36 : 0.3) : 0.46); const g = subj(r, s, sx, neg ? 'stand' : 'carry', { dry: true }); let end: Pt;
       if (!neg) {
-        footsteps(r, g.x0 - 6, 4); const both = !!o.pl && !!s.pl;
-        const hx = isAgent(s.n) && !s.pl ? besideBody(g, g.hand[0] + ow * (o.pl && !both ? 0.1 : 0.22), ow) : 0;
-        const grip = hx ? { handAt: gripAt(hx, g.hand[1] - 2, ow, oh) } : {};
-        const S = subj(r, s, sx, 'carry', { ...grip, heldAll: both, held: (m) => heldThing(r, both ? single(o) : o, hx || m.hand[0] + ow * (o.pl && !both ? 0.1 : 0.22), m.hand[1] - 2) });
+        // Many carried things are a pile in the front carrier's arms (so none hide behind the group); a carried
+        // animal is lifted to the chest, clear of the ground, so it can't read as walking alongside.
+        footsteps(r, g.x0 - 6, 4); const k = o.pl ? 0.1 : 0.22;
+        const hug = isAgent(s.n) && !s.pl && isAnimal(o.n);
+        // A big animal is drawn smaller in the arms (at most half the carrier's height).
+        // (Capped on the plain animal, so a big one still comes out bigger than a plain one.)
+        const sc = hug ? Math.min(1, ((g.y1 - g.y0) * 0.5) / dims(o.n)[1]) : 1; const cw = ow * sc, ch = oh * sc;
+        const lift = hug ? Math.min(g.hand[1] - 2, g.y0 + (g.y1 - g.y0) * 0.36) : null;
+        const hy = (m: Got) => lift ?? m.hand[1] - 2;
+        const hx = isAgent(s.n) && !s.pl ? besideBody(g, g.hand[0] + cw * k, cw) : 0;
+        const grip = hx ? { handAt: gripAt(hx, hy(g), cw, ch) } : {};
+        const S = subj(r, s, sx, 'carry', { ...grip, held: (m) => heldThing(r, o, hx || m.hand[0] + cw * k, hy(m), sc < 1 ? { scale: sc } : {}) });
         end = [S.x1 + ow * 0.4 + 8, gy - 6];
       } else {
         // Left on the ground behind them.
