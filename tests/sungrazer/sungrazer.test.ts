@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  COMET_R, LOCK, gravityAt, riseAt, MAX_LINK, MODE_IDS, REGRAB, START_Y, W, World, altitude, cinderX, cloneRun, decodeInputs, encodeInputs, heldAt,
+  COMET_R, LOCK, gravityAt, maxTether, riseAt, safeRadius, MAX_LINK, MODE_IDS, REGRAB, START_Y, W, World, altitude, cinderX, cloneRun, decodeInputs, encodeInputs, heldAt,
   isLit, newRun, replay, step, target, type Ev, type Mode, type Run,
 } from '../../src/sungrazer/core';
 import { Rng } from '../../src/shared/rng';
@@ -128,6 +128,33 @@ describe('flight', () => {
     expect(riseAt(0)).toBeLessThan(riseAt(400) / 2);
     expect(gravityAt(0)).toBeLessThan(gravityAt(800));
     expect(riseAt(3000)).toBe(13);
+  });
+
+  it('grabbing a star you are about to hit catches you at the corona edge', () => {
+    const w = new World(21, 'n');
+    const s = w.stars[0];
+    const r = newRun(21, 'n', w);
+    r.x = s.x + 0.5;
+    r.y = s.y - s.r - COMET_R - 1.5;
+    r.vx = 0;
+    r.vy = 60;
+    r.camY = s.y - 70;
+    step(r, true);
+    expect(r.tether?.star).toBe(s);
+    for (let i = 0; i < 60; i++) step(r, true);
+    expect(r.alive).toBe(true);
+    expect(r.tether!.r).toBeGreaterThan(safeRadius(s) - 1);
+  });
+
+  it('the opening is small: a short first tether, and the second star well to the side', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const r = newRun(seed);
+      while (!r.tether && r.tick < 600) step(r, true);
+      expect(r.tether!.goal).toBeLessThanOrEqual(maxTether(40));
+      expect(maxTether(40)).toBeLessThan(LOCK - 6);
+      const [a, b] = r.world.stars.filter((x) => x.spine);
+      expect(Math.abs(b.x - a.x)).toBeGreaterThanOrEqual(20);
+    }
   });
 
   it('does not touch the bottom of the screen while you dawdle: the void takes you', () => {

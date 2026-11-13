@@ -42,6 +42,14 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         zone banners are a slim strip under the HUD for 1.8 s; popups and pills stay on screen and stack; the end
         card comes back after "Watch replay"; Sound on/off in the menu; slightly fewer, smaller cinders.
         Bot (40 runs): novice 18 s, human 48 s (alt 715), good 95 s (alt 1,800).
+  - [x] Second blind pass (28 runs: best 1,897; 13 of the last 20 deaths flew into a star, 8 runs died in the first
+        1-4 s on the long first swing) and fixes (rules v3): grabbing a star you're about to hit catches you at the
+        edge of its corona (`safeRadius`), and a coach line says so in early runs; the release line turns amber when
+        letting go up to 0.25 s later would hit; the first tether is at most 18 long (LOCK by altitude 250), the
+        start is slower (orbit speed 56) and the second star sits ≥ 24 to the side; coach pills moved to the strip
+        under the HUD; ☰ hidden while a card is open; close shaves from 5.5 (cinders 6.5), cinders hit at 75% of their
+        drawn size; sungrazes count from 3 units (were 2.2); unlocks at 4,000 / 9,000 / 15,000. Bot (40 runs): novice
+        22 s, human ~50-70 s, good 117 s (p75 158 s).
   - [ ] Next: owner playtest. Watch: is the opening friendly enough now? Are pulsars readable? Is the release preview
         too generous? Good-bot deaths are mostly cinders brushed right after a grab: maybe fewer cinders near stars.
 - [ ] **Quarry** (word roguelite on a hex letter wall). Milestones:

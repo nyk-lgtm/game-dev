@@ -40,3 +40,5 @@ body {
   .card p.big { font-size: 28px; }
   .card .diagram { max-height: 96px; }
 }
+/* The menu button can't be reached under a card: hide it while one is open. */
+body:has(#overlay:not([hidden])) #menuBtn { visibility: hidden; }

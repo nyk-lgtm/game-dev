@@ -12,9 +12,19 @@ export const LOCK = 28;
 export const GRAVITY = 40;
 export const gravityAt = (alt: number) => GRAVITY - Math.max(0, 10 - alt / 40);
 /** A close shave: passing this close to a surface without touching it. */
-export const NEAR = 4.5;
+export const NEAR = 5.5;
+/** Cinders are small, so their shave zone reaches a little further. */
+export const NEAR_CINDER = 6.5;
+/** The longest tether at an altitude: short at the start, so the first swings are small and slow. */
+export const maxTether = (alt: number) => 18 + Math.min(LOCK - 18, alt / 25);
+/** Grabbing a star you're about to hit catches you at this radius (inside its corona) instead of burning. */
+export const safeRadius = (s: Star) => s.r + COMET_R + s.band * 0.6;
+/** How fast a fresh tether eases to its length (units/s). */
+const EASE = 45;
 /** Letting go of an orbit this close to the surface is a sungraze. */
-export const SUNGRAZE = 2.2;
+export const SUNGRAZE = 3;
+/** Cinders' hitbox is a little smaller than they look (a graze that looks like a miss is a miss). */
+export const CINDER_HIT = 0.75;
 export const MAX_MULT = 9;
 /** Free flight longer than this drops the combo. */
 export const LINK_TICKS = Math.round(2.6 * TPS);
@@ -27,7 +37,7 @@ const CAM_AT = 0.45;
 export const PTS = { link: 10, graze: 50, near: 25, sungraze: 40, mote: 10 };
 
 /** Orbit speed at an altitude. */
-export const speedAt = (alt: number) => 62 + Math.min(26, alt / 120);
+export const speedAt = (alt: number) => 56 + Math.min(32, alt / 100);
 /** The void's minimum climb rate. */
 export const riseAt = (alt: number) => Math.min(2 + Math.min(11, alt / 260), 0.6 + alt / 60);
 export const reelAt = (alt: number) => 3.5 + Math.min(2.5, alt / 900);
@@ -51,6 +61,8 @@ export interface Ev {
 export interface Tether {
   star: Star;
   r: number;
+  /** The length it's easing to (and that reels in). */
+  goal: number;
   dir: 1 | -1;
   /** Closest the comet has been to the surface on this orbit. */
   minClear: number;
@@ -93,7 +105,7 @@ export function newRun(seed: number, mode: Mode = 'n', world?: World): Run {
   const w = world ?? new World(seed, mode);
   return {
     world: w, seed, mode, tick: 0,
-    x: W / 2, y: START_Y, vx: 0, vy: 62,
+    x: W / 2, y: START_Y, vx: 0, vy: 56,
     held: false, used: false, tether: null, last: -1,
     camY: 0, maxY: START_Y, score: 0, mult: 1, link: 0, since: REGRAB, grazing: false,
     nears: [], got: new Set(), alive: true, cause: null, zone: 0,
@@ -178,7 +190,8 @@ export function step(r: Run, held: boolean, out?: Ev[]): void {
       r.used = true;
       const ex = r.x - s.x, ey = r.y - s.y;
       const d = Math.hypot(ex, ey);
-      r.tether = { star: s, r: d, dir: ex * r.vy - ey * r.vx >= 0 ? 1 : -1, minClear: d - s.r - COMET_R };
+      const goal = Math.min(Math.max(d, safeRadius(s)), maxTether(alt));
+      r.tether = { star: s, r: d, goal, dir: ex * r.vy - ey * r.vx >= 0 ? 1 : -1, minClear: goal - s.r - COMET_R };
       r.nears = r.nears.filter((id) => id !== s.id);
       emit(out, { k: 'grab', x: r.x, y: r.y, n: s.id });
       if (s.id !== r.last) {
@@ -197,7 +210,9 @@ export function step(r: Run, held: boolean, out?: Ev[]): void {
   const t = r.tether;
   if (t) {
     const s = t.star;
-    t.r -= reelAt(alt) * m.reel * STEP;
+    t.goal -= reelAt(alt) * m.reel * STEP;
+    t.r = t.r < t.goal ? Math.min(t.goal, t.r + EASE * STEP) : Math.max(t.goal, t.r - EASE * STEP);
+    const easing = t.r !== t.goal;
     let sp = Math.hypot(r.vx, r.vy);
     const target = speedAt(alt) * m.speed;
     sp += (target - sp) * Math.min(1, 6 * STEP);
@@ -217,7 +232,7 @@ export function step(r: Run, held: boolean, out?: Ev[]): void {
       die(r, 'burn', out);
       return;
     }
-    if (clear < t.minClear) t.minClear = clear;
+    if (!easing && clear < t.minClear) t.minClear = clear;
     r.grazing = clear < s.band;
     if (r.grazing) {
       r.score += PTS.graze * STEP * r.mult * m.graze * m.points * (1 + (1 - clear / s.band));
@@ -257,12 +272,13 @@ export function step(r: Run, held: boolean, out?: Ev[]): void {
   const cs = w.cinders;
   for (let i = lowerY(cs, r.y - 9); i < cs.length && cs[i].y <= r.y + 9; i++) {
     const c = cs[i];
-    const clear = Math.hypot(cinderX(c, r.tick) - r.x, c.y - r.y) - c.r - COMET_R;
-    if (clear <= 0) {
+    const dist = Math.hypot(cinderX(c, r.tick) - r.x, c.y - r.y);
+    const clear = dist - c.r - COMET_R;
+    if (dist <= (c.r + COMET_R) * CINDER_HIT) {
       die(r, 'cinder', out);
       return;
     }
-    if (clear < NEAR) nowNear.push(1e6 + c.id);
+    if (clear < NEAR_CINDER) nowNear.push(1e6 + c.id);
   }
   for (const id of r.nears)
     if (!nowNear.includes(id)) {

@@ -38,9 +38,9 @@ export interface ModeDef {
 }
 export const MODES: Record<Mode, ModeDef> = {
   n: { id: 'n', name: 'Classic', blurb: 'The standard sky.', speed: 1, reel: 1, graze: 1, shower: false, points: 1, unlock: 0 },
-  s: { id: 's', name: 'Swift', blurb: 'Everything 15% faster, the void too. Points ×1.25.', speed: 1.15, reel: 1.1, graze: 1, shower: false, points: 1.25, unlock: 2500 },
-  t: { id: 't', name: 'Tight orbit', blurb: 'Stars reel you in 70% faster; grazing pays double.', speed: 1, reel: 1.7, graze: 2, shower: false, points: 1, unlock: 5000 },
-  m: { id: 'm', name: 'Meteor shower', blurb: 'Cinders from the first star, twice as many. Points ×1.4.', speed: 1, reel: 1, graze: 1, shower: true, points: 1.4, unlock: 8000 },
+  s: { id: 's', name: 'Swift', blurb: 'Everything 15% faster, the void too. Points ×1.25.', speed: 1.15, reel: 1.1, graze: 1, shower: false, points: 1.25, unlock: 4000 },
+  t: { id: 't', name: 'Tight orbit', blurb: 'Stars reel you in 70% faster; grazing pays double.', speed: 1, reel: 1.7, graze: 2, shower: false, points: 1, unlock: 9000 },
+  m: { id: 'm', name: 'Meteor shower', blurb: 'Cinders from the first star, twice as many. Points ×1.4.', speed: 1, reel: 1, graze: 1, shower: true, points: 1.4, unlock: 15000 },
 };
 export const MODE_IDS: Mode[] = ['n', 's', 't', 'm'];
 
@@ -197,7 +197,11 @@ export class World {
     const gap = 22 + rng.next() * 10 + Math.min(11, alt / 280);
     const side = p.x < 32 ? 1 : p.x > 68 ? -1 : rng.next() < 0.5 ? -1 : 1;
     // Never straight above: a plain fling upward shouldn't fly into the next star.
-    let x = clamp(p.x + side * (13 + rng.next() * 23), 14, 86);
+    // (Further still for the second star: the first swing must never sweep into it.)
+    const first = this.stars.length <= 1;
+    const minShift = first ? 24 : 13;
+    const dir = first ? (p.x < 50 ? 1 : -1) : side;
+    let x = clamp(p.x + dir * (minShift + rng.next() * (36 - minShift)), 14, 86);
     let dy = gap;
     if (Math.hypot(x - p.x, dy) > MAX_LINK) dy = Math.max(18, Math.sqrt(Math.max(0, MAX_LINK * MAX_LINK - (x - p.x) ** 2)));
     if (Math.hypot(x - p.x, dy) > MAX_LINK) x = p.x + Math.sign(x - p.x) * Math.sqrt(MAX_LINK * MAX_LINK - dy * dy);

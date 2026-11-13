@@ -53,9 +53,9 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     `SEEN=0.05` ~20%; `best` mode ~99%); `PERKTABLE=1` favors each perk in turn (others weakest-first: ~19-36% wins);
     `TARGETS=`/`WORDS=` try others.
   - Sungrazer: `npx vite-node scripts/sungrazer/balance.ts 30 human` (skills novice/human/good/perfect: reaction
-    delay, timing jitter, a two-level release planner; rules v2 (40 runs): novice median ~18 s (alt ~460), human
-    ~48 s (alt ~715), good ~95 s (alt ~1800, p75 ~130 s), perfect survives 10 min; most good-bot deaths are cinders
-    it brushes after a jittered grab). `SG_MODE=s|t|m` for modes, `CHECK=1` verifies replays.
+    delay, timing jitter, a two-level release planner; rules v3 (40 runs): novice median ~22 s (alt ~470), human
+    ~50-70 s (alt ~700-900; seed noise is large), good ~115 s (alt ~1900, p75 ~158 s), perfect survives 10 min;
+    most good-bot deaths are cinders it brushes after a jittered grab). `SG_MODE=s|t|m` for modes, `CHECK=1` verifies replays.
   - Hexhold: `npx vite-node scripts/hexhold/balance.ts 32` (heuristic bot, rules v4: median wave ~28, ~7/32 wins);
     `scripts/hexhold/probe.ts 32` lists each loss with its wave and map shape (one or two portals) and the
     lives lost per band of waves (the difficulty curve: v4 is gentle to wave 10, pressure from 15 on).
@@ -165,12 +165,14 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   (a spine of stars each ≤ MAX_LINK from the last, bonus stars, mote arcs in coronas, cinders clear of every corona
   and of the spine line; zones by altitude bring cinders 450, pulsars 1000, giants/drifters 1700…); no trig in the
   rules (a 16-direction table, `swing` ping-pong). sim.ts: holding grabs the nearest lit star within LOCK (one grab
-  per press, not the star just left for REGRAB ticks), the tether reels in (`reelAt`) at constant speed toward
+  per press, not the star just left for REGRAB ticks); the tether eases to `goal` = the grab distance clamped to
+  [`safeRadius` (a grab on a star you're about to hit catches you in its corona), `maxTether(alt)` (18 at the start,
+  LOCK by altitude 250)], then the goal reels in (`reelAt`) at constant speed toward
   `speedAt`; letting go is ballistic (GRAVITY); walls bounce (and reverse an orbit) and drop the combo; the camera
   follows up and the void rises (`riseAt`, slow for the first ~100 units; `gravityAt` is lighter early too) — fall
   under it, touch a star (`burn` on the tether, `star` in free flight) or a cinder and the run ends. Spine stars are
-  never stacked in a column (≥ 12 units across). The page marks a release/flight path that hits something in red with an ✕. Combo grows
-  only from close shaves (NEAR) and sungrazes (letting go < SUNGRAZE from the surface); links keep it alive for
+  never stacked in a column (≥ 12 units across). The page marks a release/flight path that hits something in red with an ✕, amber if letting go up to 0.25 s later would. Combo grows
+  only from close shaves (NEAR, NEAR_CINDER; cinders hit at CINDER_HIT of their drawn size) and sungrazes (letting go < SUNGRAZE from the surface); links keep it alive for
   LINK_TICKS of free flight. A run is seed + mode + toggle ticks (`replay(seed, mode, inputs)`); `cloneRun` shares
   the world. The page shows a release preview by stepping a clone. `?seed=&m=&a=&t=` plays a recording back
   (`__game.seek(tick)` fast-forwards it); tools: `trace.ts <seed> [skill]`, `botrun.ts <seed> [skill]`.

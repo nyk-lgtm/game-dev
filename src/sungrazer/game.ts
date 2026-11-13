@@ -99,6 +99,8 @@ export class Game {
   private watching: { inputs: number[]; until: number; label: string } | null = null;
   private resumeTo: State = 'play';
   private fx = !reducedFx();
+  /** What the last frame warned about (for screenshots and checks). */
+  shown = { warn: false, hit: false };
 
   constructor() {
     new ResizeObserver(() => this.resize()).observe(this.canvas);
@@ -316,23 +318,40 @@ export class Game {
     // While swinging: where letting go now would fly (~0.45 s). In free flight: only a collision course.
     let preview: number[] | null = null;
     let hit: { x: number; y: number } | null = null;
+    let warn = false;
+    let hitStar = false;
     if (r.alive && playing && this.state !== 'ready') {
       const c = cloneRun(r);
       const path = [c.x, c.y];
       const n = r.tether ? 110 : 90;
       for (let i = 1; i <= n && c.alive; i++) {
         step(c, false);
-        if (!c.alive && c.cause !== 'void') hit = { x: c.x, y: c.y };
+        if (!c.alive && c.cause !== 'void') {
+          hit = { x: c.x, y: c.y };
+          hitStar = c.cause === 'star';
+        }
         else if (i % 10 === 0) path.push(c.x, c.y);
       }
       if (r.tether || hit) preview = path;
       if (hit) path.push(hit.x, hit.y);
+      // Amber when letting go a little later (up to ~0.25 s) would already hit something.
+      if (r.tether && !hit) {
+        const h = cloneRun(r);
+        for (let k = 1; k <= 60 && h.alive && !warn; k++) {
+          step(h, true);
+          if (k % 15) continue;
+          const f = cloneRun(h);
+          for (let i = 0; i < 90 && f.alive; i++) step(f, false);
+          if (!f.alive && f.cause !== 'void') warn = true;
+        }
+      }
     }
+    this.shown = { warn, hit: !!hit };
     draw(this.g, v, {
       run: r, time: this.time, trail: this.trail, particles: this.particles, floaters: this.floaters,
-      target: tgt ?? (this.state === 'ready' ? soonStar(r) : null), soon: !tgt && r.alive && !r.tether ? soonStar(r) : null, preview, hit, reaching: this.state === 'play' && this.held && !r.tether && !r.used && !tgt,
+      target: tgt ?? (this.state === 'ready' ? soonStar(r) : null), soon: !tgt && r.alive && !r.tether ? soonStar(r) : null, preview, hit, warn, reaching: this.state === 'play' && this.held && !r.tether && !r.used && !tgt,
       shake: this.fx ? this.shake : 0, flash: this.fx ? this.flash : 0, banner: this.banner,
-      coach: this.coach(), prompt: this.state === 'ready' ? 'Hold anywhere to grab' : null, grabT: this.grabT,
+      coach: hitStar && !r.tether && !this.held && this.state === 'play' && loadProfile().runs < 6 ? 'Heading into a star: hold to catch it!' : this.coach(), prompt: this.state === 'ready' ? 'Hold anywhere to grab' : null, grabT: this.grabT,
       replay: this.state === 'watch',
     });
   }
@@ -584,6 +603,7 @@ export class Game {
        </svg>
        <ul>
          <li><b>Hold anywhere</b> to grab the ringed star and swing round it. <b>Let go</b> to fling off along the dotted line; then gravity pulls. If the line turns <b>red with an ✕</b>, that fling hits something.</li>
+         <li>Flying into a star? <b>Hold</b>: grabbing it catches you at the edge of its corona.</li>
          <li>The tether <b>reels you in</b>: swing too long and you burn. Grazing the dashed <b>corona</b> pays, and letting go inside it is a <b>sungraze</b>.</li>
          <li><b>Close shaves</b>: fly through the faint green ring round a star or cinder without touching it. That and sungrazes raise your <b>combo</b>; walls and long free flights lose it.</li>
          <li>Climb! The <b>void</b> rises from below.</li>

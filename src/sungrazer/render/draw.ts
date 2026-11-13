@@ -3,7 +3,7 @@
 // sparks and floating points, and the void glowing at the bottom.
 // World y grows upward; the bottom of the screen is the run's camY.
 
-import { COMET_R, LOCK, MOTE_R, NEAR, REGRAB, VIEW_H, W, ZONES, altitude, cinderX, isLit, lowerY, type Run, type Star } from '../core';
+import { COMET_R, LOCK, MOTE_R, NEAR, NEAR_CINDER, REGRAB, VIEW_H, W, ZONES, altitude, cinderX, isLit, lowerY, type Run, type Star } from '../core';
 
 export interface View {
   scale: number;
@@ -57,6 +57,8 @@ export interface Scene {
   preview: number[] | null;
   /** Where that path would hit a star or cinder (it turns red and ends in an ✕). */
   hit: { x: number; y: number } | null;
+  /** Letting go a moment later would hit something: the line turns amber. */
+  warn: boolean;
   /** Holding but nothing caught yet: show the reach. */
   reaching: boolean;
   shake: number;
@@ -329,9 +331,9 @@ export function draw(g: CanvasRenderingContext2D, v: View, sc: Scene): void {
     const n = sc.preview.length / 2;
     const last = sc.hit ? n - 1 : n;
     for (let i = 1; i < last; i++) {
-      g.fillStyle = sc.hit ? `rgba(255,90,90,${0.95 - 0.4 * (i / n)})` : `rgba(220,240,255,${0.75 * (1 - i / n)})`;
+      g.fillStyle = sc.hit ? `rgba(255,90,90,${0.95 - 0.4 * (i / n)})` : sc.warn ? `rgba(255,190,70,${0.95 - 0.5 * (i / n)})` : `rgba(220,240,255,${0.75 * (1 - i / n)})`;
       g.beginPath();
-      g.arc(X(sc.preview[i * 2]), Y(sc.preview[i * 2 + 1]), sc.hit ? 2.2 : 1.8, 0, Math.PI * 2);
+      g.arc(X(sc.preview[i * 2]), Y(sc.preview[i * 2 + 1]), sc.hit || sc.warn ? 2.2 : 1.8, 0, Math.PI * 2);
       g.fill();
     }
     if (sc.hit) {
@@ -373,7 +375,7 @@ export function draw(g: CanvasRenderingContext2D, v: View, sc: Scene): void {
     for (let i = lowerY(cs, r.y - 14); i < cs.length && cs[i].y < r.y + 14; i++) {
       const c = cs[i];
       const cx = cinderX(c, tick);
-      ring(cx, c.y, c.r + NEAR + COMET_R, Math.hypot(cx - r.x, c.y - r.y) - c.r - COMET_R);
+      ring(cx, c.y, c.r + NEAR_CINDER + COMET_R, Math.hypot(cx - r.x, c.y - r.y) - c.r - COMET_R - (NEAR_CINDER - NEAR));
     }
   }
 
@@ -474,10 +476,10 @@ export function draw(g: CanvasRenderingContext2D, v: View, sc: Scene): void {
   g.globalAlpha = 1;
 
   // Coach line near the comet, prompt in the middle, zone banner.
-  if (sc.coach && r.alive) {
+  // Coaching sits in the strip under the HUD, never on the comet, its line or its star.
+  if (sc.coach && r.alive && !sc.banner) {
     g.font = '700 15px system-ui, sans-serif';
-    const ty = Math.max(76, Y(r.y) - 44);
-    pill(g, sc.coach, X(r.x), ty, 'rgba(10,14,30,0.82)', '#ffffff', w);
+    pill(g, sc.coach, w / 2, 26, 'rgba(10,14,30,0.85)', '#ffffff', w);
   }
   if (sc.prompt) {
     const p = 0.75 + 0.25 * Math.sin(sc.time * 4);
