@@ -24,7 +24,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 3. Third playtests done (2026-11-13) and shipped: Summit v4, Kitbag v4, Sungrazer v4 (+ frame cost cut ~3x), Brink AI v4
    (combo-aware rings, softer Normal), Quarry v4. Loomsong second playtest: fixes in progress. A cozy management sim is being built.
 4. Hexhold gold sink (honing specialized towers) if hoarding persists; Glyphwright: refit the bot model (fit.ts),
-   late Nova vs flyers; Rewild: is fire now too tame? (Delve depth 5: done, rules v6.)
+   late Nova vs flyers. (Delve depth 5: done, rules v6. Rewild fire was too tame: rules v6 gives it teeth; watch playtests.)
 5. Grove: owner said keep it as is (board and balance); only bugs/clarity. Afterglow: leave alone unless asked.
 6. New games are welcome when the queue is quiet (recent additions: Ninefold, Summit, Quarry, Sungrazer, Kitbag,
    Brink, Loomsong, Simmer). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle.
@@ -463,8 +463,20 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
     the old cards (dead cards dealt 8.6% → 1.6%). Greedy x32: median 2080 → 2333 (stars 0/1/26/5 →
     0/2/21/9; ~+140 from fire counterplay, ~+110 from deals), fire burns 3.8 → 0.5 cells per lightning
     summer for the bot; random 787 → 890. Stars kept at 900/1700/2400 since 3★ felt out of reach.
-  - [ ] Next ideas: watch whether fire is now too tame for players who graze; maybe a second strike in
-    year 4-5, or a fire that jumps one gap.
+  - [x] Rewild fire too tame? Yes (measured with new `scripts/rewild/fire.ts`, greedy x64, ~1 lightning summer a
+    game): v5 burnt anything in 9/64 lightning summers (21 cells in 64 games, all grass, never an animal), would
+    have burnt ≥ 3 cells if ignored in 2/64, and the whole game scored −2.3 on average vs lightning-as-drought
+    (random bot +0.4). Wildflowers and shrubs could never burn: they need moisture 1, so on bone-dry ground they
+    withered below full size before the fire came. The bot island has only ~1.4 burnable cells per summer and the
+    strike rarely reached them. Rules v6: fire catches within 3 cells of the strike, leaps gaps of one cell
+    (spreads up to 2 away), burns grass/flowers/shrubs from half size (seedlings don't) unless a grazer cropped
+    them that summer (so one deer still saves the cells it eats from), and animals caught in it die (bees and
+    songbirds fly off). Greedy x64: burns in 29/64 summers (1.39 cells avg, max 15), ≥ 3 cells if ignored in
+    12/64, the bot plays differently than in a drought in 24/64 (was 11), game score −13.5 mean (worst −286);
+    random −24.9 (worst −474). Balance x32: greedy median 2333 → 2278 (stars 0/2/21/9 unchanged), random 987 → 941.
+    Tried and dropped: size ≥ 2 alone (grazing no longer protected anything), reach 3 alone, longer ash.
+  - [ ] Next: playtest whether v6 fire reads well (the jump shows as flame cells apart); a second strike in
+    year 4-5 if it is still rare for players with big dry meadows.
 - [x] **Unspoken art follow-ups**: held things (take/give/carry) sit beside the holder instead of
       over their body; an acting river is drawn as the river flooding its banks, not a sea wave.
       `.shots/us-gal.cjs '<frames json>' name` renders any frames side by side (needs `npx vite --port 5174`).

@@ -65,7 +65,7 @@ export const PLANTS: Record<PlantId, PlantDef> = {
   grass: {
     id: 'grass', kind: 'plant', name: 'Grass', tier: 1, on: ['soil'], minFert: 1, maxFert: 3, minWet: 0, maxWet: 3, start: 2,
     grows: [0, 1, 2], spread: 'self', spreadAt: 2,
-    text: 'Needs soil. Grows fast and spreads on its own once half grown. Each autumn it enriches poor soil. Tall dry grass burns in lightning summers; grazing keeps it short.',
+    text: 'Needs soil. Grows fast and spreads on its own once half grown. Each autumn it enriches poor soil. Dry grass burns in lightning summers once half grown, unless grazed that summer.',
   },
   reeds: {
     id: 'reeds', kind: 'plant', name: 'Reeds', tier: 1, on: ['shallows', 'marsh', 'pond'], minFert: 0, maxFert: 3, minWet: 0, maxWet: 3, start: 1,
@@ -75,12 +75,12 @@ export const PLANTS: Record<PlantId, PlantDef> = {
   flowers: {
     id: 'flowers', kind: 'plant', name: 'Wildflowers', tier: 1, on: ['soil'], minFert: 1, maxFert: 3, minWet: 1, maxWet: 3, start: 2,
     grows: [0, 1], spread: 'pollinated', spreadAt: 2,
-    text: 'Need soil and some moisture. Only spread where bees live within 2 cells. Enrich poor soil in autumn. Burn when full grown and dry.',
+    text: 'Need soil and some moisture. Only spread where bees live within 2 cells. Enrich poor soil in autumn. Burn when half grown and dry.',
   },
   shrub: {
     id: 'shrub', kind: 'plant', name: 'Berry shrub', tier: 2, on: ['soil'], minFert: 1, maxFert: 3, minWet: 1, maxWet: 3, start: 1,
     grows: [0, 1], spread: 'birds', over: ['grass'],
-    text: 'Can be planted into grass. Songbirds carry its seeds up to 2 cells away. Deer browse it. Burns when full grown and dry.',
+    text: 'Can be planted into grass. Songbirds carry its seeds up to 2 cells away. Deer browse it. Burns when half grown and dry.',
   },
   tree: {
     id: 'tree', kind: 'plant', name: 'Oak', tier: 2, on: ['soil'], minFert: 2, maxFert: 3, minWet: 1, maxWet: 3, start: 1,

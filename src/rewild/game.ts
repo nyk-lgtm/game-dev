@@ -570,8 +570,8 @@ export class Game {
         `<b style="color:${WEATHER_COLOR.fire}">Lightning:</b> ` +
         (n
           ? `<span class="warn">the wildfire would burn ${n} cell${n > 1 ? 's' : ''}</span> (flames on the island).`
-          : 'nothing near the strike is tall and dry enough to burn.') +
-        ' Grazed or young plants, damp ground, water and bare cells stop fire.';
+          : 'nothing within 3 cells of the strike is grown and dry enough to burn.') +
+        ' Grazed plants, seedlings, damp ground and water don\'t burn; sparks jump one-cell gaps.';
     } else if (s.weather !== 'fair') {
       weather = `<b style="color:${WEATHER_COLOR[s.weather]}">${WEATHER_NAME[s.weather]}:</b> ${WEATHER_TEXT[s.weather].replace(/^[^:]*: /, '')}`;
     }
@@ -793,7 +793,7 @@ export class Game {
         <li>Life changes the land: <b>lichen</b> turns rock into soil, <b>grass</b> and <b>fungi</b> enrich it, <b>reeds</b> silt shallows into marsh, <b>beavers</b> dam ponds. Shrubs and oaks can be planted into grass once the soil is rich enough.</li>
         <li>Every season scores <b>species²/2 + life/5</b>: variety matters most. Grazers crop plants short so they can't spread; hunters keep grazers in check.</li>
         <li>A species alive at the end of <b>${SETTLE_AFTER} seasons in a row</b> is <b>settled</b> and earns <b>+${SETTLED_BONUS}</b> every season after. If it dies out, its streak starts over, so keep the balance rather than replanting.</li>
-        <li>Watch the weather: droughts dry the land, harsh winters starve animals, and summer lightning sets tall, bone-dry meadows alight. The island shows which cells would burn; grazers cropping them short, damp ground by ponds and marsh, water and bare cells stop the fire.</li>
+        <li>Watch the weather: droughts dry the land, harsh winters starve animals, and summer lightning sets grown, bone-dry meadows alight, and animals caught in the fire die. The island shows which cells would burn; plants grazed that summer, seedlings, damp ground by ponds and marsh, and water don't burn, but sparks jump one-cell gaps.</li>
         <li>Tap any cell to see what lives there and what will happen to it next season. After each season, <b>Report</b> shows what grew, what died and why.</li>
       </ul>`,
       [{ label: 'Play', primary: true, onClick: closeOverlay }],
@@ -849,7 +849,7 @@ export class Game {
     if (s.weather === 'fire') {
       const n = this.burnPlan.length;
       rows.push(
-        `<p>The bolt in a dashed hex marks where lightning will strike${n ? `; flames mark the ${n} cell${n > 1 ? 's' : ''} that would burn as things stand` : ''}. The fire comes at the end of summer, after grazing, so you can still stop it: put rabbits or deer by a tall meadow to crop it short, or leave gaps.</p>`,
+        `<p>The bolt in a dashed hex marks where lightning will strike${n ? `; flames mark the ${n} cell${n > 1 ? 's' : ''} that would burn as things stand` : ''}. The fire comes at the end of summer, after grazing, so you can still stop it: put rabbits or deer by a meadow (a plant grazed this summer won't burn), or plant into it. Sparks jump one-cell gaps, so a firebreak must be two cells wide, and animals caught in the fire die.</p>`,
       );
     } else if (weatherFor(s.seed, s.season + 1).weather === 'fire' && s.season + 1 < SEASONS) rows.push('<p>The faint bolt on the island marks where next season’s lightning will strike.</p>');
     showCard(`<h2>Weather</h2>${rows.join('')}`, [{ label: 'Close', primary: true, onClick: closeOverlay }]);

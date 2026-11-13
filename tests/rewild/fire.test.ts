@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ADJ,
+  ADJ6,
   ALL_IDS,
   N,
   RING,
@@ -88,13 +89,90 @@ describe('wildfire', () => {
     expect(after).toBeLessThan(before);
   });
 
-  it('no strike when nothing within 2 cells is burnable', () => {
+  it('no strike when nothing within 3 cells is burnable', () => {
     const s = blank(5);
     s.season = 5;
     s.weather = 'fire';
     s.fireAt = dryField(s);
     const ev = simulate(s);
     expect(ev.some((e) => e.type === 'strike' || e.type === 'burn')).toBe(false);
+  });
+
+  it('catches the nearest burnable plant up to 3 cells from the strike, not 4', () => {
+    for (const d of [3, 4]) {
+      const s = blank(11);
+      s.season = 5;
+      s.weather = 'fire';
+      s.fireAt = dryField(s);
+      const k = s.cells.findIndex((_, j) => RING[j] === d);
+      s.cells[k].t = 'soil';
+      s.cells[k].fert = 1;
+      s.cells[k].plant = { id: 'grass', n: 3, age: 2 };
+      const ev = simulate(s);
+      expect(ev.some((e) => e.type === 'strike' && e.cell === k)).toBe(d === 3);
+    }
+  });
+
+  it('half-grown plants burn, seedlings do not (wildflowers wither on bone-dry ground first)', () => {
+    const { s, i } = meadowOnFire(12);
+    // Full wildflowers wither to half size in a lightning summer: they still burn (rules v5 they never could).
+    for (const k of [i, ...ADJ[i]]) s.cells[k].plant = { id: 'flowers', n: 3, age: 2 };
+    expect(simulate(clone(s)).filter((e) => e.type === 'burn').length).toBe(7);
+    // Half-grown ones wither to seedlings and don't.
+    for (const k of [i, ...ADJ[i]]) s.cells[k].plant = { id: 'flowers', n: 2, age: 2 };
+    expect(simulate(clone(s)).filter((e) => e.type === 'burn').length).toBe(0);
+  });
+
+  it('a plant grazed this summer does not burn, even when it is still half grown', () => {
+    const { s, i } = meadowOnFire(13);
+    const ev0 = simulate(clone(s));
+    expect(ev0.filter((e) => e.type === 'burn').length).toBe(7);
+    // Rabbits crop one unit: a full grass on their cell or beside it drops to 2, and it is spared.
+    s.cells[i].animal = { id: 'rabbit', n: 2, age: 1 };
+    const t = clone(s);
+    const ev = simulate(t);
+    const cropped = ev.filter((e) => e.type === 'eat').map((e) => (e as { prey: number }).prey);
+    expect(cropped.length).toBeGreaterThan(0);
+    const burnt = new Set(ev.filter((e) => e.type === 'burn').map((e) => (e as { cell: number }).cell));
+    for (const k of cropped) {
+      expect(burnt.has(k)).toBe(false);
+      expect(t.cells[k].plant?.n).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('sparks jump a one-cell gap but not a two-cell gap', () => {
+    for (const gap of [1, 2]) {
+      const s = blank(14);
+      s.season = 5;
+      s.weather = 'fire';
+      const i = dryField(s);
+      s.fireAt = i;
+      // A straight line of cells through the center: grass at the strike, then `gap` bare cells, then grass.
+      const line = [i];
+      const dir = ADJ6[i].findIndex((j) => j >= 0);
+      while (line.length < 1 + gap + 1) line.push(ADJ6[line[line.length - 1]][dir]);
+      for (const k of [line[0], line[line.length - 1]]) {
+        s.cells[k].t = 'soil';
+        s.cells[k].fert = 1;
+        s.cells[k].plant = { id: 'grass', n: 3, age: 2 };
+      }
+      const far = line[line.length - 1];
+      const ev = simulate(s);
+      expect(ev.some((e) => e.type === 'burn' && e.cell === far)).toBe(gap === 1);
+    }
+  });
+
+  it('animals caught in the fire die; bees and songbirds fly off', () => {
+    const { s, i } = meadowOnFire(15);
+    const [a, b, c] = ADJ[i];
+    s.cells[a].animal = { id: 'fox', n: 3, age: 1 };
+    s.cells[b].animal = { id: 'bees', n: 2, age: 1 };
+    s.cells[c].animal = { id: 'songbird', n: 2, age: 1 };
+    const ev = simulate(s);
+    expect(ev).toContainEqual({ type: 'die', cell: a, id: 'fox', why: 'burnt' });
+    expect(s.cells[a].animal).toBeNull();
+    expect(s.cells[b].animal?.id).toBe('bees');
+    expect(s.cells[c].animal?.id).toBe('songbird');
   });
 
   it('the season report counts burnt plants as burnt in the wildfire', () => {
