@@ -6,7 +6,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 (pseudo-3D ASCII racer), `glyph/` (Glyphwright, spell-crafting autobattler), `rewild/`
 (ecosystem builder on a hex island), `unspoken/` (learn a procedurally invented language from pictures), `hexhold/` (hex maze tower defense),
 `triad/` (hex logic puzzle: fire/water/leaf, numbers count beaten neighbors), `lastlight/` (tap-driven interactive story, two nights),
-`ninefold/` (seeded mini-golf), `summit/` (peaks-solitaire roguelite with charms), `quarry/` (word roguelite on a hex letter wall).
+`ninefold/` (seeded mini-golf), `summit/` (peaks-solitaire roguelite with charms), `quarry/` (word roguelite on a hex letter wall),
+`sungrazer/` (one-thumb arcade: hold to swing a comet round stars, let go to fling).
 
 - The owner plays and tests only on an Android phone (Chrome, portrait). Every UI
   change must work by touch at ~390 CSS px wide; tap targets ≥ 44px.
@@ -51,6 +52,9 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     rules v3 (depth 6-8 targets raised to 365/430/495 after these numbers, ~40% / ~16% expected): median depth 8, ~45% wins with its perk order (`PRIORITY` in bot.ts); `PICK=worst` (`WORST`) ~22%;
     `SEEN=0.05` ~20%; `best` mode ~99%); `PERKTABLE=1` favors each perk in turn (others weakest-first: ~19-36% wins);
     `TARGETS=`/`WORDS=` try others.
+  - Sungrazer: `npx vite-node scripts/sungrazer/balance.ts 30 human` (skills novice/human/good/perfect: reaction
+    delay, timing jitter, a two-level release planner; rules v1: novice median ~17 s, human ~40 s (alt ~620),
+    good ~2 min (alt ~2400), perfect survives 10 min). `SG_MODE=s|t|m` for modes, `CHECK=1` verifies replays.
   - Hexhold: `npx vite-node scripts/hexhold/balance.ts 32` (heuristic bot, rules v4: median wave ~28, ~7/32 wins);
     `scripts/hexhold/probe.ts 32` lists each loss with its wave and map shape (one or two portals) and the
     lives lost per band of waves (the difficulty curve: v4 is gentle to wave 10, pressure from 15 on).
@@ -65,7 +69,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   with batched `fillText` runs; art lives in each game's `art.ts`.
 - Daily challenges (src/shared/daily.ts): `<game>/?daily` plays today's seed (`dailySeed(game, day)`,
   local date); each game keeps its in-progress daily under `dailyRun` and today's best under `daily`.
-  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad, Ninefold, Summit and Quarry; the hub's Daily section links them.
+  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad, Ninefold, Summit, Quarry and Sungrazer; the hub's Daily section links them.
 - Afterglow extras: Nights 1-5 (`NIGHTS` in content.ts, unlocked by `profile.nightsWon`), arenas
   (`ARENAS`/pillars in core/arena.ts, hashed from the seed), unions (`union` on a WeaponDef: two
   maxed weapons merge in a chest), and player damage is attributed (`w.taken`, `w.killedBy`).
@@ -156,6 +160,17 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   an INFORMAL list (yeah, okay, yay, phew…) added as common, front-coded, ~46 KB gzipped,
   lazy-loaded by main.ts); bots use only the common part (SCOWL ≤ 35). `scripts/quarry/grep.ts '<regex>'` searches
   it; `upto.ts <seed> <depth>` prints bot actions for `?seed=&a=`. UI is DOM hexes (game.ts) with WAAPI falls.
+- Sungrazer (src/sungrazer/core): a fixed 240 Hz sim. world.ts grows the sky lazily and in order from the seed
+  (a spine of stars each ≤ MAX_LINK from the last, bonus stars, mote arcs in coronas, cinders clear of every corona
+  and of the spine line; zones by altitude bring cinders 450, pulsars 1000, giants/drifters 1700…); no trig in the
+  rules (a 16-direction table, `swing` ping-pong). sim.ts: holding grabs the nearest lit star within LOCK (one grab
+  per press, not the star just left for REGRAB ticks), the tether reels in (`reelAt`) at constant speed toward
+  `speedAt`; letting go is ballistic (GRAVITY); walls bounce (and reverse an orbit) and drop the combo; the camera
+  follows up and the void rises (`riseAt`) — fall under it, touch a star or cinder and the run ends. Combo grows
+  only from close shaves (NEAR) and sungrazes (letting go < SUNGRAZE from the surface); links keep it alive for
+  LINK_TICKS of free flight. A run is seed + mode + toggle ticks (`replay(seed, mode, inputs)`); `cloneRun` shares
+  the world. The page shows a release preview by stepping a clone. `?seed=&m=&a=&t=` plays a recording back
+  (`__game.seek(tick)` fast-forwards it); tools: `trace.ts <seed> [skill]`, `botrun.ts <seed> [skill]`.
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)
   plus a shape in render/draw.ts and a color in palette.ts; tests in
   tests/telegraph/enemies.test.ts. Telegraphed attacks set `aim` and resolve via

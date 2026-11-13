@@ -32,8 +32,33 @@ const lastlight = makeStore('lastlight.');
 const ninefold = makeStore('ninefold.');
 const summit = makeStore('summit.');
 const quarry = makeStore('quarry.');
+const sungrazer = makeStore('sungrazer.');
 
 const GAMES: GameCard[] = [
+  {
+    path: './sungrazer/',
+    title: 'Sungrazer',
+    tag: 'One-thumb arcade',
+    pitch: 'Hold to swing a comet round a star, let go to fling it to the next. Graze the coronas and shave past cinders for combos while the void rises below.',
+    accent: '#ffc35a',
+    best: () => {
+      const p = sungrazer.load<{ runs?: number; best?: number; bestAlt?: number } | null>('profile', null);
+      if (!p?.runs) return null;
+      return `Best ${(p.best ?? 0).toLocaleString('en-US')} · altitude ${p.bestAlt ?? 0}`;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#0a0f2c"/>
+      <g fill="#cfd8ff"><rect x="8" y="12" width="1.5" height="1.5"/><rect x="60" y="8" width="1.5" height="1.5"/><rect x="66" y="40" width="1" height="1"/><rect x="14" y="56" width="1" height="1"/><rect x="40" y="6" width="1" height="1"/></g>
+      <path d="M0 76h76v-8q-19 -5 -38 0t-38 0z" fill="#ff3264" opacity="0.45"/>
+      <circle cx="28" cy="46" r="17" fill="none" stroke="#ffd9a8" stroke-opacity="0.45" stroke-dasharray="2 3"/>
+      <circle cx="28" cy="46" r="8" fill="#fff1c4" stroke="#ffb547" stroke-width="2"/>
+      <path d="M28 46 41 34" stroke="#dff2ff" stroke-width="1.5"/>
+      <path d="M41 34Q30 46 18 50" fill="none" stroke="#a0e6ff" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
+      <circle cx="41" cy="34" r="3" fill="#fff"/>
+      <path d="M45 30q8 -12 14 -14" fill="none" stroke="#fff" stroke-width="1.5" stroke-dasharray="1.5 3.5"/>
+      <circle cx="62" cy="20" r="5" fill="#fff1c4" stroke="#ffb547" stroke-width="1.5"/>
+      <circle cx="62" cy="20" r="9" fill="none" stroke="#fff" stroke-width="1.5" stroke-dasharray="3 3"/>
+      <path d="M56 54l3-5 5 2-2 5z" fill="#3b2420" stroke="#ff6a3d" stroke-width="1.2"/></svg>`,
+  },
   {
     path: './quarry/',
     title: 'Quarry',
@@ -324,6 +349,7 @@ const DAILY = [
   { path: './ninefold/?daily', title: 'Ninefold', store: ninefold, accent: '#9be15d' },
   { path: './summit/?daily', title: 'Summit', store: summit, accent: '#8fc4ff' },
   { path: './quarry/?daily', title: 'Quarry', store: quarry, accent: '#ffc857' },
+  { path: './sungrazer/?daily', title: 'Sungrazer', store: sungrazer, accent: '#ffc35a' },
 ];
 const daily = document.getElementById('daily')!;
 daily.innerHTML = `<h3>Daily challenges <span>${prettyDay()}</span></h3><p>The same run for everyone today. A new one at midnight.</p>`;

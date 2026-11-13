@@ -42,6 +42,7 @@ export default defineConfig({
         summit: resolve(__dirname, 'summit/index.html'),
         lastlight: resolve(__dirname, 'lastlight/index.html'),
         quarry: resolve(__dirname, 'quarry/index.html'),
+        sungrazer: resolve(__dirname, 'sungrazer/index.html'),
       },
     },
   },

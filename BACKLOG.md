@@ -18,6 +18,23 @@ Ground rules: never break saves without bumping RULES_VERSION; never leave main 
 keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 
 ## Now
+- [ ] **Sungrazer** (one-thumb arcade: hold to swing a comet round a star, let go to fling). Milestones:
+  - [x] Core (src/sungrazer/core, rules v1): fixed 240 Hz sim, lazily grown seeded sky (spine stars ≤ 40 apart,
+        bonus stars, motes, cinders from altitude 450, pulsars 1000, giants and drifting cinders 1700, sparser past
+        2500), tether that reels in, ballistic flight, wall bounces, rising void; points for altitude, links ×combo,
+        corona grazing, sungrazes and close shaves (only those two raise the combo). Runs replay from seed + mode +
+        toggle ticks. Modes: Swift (score 2,500), Tight orbit (5,000), Meteor shower (8,000). 12 tests.
+  - [x] Bot (scripts/sungrazer/bot.ts): reaction delay, timing jitter, a release planner that flies every candidate
+        out and looks one orbit further. 30 runs each: novice median 17 s (alt 320), human 40 s (alt 620, score
+        ~2,400), good 126 s (alt 2,400, score ~9,800, p90 163 s), perfect alive at the 10-minute cap on half the seeds.
+        Tuned so a first run is ~30-60 s and a good one 2-3 minutes.
+  - [x] UI: canvas sky tinted per zone, coronas, target ring (and a faint ring for the star coming into reach),
+        tether + dotted release preview, tail, sparks, floaters, zone banners, void glow, combo clock ring,
+        shake/flash (off with reduced effects), synth sounds incl. a corona sizzle, haptics; first-run help card
+        with a diagram and coach lines; end card with stats, unlocks and mode chips; replays (last run, best run,
+        bug-report links), daily sky, hub card first + Daily link. Pixel 7 screenshots checked.
+  - [ ] Next: owner playtest. Watch: is the void too fast/slow early? Are pulsars readable? Is the release preview
+        too generous (it shows ~0.45 s of the path)? Does holding to "catch the next star" feel natural?
 - [ ] **Quarry** (word roguelite on a hex letter wall). Milestones:
   - [x] Dictionary: SCOWL sizes 10-50 (npm `wordlist-english`, MIT; SCOWL's own permissive licence), 3-8 letters
         a-z with a vowel, minus `badwords-list` (MIT), `naughty-words` en (CC-BY-4.0) and a hand list of slurs, with
