@@ -10,7 +10,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 `sungrazer/` (one-thumb arcade: hold to swing a comet round stars, let go to fling),
 `kitbag/` (dice-placement roguelite: roll dice, slot them into gear cards, 12 floors to a boss),
 `brink/` (push duel on a crumbling hex island vs an alpha-beta AI, plus win-in-N puzzles),
-`loomsong/` (rhythm game: seeded synth songs, notes charted from the song's own onsets, 4 lanes).
+`loomsong/` (rhythm game: seeded synth songs, notes charted from the song's own onsets, 4 lanes),
+`simmer/` (cozy management sim: a night-market food stall for 20 nights, critter guests on a watchable evening).
 
 - The owner plays and tests only on an Android phone (Chrome, portrait). Every UI
   change must work by touch at ~390 CSS px wide; tap targets ≥ 44px.
@@ -69,6 +70,14 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     Hard ~25 / 5 / 32; lanes ~21/29/28/22%; same-lane runs ≤ 4). `botrun.ts <seed> [lv] [jitter] [skip]` prints a bot play
     and its `?seed=&lv=&a=` (N=100 gives the grade spread, rules v2: Normal, 2% skipped, jitter 15 ms → A 86 / S 12, 30 → A 65 / B 31, 45 → B,
     60 → C; a full combo of Goods is a B).
+  - Simmer: `npx vite-node scripts/simmer/balance.ts 100 [naive,decent,clever,cheap,premium,greedy,fame,hoard,builder,sweets,fishy,overstock,understock]`
+    (bots plan from the forecast only, never the real crowd; rules v1, 100 seasons: naive (start menu, listed prices, 6 portions
+    each, no shop) median ~1600 = 1★ 100%; decent (menu by expected orders, listed prices, stock = forecast ×1.1+1, two recipes,
+    menu board, helper on festivals) ~2730 = 2★ 98%; clever (prices searched against the purses, renown valued, cheap-day stock-ups,
+    recipes/upgrades by payback, helper when the stoves are short) ~4080, 3★ 27% (SEED=5000: ~4090, 29%); every single-minded strategy
+    scores below clever (cheap ×0.8 prices ~3300, fishy ~3500, overstock ~3600, greedy (renown worth 0) ~2850, hoard (no shop) ~2500,
+    sweets ~1500, premium ×1.35 ~870). Clever is ~1 s a season. `trace.ts <seed> [strat]` prints a season night by night,
+    `upto.ts <seed> <nights> [strat]` gives `?seed=&a=`. Env RV/RD/COVER/PAD tune the clever bot, TUNE=k:v the rules.
   - Brink: `npx vite-node scripts/brink/selfplay.ts 40 [hard,hard normal,easy …]` (AI vs AI per pairing: wins, first-mover
     wins, plies, time per move, shove-backs a game and the longest run, repeated layouts (and "cheap" ones, re-searched
     exactly); rules v1, AI v4 (80 games Easy/Normal, 40 Hard): first mover 45% Easy, 49% Normal, ~42% Hard mirrors; Hard
@@ -90,7 +99,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   with batched `fillText` runs; art lives in each game's `art.ts`.
 - Daily challenges (src/shared/daily.ts): `<game>/?daily` plays today's seed (`dailySeed(game, day)`,
   local date); each game keeps its in-progress daily under `dailyRun` and today's best under `daily`.
-  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad, Ninefold, Summit, Quarry, Sungrazer, Kitbag, Brink (a daily win-in-N puzzle) and Loomsong (a daily song); the hub's Daily section links them.
+  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad, Ninefold, Summit, Quarry, Sungrazer, Kitbag, Brink (a daily win-in-N puzzle), Loomsong (a daily song) and Simmer (a daily season); the hub's Daily section links them.
 - Afterglow extras: Nights 1-5 (`NIGHTS` in content.ts, unlocked by `profile.nightsWon`), arenas
   (`ARENAS`/pillars in core/arena.ts, hashed from the seed), unions (`union` on a WeaponDef: two
   maxed weapons merge in a chest), and player damage is attributed (`w.taken`, `w.killedBy`).
@@ -283,6 +292,28 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   judgement words sit under the pads (`L.popY`), off the beads' approach; the opening hint goes at the first note.
   The menu song persists (`profile.song`). Songs play out (~2 s fade) before results. `?song=CODE` (base-36 seed), `?seed=&lv=&a=` shows a recorded play rescored; `__game.auto = true`
   plays a bot (screenshots). Reports `LOOMSONG v… seed=… lv=… off=… a=…`.
+- Simmer (src/simmer/core, rules v1): `TUNE.days` (20) nights. data.ts: 6 ingredients (`marketPrice(seed, day, ing)`: cheap
+  18% / usual / dear 20%; `keeps` nights counting the night bought: fish 1, greens/berries 2, mushrooms 3, rice/flour 6; the
+  cool box adds 1, also to stock on hand), 10 dishes (one unit of each listed ingredient, `base` worth, `cook` minutes, tags; 3
+  known, the rest learned for coins), 8 critter kinds (`SPECIES`: loves/dislikes one tag, purse range, patience, arrival
+  window, renown to unlock 0/0/0/10/20/35/55/80, weather likes, badgers eat two), weather drifting warm → chilly
+  (`makeWeather`, 40% repeats), festivals (two seeded + the last night), paydays every 5th night, 5 upgrades and a 12¢
+  helper per night (+1 stove). night.ts: `worthOf` = base × love 1.4 / dislike 0.6 × weather tag × festival sweets, rounded;
+  `chooseFrom`: the most worth left over (worth − price) among dishes in stock, priced ≤ worth and ≤ purse, else why
+  (soldout/pricey/worth/nolike); `simulate` is a minute-by-minute FIFO queue over the stoves (SERVE 2 + cook minutes per
+  guest), walk-offs at their patience, closing at 240 (arrivals end at LAST_CALL 225). Delighted (`delights`) = a dish with
+  the tag they love and ≥ 25% of its worth left; settling for a second choice or waiting > half their patience takes a step
+  off. run.ts: renown 0-100 (`repChange`): + round(delighted × (100 − renown)%) − one per let-down (sold out, gave up,
+  closing); each delighted guest brings a friend next night (≤ 10); street crowd = (8 + 0.25·renown) × weather × festival 1.6
+  × lanterns 1.2 × ±15%; stock is used oldest first and batches on their last night are thrown out (ledger `wasted`); under
+  8¢ in the morning a neighbour gives 12¢ (`giftFor`). Score = coins + 10·renown; `STARS` 1200/2300/4300. forecast.ts:
+  `forecast` (expected mix; never the real crowd) and `demand` (exact expectation over each kind's purses) feed the page's
+  "~N orders", Fill to forecast (×1.1) and the bots. Actions `b<ing>.<n>`, `l<dish>`, `u<k>`, `o[h]<dish>x<price>.…` (open
+  the night; h = helper); `replay(seed, a)`. The morning is a draft (store `draft`) turned into actions on Open; recipes and
+  upgrades apply at once. UI: DOM morning (forecast with tappable crowd/kinds, menu with price steppers and who-orders sprites,
+  pantry with spoil warnings, recipe/upgrade cards), canvas evening (scene.ts: original critter sprites, the red-panda keeper,
+  weather; guests set off 16 sim minutes early so they reach the stall on time), a log and guest taps that spell out purse,
+  worth factors and the reason, a ledger card per night, guest book (📖). `SIMMER v… seed=… a=…` reports.
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)
   plus a shape in render/draw.ts and a color in palette.ts; tests in
   tests/telegraph/enemies.test.ts. Telegraphed attacks set `aim` and resolve via
