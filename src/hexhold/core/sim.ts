@@ -10,7 +10,9 @@ import {
   ENEMIES,
   HP_GROWTH,
   LATE_FROM,
+  LATE_WAVES,
   LATE_GROWTH,
+  INTEREST_CAP,
   LEVEL_DMG,
   LEVEL_RANGE,
   MAX_LEVEL,
@@ -74,7 +76,7 @@ export type Fx =
   | { type: 'chain'; from: number; pts: number[] }
   | { type: 'die'; x: number; y: number; id: EnemyId; gold: number }
   | { type: 'leak'; lives: number }
-  | { type: 'wave'; wave: number; bonus: number };
+  | { type: 'wave'; wave: number; bonus: number; lost: number };
 
 export interface Spawn {
   id: EnemyId;
@@ -99,6 +101,8 @@ export interface State {
   lives: number;
   /** Waves sent so far (the current or last wave's number). */
   wave: number;
+  /** Lives lost during the current (or last) wave. */
+  waveLost: number;
   active: boolean;
   queue: Spawn[];
   tick: number;
@@ -126,6 +130,7 @@ export function newGame(seed: number): State {
     gold: START_GOLD + (portalsOf(ground).length > 1 ? TWIN_GOLD : 0),
     lives: START_LIVES,
     wave: 0,
+    waveLost: 0,
     active: false,
     queue: [],
     tick: 0,
@@ -139,10 +144,14 @@ export function newGame(seed: number): State {
 
 const GAP: Record<EnemyId, number> = { runner: 0.5, grunt: 0.75, swarm: 0.22, brute: 1.5, flyer: 0.85, healer: 1.1, splitter: 1.1, digger: 1.0, boss: 2 };
 // What each enemy is worth in a wave's budget (splitters carry three runners inside).
-const COST: Record<EnemyId, number> = { runner: 3, grunt: 4, swarm: 1.2, brute: 14, flyer: 7, healer: 9, splitter: 14, digger: 11, boss: 80 };
+export const WAVE_COST: Record<EnemyId, number> = { runner: 3, grunt: 4, swarm: 1.2, brute: 14, flyer: 7, healer: 9, splitter: 14, digger: 11, boss: 80 };
+const COST = WAVE_COST;
 
 /** Budget scale for the first waves. */
 const EARLY = [0.7, 0.8, 0.9, 0.95];
+/** No kind (but runners and grunts) may take more than this share of a wave's budget, so themes
+ *  stay mixes instead of 30 Brutes or 300 Mites in a row. */
+export const THEME_SHARE = 0.45;
 
 /** The enemies of wave w (1-based), in order. Depends only on the seed. */
 export function wavePlan(seed: number, w: number): EnemyId[] {
@@ -154,8 +163,10 @@ export function wavePlan(seed: number, w: number): EnemyId[] {
     out.push('boss');
     budget -= COST.boss;
   }
+  const cap = budget * THEME_SHARE;
+  const spent: Partial<Record<EnemyId, number>> = {};
   const pool = (Object.keys(ENEMIES) as EnemyId[]).filter((id) => id !== 'boss' && ENEMIES[id].from <= w);
-  // Waves have a theme: one or two kinds dominate. Menders and burrowers are a
+  // Waves have a theme: one or two kinds lead. Menders and burrowers are a
   // twist, never the theme, and a wave has only a few of them.
   const leads = pool.filter((id) => id !== 'healer' && id !== 'digger');
   const lead = rng.pick(leads);
@@ -164,20 +175,29 @@ export function wavePlan(seed: number, w: number): EnemyId[] {
   let diggers = 0;
   const maxMenders = 2 + Math.floor(w / 8);
   const maxDiggers = 2 + Math.floor(w / 5);
+  // Mites come five at a time and cheap, so their share is smaller.
+  const full = (id: EnemyId) => id !== 'runner' && id !== 'grunt' && (spent[id] ?? 0) >= cap * (id === 'swarm' ? 0.65 : 1);
   while (budget > 0) {
     const r = rng.next();
     let id = r < 0.5 ? lead : r < 0.8 ? second : rng.pick(pool);
     if (id === 'healer' && menders++ >= maxMenders) id = lead;
     if (id === 'digger' && diggers++ >= maxDiggers) id = lead;
+    if (full(id)) {
+      // This kind has had its share: something else leads for a while.
+      const rest = leads.filter((x) => !full(x));
+      id = rest.length ? rng.pick(rest) : 'grunt';
+    }
     const n = id === 'swarm' ? 5 : 1;
     for (let k = 0; k < n; k++) out.push(id);
     budget -= COST[id] * n;
+    spent[id] = (spent[id] ?? 0) + COST[id] * n;
   }
   return out;
 }
 
 function sendWave(s: State) {
   s.wave++;
+  s.waveLost = 0;
   s.active = true;
   let at = s.tick + 15;
   // With two portals, enemies take turns in small groups (a swarm stays together).
@@ -198,7 +218,7 @@ function sendWave(s: State) {
 
 function spawn(s: State, id: EnemyId, cell = PORTAL, t = 0, hpScale = 1): Enemy {
   const def = ENEMIES[id];
-  const hp = def.hp * Math.pow(1 + HP_GROWTH, Math.max(0, s.wave - 1)) * (1 + Math.max(0, s.wave - LATE_FROM) * LATE_GROWTH) * hpScale;
+  const hp = def.hp * Math.pow(1 + HP_GROWTH, Math.max(0, s.wave - 1)) * (1 + Math.min(LATE_WAVES, Math.max(0, s.wave - LATE_FROM)) * LATE_GROWTH) * hpScale;
   const next = nextCell(distFor(s, id), cell);
   const e: Enemy = { uid: s.nextUid++, id, hp, maxHp: hp, cell, next: next < 0 ? cell : next, t, x: POS[cell].x, y: POS[cell].y, chill: 0, deep: 0, stun: 0, burn: 0, burnDps: 0, healed: 0, alive: true };
   s.enemies.push(e);
@@ -525,6 +545,7 @@ export function step(s: State): void {
         e.alive = false;
         s.lives -= def.leak;
         s.stats.leaked += def.leak;
+        s.waveLost += def.leak;
         s.fx.push({ type: 'leak', lives: def.leak });
         break;
       }
@@ -545,9 +566,9 @@ export function step(s: State): void {
   }
   if (s.active && !s.queue.length && !s.enemies.length) {
     s.active = false;
-    const bonus = 18 + s.wave * 3 + Math.min(25, Math.floor(s.gold * 0.05));
+    const bonus = 18 + s.wave * 3 + Math.min(INTEREST_CAP, Math.floor(s.gold * 0.05));
     s.gold += bonus;
-    s.fx.push({ type: 'wave', wave: s.wave, bonus });
+    s.fx.push({ type: 'wave', wave: s.wave, bonus, lost: s.waveLost });
     if (s.wave >= WAVES) s.status = 'won';
   }
 }

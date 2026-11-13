@@ -36,6 +36,8 @@ import {
   towerStats,
   upgradeCost,
   wavePlan,
+  WAVE_COST,
+  FLY_DIST,
   type Action,
   type EnemyId,
   type State,
@@ -70,7 +72,7 @@ const secs = (r: number) => `${+r.toFixed(2)}s`;
 function statLine(t: Tower, st: TowerStats): string {
   const sp = specOf(t);
   if (t.id === 'beacon') return `Neighbors deal <b>+${Math.round(((sp?.boost ?? BEACON_BOOST[t.level]) - 1) * 100)}%</b> damage${sp?.reach ? ' and reach a cell further' : ''}.`;
-  const air = st.air ? ' · hits flyers' : '';
+  const air = st.air ? (TOWERS[t.id].air ? ' · hits flyers' : ' · hits flyers thanks to the Bolt') : ' · ground only';
   const range = ` · range <b>${cells(st.range)}</b>`;
   switch (t.id) {
     case 'frost':
@@ -103,6 +105,26 @@ function paletteStats(t: Tower, st: TowerStats): string {
       return `${d} splash / ${secs(st.rate)}<br>${r}`;
     default:
       return `${d} dmg / ${secs(st.rate)}<br>${r}`;
+  }
+}
+
+/** What a specialization would leave the tower doing, in a few words. */
+function specPreview(t: Tower, st: TowerStats, rangeBefore: number): string {
+  const sp = specOf(t);
+  const d = Math.round(st.dmg);
+  // Range only when the form changes it.
+  const r = Math.abs(st.range - rangeBefore) > 0.01 ? ` · range ${cells(st.range)}` : '';
+  switch (t.id) {
+    case 'beacon':
+      return `+${Math.round(((sp?.boost ?? 1) - 1) * 100)}% to neighbors${sp?.reach ? ', +1 range' : ''}`;
+    case 'frost':
+      return `${sp?.deep ? 60 : 40}% slow · ${d}/s${r}`;
+    case 'flame':
+      return `${d} dmg/s${r}`;
+    case 'tesla':
+      return `${d} dmg ×${3 + (sp?.chain ?? 0)} / ${secs(st.rate)}${r}`;
+    default:
+      return `${d} dmg / ${secs(st.rate)}${r}`;
   }
 }
 
@@ -152,8 +174,15 @@ export class Game {
   private ghostPath: number[][] | null = null;
   /** Towers that reach today's path but would not reach the ghost's. */
   private ghostBypass: number[] = [];
-  /** When a build that bypasses towers was first tapped (it needs a second tap). */
-  private armed = 0;
+  /** When the current ghost was picked (a double tap must not also build). */
+  private ghostAt = 0;
+  /** A specialization card tapped once (the second tap buys it), and when. */
+  private specPick = -1;
+  private specAt = 0;
+  /** Attacking towers whose range misses every path (cached per action count). */
+  private idle: number[] = [];
+  private idleKey = -1;
+  private bannerUntil = 0;
   /** Cached: does the current or next wave bring burrowers? (key = wave*2+active) */
   private digKey = -1;
   private digShow = false;
@@ -212,7 +241,10 @@ export class Game {
     this.effects = [];
     this.ended = this.s.status !== 'playing';
     this.newBest = false;
-    this.armed = 0;
+    this.specPick = -1;
+    this.idleKey = -1;
+    this.bannerUntil = 0;
+    $('banner').classList.remove('show');
     this.panelKey = '';
     if (!fromLink) this.persist(true);
     if (this.ended) setTimeout(() => this.showEnd(), 300);
@@ -261,6 +293,7 @@ export class Game {
 
   private tapCell(i: number): void {
     if (this.s.status !== 'playing') return;
+    this.specPick = -1;
     if (i < 0 || i === this.selected) {
       this.selected = -1;
       this.ghost = null;
@@ -286,7 +319,7 @@ export class Game {
     this.ghost = this.ghost === id ? null : id;
     this.ghostPath = this.ghost ? pathCells(flowField(this.s.ground, blockedSet(this.s, this.selected)).dist, this.s.portals) : null;
     this.ghostBypass = this.ghostPath ? this.bypassed(pathCells(this.s.field.dist, this.s.portals).flat(), this.ghostPath.flat()) : [];
-    this.armed = 0;
+    this.ghostAt = performance.now();
     this.sfx.click();
     this.panelKey = '';
   }
@@ -298,18 +331,8 @@ export class Game {
       toast(err);
       return;
     }
-    if (this.ghostBypass.length) {
-      // A build that walks the path past towers needs a deliberate second tap.
-      const now = performance.now();
-      if (!this.armed) {
-        this.armed = now;
-        this.sfx.warn();
-        navigator.vibrate?.(20);
-        this.panelKey = '';
-        return;
-      }
-      if (now - this.armed < 450) return;
-    }
+    // The bypass warning is already on screen; just don't let a double tap on the palette build.
+    if (performance.now() - this.ghostAt < 200) return;
     this.doAct({ t: 'build', cell: this.selected, tower: this.ghost });
     this.guardUntil = performance.now() + 500;
     this.sfx.pickup();
@@ -365,7 +388,12 @@ export class Game {
     this.effects = this.effects.filter((f) => time - f.t0 < f.life);
     const g = this.ctx;
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    drawBoard(g, this.view, s, { time, selected: this.selected, ghost: this.ghost, ghostPath: this.ghostPath, bypass: this.ghostBypass, showDig: this.showDig(), effects: this.effects, hurt: this.hurt });
+    drawBoard(g, this.view, s, { time, selected: this.selected, ghost: this.ghost, ghostPath: this.ghostPath, bypass: this.ghostBypass, idle: this.idleTowers(), showDig: this.showDig(), effects: this.effects, hurt: this.hurt });
+    // Timers can be throttled; the frame loop makes sure a banner never outstays its time.
+    if (this.bannerUntil && performance.now() > this.bannerUntil) {
+      this.bannerUntil = 0;
+      $('banner').classList.remove('show');
+    }
     this.hud();
     this.panel();
   }
@@ -398,7 +426,7 @@ export class Game {
           break;
         case 'wave':
           this.persist(true);
-          this.banner(`Wave ${f.wave} held · +${f.bonus} gold`);
+          this.banner(`Wave ${f.wave} held · +${f.bonus} gold${f.lost ? ` · −${f.lost}♥` : ''}`);
           this.sfx.levelUp();
           this.panelKey = '';
           break;
@@ -421,6 +449,7 @@ export class Game {
     b.textContent = text;
     b.classList.add('show');
     clearTimeout(this.bannerTimer);
+    this.bannerUntil = performance.now() + 1800;
     this.bannerTimer = window.setTimeout(() => b.classList.remove('show'), 1800);
   }
 
@@ -476,19 +505,25 @@ export class Game {
     const chips = el('div', 'chips');
     for (const [id, n] of counts) chips.appendChild(el('span', 'chip', `<i style="background:${ENEMIES[id].color}"></i>${ENEMIES[id].name} ×${n}${ENEMIES[id].leak > 1 ? ` <em>−${ENEMIES[id].leak}♥</em>` : ''}`));
     p.appendChild(chips);
-    // The most notable threat, in a sentence.
-    const notable = (['boss', 'digger', 'flyer', 'brute', 'healer', 'splitter', 'swarm'] as EnemyId[]).find((id) => counts.has(id));
+    // The threat that makes up most of the wave, in a sentence (the Colossus always gets the line).
+    const weight = (id: EnemyId) => (counts.get(id) ?? 0) * WAVE_COST[id];
+    const special = (['digger', 'flyer', 'brute', 'healer', 'splitter', 'swarm'] as EnemyId[]).filter((id) => counts.has(id));
+    const notable = counts.has('boss') ? 'boss' : special.sort((a, b) => weight(b) - weight(a))[0];
+    const costly = [...counts.keys()].find((id) => ENEMIES[id].leak > 1);
+    const legend = costly ? `<br><span class="note"><em>−${ENEMIES[costly].leak}♥</em> = lives lost for each one that reaches your core.</span>` : '';
     p.appendChild(
       el(
         'div',
         'text',
-        notable ? `<b>${ENEMIES[notable].name}:</b> ${ENEMIES[notable].text}` : s.wave === 0 ? (s.portals.length > 1 ? 'Two portals on this map: enemies take turns. Towers are walls: make both paths long.' : 'Tap an empty hex to build a tower. Towers are walls: make the path long.') : 'Build, upgrade, then send it.',
+        (notable ? `<b>${ENEMIES[notable].name}:</b> ${ENEMIES[notable].text}` : s.wave === 0 ? (s.portals.length > 1 ? 'Two portals on this map: enemies take turns. Towers are walls: make both paths long.' : 'Tap an empty hex to build a tower. Towers are walls: make the path long.') : 'Build, upgrade, then send it.') + legend,
       ),
     );
     const b = el('button', 'primary');
     b.textContent = `Send wave ${next}`;
     b.onclick = () => this.sendWave();
-    p.appendChild(b);
+    const foot = el('div', 'foot');
+    foot.appendChild(b);
+    p.appendChild(foot);
   }
 
   private buildPanel(p: HTMLElement): void {
@@ -524,14 +559,14 @@ export class Game {
     const foot = el('div', 'foot');
     if (bypass)
       foot.appendChild(
-        el('div', 'alert', `⚠ The new path walks past <b>${bypass === 1 ? '1 tower' : `${bypass} towers`}</b> (circled red): ${bypass === 1 ? 'it' : 'they'} could no longer hit anything on it.`),
+        el('div', 'alert', `⚠ The path now avoids <b>${bypass === 1 ? '1 tower' : `${bypass} towers`}</b> (circled red): ${bypass === 1 ? 'it' : 'they'} can no longer hit anything.`),
       );
     const row = el('div', 'row');
     const back = el('button', 'secondary');
     back.textContent = 'Back';
     back.onclick = () => this.pickGhost(this.ghost!);
     const go = el('button', bypass ? 'primary danger' : 'primary');
-    go.textContent = !bypass ? `Build ${def.name}` : this.armed ? 'Tap again to build' : 'Build anyway';
+    go.textContent = bypass ? 'Build anyway' : `Build ${def.name}`;
     go.disabled = !!err;
     go.onclick = () => this.build();
     row.append(back, go);
@@ -563,19 +598,34 @@ export class Game {
     return out;
   }
 
+  /** Attacking towers whose range misses every path (walking, flying if it hits flyers, digging when burrowers come). */
+  private idleTowers(): number[] {
+    const s = this.s;
+    const key = this.actions.length * 2 + (this.showDig() ? 1 : 0);
+    if (key === this.idleKey) return this.idle;
+    this.idleKey = key;
+    const walk = pathCells(s.field.dist, s.portals).flat();
+    const fly = pathCells(FLY_DIST, s.portals).flat();
+    const dig = this.showDig() ? pathCells(s.dig, s.portals).flat() : [];
+    this.idle = [];
+    for (const t of s.towers) {
+      if (!t || TOWERS[t.id].range === 0) continue;
+      const st = towerStats(s, t);
+      const r2 = st.range * st.range;
+      const near = (c: number) => (POS[c].x - POS[t.cell].x) ** 2 + (POS[c].y - POS[t.cell].y) ** 2 <= r2;
+      if (!walk.some(near) && !dig.some(near) && !(st.air && fly.some(near))) this.idle.push(t.cell);
+    }
+    return this.idle;
+  }
+
   private towerPanel(p: HTMLElement): void {
     const s = this.s;
     const t = s.towers[this.selected]!;
     const def = TOWERS[t.id];
     const sp = specOf(t);
-    p.appendChild(this.titleRow(`<span class="t">${sp ? `${sp.name} <small>(${def.name})</small>` : `${def.name} · level ${t.level}`}</span><span>${t.id === 'beacon' ? '' : `${Math.round(t.dealt).toLocaleString()} dealt`}</span>`));
-    const gifts = ADJ[t.cell].map((j) => s.towers[j]).filter((x): x is NonNullable<typeof x> => !!x);
-    const got = [...new Set(gifts.map(giftShort))];
-    // A beacon's line already says what it gives.
-    const gives = t.id === 'beacon' ? '' : `<br><span class="gift">Gives neighbors: ${def.aura}</span>`;
-    p.appendChild(el('div', 'text', `${statLine(t, towerStats(s, t))}${gives}<br>${got.length ? `Gets: ${got.join(' · ')}` : 'No neighbors yet.'}`));
-    const sell = el('button', 'secondary');
+    const choosing = t.level >= MAX_LEVEL && t.spec < 0;
     const refund = Math.floor(t.spent * SELL_BACK);
+    const sell = el('button', 'secondary');
     sell.onclick = () => {
       if (performance.now() < this.guardUntil) return;
       if (this.doAct({ t: 'sell', cell: t.cell })) {
@@ -584,17 +634,47 @@ export class Game {
         this.panelKey = '';
       } else toast("Can't sell that now");
     };
-    if (t.level >= MAX_LEVEL && t.spec < 0) {
-      // Choose a specialization: two forms side by side, Sell beside them.
+    const name = `<span class="t">${sp ? `${sp.name} <small>(${def.name})</small>` : `${def.name} · level ${t.level}`}</span>`;
+    if (choosing) {
+      // Sell moves up to the title row, well away from the two cards.
+      const row = this.titleRow(name);
+      sell.classList.add('mini');
+      sell.textContent = `Sell +${refund}`;
+      row.insertBefore(sell, row.lastChild);
+      p.appendChild(row);
+    } else p.appendChild(this.titleRow(`${name}<span>${t.id === 'beacon' ? '' : `${Math.round(t.dealt).toLocaleString()} dealt`}</span>`));
+    const gifts = ADJ[t.cell].map((j) => s.towers[j]).filter((x): x is NonNullable<typeof x> => !!x);
+    const got = [...new Set(gifts.map(giftShort))];
+    // A beacon's line already says what it gives.
+    const gives = t.id === 'beacon' ? '' : `<br><span class="gift">Gives neighbors: ${def.aura}</span>`;
+    const idle = this.idleTowers().includes(t.cell) ? '<br><span class="warn">⚠ Out of reach: no path passes within its range, so it can’t hit anything here.</span>' : '';
+    // While choosing a form the cards need the room: just the numbers (and any warning).
+    const more = choosing ? '' : `${gives}<br>${got.length ? `Gets: ${got.join(' · ')}` : 'No neighbors yet.'}`;
+    p.appendChild(el('div', 'text', `${statLine(t, towerStats(s, t))}${idle}${more}`));
+    if (choosing) {
+      // Choose a specialization: two forms side by side, each showing what it would do. One tap picks, a second buys.
       const cost = specCost(t.id);
       const pick = el('div', 'specs');
       SPECS[t.id].forEach((sd, k) => {
         const b = el('button', 'spec');
-        b.innerHTML = `<b>${sd.name}</b><small>${sd.text}</small><em>${cost} gold</em>`;
+        const after = { ...t, spec: k };
+        const on = this.specPick === k;
+        if (on) b.classList.add('on');
+        b.innerHTML = `<b>${sd.name}</b><small>${sd.text}</small><i>→ ${specPreview(after, towerStats(s, after), towerStats(s, t).range)}</i><em>${on ? `Tap again: buy for ${cost}` : `${cost} gold`}</em>`;
         b.disabled = s.gold < cost;
         b.onclick = () => {
-          if (performance.now() < this.guardUntil) return;
+          const now = performance.now();
+          if (now < this.guardUntil) return;
+          if (this.specPick !== k) {
+            this.specPick = k;
+            this.specAt = now;
+            this.sfx.click();
+            this.panelKey = '';
+            return;
+          }
+          if (now - this.specAt < 200) return;
           if (this.doAct({ t: 'spec', cell: t.cell, pick: k })) {
+            this.specPick = -1;
             this.sfx.evolve();
             this.banner(`${def.name} becomes ${sd.name}`);
             this.panelKey = '';
@@ -602,9 +682,6 @@ export class Game {
         };
         pick.appendChild(b);
       });
-      sell.classList.add('sell');
-      sell.innerHTML = `Sell<small>+${refund}</small>`;
-      pick.appendChild(sell);
       p.appendChild(pick);
       return;
     }
@@ -720,6 +797,7 @@ export class Game {
         <li><b>Neighbors matter.</b> Every tower gives something to the six hexes around it: Bolts let neighbors hit flyers, Frost makes neighbors hit chilled enemies harder, Beacons boost everything next to them. Clusters are strong.</li>
         <li><b>Glowing hexes</b> are ley lines: towers built on them hit 25% harder.</li>
         <li>Check the next wave before sending it: Wisps fly over the maze, Brutes shrug off small hits, Menders heal their friends, Burrowers dig straight under your maze.</li>
+        <li>Most enemies cost 1 life if they reach your core; Brutes and Burrowers cost 2 (the <b>−2♥</b> on the wave preview) and the Colossus 6.</li>
         <li>Tap a tower to upgrade or sell it. Use the speed button when things are under control.</li>
       </ul>`,
       [{ label: 'Hold the line', primary: true, onClick: closeOverlay }],
@@ -728,7 +806,7 @@ export class Game {
 
   showTowers(): void {
     showCard(
-      `<h2>Towers</h2><p>At level 3 each tower can specialize into one of two forms.</p>${TOWER_IDS.map((id) => `<p><b style="color:${TOWERS[id].color}">${TOWERS[id].name}</b> · ${TOWERS[id].cost} gold<br>${TOWERS[id].text}<br><i>Neighbors: ${TOWERS[id].aura}</i><br>Becomes <b>${SPECS[id][0].name}</b> or <b>${SPECS[id][1].name}</b>.</p>`).join('')}`,
+      `<h2>Towers</h2><p>At level 3 each tower can specialize into one of two forms.</p>${TOWER_IDS.map((id) => `<p><b style="color:${TOWERS[id].color}">${TOWERS[id].name}</b> · ${TOWERS[id].cost} gold<br>${TOWERS[id].text} ${TOWERS[id].air ? 'Hits flyers.' : TOWERS[id].range ? 'Ground only (a Bolt next to it lets it hit flyers).' : ''}<br><i>Neighbors: ${TOWERS[id].aura}</i><br>Becomes <b>${SPECS[id][0].name}</b> or <b>${SPECS[id][1].name}</b>.</p>`).join('')}`,
       [{ label: 'Close', primary: true, onClick: closeOverlay }],
     );
   }

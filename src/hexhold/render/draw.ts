@@ -272,6 +272,8 @@ export interface DrawOpts {
   ghostPath: number[][] | null;
   /** Towers the ghost's path would walk past (circled red). */
   bypass: number[];
+  /** Attacking towers no path passes within range of (drawn dimmed, with a mark). */
+  idle: number[];
   /** Burrowers are coming: show their straight route. */
   showDig: boolean;
   effects: Effect[];
@@ -422,7 +424,25 @@ export function drawBoard(g: CanvasRenderingContext2D, v: View, s: State, o: Dra
       g.lineWidth = 2.5;
       g.stroke();
     }
-    drawTowerIcon(g, t.id, sx(v, i), sy(v, i), size * 0.92, t.level);
+    const idle = o.idle.includes(i);
+    drawTowerIcon(g, t.id, sx(v, i), sy(v, i), size * 0.92, t.level, idle ? 0.5 : 1);
+    if (idle) {
+      // Out of reach: a small grey "no path" badge.
+      const cx = sx(v, i) + size * 0.6;
+      const cy = sy(v, i) - size * 0.6;
+      const d = size * 0.26;
+      g.beginPath();
+      g.arc(cx, cy, d, 0, Math.PI * 2);
+      g.fillStyle = '#3a4258';
+      g.fill();
+      g.strokeStyle = '#c8cfe0';
+      g.lineWidth = 1.6;
+      g.beginPath();
+      g.arc(cx, cy, d * 0.55, 0, Math.PI * 2);
+      g.moveTo(cx - d * 0.4, cy + d * 0.4);
+      g.lineTo(cx + d * 0.4, cy - d * 0.4);
+      g.stroke();
+    }
   }
   // Towers a planned build would leave out of reach: a pulsing red ring and a cross.
   for (const c of o.bypass) {

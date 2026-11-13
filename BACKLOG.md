@@ -189,7 +189,19 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         hp 190, first Colossus 80% hp, HP_GROWTH 0.098 plus 7%/wave from wave 11 (was 3.5% from 14);
         Mortar 30 dmg/2.0s (Siege ×1.7), Tesla 17/1.2s. Bot: median 27 → 28, wins 8 → 7/32; lives
         lost by waves (probe.ts) 1-3/4-7/8-10: 5/73/143 → 0/43/26, 15-25: 117 → 166, 26-30: 185 → 267.
-  - [ ] Next ideas: owner feedback on the new curve (is 15-25 tense now? is the end too hard?).
+  - [x] Third blind pass (two wins with 9 and 8 lives; coasted 11-26 with 800-2,000 gold, then mass-Brute
+        spikes at 27-30) and fixes (rules v5): no kind but runners/grunts may take over 45% of a wave's
+        budget (Mites 29%), so themes are mixes (max Brutes at wave 29: 33 → 17, Mites 345 → ~130; wave-4
+        Mites 40 → 15, wave 6 60 → 20); late hp growth 10%/wave from wave 11 but only for 13 waves (more pressure 15-24, no
+        extra climb 25-30); interest capped at 15 (was 25); Tesla range 2.6, Flame 22 dmg range 1.5, Bolt
+        0.75 s. Bypass confirm is one tap on the red "Build anyway" (200 ms double-tap guard), "The path now
+        avoids N towers"; towers out of reach of every path are dimmed with a badge and warned in the panel;
+        "hits flyers thanks to the Bolt" / "ground only"; spec cards show numbers ("→ 51 dmg ×6 / 1.2s"),
+        need two taps, Sell moved to the title row; banners expire in the frame loop and clear on a new map;
+        "Wave 27 held · +gold · −10♥"; the preview explains the kind with the biggest share of the wave and
+        what −2♥ means (help too). Bot: median 27, 7/32 wins; lives lost by band 15-20/21-25/26-30:
+        76/90/267 → 83/171/210. `scripts/hexhold/waves.ts` shows wave sizes and the biggest piles per kind.
+  - [ ] Next ideas: a gold sink if players still hoard (e.g. honing specialized towers); owner feedback.
 - [x] **Blind playtests** for Rewild, Glyphwright, Telegraph, and their bug/UX fixes (shipped).
 - [ ] **Design follow-ups from those playtests** (balance; need care, not quick fixes):
   - [x] Glyphwright gold sink (rules v2): **Empower** raises a rune a tier for gold (4×/10× its

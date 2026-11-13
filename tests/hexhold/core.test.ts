@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ADJ, CORE, ENEMIES, HP_GROWTH, LATE_FROM, LATE_GROWTH, N, PORTAL, START_GOLD, TWIN_GOLD, TWIN_PORTALS, buried, portalsOf, TOWERS, WAVES, act, buildError, decode, encode, flowField, makeMap, newGame, replay, step, towerStats, wavePlan,
+  ADJ, CORE, ENEMIES, HP_GROWTH, LATE_FROM, LATE_GROWTH, LATE_WAVES, N, PORTAL, START_GOLD, TWIN_GOLD, TWIN_PORTALS, buried, portalsOf, TOWERS, WAVES, act, buildError, decode, encode, flowField, makeMap, newGame, replay, step, towerStats, wavePlan,
   type State,
 } from '../../src/hexhold/core';
 import { runGame } from '../../scripts/hexhold/bot';
@@ -95,9 +95,31 @@ describe('waves', () => {
       while (!s.enemies.some((e) => e.id === 'boss')) step(s);
       return s.enemies.find((e) => e.id === 'boss')!.maxHp;
     };
-    const growth = (w: number) => Math.pow(1 + HP_GROWTH, w - 1) * (1 + Math.max(0, w - LATE_FROM) * LATE_GROWTH);
+    const growth = (w: number) => Math.pow(1 + HP_GROWTH, w - 1) * (1 + Math.min(LATE_WAVES, Math.max(0, w - LATE_FROM)) * LATE_GROWTH);
     expect(hpOf(10)).toBeCloseTo(ENEMIES.boss.hp * growth(10) * 0.8);
     expect(hpOf(20)).toBeCloseTo(ENEMIES.boss.hp * growth(20));
+  });
+
+  it('no single kind swamps a wave (themes stay mixes)', () => {
+    for (let seed = 0; seed < 40; seed++)
+      for (let w = 4; w <= WAVES; w++) {
+        const p = wavePlan(seed, w);
+        expect(p.filter((x) => x === 'brute').length).toBeLessThanOrEqual(3 + Math.ceil(w * 0.5));
+        expect(p.filter((x) => x === 'swarm').length).toBeLessThanOrEqual(25 + w * 6);
+      }
+  });
+
+  it('a wave-held message knows the lives it cost', () => {
+    const s = newGame(7);
+    act(s, { t: 'wave' });
+    let held: { lost: number } | undefined;
+    for (let k = 0; k < 20000 && !held; k++) {
+      step(s);
+      held = s.fx.find((f) => f.type === 'wave') as { lost: number } | undefined;
+      s.fx.length = held ? s.fx.length : 0;
+    }
+    expect(held!.lost).toBe(20 - s.lives);
+    expect(held!.lost).toBeGreaterThan(0);
   });
 
   it('an undefended core loses lives and the game ends', () => {
