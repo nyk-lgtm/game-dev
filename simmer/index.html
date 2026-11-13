@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#1a1424" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Simmer</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1424'/%3E%3Cpath d='M6 11h20l-2-5H8z' fill='%23c9473f'/%3E%3Cpath d='M8 11h16v4H8z' fill='%23e8d6b4'/%3E%3Cellipse cx='16' cy='22' rx='8' ry='5' fill='%232f2a2e'/%3E%3Cpath d='M12 18c0-2 2-2 2-4M17 18c0-2 2-2 2-4' stroke='%23fff' stroke-width='1.4' fill='none' opacity='.6'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="../src/shared/shell.css" />
+    <link rel="stylesheet" href="../src/simmer/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header id="hud">
+        <div class="stat"><span class="label">Night</span><span id="dayNo" class="value">1/20</span></div>
+        <div class="stat"><span class="label">Coins</span><span id="coins" class="value">60</span></div>
+        <div class="stat"><span class="label">Renown</span><span id="rep" class="value">♥ 0</span></div>
+        <span id="dailyTag" hidden>Daily</span>
+        <div class="spacer"></div>
+        <button id="bookBtn" class="icon-btn" aria-label="Guest book">📖</button>
+        <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>
+      </header>
+      <main id="stage">
+        <section id="morning"></section>
+        <section id="evening" hidden>
+          <div id="sceneWrap">
+            <canvas id="scene"></canvas>
+            <div id="clock">18:00</div>
+            <div id="tally"></div>
+          </div>
+          <div id="logHead">Tonight’s guests <small>tap one for their numbers</small></div>
+          <div id="log"></div>
+        </section>
+      </main>
+      <footer id="dock">
+        <div id="dockMorning">
+          <div id="spend"></div>
+          <button id="openBtn" class="primary">Open the stall</button>
+        </div>
+        <div id="dockEvening" hidden>
+          <button id="speedBtn" class="secondary">▶ Normal</button>
+          <button id="skipBtn" class="secondary">Skip to closing ⏭</button>
+        </div>
+      </footer>
+    </div>
+    <div id="overlay" hidden></div>
+    <div id="errors"></div>
+    <script type="module" src="../src/simmer/main.ts"></script>
+  </body>
+</html>

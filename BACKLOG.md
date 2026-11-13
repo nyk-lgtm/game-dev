@@ -18,7 +18,7 @@ Ground rules: never break saves without bumping RULES_VERSION; never leave main 
 keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 
 ## Start here (summary, 2026-11-13)
-19 games are live; every one has had at least two blind playtests and the fixes shipped. Open threads, in order:
+20 games are live; all but the newest (Simmer) have had at least two blind playtests and the fixes shipped. Open threads, in order:
 1. Owner feedback first: anything the owner reports beats this list.
 2. Loomsong: needs a real-phone check of sound and timing (headless has no audio); then a second playtest.
 3. Third playtests where the last pass still found balance doubts: Summit (carry cap), Kitbag (Powder Keg/Lucky Coin,
@@ -27,9 +27,31 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
    late Nova vs flyers; Delve: depth 5 ghouls; Rewild: is fire now too tame?
 5. Grove: owner said keep it as is (board and balance); only bugs/clarity. Afterglow: leave alone unless asked.
 6. New games are welcome when the queue is quiet (recent additions: Ninefold, Summit, Quarry, Sungrazer, Kitbag,
-   Brink, Loomsong). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle, a cozy management sim.
+   Brink, Loomsong, Simmer). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle.
+7. Simmer: first blind playtest (see its item below).
 
 ## Now
+- [ ] **Simmer** (cozy management sim: a night-market food stall for 20 nights, critter guests). Milestones:
+  - [x] Core (src/simmer/core, rules v1): ingredients that spoil (fish 1 night … rice 6) with seeded cheap/dear market days,
+        10 dishes (3 known, 7 to learn), 8 critter kinds with loves/dislikes, purses, patience, arrival windows and weather
+        likes, unlocked by renown; worth = base × taste × weather; guests take the most worth left over within purse and
+        stock; a minute-by-minute queue over 1-3 stoves; delight (loved dish, ≥ 25% of worth left) grows renown on a
+        (100 − renown)% curve and brings a friend; sold out / gave up / closing cost a ♥; festivals, paydays, upgrades,
+        a nightly helper; score coins + 10·renown. 16 tests (purity, choice rules, queue, spoilage, replay, bot order).
+  - [x] Bots and tuning (scripts/simmer): naive 1★ 100%, decent 2★ 98%, clever 3★ ~27%, and none of cheap / premium /
+        greedy / fame / hoard / builder / sweets / fishy / overstock / understock beats clever. Learned on the way: per-guest
+        +1/+2 renown snowballed (rep 700+, 250 guests a night), fixed by the bounded curve and "delight needs a loved dish";
+        cook times needed +2 min serving overhead or one stove fed 100 guests; the bot must keep tonight's stock money
+        before shopping (it starved itself buying recipes).
+  - [x] UI: morning planner (forecast with crowd breakdown, kinds with tastes and purses, menu price steppers with expected
+        orders and who orders, pantry with spoil/short warnings and Fill to forecast, recipes, upgrades, helper), evening
+        canvas (original critter art, red-panda keeper, lanterns, rain/fog/fireflies/leaves, bubbles, coins and hearts,
+        Normal/Fast/Skip), guest log with "why" cards, nightly ledger, season end with stars, guest book, season ledger,
+        help, bug report, `?daily`, hub card (Strategy filter) + Daily link + NEWS. Pixel 7 and 360×640 checked.
+  - [ ] Next: blind playtest. Watch: is the morning too much reading on a phone (five sections)? Does Fill to forecast make
+        decent play automatic? Is 30 s an evening at Normal right? Renown saturates near 100 for good play (late let-downs
+        then cost more than delights earn): fun or frustrating? The clever bot leans on recipes + second stove + lanterns;
+        check humans find those paybacks without the bot's arithmetic.
 - [ ] **Loomsong** (original rhythm game with procedurally generated music). Milestones:
   - [x] Core (src/loomsong/core, rules v1): seeded songs (key, mode, 90-140 BPM, verse/chorus progressions, a form
         sized to 90-120 s, drums with fills, bass, pads, chorus arpeggio, motif-based lead); charts from the song's own

@@ -1,0 +1,820 @@
+// Simmer controller: the morning planner (forecast, menu and prices, pantry and
+// market, recipes and upgrades) as DOM, the evening on a canvas with a log of
+// every guest, the night's ledger, the season's end, saves and the daily.
+
+import { closeOverlay, showCard } from '../shared/cards';
+import { dailySeed, leaveDaily, loadDaily, recordDaily, todayKey } from '../shared/daily';
+import { copyText, toast } from '../shared/debug';
+import { randomSeed } from '../shared/rng';
+import { reducedFx } from '../shared/settings';
+import { makeStore } from '../shared/storage';
+import {
+  DISHES,
+  INGS,
+  MAX_PRICE,
+  OPEN_MINUTES,
+  REP_MAX,
+  RULES_VERSION,
+  SPECIES,
+  STARS,
+  TAG_WORD,
+  TUNE,
+  UPGRADES,
+  UP,
+  WEATHER,
+  act,
+  actError,
+  ctxOf,
+  delights,
+  demand,
+  expiring,
+  forecast,
+  marketPrice,
+  menuSize,
+  onHand,
+  openAction,
+  patienceOf,
+  purseRange,
+  speciesWeights,
+  replay,
+  scoreOf,
+  starsOf,
+  stovesOf,
+  upCost,
+  worthOf,
+  type Ledger,
+  type MenuItem,
+  type NightCtx,
+  type Run,
+  type Visit,
+  type Why,
+} from './core';
+import { Scene, spriteURL } from './scene';
+import { Sounds } from './audio';
+
+export const store = makeStore('simmer.');
+const $ = (id: string) => document.getElementById(id)!;
+
+interface Profile {
+  seasons: number;
+  best: number;
+  bestStars: number;
+}
+const loadProfile = () => store.load<Profile>('profile', { seasons: 0, best: 0, bestStars: 0 });
+
+const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
+const plural = (n: number, w: string, ws = `${w}s`) => `${n} ${n === 1 ? w : ws}`;
+const clockOf = (min: number) => {
+  const m = Math.max(0, Math.min(OPEN_MINUTES + 30, Math.round(min)));
+  return `${18 + Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
+};
+const sprite = (sp: number, size = 28) => `<img class="sprite" src="${spriteURL(sp, 40)}" width="${size}" height="${size}" alt="${SPECIES[sp].name}">`;
+const tagsOf = (d: number) => DISHES[d].tags.map((t) => TAG_WORD[t]).join(' · ');
+const usesOf = (d: number) => DISHES[d].uses.map((u) => INGS[u].icon).join('');
+const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n);
+
+const WHY_TEXT: Record<Why, string> = {
+  pricey: 'too pricey for their purse',
+  worth: 'not worth the price to them',
+  soldout: 'what they wanted was sold out',
+  nolike: 'nothing on the menu they fancy',
+  slow: 'waited too long and gave up',
+  closed: 'still queueing at closing time',
+};
+const WHY_SHORT: Record<Why, string> = { pricey: 'too pricey', worth: 'not worth it', soldout: 'sold out', nolike: 'nothing they like', slow: 'waited too long', closed: 'closing time' };
+const WHY_ICON: Record<Why, string> = { pricey: '💸', worth: '🤨', soldout: '❌', nolike: '😕', slow: '⌛', closed: '🌙' };
+
+function weatherNote(ctx: NightCtx): string {
+  const wx = WEATHER[ctx.weather];
+  const bits = Object.entries(wx.tags).map(([t, x]) => `${TAG_WORD[t as keyof typeof TAG_WORD]} dishes ×${x}`);
+  if (wx.crowd !== 1) bits.push(`${wx.crowd < 1 ? 'fewer' : 'more'} passers-by (×${wx.crowd})`);
+  if (ctx.festival) bits.push(`festival: crowd ×${TUNE.festival}, purses ×${TUNE.festPurse}, sweets ×${TUNE.festSweet}`);
+  if (ctx.payday) bits.push(`payday: purses ×${TUNE.payday}`);
+  return bits.join(' · ') || 'nothing special';
+}
+
+interface Draft {
+  buys: number[];
+  menu: MenuItem[];
+  helper: boolean;
+}
+
+export class Game {
+  r!: Run;
+  daily: string | null = null;
+  private draft: Draft = { buys: [], menu: [], helper: false };
+  private mode: 'morning' | 'evening' = 'morning';
+  private scene: Scene;
+  private sfx = new Sounds();
+  private tally = { coins: 0, served: 0, left: 0 };
+  private speeds = [8, 24];
+  private speedIx = 0;
+  private clockText = '';
+
+  constructor() {
+    this.scene = new Scene($('scene') as HTMLCanvasElement, {
+      onVisit: (v) => this.onVisit(v),
+      onOrder: () => {},
+      onDone: () => this.nightDone(),
+      onTap: (v) => this.explain(v, this.lastLedger()!),
+      onFrame: (t) => {
+        const c = t < 0 ? 'Opening…' : clockOf(Math.min(t, OPEN_MINUTES));
+        if (this.clockText !== c) $('clock').textContent = this.clockText = c;
+      },
+    });
+    this.scene.reduced = reducedFx();
+    this.speedIx = store.load('speed', 0) ? 1 : 0;
+    $('openBtn').onclick = () => this.tryOpen();
+    $('skipBtn').onclick = () => this.scene.skip();
+    $('speedBtn').onclick = () => {
+      this.speedIx = 1 - this.speedIx;
+      store.save('speed', this.speedIx);
+      this.scene.speed = this.speeds[this.speedIx];
+      this.renderSpeed();
+    };
+    $('bookBtn').onclick = () => this.showBook();
+    $('morning').addEventListener('click', (e) => this.morningClick(e));
+    $('log').addEventListener('click', (e) => {
+      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-g]');
+      const n = this.r.night;
+      if (!el || !n) return;
+      const v = n.visits.find((x) => x.g.id === Number(el.dataset.g));
+      if (v) this.explain(v, this.lastLedger()!);
+    });
+    document.addEventListener('pointerdown', () => this.sfx.unlock(), { capture: true });
+    window.addEventListener('resize', () => this.mode === 'evening' && this.scene.resize());
+  }
+
+  // ---------------------------------------------------------------- runs
+
+  start(seed: number, actions: string[] = [], daily: string | null = null): void {
+    closeOverlay();
+    this.scene.stop();
+    this.daily = daily;
+    this.r = replay(seed, actions);
+    $('dailyTag').hidden = !daily;
+    this.save();
+    this.loadDraft();
+    this.setMode('morning');
+    if (this.r.over) this.showEnd();
+  }
+
+  newGame(): void {
+    leaveDaily();
+    this.start(randomSeed());
+  }
+
+  playDaily(): void {
+    const day = todayKey();
+    const saved = store.load<{ v: number; seed: number; a: string; day: string } | null>('dailyRun', null);
+    const seed = dailySeed('simmer', day);
+    if (saved && saved.v === RULES_VERSION && saved.day === day && saved.seed === seed) this.start(seed, saved.a ? saved.a.split(',') : [], day);
+    else this.start(seed, [], day);
+  }
+
+  private save(): void {
+    const data = { v: RULES_VERSION, seed: this.r.seed, a: this.r.actions.join(',') };
+    if (this.daily) store.save('dailyRun', { ...data, day: this.daily });
+    else store.save('run', data);
+  }
+
+  private saveDraft(): void {
+    store.save('draft', { seed: this.r.seed, n: this.r.actions.length, d: this.draft });
+  }
+
+  /** The morning's plan: kept across reloads; a new morning starts from last night's menu. */
+  private loadDraft(): void {
+    const r = this.r;
+    const saved = store.load<{ seed: number; n: number; d: Draft } | null>('draft', null);
+    if (saved && saved.seed === r.seed && saved.n === r.actions.length && saved.d?.menu) {
+      this.draft = saved.d;
+      this.fixDraft();
+      return;
+    }
+    const keep = saved && saved.seed === r.seed && saved.d?.menu ? saved.d : null;
+    this.draft = { buys: INGS.map(() => 0), menu: r.lastMenu.map((m) => ({ ...m })), helper: false };
+    // Recipes learned and prices set after the last opening carry over.
+    if (keep && keep.menu.length > this.draft.menu.length) this.draft.menu = keep.menu.map((m) => ({ ...m }));
+    this.fixDraft();
+  }
+
+  private fixDraft(): void {
+    const r = this.r;
+    const d = this.draft;
+    d.buys = INGS.map((_, i) => Math.max(0, Math.min(99, Math.floor(d.buys[i] ?? 0))));
+    d.menu = d.menu.filter((m, i, a) => r.known[m.dish] && a.findIndex((x) => x.dish === m.dish) === i).slice(0, menuSize(r));
+    for (const m of d.menu) m.price = Math.max(1, Math.min(MAX_PRICE, Math.round(m.price)));
+    if (d.helper && this.spend() + TUNE.wage > r.coins) d.helper = false;
+    while (this.spend() > r.coins) {
+      const i = d.buys.findIndex((b) => b > 0);
+      if (i < 0) break;
+      d.buys[i]--;
+    }
+  }
+
+  /** Coins the draft's purchases cost. */
+  private spend(): number {
+    return this.draft.buys.reduce((a, n, u) => a + n * marketPrice(this.r.seed, this.r.day, u).price, 0) + (this.draft.helper ? TUNE.wage : 0);
+  }
+
+  private lastLedger(): Ledger | undefined {
+    return this.r.ledgers[this.r.ledgers.length - 1];
+  }
+
+  private setMode(m: 'morning' | 'evening'): void {
+    this.mode = m;
+    $('morning').hidden = m !== 'morning';
+    $('evening').hidden = m !== 'evening';
+    $('dockMorning').hidden = m !== 'morning';
+    $('dockEvening').hidden = m !== 'evening';
+    if (m === 'morning') this.renderMorning();
+    this.renderHud();
+  }
+
+  private renderHud(): void {
+    const r = this.r;
+    const l = this.lastLedger();
+    $('dayNo').textContent = `${this.mode === 'evening' && l ? l.day + 1 : Math.min(r.day + 1, TUNE.days)}/${TUNE.days}`;
+    $('coins').textContent = fmt(this.mode === 'evening' ? this.tally.coins : r.coins);
+    $('rep').textContent = `♥ ${this.mode === 'evening' && l ? l.repAfter - l.rep : r.rep}`;
+  }
+
+  // ---------------------------------------------------------------- morning
+
+  private renderMorning(): void {
+    const r = this.r;
+    $('dockMorning').hidden = r.over;
+    if (r.over) {
+      $('morning').innerHTML = `<section class="panel"><h3>The season is over</h3><p class="note">Score ${fmt(scoreOf(r))} ${stars(starsOf(scoreOf(r)))}</p><button class="add" data-end="1">See the season</button></section>`;
+      return;
+    }
+    const d = this.draft;
+    const f = forecast(r);
+    const stoves = stovesOf(r, d.helper);
+    const dem = demand(r, d.menu, f, stoves);
+    const have = onHand(r);
+    const exp = expiring(r);
+    const after = have.map((h, u) => h + d.buys[u]);
+    const need = INGS.map(() => 0);
+    d.menu.forEach((m, i) => DISHES[m.dish].uses.forEach((u) => (need[u] += dem.orders[i])));
+    const ctx = f.ctx;
+    const wx = WEATHER[ctx.weather];
+    const next = [1, 2, 3]
+      .filter((k) => r.day + k < TUNE.days)
+      .map((k) => {
+        const c = ctxOf(r, r.day + k);
+        return `<span class="nx"><small>N${r.day + k + 1}</small>${WEATHER[c.weather].icon}${c.festival ? '🏮' : ''}${c.payday ? '💰' : ''}</span>`;
+      })
+      .join('');
+    const kinds = f.mix
+      .map((n, sp) => ({ n, sp }))
+      .filter((k) => k.n > 0.05)
+      .sort((a, b) => b.n - a.n)
+      .map((k) => `<button class="kind" data-sp="${k.sp}">${sprite(k.sp, 30)}<span>~${k.n < 1 ? '<1' : Math.round(k.n)}</span></button>`)
+      .join('');
+    const gift = r.giftFor === r.day ? '<p class="note">Nearly broke: a neighbour gave you 12¢ to get going again.</p>' : '';
+    const tonight = `<section class="panel tonight">
+      <div class="wx"><span class="wxi">${wx.icon}</span><div><b>${wx.name} night</b>${ctx.festival ? ' <span class="badge fest">🏮 Lantern festival</span>' : ''}${ctx.payday ? ' <span class="badge pay">💰 Payday</span>' : ''}
+        <small>${weatherNote(ctx)}</small></div></div>
+      <div class="next">${next ? `Coming up ${next}` : '<b>Last night of the season!</b>'}</div>
+      <button class="crowd" data-crowd="1">Expect <b>~${Math.round(f.street + f.friends)}</b> guests <small>(${f.lo + f.friends}–${f.hi + f.friends}${f.friends ? `, ${plural(f.friends, 'friend')} of last night’s delighted guests` : ''}) ⓘ</small></button>
+      <div class="kinds">${kinds}</div>${gift}
+    </section>`;
+
+    // Menu.
+    const size = menuSize(r);
+    const rows = d.menu
+      .map((m, i) => {
+        const dish = DISHES[m.dish];
+        const who = dem.kinds
+          .filter((k) => k.share[i] * k.n >= 0.3)
+          .sort((a, b) => b.share[i] * b.n - a.share[i] * a.n)
+          .map((k) => sprite(k.sp, 20))
+          .join('');
+        const can = Math.min(...dish.uses.map((u) => Math.floor(after[u] / dish.uses.filter((x) => x === u).length)));
+        const cost = dish.uses.reduce((a, u) => a + marketPrice(r.seed, r.day, u).price, 0);
+        const exp = dem.orders[i];
+        const short = can + 0.5 < exp;
+        return `<div class="dish">
+          <button class="dname" data-swap="${i}"><span class="di">${dish.icon}</span><span><b>${dish.name}</b><small>${tagsOf(m.dish)} · ${usesOf(m.dish)}</small></span></button>
+          <div class="price"><button data-price="${i}" data-dp="-1" aria-label="Cheaper">−</button><span>${m.price}¢</span><button data-price="${i}" data-dp="1" aria-label="Dearer">+</button></div>
+          <div class="dinfo"><span class="${short ? 'warn' : ''}">~${exp < 0.5 && exp > 0 ? '<1' : Math.round(exp)} orders · stock for ${can}</span><span class="who">${who || '<small>no takers at this price</small>'}</span><small>costs ${cost}¢ · listed ${dish.base}¢</small></div>
+        </div>`;
+      })
+      .join('');
+    const canAdd = d.menu.length < size && r.known.some((k, i) => k && !d.menu.some((m) => m.dish === i));
+    const cap = dem.cookMins > dem.capacity * 0.85;
+    const menu = `<section class="panel"><h3>Tonight’s menu <small>${d.menu.length}/${size} dishes · tap a dish to swap it</small></h3>${rows}
+      ${canAdd ? '<button class="add" data-add="1">＋ Add a dish</button>' : ''}
+      <p class="note ${cap ? 'warn' : ''}">Orders need ~${Math.round(dem.cookMins)} of ${dem.capacity} stove minutes${cap ? ': a long queue, some guests will give up (a helper or a second stove cooks twice as fast)' : ''}. Expected takings ~${Math.round(dem.revenue)}¢.</p></section>`;
+
+    // Pantry and market.
+    const pantry = INGS.map((g, u) => {
+      const mp = marketPrice(r.seed, r.day, u);
+      const want = Math.ceil(need[u]);
+      const keeps = INGS[u].keeps + (r.ups[UP.cool] ? 1 : 0);
+      return `<div class="ing ${want > after[u] ? 'short' : ''}">
+        <span class="ii">${g.icon}</span>
+        <span class="iname"><b>${g.name}</b><small>have ${have[u]}${exp[u] ? ` <em>(${exp[u]} spoil tonight)</em>` : ''} · need ~${want} · keeps ${plural(keeps, 'night')}</small></span>
+        <span class="ip ${mp.mood}">${mp.price}¢${mp.mood !== 'usual' ? `<small>${mp.mood}</small>` : ''}</span>
+        <span class="buy"><button data-buy="${u}" data-db="-1" aria-label="Buy fewer">−</button><span>${d.buys[u] ? `+${d.buys[u]}` : '0'}</span><button data-buy="${u}" data-db="1" aria-label="Buy more">+</button></span>
+      </div>`;
+    }).join('');
+    const market = `<section class="panel"><h3>Pantry &amp; market <button class="mini" data-fill="1">Fill to forecast</button></h3>${pantry}
+      <p class="note">Each dish uses one of each ingredient shown with it. Anything left on its last night is thrown out.</p></section>`;
+
+    const learnable = r.known.filter((k) => !k).length;
+    const ups = UPGRADES.filter((_, k) => upCost(r, k) !== null).length;
+    const shop = `<section class="panel shop">
+      <button class="secondary" data-recipes="1">📜 Recipes${learnable ? ` <small>${learnable} to learn</small>` : ''}</button>
+      <button class="secondary" data-ups="1">🛠️ Upgrades${ups ? ` <small>${ups} to buy</small>` : ''}</button>
+      <label class="helper"><input type="checkbox" data-helper="1" ${d.helper ? 'checked' : ''}> Hire a helper tonight <small>${TUNE.wage}¢ · cooks alongside you (${stovesOf(r) + 1} at once)</small></label>
+    </section>`;
+    $('morning').innerHTML = tonight + menu + market + shop;
+    const sp = this.spend();
+    $('spend').innerHTML = `Spend <b>${sp}¢</b> · ${fmt(r.coins - sp)}¢ left`;
+    this.renderHud();
+  }
+
+  private morningClick(e: Event): void {
+    const el = (e.target as HTMLElement).closest<HTMLElement>('button, input');
+    if (!el) return;
+    const r = this.r;
+    const d = this.draft;
+    const ds = el.dataset;
+    if (ds.price !== undefined) {
+      const m = d.menu[Number(ds.price)];
+      m.price = Math.max(1, Math.min(MAX_PRICE, m.price + Number(ds.dp)));
+    } else if (ds.buy !== undefined) {
+      const u = Number(ds.buy);
+      const dn = Number(ds.db);
+      const p = marketPrice(r.seed, r.day, u).price;
+      if (dn > 0 && this.spend() + p > r.coins) {
+        toast('Not enough coins');
+        return;
+      }
+      d.buys[u] = Math.max(0, Math.min(99, d.buys[u] + dn));
+    } else if (ds.fill) this.fill();
+    else if (ds.swap !== undefined) return this.pickDish(Number(ds.swap));
+    else if (ds.add) return this.pickDish(-1);
+    else if (ds.sp !== undefined) return this.showKind(Number(ds.sp));
+    else if (ds.crowd) return this.showCrowd();
+    else if (ds.end) return this.showEnd();
+    else if (ds.recipes) return this.showRecipes();
+    else if (ds.ups) return this.showUpgrades();
+    else if (ds.helper) {
+      if (!d.helper && this.spend() + TUNE.wage > r.coins) {
+        (el as HTMLInputElement).checked = false;
+        toast('Not enough coins for a helper');
+        return;
+      }
+      d.helper = !d.helper;
+    } else return;
+    this.saveDraft();
+    this.renderMorning();
+  }
+
+  /** Buys what tonight's expected orders need, with a little spare, as far as coins go. */
+  private fill(): void {
+    const r = this.r;
+    const d = this.draft;
+    const dem = demand(r, d.menu, forecast(r), stovesOf(r, d.helper));
+    const need = INGS.map(() => 0);
+    d.menu.forEach((m, i) => DISHES[m.dish].uses.forEach((u) => (need[u] += dem.orders[i] * 1.1)));
+    const have = onHand(r);
+    d.buys = INGS.map(() => 0);
+    const want = need.map((n, u) => Math.max(0, Math.ceil(n) - have[u]));
+    let budget = r.coins - (d.helper ? TUNE.wage : 0);
+    const total = want.reduce((a, n, u) => a + n * marketPrice(r.seed, r.day, u).price, 0);
+    const scale = total > budget ? budget / total : 1;
+    want.forEach((n, u) => {
+      const p = marketPrice(r.seed, r.day, u).price;
+      const k = Math.min(Math.floor(n * scale), Math.floor(budget / p), 99);
+      d.buys[u] = k;
+      budget -= k * p;
+    });
+    if (scale < 1) toast('Coins only cover part of it');
+  }
+
+  private pickDish(slot: number): void {
+    const r = this.r;
+    const d = this.draft;
+    const opts = DISHES.map((_, i) => i).filter((i) => r.known[i] && !d.menu.some((m) => m.dish === i));
+    const items = opts
+      .map((i) => `<button class="pick" data-d="${i}"><span class="di">${DISHES[i].icon}</span><span><b>${DISHES[i].name}</b><small>${tagsOf(i)} · ${usesOf(i)} · listed ${DISHES[i].base}¢ · ${DISHES[i].cook} min</small></span></button>`)
+      .join('');
+    showCard(
+      `<h2>${slot < 0 ? 'Add a dish' : `Swap ${DISHES[d.menu[slot].dish].name}`}</h2>${items || '<p>No other recipes known yet: learn some under 📜 Recipes.</p>'}`,
+      [
+        ...(slot >= 0 && d.menu.length > 1 ? [{ label: 'Take it off the menu', onClick: () => (d.menu.splice(slot, 1), this.saveDraft(), closeOverlay(), this.renderMorning()) }] : []),
+        { label: 'Back', primary: true, onClick: () => closeOverlay() },
+      ],
+    );
+    $('overlay').querySelectorAll<HTMLElement>('.pick').forEach((b) => {
+      b.onclick = () => {
+        const dish = Number(b.dataset.d);
+        const item = { dish, price: DISHES[dish].base };
+        if (slot < 0) d.menu.push(item);
+        else d.menu[slot] = item;
+        this.saveDraft();
+        closeOverlay();
+        this.renderMorning();
+      };
+    });
+  }
+
+  private showRecipes(): void {
+    const r = this.r;
+    const rows = DISHES.map((x, i) => ({ x, i }))
+      .filter(({ i }) => !r.known[i])
+      .map(
+        ({ x, i }) =>
+          `<div class="shoprow"><span class="di">${x.icon}</span><span><b>${x.name}</b><small>${tagsOf(i)} · ${usesOf(i)} · listed ${x.base}¢ · ${x.cook} min</small></span><button class="primary small" data-learn="${i}" ${x.learn > r.coins ? 'disabled' : ''}>${x.learn}¢</button></div>`,
+      )
+      .join('');
+    showCard(`<h2>Recipes<span class="sub">Learned for good. Coins spent count against your score.</span></h2>${rows || '<p>You know every recipe.</p>'}`, [{ label: 'Back', primary: true, onClick: () => closeOverlay() }]);
+    $('overlay').querySelectorAll<HTMLElement>('[data-learn]').forEach((b) => {
+      b.onclick = () => this.buy(`l${b.dataset.learn}`, () => this.showRecipes());
+    });
+  }
+
+  private showUpgrades(): void {
+    const r = this.r;
+    const rows = UPGRADES.map((u, k) => {
+      const c = upCost(r, k);
+      const lv = r.ups[k];
+      return `<div class="shoprow"><span class="di">${u.icon}</span><span><b>${u.name}${u.cost.length > 1 ? ` ${lv}/${u.cost.length}` : ''}</b><small>${u.text}</small></span>${
+        c === null ? '<span class="owned">✓</span>' : `<button class="primary small" data-up="${k}" ${c > r.coins ? 'disabled' : ''}>${c}¢</button>`
+      }</div>`;
+    }).join('');
+    showCard(`<h2>Upgrades<span class="sub">They last the season; ${plural(TUNE.days - r.day, 'night')} left to pay back.</span></h2>${rows}`, [{ label: 'Back', primary: true, onClick: () => closeOverlay() }]);
+    $('overlay').querySelectorAll<HTMLElement>('[data-up]').forEach((b) => {
+      b.onclick = () => this.buy(`u${b.dataset.up}`, () => this.showUpgrades());
+    });
+  }
+
+  /** A shop purchase: applied at once (it's an action), the draft's buys trimmed to fit. */
+  private buy(a: string, again: () => void): void {
+    const err = actError(this.r, a);
+    if (err) return void toast(err);
+    act(this.r, a);
+    this.sfx.coin();
+    this.save();
+    this.fixDraft();
+    this.saveDraft();
+    this.renderMorning();
+    again();
+  }
+
+  private tryOpen(): void {
+    const r = this.r;
+    const d = this.draft;
+    if (!d.menu.length) return void toast('Put at least one dish on the menu');
+    const dem = demand(r, d.menu, forecast(r), stovesOf(r, d.helper));
+    const after = onHand(r).map((h, u) => h + d.buys[u]);
+    const need = INGS.map(() => 0);
+    d.menu.forEach((m, i) => DISHES[m.dish].uses.forEach((u) => (need[u] += dem.orders[i])));
+    const short = INGS.map((g, u) => (need[u] > after[u] + 1.5 ? g.icon : '')).join('');
+    if (short) {
+      showCard(`<h2>Short on stock</h2><p>Tonight’s expected orders need more ${short} than you’ll have. Guests who find their dish sold out leave and cost a ♥.</p>`, [
+        { label: 'Back to the market', primary: true, onClick: () => closeOverlay() },
+        { label: 'Open anyway', onClick: () => this.open() },
+      ]);
+      return;
+    }
+    this.open();
+  }
+
+  private open(): void {
+    closeOverlay();
+    const r = this.r;
+    const d = this.draft;
+    const acts = d.buys.map((n, u) => (n > 0 ? `b${u}.${n}` : '')).filter(Boolean);
+    acts.push(openAction(d.menu, d.helper));
+    for (const a of acts) {
+      if (!act(r, a)) {
+        toast(actError(r, a) ?? 'Can’t open');
+        this.renderMorning();
+        return;
+      }
+    }
+    this.save();
+    this.sfx.bell();
+    const l = this.lastLedger()!;
+    this.tally = { coins: l.coins - l.revenue, served: 0, left: 0 };
+    $('log').innerHTML = '';
+    this.setMode('evening');
+    this.scene.resize();
+    this.scene.speed = this.speeds[this.speedIx];
+    this.renderSpeed();
+    this.renderTally();
+    this.scene.play(r.night!, l.ctx, l.menu, stovesOf(r, l.helper));
+    // The next morning starts from tonight's menu.
+    this.draft = { buys: INGS.map(() => 0), menu: l.menu.map((m) => ({ ...m })), helper: false };
+    this.saveDraft();
+  }
+
+  // ---------------------------------------------------------------- evening
+
+  private renderSpeed(): void {
+    $('speedBtn').textContent = this.speedIx ? '▶▶ Fast' : '▶ Normal';
+  }
+
+  private renderTally(): void {
+    $('tally').innerHTML = `<span>🍽️ ${this.tally.served}</span><span>🚶 ${this.tally.left}</span>`;
+    $('coins').textContent = fmt(this.tally.coins);
+  }
+
+  private onVisit(v: Visit): void {
+    const l = this.lastLedger()!;
+    const sp = SPECIES[v.g.sp];
+    let line: string;
+    if (v.pick >= 0) {
+      this.tally.served++;
+      this.tally.coins += v.paid;
+      const dishes = [v.pick, v.pick2].filter((i) => i >= 0).map((i) => DISHES[l.menu[i].dish].icon).join(' + ');
+      const mood = v.mood === 'delighted' ? '<b class="love">delighted ♥</b>' : v.mood === 'meh' ? 'grumbled at the wait' : 'happy';
+      line = `${dishes} for ${v.paid}¢ · ${mood}`;
+      if (v.mood === 'delighted') this.sfx.heart();
+      else this.sfx.coin();
+    } else {
+      this.tally.left++;
+      line = `${WHY_ICON[v.why!]} left: ${WHY_SHORT[v.why!]}${v.rep < 0 ? ' <b class="bad">−♥</b>' : ''}`;
+      if (v.rep < 0) this.sfx.sad();
+    }
+    const el = document.createElement('button');
+    el.className = 'logline';
+    el.dataset.g = String(v.g.id);
+    el.innerHTML = `<small>${clockOf(v.pick >= 0 ? v.ready : v.t)}</small>${sprite(v.g.sp, 22)}<span><b>${sp.name}</b>${v.g.friend ? ' <small>(friend)</small>' : ''} ${line}</span><i>?</i>`;
+    const log = $('log');
+    log.prepend(el);
+    while (log.children.length > 60) log.lastElementChild?.remove();
+    this.renderTally();
+  }
+
+  private nightDone(): void {
+    this.renderTally();
+    $('clock').textContent = this.clockText = 'Closed';
+    setTimeout(() => this.showLedger(), 350);
+  }
+
+  /** Why a guest did what they did, every number spelled out. */
+  private explain(v: Visit, l: Ledger): void {
+    const sp = SPECIES[v.g.sp];
+    const ctx = l.ctx;
+    const [lo, hi] = SPECIES[v.g.sp].purse;
+    const pm = [ctx.payday ? `payday ×${TUNE.payday}` : '', ctx.festival ? `festival ×${TUNE.festPurse}` : ''].filter(Boolean).join(', ');
+    const n = this.r.night!;
+    const rows = l.menu
+      .map((m, i) => {
+        const w = worthOf(m.dish, v.g.sp, ctx);
+        const calc = w.parts.length ? `${DISHES[m.dish].base} × ${w.parts.map((p) => `${p.x} <small>(${p.label})</small>`).join(' × ')} = <b>${w.w}</b>` : `<b>${w.w}</b> <small>(listed)</small>`;
+        let verdict: string;
+        if (i === v.pick) verdict = '<b class="good">✓ chosen</b>';
+        else if (i === v.pick2) verdict = '<b class="good">✓ second helping</b>';
+        else if (m.price > w.w) verdict = 'not worth the price';
+        else if (m.price > v.g.purse) verdict = 'beyond their purse';
+        else if (n.soldOutAt[i] >= 0 && n.soldOutAt[i] <= v.t && v.why !== 'slow' && v.why !== 'closed') verdict = '<b class="bad">sold out</b>';
+        else if (v.why === 'slow' || v.why === 'closed') verdict = 'never reached the counter';
+        else verdict = `less left over (${w.w - m.price}¢)`;
+        return `<tr><td>${DISHES[m.dish].icon}</td><td>${calc}</td><td>${m.price}¢</td><td>${verdict}</td></tr>`;
+      })
+      .join('');
+    let outcome: string;
+    if (v.pick >= 0) {
+      const m = l.menu[v.pick];
+      const w = worthOf(m.dish, v.g.sp, ctx).w;
+      const loved = DISHES[m.dish].tags.includes(sp.loves);
+      const share = Math.round((100 * (w - m.price)) / w);
+      const del = delights(m.dish, v.g.sp, w, m.price);
+      outcome = `Bought ${DISHES[m.dish].icon} for ${m.price}¢: worth ${w}, so ${w - m.price}¢ (${share}%) left over. `;
+      if (v.mood === 'delighted') outcome += `<b class="love">Delighted ♥</b>: a dish they love (${TAG_WORD[sp.loves]}) with at least ${Math.round(TUNE.delight * 100)}% of its worth left over. They spread the word (renown) and bring a friend tomorrow.`;
+      else if (del && v.slow) outcome += `It would have delighted them, but they waited ${v.waited} of their ${v.g.patience} minutes. Happy, no ♥.`;
+      else if (del && v.wanted !== v.pick) outcome += `They settled for this because their first choice was sold out. Happy, no ♥.`;
+      else if (v.mood === 'meh') outcome += `They grumbled at the wait (${v.waited} of ${v.g.patience} minutes).`;
+      else outcome += loved ? `Happy, but ${share}% left over isn’t a bargain (needs ${Math.round(TUNE.delight * 100)}%) for a ♥.` : `Happy. Only a dish with something they love (${TAG_WORD[sp.loves]}) can delight them.`;
+      if (v.pick2 >= 0) outcome += ` Badgers eat two: they had ${DISHES[l.menu[v.pick2].dish].icon} too (${l.menu[v.pick2].price}¢).`;
+    } else {
+      outcome = `Left: ${WHY_TEXT[v.why!]}.${v.rep < 0 ? ' Cost a ♥.' : ' No harm to your renown.'}`;
+      if (v.why === 'slow') outcome += ` They queue at most ${v.g.patience} minutes.`;
+    }
+    showCard(
+      `<h2>${sprite(v.g.sp, 34)} ${sp.name}<span class="sub">arrived ${clockOf(v.g.at)}${v.g.friend ? ' · a friend of last night’s delighted guest' : ''} · waited ${v.waited} min</span></h2>
+       <p>Purse <b>${v.g.purse}¢</b> <small>(${sp.plural.toLowerCase()} carry ${lo}–${hi}¢${pm ? `, ${pm}` : ''})</small>. Loves <b>${TAG_WORD[sp.loves]}</b>, dislikes <b>${TAG_WORD[sp.dislikes]}</b>. Queues up to ${v.g.patience} min.</p>
+       <p class="small">They pick the dish with the most worth left over after its price, if it’s in stock, worth its price and within their purse.</p>
+       <table class="why"><tr><th></th><th>worth to them</th><th>price</th><th></th></tr>${rows}</table>
+       <p>${outcome}</p>`,
+      [{ label: 'Back', primary: true, onClick: () => closeOverlay() }],
+    );
+  }
+
+  private showLedger(): void {
+    const r = this.r;
+    const l = this.lastLedger()!;
+    const net = l.revenue - l.bought - l.shop - l.wage;
+    const lefts = (Object.entries(l.left) as [Why, number][]).map(([w, n]) => `<span>${WHY_ICON[w]} ${n} ${WHY_SHORT[w]}${['soldout', 'slow', 'closed'].includes(w) ? ' <b class="bad">−♥</b>' : ''}</span>`).join('');
+    const sold = l.menu.map((m, i) => `<span>${DISHES[m.dish].icon} ${l.sold[i]} × ${m.price}¢</span>`).join('');
+    const waste = l.wasted.map((n, u) => (n ? `${n} ${INGS[u].icon}` : '')).filter(Boolean).join(', ');
+    const before = l.repAfter - l.rep;
+    const rows = [
+      ['Takings', `+${l.revenue}¢`],
+      ['Ingredients bought', l.bought ? `−${l.bought}¢` : '0¢'],
+      ...(l.shop ? [['Recipes & upgrades', `−${l.shop}¢`]] : []),
+      ...(l.wage ? [['Helper', `−${l.wage}¢`]] : []),
+    ]
+      .map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`)
+      .join('');
+    const card = `<h2>Night ${l.day + 1} ledger<span class="sub">${WEATHER[l.ctx.weather].icon} ${WEATHER[l.ctx.weather].name}${l.ctx.festival ? ' · 🏮 festival' : ''}${l.ctx.payday ? ' · 💰 payday' : ''}</span></h2>
+      <table class="ledger">${rows}<tr class="sum"><td>Today</td><td>${net >= 0 ? '+' : '−'}${Math.abs(net)}¢</td></tr><tr><td>Coins now</td><td><b>${fmt(l.coins)}¢</b></td></tr></table>
+      <div class="chips">${sold}</div>
+      <p><b>${l.served}</b> of ${l.guests} guests served${l.friends ? ` (${plural(l.friends, 'friend')} came)` : ''}. ${lefts ? `Walked off:` : 'Nobody walked off.'}</p>${lefts ? `<div class="chips">${lefts}</div>` : ''}
+      <p>Renown ♥ ${before} → <b>${l.repAfter}</b>: ${l.delighted} delighted × ${REP_MAX - before}% not yet heard of you = +${l.repGain}${l.repLoss ? `, ${l.repLoss} let down −${l.repLoss}` : ''}. ${l.delighted ? `${plural(Math.min(l.delighted, TUNE.friendCap), 'friend')} will come tomorrow.` : ''}</p>
+      ${waste ? `<p class="warn">Thrown out: ${waste} (${l.wasteCost}¢ worth).</p>` : '<p>Nothing went to waste.</p>'}`;
+    showCard(
+      card,
+      [
+        r.over
+          ? { label: 'See the season', primary: true, onClick: () => this.showEnd() }
+          : { label: `Morning of night ${r.day + 1}`, primary: true, onClick: () => (closeOverlay(), this.scene.stop(), this.setMode('morning')) },
+      ],
+      false,
+    );
+  }
+
+  // ---------------------------------------------------------------- season end
+
+  private recorded = '';
+  showEnd(): void {
+    const r = this.r;
+    const score = scoreOf(r);
+    const st = starsOf(score);
+    // One record per finished season (a reload shows the card again without counting it twice).
+    let h = 0;
+    for (const ch of r.actions.join(',')) h = (Math.imul(h, 31) + ch.charCodeAt(0)) | 0;
+    const key = `${r.seed}:${r.actions.length}:${h}`;
+    if (this.recorded !== key && store.load('lastRecorded', '') !== key) {
+      this.recorded = key;
+      store.save('lastRecorded', key);
+      const p = loadProfile();
+      p.seasons++;
+      p.best = Math.max(p.best, score);
+      p.bestStars = Math.max(p.bestStars, st);
+      store.save('profile', p);
+      if (this.daily) recordDaily(store, score, `${fmt(score)} ${stars(st)}`, this.daily);
+      if (st >= 2) this.sfx.fanfare();
+    }
+    const p = loadProfile();
+    const daily = this.daily ? loadDaily(store) : null;
+    const ls = r.ledgers;
+    const served = ls.reduce((a, l) => a + l.served, 0);
+    const guests = ls.reduce((a, l) => a + l.guests, 0);
+    const delighted = ls.reduce((a, l) => a + l.delighted, 0);
+    const waste = ls.reduce((a, l) => a + l.wasteCost, 0);
+    const best = ls.reduce((b, l) => (l.revenue > b.revenue ? l : b), ls[0]);
+    const next = STARS.find((s) => s > score);
+    this.setMode('morning');
+    showCard(
+      `<h2>Season’s end<span class="sub">${plural(TUNE.days, 'night')} at the market</span></h2>
+       <p class="big">${stars(st)}</p>
+       <table class="ledger"><tr><td>Coins</td><td>${fmt(r.coins)}</td></tr><tr><td>Renown ♥ ${r.rep} × ${TUNE.repPts}</td><td>${fmt(TUNE.repPts * r.rep)}</td></tr><tr class="sum"><td>Score</td><td>${fmt(score)}</td></tr></table>
+       <p class="meta2">Stars at ${STARS.map(fmt).join(' / ')}${next ? ` · ${fmt(next - score)} more for the next` : ''}</p>
+       <div class="stats"><div><b>${served}/${guests}</b>guests served</div><div><b>${delighted}</b>delighted</div>
+         <div><b>${best ? `${best.revenue}¢` : '-'}</b>best night (${best ? `N${best.day + 1}` : ''})</div><div><b>${waste}¢</b>thrown out</div></div>
+       ${daily ? `<p class="meta2">Today’s best: ${daily.label} · ${plural(daily.plays, 'try', 'tries')}</p>` : p.seasons ? `<p class="meta2">Best ${fmt(p.best)} ${stars(p.bestStars)} · ${plural(p.seasons, 'season')}</p>` : ''}`,
+      [
+        { label: 'New season', primary: true, onClick: () => this.newGame() },
+        { label: this.daily ? 'Play the daily again' : 'Same seed again', onClick: () => this.start(this.r.seed, [], this.daily) },
+        { label: 'Season ledger', onClick: () => this.showSeason(() => this.showEnd()) },
+        { label: 'All games', onClick: () => (location.href = '../') },
+      ],
+      false,
+    );
+  }
+
+  // ---------------------------------------------------------------- cards
+
+  private back(): void {
+    if (this.r.over) this.showEnd();
+    else closeOverlay();
+  }
+
+  showKind(sp: number): void {
+    const r = this.r;
+    const s = SPECIES[sp];
+    const ctx = ctxOf(r);
+    const [lo, hi] = purseRange(sp, ctx);
+    const d = demand(r, this.draft.menu, forecast(r), stovesOf(r, this.draft.helper));
+    const k = d.kinds.find((x) => x.sp === sp);
+    const picks = this.draft.menu
+      .map((m, i) => {
+        const w = worthOf(m.dish, sp, ctx).w;
+        const share = k ? Math.round(k.share[i] * 100) : 0;
+        return `<tr><td>${DISHES[m.dish].icon}</td><td>worth <b>${w}</b></td><td>${m.price}¢</td><td>${share ? `${share}% order it` : m.price > w ? 'not worth it' : m.price > hi ? 'too pricey' : '—'}</td></tr>`;
+      })
+      .join('');
+    showCard(
+      `<h2>${sprite(sp, 34)} ${s.plural}<span class="sub">~${k ? (k.n < 1 ? '<1' : Math.round(k.n)) : 0} expected tonight</span></h2>
+       <p>Loves <b>${TAG_WORD[s.loves]}</b> (worth ×${TUNE.love}), dislikes <b>${TAG_WORD[s.dislikes]}</b> (×${TUNE.dislike}). Tonight they carry <b>${lo}–${hi}¢</b> and queue up to ${patienceOf(sp, r.ups[UP.bench] > 0)} min.${s.appetite > 1 ? ' They eat two dishes if their purse allows.' : ''}</p>
+       <table class="why"><tr><th></th><th>to them</th><th>price</th><th>tonight</th></tr>${picks}</table>
+       <p class="small">${k?.delight ? `~${Math.round(k.delight * 100)}% would leave delighted (♥).` : 'None would leave delighted: that takes a dish they love at no more than ¾ of what it’s worth to them.'}</p>`,
+      [{ label: 'Back', primary: true, onClick: () => closeOverlay() }],
+    );
+  }
+
+  /** Where the crowd estimate comes from. */
+  showCrowd(): void {
+    const r = this.r;
+    const f = forecast(r);
+    const ctx = f.ctx;
+    const parts = [`(${TUNE.street0} + ${TUNE.streetK} × renown ${r.rep})`, `${WEATHER[ctx.weather].name.toLowerCase()} ×${WEATHER[ctx.weather].crowd}`];
+    if (ctx.festival) parts.push(`festival ×${TUNE.festival}`);
+    if (r.ups[UP.lantern]) parts.push(`lanterns ×${TUNE.lanterns}`);
+    const wts = speciesWeights(r.rep, ctx.weather);
+    const tot = wts.reduce((a, b) => a + b, 0);
+    const mix = wts
+      .map((w, sp) => ({ w, sp }))
+      .filter((x) => x.w > 0)
+      .map((x) => `${sprite(x.sp, 22)} ${Math.round((100 * x.w) / tot)}%`)
+      .join(' ');
+    showCard(
+      `<h2>Tonight’s crowd</h2>
+       <p>Passers-by who stop: ${parts.join(' × ')} = <b>${f.street.toFixed(1)}</b>, give or take 15% (${f.lo}–${f.hi}).</p>
+       <p>${f.friends ? `Plus <b>${plural(f.friends, 'friend')}</b> of last night’s delighted guests (at most ${TUNE.friendCap}).` : 'No friends tonight: only delighted guests bring one.'}</p>
+       <p>Who they are, by share: ${mix}</p>
+       <p class="small">Each kind turns up more or less in some weather (see 📖), and new kinds start coming as your renown grows.</p>`,
+      [{ label: 'Back', primary: true, onClick: () => closeOverlay() }],
+    );
+  }
+
+  showBook(): void {
+    const r = this.r;
+    const rows = SPECIES.map((s, sp) => {
+      const met = r.met[sp];
+      const open = r.rep >= s.rep;
+      const likes = Object.entries(s.likes)
+        .map(([w, x]) => `${WEATHER[w as keyof typeof WEATHER].icon}${x === 0 ? ' never' : x > 1 ? ' more' : ' fewer'}`)
+        .join(', ');
+      const when = `${clockOf(s.window[0])}–${clockOf(s.window[1])}`;
+      return `<div class="book ${met ? '' : 'unmet'}">${sprite(sp, 40)}<div><b>${s.plural}</b>${
+        met
+          ? `<small>love <b>${TAG_WORD[s.loves]}</b> · dislike <b>${TAG_WORD[s.dislikes]}</b> · purse ${s.purse[0]}–${s.purse[1]}¢ · queue ${s.patience} min · come ${when}${likes ? ` · ${likes}` : ''}${s.appetite > 1 ? ' · eat two' : ''}</small>`
+          : `<small>${open ? 'Might turn up any night now.' : `Come once your renown reaches ♥ ${s.rep}.`}</small>`
+      }</div></div>`;
+    }).join('');
+    showCard(`<h2>Guest book<span class="sub">Who visits, and what they like</span></h2>${rows}`, [{ label: 'Back', primary: true, onClick: () => this.back() }]);
+  }
+
+  showSeason(back: () => void): void {
+    const rows = this.r.ledgers
+      .map((l) => {
+        const net = l.revenue - l.bought - l.shop - l.wage;
+        return `<tr><td>N${l.day + 1} ${WEATHER[l.ctx.weather].icon}${l.ctx.festival ? '🏮' : ''}${l.ctx.payday ? '💰' : ''}</td><td>${l.served}/${l.guests}</td><td>${net >= 0 ? '+' : '−'}${Math.abs(net)}¢</td><td>♥ ${l.repAfter}</td></tr>`;
+      })
+      .join('');
+    showCard(`<h2>Season ledger</h2>${rows ? `<table class="ledger season"><tr><th>Night</th><th>Served</th><th>Net</th><th>Renown</th></tr>${rows}</table>` : '<p>No nights yet.</p>'}`, [
+      { label: 'Back', primary: true, onClick: back },
+    ]);
+  }
+
+  showHelp(): void {
+    store.save('seenHelp', true);
+    showCard(
+      `<h2>Simmer</h2>
+       <p>Run a little food stall at the night market for ${TUNE.days} nights. Critters come to eat; keep them happy and your coins growing.</p>
+       <ul>
+         <li><b>Morning:</b> pick tonight’s dishes and prices, and buy ingredients. The forecast says how many guests to expect, of which kinds, and roughly how many will order each dish. <b>Fill to forecast</b> buys what that needs.</li>
+         <li>Ingredients keep a few nights (fish only one); what’s left on its last night is thrown out.</li>
+         <li><b>Evening:</b> guests queue and pick the dish with the most <b>worth left over</b> after its price, if they can afford it. Worth depends on what each kind loves or dislikes and the weather. Tap any guest (or a line in the log) to see their numbers.</li>
+         <li>A guest served a dish they <b>love</b> at ¾ of its worth or less is <b>delighted</b>: your renown ♥ grows and they bring a friend tomorrow. Sold out, too long a queue or closing time costs a ♥.</li>
+         <li>Renown brings more guests and new kinds (see 📖). Recipes, upgrades and a helper cost coins now and pay back later.</li>
+         <li><b>Score</b> = coins + ${TUNE.repPts} × renown at the season’s end. Stars at ${STARS.map(fmt).join(', ')}.</li>
+       </ul>`,
+      [{ label: 'Got it', primary: true, onClick: () => this.back() }],
+    );
+  }
+
+  showMenu(): void {
+    const r = this.r;
+    showCard(`<h2>Simmer${this.daily ? ' · daily' : ''}<span class="sub">Night ${Math.min(r.day + 1, TUNE.days)} of ${TUNE.days} · ${fmt(r.coins)}¢ · ♥ ${r.rep} · score ${fmt(scoreOf(r))}</span></h2>`, [
+      { label: 'Resume', primary: true, onClick: () => this.back() },
+      { label: 'Guest book', onClick: () => this.showBook() },
+      { label: 'Season ledger', onClick: () => this.showSeason(() => this.showMenu()) },
+      { label: 'How to play', onClick: () => this.showHelp() },
+      {
+        label: 'New season',
+        onClick: () =>
+          showCard('<h2>New season?</h2><p>This season will be lost.</p>', [
+            { label: 'Keep going', primary: true, onClick: () => this.back() },
+            { label: 'New season', onClick: () => this.newGame() },
+          ]),
+      },
+      { label: 'Copy bug report', onClick: () => this.copyReport() },
+      { label: 'All games', onClick: () => (location.href = '../') },
+    ]);
+  }
+
+  private async copyReport(): Promise<void> {
+    toast((await copyText(`SIMMER v${RULES_VERSION} seed=${this.r.seed} a=${this.r.actions.join(',')}`)) ? 'Bug report copied' : 'Copy failed');
+  }
+}
+

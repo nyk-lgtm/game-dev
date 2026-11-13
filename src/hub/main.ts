@@ -36,8 +36,35 @@ const sungrazer = makeStore('sungrazer.');
 const kitbag = makeStore('kitbag.');
 const brink = makeStore('brink.');
 const loomsong = makeStore('loomsong.');
+const simmer = makeStore('simmer.');
 
 const GAMES: GameCard[] = [
+  {
+    path: './simmer/',
+    title: 'Simmer',
+    tag: 'Cozy management',
+    pitch: 'Keep a little food stall at the night market for twenty nights. Pick the menu and prices, buy ingredients before they spoil, then watch mice, foxes, moles and owls queue up, order and spread the word.',
+    accent: '#ffb35c',
+    best: () => {
+      const p = simmer.load<{ seasons?: number; best?: number; bestStars?: number } | null>('profile', null);
+      if (!p?.seasons) return null;
+      const st = p.bestStars ?? 0;
+      return `Best ${(p.best ?? 0).toLocaleString('en-US')} ${'★'.repeat(st)}${'☆'.repeat(3 - st)} · ${p.seasons} season${p.seasons === 1 ? '' : 's'}`;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#1a1424"/>
+      <path d="M0 8Q38 22 76 8" stroke="#f6e0b8" stroke-opacity="0.35" fill="none"/>
+      <g fill="#ffcf6b"><ellipse cx="14" cy="13" rx="3" ry="3.6"/><ellipse cx="38" cy="16" rx="3" ry="3.6"/><ellipse cx="62" cy="13" rx="3" ry="3.6"/></g>
+      <rect x="14" y="30" width="48" height="22" fill="#4a2f24"/>
+      <g><rect x="10" y="22" width="8" height="9" fill="#c9473f"/><rect x="18" y="22" width="8" height="9" fill="#e8d6b4"/><rect x="26" y="22" width="8" height="9" fill="#c9473f"/><rect x="34" y="22" width="8" height="9" fill="#e8d6b4"/><rect x="42" y="22" width="8" height="9" fill="#c9473f"/><rect x="50" y="22" width="8" height="9" fill="#e8d6b4"/><rect x="58" y="22" width="8" height="9" fill="#c9473f"/></g>
+      <circle cx="38" cy="38" r="6" fill="#c95a30"/><circle cx="33" cy="33" r="2.4" fill="#c95a30"/><circle cx="43" cy="33" r="2.4" fill="#c95a30"/><ellipse cx="38" cy="40" rx="3" ry="2.2" fill="#fff3e6"/><circle cx="35.6" cy="37.4" r="0.9" fill="#1b1420"/><circle cx="40.4" cy="37.4" r="0.9" fill="#1b1420"/>
+      <rect x="10" y="46" width="56" height="6" fill="#8a5a3c"/>
+      <path d="M48 44c-1-3 2-4 0-7M53 44c-1-3 2-4 0-7" stroke="#fff" stroke-opacity="0.45" fill="none"/>
+      <rect x="0" y="52" width="76" height="24" fill="#2e2330"/>
+      <g><ellipse cx="20" cy="64" rx="6" ry="6.5" fill="#e57a35"/><path d="M16 59l1-6 3 4zM21 58l3-5 1 6z" fill="#e57a35"/><ellipse cx="22" cy="66" rx="3" ry="3" fill="#fbf1e4"/><circle cx="21" cy="62" r="0.9" fill="#1b1420"/><circle cx="24" cy="62" r="0.9" fill="#1b1420"/></g>
+      <g><ellipse cx="44" cy="65" rx="6" ry="6" fill="#b9b2c6"/><circle cx="41" cy="58" r="3" fill="#b9b2c6"/><circle cx="48" cy="58" r="3" fill="#b9b2c6"/><circle cx="41" cy="58" r="1.6" fill="#f2b6c6"/><circle cx="48" cy="58" r="1.6" fill="#f2b6c6"/><circle cx="43" cy="63" r="0.9" fill="#1b1420"/><circle cx="46.5" cy="63" r="0.9" fill="#1b1420"/></g>
+      <rect x="32" y="45" width="14" height="11" rx="4" fill="#fff8eb"/><text x="39" y="53.5" text-anchor="middle" font-size="8">🍢</text>
+      <text x="60" y="64" font-family="system-ui,sans-serif" font-weight="900" font-size="11" fill="#ff7aa2">♥</text></svg>`,
+  },
   {
     path: './loomsong/',
     title: 'Loomsong',
@@ -395,7 +422,7 @@ const GAMES: GameCard[] = [
 const KINDS: Record<string, string[]> = {
   Puzzle: ['triad', 'unspoken', 'grove', 'quarry', 'ninefold', 'summit'],
   Action: ['loomsong', 'sungrazer', 'afterglow', 'nightline', 'hexhold'],
-  Strategy: ['brink', 'kitbag', 'glyph', 'telegraph', 'rewild', 'hexhold', 'summit'],
+  Strategy: ['simmer', 'brink', 'kitbag', 'glyph', 'telegraph', 'rewild', 'hexhold', 'summit'],
   Story: ['lastlight', 'lantern', 'delve', 'unspoken'],
 };
 const slug = (path: string) => path.replace(/[./]/g, '');
@@ -457,6 +484,7 @@ const DAILY = [
   { path: './kitbag/?daily', title: 'Kitbag', store: kitbag, accent: '#e8b04a' },
   { path: './brink/?daily', title: 'Brink', store: brink, accent: '#ff8a6e' },
   { path: './loomsong/?daily', title: 'Loomsong', store: loomsong, accent: '#ffc857' },
+  { path: './simmer/?daily', title: 'Simmer', store: simmer, accent: '#ffb35c' },
 ];
 const daily = document.getElementById('daily')!;
 daily.innerHTML = `<h3>Daily challenges <span>${prettyDay()}</span></h3><p>The same run for everyone today. A new one at midnight.</p>`;
