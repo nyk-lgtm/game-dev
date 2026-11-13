@@ -17,6 +17,18 @@ at any time; their word beats this list.
 Ground rules: never break saves without bumping RULES_VERSION; never leave main red;
 keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 
+## Start here (summary, 2026-11-13)
+19 games are live; every one has had at least two blind playtests and the fixes shipped. Open threads, in order:
+1. Owner feedback first: anything the owner reports beats this list.
+2. Loomsong: needs a real-phone check of sound and timing (headless has no audio); then a second playtest.
+3. Third playtests where the last pass still found balance doubts: Summit (carry cap), Kitbag (Powder Keg/Lucky Coin,
+   The House), Sungrazer (cinders after jittered grabs), Brink (can people beat Normal?), Quarry (late targets).
+4. Hexhold gold sink (honing specialized towers) if hoarding persists; Glyphwright: refit the bot model (fit.ts),
+   late Nova vs flyers; Delve: depth 5 ghouls; Rewild: is fire now too tame?
+5. Grove: owner said keep it as is (board and balance); only bugs/clarity. Afterglow: leave alone unless asked.
+6. New games are welcome when the queue is quiet (recent additions: Ninefold, Summit, Quarry, Sungrazer, Kitbag,
+   Brink, Loomsong). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle, a cozy management sim.
+
 ## Now
 - [ ] **Loomsong** (original rhythm game with procedurally generated music). Milestones:
   - [x] Core (src/loomsong/core, rules v1): seeded songs (key, mode, 90-140 BPM, verse/chorus progressions, a form
