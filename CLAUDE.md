@@ -56,7 +56,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     `SEEN=0.05` ~20%; `best` mode ~99%); `PERKTABLE=1` favors each perk in turn (others weakest-first: ~19-36% wins);
     `TARGETS=`/`WORDS=` try others.
   - Sungrazer: `npx vite-node scripts/sungrazer/balance.ts 30 human` (skills novice/human/good/perfect: reaction
-    delay, timing jitter, a two-level release planner; rules v3 (40 runs): novice median ~22 s (alt ~470), human
+    delay, timing jitter, a two-level release planner; rules v4 (40 runs): novice median ~22 s (alt ~470), human
     ~50-70 s (alt ~700-900; seed noise is large), good ~115 s (alt ~1900, p75 ~158 s), perfect survives 10 min;
     most good-bot deaths are cinders it brushes after a jittered grab). `SG_MODE=s|t|m` for modes, `CHECK=1` verifies replays.
   - Kitbag: `npx vite-node scripts/kitbag/balance.ts 1000` (planning bot, rules v4: first two fights 100%, median floor 12,
@@ -198,7 +198,9 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   `speedAt`; letting go is ballistic (GRAVITY); walls bounce (and reverse an orbit) and drop the combo; the camera
   follows up and the void rises (`riseAt`, slow for the first ~100 units; `gravityAt` is lighter early too) — fall
   under it, touch a star (`burn` on the tether, `star` in free flight) or a cinder and the run ends. Spine stars are
-  never stacked in a column (≥ 12 units across). The page marks a release/flight path that hits something in red with an ✕, amber if letting go up to 0.25 s later would. Combo grows
+  never stacked in a column (≥ 12 units across). The page marks a release path that hits something in red with an ✕ (in flight: a ~0.6 s look-ahead, as
+  you're holding), yellow dashes if letting go up to 0.45 s later would, and pulses the tether red in the last 0.5 s
+  before a burn (`burnIn`). A pulsar going dark clears `used`, so a finger still down reaches for the next star. Combo grows
   only from close shaves (NEAR, NEAR_CINDER; cinders hit at CINDER_HIT of their drawn size) and sungrazes (letting go < SUNGRAZE from the surface); links keep it alive for
   LINK_TICKS of free flight. A run is seed + mode + toggle ticks (`replay(seed, mode, inputs)`); `cloneRun` shares
   the world. The page shows a release preview by stepping a clone. `?seed=&m=&a=&t=` plays a recording back

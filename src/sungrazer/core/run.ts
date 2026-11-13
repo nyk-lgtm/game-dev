@@ -4,7 +4,7 @@
 import { newRun, step, type Ev, type Run } from './sim';
 import { MODE_IDS, TPS, type Mode } from './world';
 
-export const RULES_VERSION = 3;
+export const RULES_VERSION = 4;
 /** Replays stop here whatever happens (a run can't really last this long). */
 export const MAX_TICKS = TPS * 60 * 30;
 

@@ -178,6 +178,12 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         under the HUD; ☰ hidden while a card is open; close shaves from 5.5 (cinders 6.5), cinders hit at 75% of their
         drawn size; sungrazes count from 3 units (were 2.2); unlocks at 4,000 / 9,000 / 15,000. Bot (40 runs): novice
         22 s, human ~50-70 s, good 117 s (p75 158 s).
+  - [x] Third blind pass (33 runs: best 5,495, longest 1:04; deaths void 12, star 10, burn 9; the rescue saved ~16
+        runs) and fixes (rules v4): the in-flight warning looks ~0.6 s ahead (as you're holding), amber looks 0.45 s
+        ahead and is now yellow dashes (not dots, so it never reads as a corona), the help explains red ✕ / yellow /
+        burn pulse; the tether and the star's edge pulse red (plus a beep and buzz) in the last 0.5 s before a burn;
+        a pulsar going dark lets a finger still down catch the next star; coach pills sit low over the void and fade
+        when the comet comes near; plurals; the end card says what the next mode needs vs your best. Bot numbers as v3.
   - [ ] Next: owner playtest. Watch: is the opening friendly enough now? Are pulsars readable? Is the release preview
         too generous? Good-bot deaths are mostly cinders brushed right after a grab: maybe fewer cinders near stars.
 - [ ] **Quarry** (word roguelite on a hex letter wall). Milestones:

@@ -159,6 +159,8 @@ function letGo(r: Run, out: Ev[] | undefined, snapped: boolean): void {
   r.link = LINK_TICKS;
   r.since = 0;
   if (snapped) {
+    // A pulsar went dark: a finger still down reaches for the next star by itself.
+    r.used = false;
     emit(out, { k: 'snap', x: r.x, y: r.y });
     return;
   }
@@ -329,4 +331,11 @@ export function step(r: Run, held: boolean, out?: Ev[]): void {
   r.camY += riseAt(alt) * m.speed * STEP;
   r.tick++;
   if (r.y < r.camY - COMET_R) die(r, 'void', out);
+}
+
+/** Seconds until a tether at its current length burns (Infinity when free). */
+export function burnIn(r: Run): number {
+  const t = r.tether;
+  if (!t) return Infinity;
+  return (t.goal - t.star.r - COMET_R) / (reelAt(altitude(r)) * MODES[r.mode].reel);
 }

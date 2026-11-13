@@ -9,7 +9,7 @@ import { randomSeed } from '../shared/rng';
 import { loadSettings, reducedFx, saveSettings, soundOn } from '../shared/settings';
 import { makeStore } from '../shared/storage';
 import {
-  LOCK, MODES, MODE_IDS, REGRAB, RULES_VERSION, TPS, ZONES, altitude, cloneRun, encodeInputs, finalScore, isLit, lowerY, newRun, step, target,
+  LOCK, MODES, burnIn, MODE_IDS, REGRAB, RULES_VERSION, TPS, ZONES, altitude, cloneRun, encodeInputs, finalScore, isLit, lowerY, newRun, step, target,
   type Cause, type Ev, type Mode, type Run, type Star,
 } from './core';
 import { Sounds } from './audio';
@@ -101,6 +101,7 @@ export class Game {
   private fx = !reducedFx();
   /** What the last frame warned about (for screenshots and checks). */
   shown = { warn: false, hit: false };
+  private buzzed: unknown = null;
 
   constructor() {
     new ResizeObserver(() => this.resize()).observe(this.canvas);
@@ -315,7 +316,8 @@ export class Game {
     const r = this.run;
     const playing = this.state === 'play' || this.state === 'ready' || this.state === 'watch' || this.state === 'paused';
     const tgt = r.alive && !r.tether ? target(r) : null;
-    // While swinging: where letting go now would fly (~0.45 s). In free flight: only a collision course.
+    // While swinging: where letting go now would fly (~0.45 s). In free flight: only a collision course,
+    // looked for ~0.6 s ahead (as you're holding now), so there's time to react.
     let preview: number[] | null = null;
     let hit: { x: number; y: number } | null = null;
     let warn = false;
@@ -323,9 +325,10 @@ export class Game {
     if (r.alive && playing && this.state !== 'ready') {
       const c = cloneRun(r);
       const path = [c.x, c.y];
-      const n = r.tether ? 110 : 90;
+      const n = r.tether ? 110 : 150;
+      const hold = !r.tether && (this.state === 'watch' ? r.held : this.held);
       for (let i = 1; i <= n && c.alive; i++) {
-        step(c, false);
+        step(c, hold);
         if (!c.alive && c.cause !== 'void') {
           hit = { x: c.x, y: c.y };
           hitStar = c.cause === 'star';
@@ -334,22 +337,29 @@ export class Game {
       }
       if (r.tether || hit) preview = path;
       if (hit) path.push(hit.x, hit.y);
-      // Amber when letting go a little later (up to ~0.25 s) would already hit something.
+      // Amber when letting go a little later (up to ~0.45 s, about two reaction times) would hit something.
       if (r.tether && !hit) {
         const h = cloneRun(r);
-        for (let k = 1; k <= 60 && h.alive && !warn; k++) {
+        for (let k = 1; k <= 108 && h.alive && !warn; k++) {
           step(h, true);
-          if (k % 15) continue;
+          if (k % 12) continue;
           const f = cloneRun(h);
-          for (let i = 0; i < 90 && f.alive; i++) step(f, false);
+          for (let i = 0; i < 110 && f.alive; i++) step(f, false);
           if (!f.alive && f.cause !== 'void') warn = true;
         }
       }
     }
     this.shown = { warn, hit: !!hit };
+    // The last half second before a tether burns: it pulses red (and a small buzz, once).
+    const burnSoon = r.alive && !!r.tether && burnIn(r) < 0.5;
+    if (burnSoon && this.buzzed !== r.tether && this.state === 'play') {
+      this.buzzed = r.tether;
+      navigator.vibrate?.(10);
+      this.sfx.warn();
+    }
     draw(this.g, v, {
       run: r, time: this.time, trail: this.trail, particles: this.particles, floaters: this.floaters,
-      target: tgt ?? (this.state === 'ready' ? soonStar(r) : null), soon: !tgt && r.alive && !r.tether ? soonStar(r) : null, preview, hit, warn, reaching: this.state === 'play' && this.held && !r.tether && !r.used && !tgt,
+      target: tgt ?? (this.state === 'ready' ? soonStar(r) : null), soon: !tgt && r.alive && !r.tether ? soonStar(r) : null, preview, hit, warn, burnSoon, reaching: this.state === 'play' && this.held && !r.tether && !r.used && !tgt,
       shake: this.fx ? this.shake : 0, flash: this.fx ? this.flash : 0, banner: this.banner,
       coach: hitStar && !r.tether && !this.held && this.state === 'play' && loadProfile().runs < 6 ? 'Heading into a star: hold to catch it!' : this.coach(), prompt: this.state === 'ready' ? 'Hold anywhere to grab' : null, grabT: this.grabT,
       replay: this.state === 'watch',
@@ -362,6 +372,7 @@ export class Game {
     if (p.runs >= 3 || this.state !== 'play') return null;
     const r = this.run;
     if (r.tether && r.grazing) return 'In the corona: points! Let go soon';
+    if (r.tether && burnIn(r) < 0.8) return 'Let go before you burn!';
     if (r.tether && r.stats.links < 4) return 'Let go to fling along the dotted line';
     if (!r.tether && r.stats.links < 3 && r.tick > 60) {
       if (this.held) return r.used ? null : 'Holding: you’ll catch the next star';
@@ -517,9 +528,10 @@ export class Game {
        <p class="big">${res.score.toLocaleString('en-US')}${res.newBest ? ' <span class="newbest">New best!</span>' : ''}</p>
        <div class="stats"><span><b>${Math.floor(altitude(r))}</b>altitude</span><span><b>${fmtTime(r.tick)}</b>time</span><span><b>×${s.bestMult}</b>best combo</span><span><b>${ZONES[r.zone].name}</b>reached</span></div>
        <p class="why">${why}</p>
-       <p class="meta2">${s.links} stars · ${s.nears} close shaves · ${s.sungrazes} sungrazes · ${s.motes} motes</p>
+       <p class="meta2">${s.links} star${s.links === 1 ? '' : 's'} · ${s.nears} close shave${s.nears === 1 ? '' : 's'} · ${s.sungrazes} sungraze${s.sungrazes === 1 ? '' : 's'} · ${s.motes} mote${s.motes === 1 ? '' : 's'}</p>
        ${unlockLine}
-       <p class="meta2">${daily ? `Today’s best: <b>${daily.label}</b> (${daily.plays} tr${daily.plays === 1 ? 'y' : 'ies'})` : `Best ${p.best.toLocaleString('en-US')} · ${p.runs} run${p.runs === 1 ? '' : 's'}`}${!this.daily && next ? ` · ${MODES[next].name} at ${MODES[next].unlock.toLocaleString('en-US')}` : ''}</p>
+       <p class="meta2">${daily ? `Today’s best: <b>${daily.label}</b> (${daily.plays} tr${daily.plays === 1 ? 'y' : 'ies'})` : `Best ${p.best.toLocaleString('en-US')} · ${p.runs} run${p.runs === 1 ? '' : 's'}`}</p>
+       ${!this.daily && next ? `<p class="meta2">${MODES[next].name} unlocks at <b>${MODES[next].unlock.toLocaleString('en-US')}</b> (your best: ${p.best.toLocaleString('en-US')})</p>` : ''}
        ${!this.daily && chips.length > 1 ? `<div class="modes">${chips.map((m) => `<button data-mode="${m}" class="${m === this.mode ? 'on' : ''}">${MODES[m].name}</button>`).join('')}</div>` : ''}`,
       [
         { label: this.daily ? 'Fly the daily again' : 'Fly again', primary: true, onClick: () => this.newRun() },
@@ -603,7 +615,8 @@ export class Game {
        </svg>
        <ul>
          <li><b>Hold anywhere</b> to grab the ringed star and swing round it. <b>Let go</b> to fling off along the dotted line; then gravity pulls. If the line turns <b>red with an ✕</b>, that fling hits something.</li>
-         <li>Flying into a star? <b>Hold</b>: grabbing it catches you at the edge of its corona.</li>
+         <li>The line turns <b class="amber">yellow dashes</b> when letting go a moment later would hit something, and <b class="red">red with an ✕</b> when letting go now would. In flight it turns red if you're heading into something.</li>
+         <li>Flying into a star? <b>Hold</b>: grabbing it catches you at the edge of its corona. A tether that <b class="red">pulses red</b> is about to burn: let go!</li>
          <li>The tether <b>reels you in</b>: swing too long and you burn. Grazing the dashed <b>corona</b> pays, and letting go inside it is a <b>sungraze</b>.</li>
          <li><b>Close shaves</b>: fly through the faint green ring round a star or cinder without touching it. That and sungrazes raise your <b>combo</b>; walls and long free flights lose it.</li>
          <li>Climb! The <b>void</b> rises from below.</li>

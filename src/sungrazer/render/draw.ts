@@ -59,6 +59,8 @@ export interface Scene {
   hit: { x: number; y: number } | null;
   /** Letting go a moment later would hit something: the line turns amber. */
   warn: boolean;
+  /** The tether burns within half a second. */
+  burnSoon: boolean;
   /** Holding but nothing caught yet: show the reach. */
   reaching: boolean;
   shake: number;
@@ -313,12 +315,21 @@ export function draw(g: CanvasRenderingContext2D, v: View, sc: Scene): void {
   if (r.tether && r.alive) {
     const s = r.tether.star;
     const hot = r.grazing;
-    g.strokeStyle = hot ? 'rgba(255,190,110,0.95)' : 'rgba(220,240,255,0.85)';
-    g.lineWidth = hot ? 2.2 : 1.6;
+    const pulse = 0.5 + 0.5 * Math.sin(sc.time * 28);
+    g.strokeStyle = sc.burnSoon ? `rgba(255,${60 + pulse * 60},${60 + pulse * 40},1)` : hot ? 'rgba(255,190,110,0.95)' : 'rgba(220,240,255,0.85)';
+    g.lineWidth = sc.burnSoon ? 2.5 + pulse * 2 : hot ? 2.2 : 1.6;
     g.beginPath();
     g.moveTo(X(r.x), Y(r.y));
     g.lineTo(X(s.x), Y(s.y));
     g.stroke();
+    if (sc.burnSoon) {
+      // About to burn: the star's edge throbs red too (the tether is short by now and hides behind the comet).
+      g.strokeStyle = `rgba(255,70,70,${0.55 + 0.45 * pulse})`;
+      g.lineWidth = 3;
+      g.beginPath();
+      g.arc(X(s.x), Y(s.y), (s.r + 1.2) * k + pulse * 3, 0, Math.PI * 2);
+      g.stroke();
+    }
     if (sc.grabT < 0.3) {
       g.strokeStyle = `rgba(255,255,255,${1 - sc.grabT / 0.3})`;
       g.lineWidth = 2;
@@ -330,11 +341,26 @@ export function draw(g: CanvasRenderingContext2D, v: View, sc: Scene): void {
   if (sc.preview && sc.preview.length > 2) {
     const n = sc.preview.length / 2;
     const last = sc.hit ? n - 1 : n;
-    for (let i = 1; i < last; i++) {
-      g.fillStyle = sc.hit ? `rgba(255,90,90,${0.95 - 0.4 * (i / n)})` : sc.warn ? `rgba(255,190,70,${0.95 - 0.5 * (i / n)})` : `rgba(220,240,255,${0.75 * (1 - i / n)})`;
+    if (sc.warn && !sc.hit) {
+      // Amber: bright yellow dashes along the path, pulsing (not dots, so it never reads as a corona).
+      const a = 0.85 + 0.15 * Math.sin(sc.time * 14);
+      g.strokeStyle = `rgba(255,225,77,${a})`;
+      g.lineWidth = 3;
+      g.setLineDash([7, 6]);
+      g.lineDashOffset = -sc.time * 40;
       g.beginPath();
-      g.arc(X(sc.preview[i * 2]), Y(sc.preview[i * 2 + 1]), sc.hit || sc.warn ? 2.2 : 1.8, 0, Math.PI * 2);
-      g.fill();
+      g.moveTo(X(sc.preview[0]), Y(sc.preview[1]));
+      for (let i = 1; i < n; i++) g.lineTo(X(sc.preview[i * 2]), Y(sc.preview[i * 2 + 1]));
+      g.stroke();
+      g.setLineDash([]);
+      g.lineDashOffset = 0;
+    } else {
+      for (let i = 1; i < last; i++) {
+        g.fillStyle = sc.hit ? `rgba(255,90,90,${0.95 - 0.4 * (i / n)})` : `rgba(220,240,255,${0.75 * (1 - i / n)})`;
+        g.beginPath();
+        g.arc(X(sc.preview[i * 2]), Y(sc.preview[i * 2 + 1]), sc.hit ? 2.2 : 1.8, 0, Math.PI * 2);
+        g.fill();
+      }
     }
     if (sc.hit) {
       const hx = X(sc.hit.x), hy = Y(sc.hit.y), q = 7;
@@ -476,10 +502,13 @@ export function draw(g: CanvasRenderingContext2D, v: View, sc: Scene): void {
   g.globalAlpha = 1;
 
   // Coach line near the comet, prompt in the middle, zone banner.
-  // Coaching sits in the strip under the HUD, never on the comet, its line or its star.
-  if (sc.coach && r.alive && !sc.banner) {
+  // Coaching sits low, over the void (what's down there is already behind you), and fades when the comet comes near.
+  if (sc.coach && r.alive) {
     g.font = '700 15px system-ui, sans-serif';
-    pill(g, sc.coach, w / 2, 26, 'rgba(10,14,30,0.85)', '#ffffff', w);
+    const cy = h - 26;
+    g.globalAlpha = Y(r.y) > cy - 90 ? 0.35 : 1;
+    pill(g, sc.coach, w / 2, cy, 'rgba(10,14,30,0.8)', '#ffffff', w);
+    g.globalAlpha = 1;
   }
   if (sc.prompt) {
     const p = 0.75 + 0.25 * Math.sin(sc.time * 4);

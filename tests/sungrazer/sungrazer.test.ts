@@ -157,6 +157,28 @@ describe('flight', () => {
     }
   });
 
+  it('a pulsar going dark drops you, and a finger still down reaches for the next star', () => {
+    const w = new World(11, 'n');
+    w.ensure(5000);
+    const p = w.stars.find((s) => s.kind === 'pulsar')!;
+    const r = newRun(11, 'n', w);
+    // Start just after it lights, next to it, holding.
+    r.tick = p.period - p.phase + p.period * 3;
+    expect(isLit(p, r.tick)).toBe(true);
+    r.x = p.x + 14;
+    r.y = p.y;
+    r.vx = 0;
+    r.vy = 50;
+    r.camY = p.y - 70;
+    r.maxY = p.y;
+    step(r, true);
+    expect(r.tether?.star).toBe(p);
+    const evs: Ev[] = [];
+    while (r.alive && r.tether && r.tick < 10 * p.period) step(r, true, evs);
+    expect(evs.some((e) => e.k === 'snap')).toBe(true);
+    expect(r.used).toBe(false);
+  });
+
   it('does not touch the bottom of the screen while you dawdle: the void takes you', () => {
     const r = newRun(1);
     while (r.alive && r.tick < 240 * 30) step(r, false);

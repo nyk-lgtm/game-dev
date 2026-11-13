@@ -103,6 +103,12 @@ export class Sounds {
     this.tone(2349, 2349, 0.1, 0.04, 'sine', 0.03);
   }
 
+  /** A tether about to burn. */
+  warn(): void {
+    this.tone(1200, 900, 0.09, 0.08, 'square');
+    this.tone(1200, 900, 0.09, 0.08, 'square', 0.12);
+  }
+
   bounce(): void {
     this.tone(180, 90, 0.12, 0.2, 'triangle');
   }

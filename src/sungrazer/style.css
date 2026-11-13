@@ -42,3 +42,5 @@ body {
 }
 /* The menu button can't be reached under a card: hide it while one is open. */
 body:has(#overlay:not([hidden])) #menuBtn { visibility: hidden; }
+.card b.amber { color: #ffe14d; }
+.card b.red { color: #ff6b6b; }
