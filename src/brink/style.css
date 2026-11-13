@@ -39,7 +39,7 @@ body {
   #status .nw { white-space: nowrap; }
   #status .badge { width: 15px; height: 15px; font-size: 10px; vertical-align: 0; }
 }
-#status .badge {
+#status .badge, #info .badge {
   display: inline-flex; width: 17px; height: 17px; border-radius: 50%; align-items: center; justify-content: center;
   background: #ff5a4a; color: #1a0c08; font-weight: 800; font-size: 11px; vertical-align: 1px;
 }

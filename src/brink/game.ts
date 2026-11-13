@@ -21,7 +21,8 @@ import {
   chooseMove,
   clone,
   crumbleAfter,
-  legalMoves,
+  chancesNow,
+  threatenedNext,
   stoneKey,
   dirTo,
   lineCount,
@@ -45,7 +46,7 @@ import {
   type Side,
   type State,
 } from './core';
-import { cellPx, drawScene, layout, stoneSvg, type Scene, type Sprite, type Target, type View } from './render/draw';
+import { DOOM_COLOR, cellPx, drawScene, layout, stoneSvg, type Scene, type Sprite, type Target, type View } from './render/draw';
 
 export const store = makeStore('brink.');
 
@@ -131,6 +132,7 @@ export class Game {
   private targets: Target[] = [];
   private danger: number[] = [];
   private threats: number[] = [];
+  private chances: number[] = [];
   private hint: { from: number; to: number } | null = null;
   private last: Scene['last'] = null;
   private anim: Anim | null = null;
@@ -696,6 +698,16 @@ export class Game {
   refresh(): void {
     if (!this.s) return;
     const s = this.s;
+    // Planning hints: your stones the AI's reply could take (red), its stones you can take now (green).
+    const yourTurn = !s.winner && s.turn === LIGHT && !this.thinking;
+    this.threats = yourTurn ? threatenedNext(s) : [];
+    this.chances = yourTurn ? chancesNow(s) : [];
+    // Your stones on tiles that fall before your next turn.
+    const doomed: number[] = [];
+    for (let k = 1; k <= 2 && yourTurn; k++) {
+      const c = crumbleAfter(s, s.ply - 1 + k);
+      if (c >= 0 && s.cells[c] === LIGHT) doomed.push(k);
+    }
     // HUD: stones each side has pushed off.
     $('youPips').innerHTML = this.pips(s.lost[DARK], DARK);
     $('aiPips').innerHTML = this.pips(s.lost[LIGHT], LIGHT);
@@ -713,24 +725,12 @@ export class Game {
       // Counted in moves of either side, like the badges: 1 = after this move, 2 = after the reply.
       const first = TUNE.crumbleStart - s.ply + 1;
       const you = s.turn === LIGHT;
-      if (first > 3) right = `Tiles start falling in ${first} moves`;
-      else if (first === 3) right = `First tile falls after ${you ? 'your next move' : 'its next move'}`;
+      if (first > 2) right = `First tile falls in ${first} moves`;
       else if (first === 2) right = `First tile falls after ${you ? 'the AI’s reply' : 'your reply'}`;
-      else if (crumbleAfter(s, s.ply) >= 0) right = '<span class="badge">1</span> falls after this move';
+      else if (crumbleAfter(s, s.ply) >= 0) right = `${badge(1)} falls after this move`;
     }
+    if (yourTurn && doomed.length) right = `<span class="bad">⚠ your stone on ${badge(doomed[0])}</span>`;
     $('status').innerHTML = `<span>${left}</span><span>${right}</span>`;
-    // Your stones the AI could shove off with its next move (a light hint for planning).
-    this.threats = [];
-    if (!s.winner && s.turn === LIGHT && !this.thinking) {
-      const them = clone(s);
-      them.turn = DARK;
-      const set = new Set<number>();
-      for (const m of legalMoves(them)) {
-        const ev = play(clone(them), m);
-        if (ev.shovedOff?.side === LIGHT) set.add(ev.shovedOff.from);
-      }
-      this.threats = [...set];
-    }
     // Info line.
     if (this.selected < 0) {
       if (this.mode === 'puzzle' && !s.winner)
@@ -739,7 +739,15 @@ export class Game {
       else if (this.thinking) this.info(this.lastSay || 'The AI is reading the board…');
       else if (!this.moves.length || this.moves.length < 2 && this.first === DARK)
         this.info(`${this.lastSay ? `${this.lastSay} ` : ''}Tap one of your ${stoneSvg(LIGHT, 16)} stones to see where it can go. Shove ${TUNE.target} coral stones off to win.`);
-      else this.info(`${this.lastSay || 'Your move.'}${this.threats.length ? ' <span class="bad">Red rings: the AI can shove those off next.</span>' : ''}`);
+      else
+        this.info(
+          `${this.lastSay || 'Your move.'}${this.threats.length ? ' <span class="bad">Red rings: the AI’s reply could take those.</span>' : ''}${
+            this.chances.length ? ' <span class="good">Green: yours to take.</span>' : ''
+          }`,
+        );
+      // Loudest of all: a stone of yours standing on a tile about to fall.
+      if (doomed.length && this.selected < 0)
+        this.info(`<b class="bad">Your stone on ${badge(doomed[0])} falls ${doomed[0] === 1 ? 'right after this move' : 'after the AI’s reply'}: move it off!</b>`);
     }
     $('undoBtn').innerHTML = this.mode === 'puzzle' ? '↺ Retry' : '↶ Undo';
     ($('undoBtn') as HTMLButtonElement).disabled = this.mode === 'game' ? !this.who.includes(LIGHT) || !!s.winner : !this.moves.length;
@@ -779,6 +787,7 @@ export class Game {
       hint: this.hint,
       danger: this.danger,
       threats: this.anim ? [] : this.threats,
+      chances: this.anim ? [] : this.chances,
       time: this.time,
       shake: this.shake,
       reduced: this.reduced,
@@ -834,7 +843,7 @@ export class Game {
         this.draw();
         a.done();
       } else this.draw();
-    } else if (this.hint || this.shake || (!this.reduced && this.s && !this.s.winner && crumbleAfter(this.s, this.s.ply) >= 0)) this.draw();
+    } else if (this.hint || this.shake || (!this.reduced && this.s && !this.s.winner && crumbleAfter(this.s, this.s.ply + 1) >= 0)) this.draw();
     requestAnimationFrame((tt) => this.frame(tt));
   }
 
@@ -943,6 +952,9 @@ function lastOf(m: number, ev: MoveEvents, mover: Side, s: State, before?: Int8A
   }
   return { from: moveCell(m), to: moveTo(m), side: mover, pushed };
 }
+
+/** A falling-order badge for text (1 red, 2 orange, 3 yellow). */
+const badge = (k: number) => `<span class="badge" style="background:${DOOM_COLOR[k]}">${k}</span>`;
 
 /** The help card's picture: your stone shoves two coral stones; the far one goes over. */
 function diagram(): string {

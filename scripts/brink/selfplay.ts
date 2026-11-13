@@ -5,8 +5,8 @@
 // plus hard-normal, normal-easy, hard-easy.
 // TUNE=target:3,crumbleStart:6 tries other rules; W=threat:60 other weights; SETUP=1 another start.
 
-import { LEVELS, REPEAT_PLIES, W, chooseMove, loopPenalty, stoneKey, type Level } from '../../src/brink/core/ai';
-import { DARK, LIGHT, TUNE, newGame, play, useSetup, type Side } from '../../src/brink/core/rules';
+import { LEVELS, REPEAT_PLIES, W, chooseMove, loopPenalty, search, stoneKey, type Level } from '../../src/brink/core/ai';
+import { DARK, LIGHT, TUNE, after, clone, newGame, play, useSetup, type Side } from '../../src/brink/core/rules';
 
 const n = Number(process.argv[2] ?? 20);
 const seed0 = Number(process.env.SEED ?? 1);
@@ -40,6 +40,7 @@ for (const [A, B] of pairs) {
   let crumbleEnds = 0;
   let undos = 0;
   let repeats = 0;
+  let unforced = 0;
   let longest = 0;
   const plies: number[] = [];
   for (let k = 0; k < n; k++) {
@@ -63,10 +64,21 @@ for (const [A, B] of pairs) {
         longest = Math.max(longest, ++run);
       } else run = 0;
       moves.push(ch.move);
+      const before = clone(s);
       const ev = play(s, ch.move);
       // A layout (stones + side to move) recreated within the last few plies.
       const key = stoneKey(s);
-      if (seen.slice(-REPEAT_PLIES).includes(key)) repeats++;
+      if (seen.slice(-REPEAT_PLIES).includes(key)) {
+        repeats++;
+        // Cheap: another move was less than half a stone worse than the repeat (before its cost).
+        // Exact scores this time (full window for every move, same budget) so bounds don't mislead.
+        const recent = new Set(seen.slice(-REPEAT_PLIES));
+        const L = LEVELS[lvl];
+        const ex = search(before, L.depth, L.nodes, true, loopPenalty(moves.slice(0, -1)), seen.slice(-REPEAT_PLIES));
+        const mine = ex.ranked.find((r) => r.move === ch.move);
+        const alt = ex.ranked.find((r) => r.move !== ch.move && !recent.has(stoneKey(after(before, r.move))));
+        if (mine && alt && mine.score + W.repeat - alt.score < W.stone / 2) unforced++;
+      }
       seen.push(key);
       lastCrumble = !!ev.crumbleTook;
     }
@@ -77,7 +89,7 @@ for (const [A, B] of pairs) {
   }
   console.log(
     `${A.padEnd(6)} vs ${B.padEnd(6)}: ${A} wins ${pct(winsA, n)}, first mover wins ${pct(firstWins, n)}, ` +
-      `median ${median(plies)} plies (min ${Math.min(...plies)}, max ${Math.max(...plies)}), last stone to a crumble ${pct(crumbleEnds, n)}, shove-backs ${(undos / n).toFixed(1)} a game (longest run ${longest}), repeated layouts ${(repeats / n).toFixed(1)} a game`,
+      `median ${median(plies)} plies (min ${Math.min(...plies)}, max ${Math.max(...plies)}), last stone to a crumble ${pct(crumbleEnds, n)}, shove-backs ${(undos / n).toFixed(1)} a game (longest run ${longest}), repeated layouts ${(repeats / n).toFixed(1)} a game (${unforced} cheap ones)`,
   );
 }
 for (const l of Object.keys(LEVELS) as Level[]) {

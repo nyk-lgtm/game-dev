@@ -60,8 +60,10 @@ export interface Scene {
   hint: { from: number; to: number } | null;
   /** Cells to ring red (where a stone would go over). */
   danger: number[];
-  /** Your stones the other side could shove off next move (thin red outline). */
+  /** Your stones the other side's reply could take (thin red outline). */
   threats: number[];
+  /** Their stones you can take with this move (thin green outline). */
+  chances: number[];
   time: number;
   /** Screen shake offset in px. */
   shake: number;
@@ -255,13 +257,18 @@ export function drawScene(g: CanvasRenderingContext2D, v: View, sc: Scene): void
     drawStone(g, p.x, p.y, s * 0.6, v0 as Side);
   }
   for (const sp of sc.sprites) drawStone(g, sp.x, sp.y, s * 0.6 * sp.scale, sp.side, sp.alpha);
-  for (const c of sc.threats) {
-    const p = cellPx(v, c);
-    g.strokeStyle = 'rgba(255,77,77,0.9)';
-    g.lineWidth = 2;
-    g.beginPath();
-    g.arc(p.x, p.y, s * 0.63, 0, Math.PI * 2);
-    g.stroke();
+  for (const [cells, col] of [
+    [sc.threats, 'rgba(255,77,77,0.9)'],
+    [sc.chances, 'rgba(110,230,140,0.95)'],
+  ] as const) {
+    for (const c of cells) {
+      const p = cellPx(v, c);
+      g.strokeStyle = col;
+      g.lineWidth = 2.2;
+      g.beginPath();
+      g.arc(p.x, p.y, s * 0.63, 0, Math.PI * 2);
+      g.stroke();
+    }
   }
   // The next tiles to fall: a numbered badge (1 = right after this move), and a
   // dashed ring round any stone standing on one, so it shows on top of the stone.
@@ -274,6 +281,12 @@ export function drawScene(g: CanvasRenderingContext2D, v: View, sc: Scene): void
       g.save();
       g.strokeStyle = col;
       g.lineWidth = k === 1 ? 3 : 2.2;
+      // Your own stone about to go (before your next turn): pulse it.
+      if (sc.cells[i] === LIGHT && k <= 2) {
+        const pulse = sc.reduced ? 1 : 0.5 + 0.5 * Math.sin(sc.time * 7);
+        g.lineWidth = 3 + 2 * pulse;
+        g.globalAlpha = 0.55 + 0.45 * pulse;
+      }
       g.setLineDash([4, 3]);
       g.beginPath();
       g.arc(p.x, p.y, s * 0.68, 0, Math.PI * 2);

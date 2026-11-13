@@ -259,6 +259,43 @@ export function after(s: State, m: number): State {
   return t;
 }
 
+// ------------------------------------------------------------------ hints
+
+/** Stones of `victim` that some legal move of `t`'s side to move would lose (shoved off, or onto/left on the tile that falls after it), by where they stand now. */
+function lossesFrom(t: State, victim: Side): number[] {
+  const out = new Set<number>();
+  for (const m of legalMoves(t)) {
+    const ev = play(clone(t), m);
+    if (ev.shovedOff?.side === victim) out.add(ev.shovedOff.from);
+    if (ev.crumbleTook === victim) out.add(ev.slid.find(([, to]) => to === ev.crumbled)?.[0] ?? ev.crumbled);
+  }
+  return [...out];
+}
+
+/**
+ * Stones of the side to move that the other side could take with its reply,
+ * whatever this move is: the tile that falls after this move is taken out first,
+ * then every reply is tried with the tile that falls after it.
+ */
+export function threatenedNext(s: State): number[] {
+  if (s.winner) return [];
+  const me = s.turn;
+  const t = clone(s);
+  const c = crumbleAfter(s, s.ply);
+  if (c >= 0) {
+    if (t.cells[c] === LIGHT || t.cells[c] === DARK) t.lost[t.cells[c] as Side]++;
+    t.cells[c] = HOLE;
+  }
+  t.ply++;
+  t.turn = other(me);
+  return lossesFrom(t, me);
+}
+
+/** Enemy stones the side to move could take right now (a shove off, or onto the tile that falls after this move). */
+export function chancesNow(s: State): number[] {
+  return s.winner ? [] : lossesFrom(s, other(s.turn));
+}
+
 // ------------------------------------------------------------------ records
 
 export const encodeMove = (m: number): string => `${moveCell(m)}.${moveTo(m)}`;

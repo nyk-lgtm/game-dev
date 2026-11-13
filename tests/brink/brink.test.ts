@@ -17,6 +17,8 @@ import {
   boardText,
   clone,
   loopPenalty,
+  threatenedNext,
+  chancesNow,
   stoneKey,
   W,
   cellAt,
@@ -157,6 +159,44 @@ describe('shoves', () => {
     const t = after(s, mv([0, -2], [0, -3]));
     expect(t.winner).toBe(LIGHT);
     expect(legalMoves(t)).toEqual([]);
+  });
+});
+
+describe('planning hints', () => {
+  /** Light at A, dark at B, lined up so dark shoves light onto/into `target`. */
+  function lineUp(target: number, avoid: number[]): { s: State; A: number } | null {
+    for (let d = 0; d < 6; d++) {
+      const A = NB[target * 6 + ((d + 3) % 6)];
+      const B = A >= 0 ? NB[A * 6 + ((d + 3) % 6)] : -1;
+      if (A < 0 || B < 0 || avoid.includes(A) || avoid.includes(B)) continue;
+      const s = newGame(1);
+      s.cells.fill(EMPTY);
+      s.ply = TUNE.crumbleStart;
+      s.cells[A] = LIGHT;
+      s.cells[B] = DARK;
+      // A spare light stone far away so light has other moves.
+      const spare = [...Array(N).keys()].find((c) => RING[c] === 0)!;
+      if (spare !== A && spare !== B && spare !== target) s.cells[spare] = LIGHT;
+      return { s, A };
+    }
+    return null;
+  }
+
+  it('rings a stone the reply can shove onto the tile that falls after it', () => {
+    const s0 = newGame(1);
+    const after2 = s0.order[1]; // falls after the AI's reply (light moves at ply crumbleStart)
+    const { s, A } = lineUp(after2, [s0.order[0]])!;
+    expect(threatenedNext(s)).toContain(A);
+  });
+
+  it('rings a stone the reply can shove into the hole the next crumble leaves', () => {
+    const s0 = newGame(1);
+    const next = s0.order[0]; // falls right after light's move
+    const { s, A } = lineUp(next, [s0.order[1]])!;
+    expect(threatenedNext(s)).toContain(A);
+    // Green: what you can take right now.
+    const t = position([[0, -2]], [[0, -3]]);
+    expect(chancesNow(t)).toEqual([cellAt(0, -3)]);
   });
 });
 

@@ -98,8 +98,18 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         ("Tiles start falling in 7 moves", "First tile falls after the AI's reply", badges 1/2/3, help "after move 7").
         Self-play: Hard–Normal 80% → 90%, Normal–Easy 90% → 86%, Hard–Easy 100%; first mover Easy 50%, Normal 56%, Hard
         33%/50% on two seed sets (≈42%); shove-backs 0.4-1.1 a game with the longest run 1-3 (players saw 5-7).
-  - [ ] Next: owner playtest. Watch: can a person now beat Normal? Is Hard's ~42% first-mover rate a side bias for
-        people? Do the red threat outlines make the game too easy to read?
+  - [x] Third blind pass (Normal 0-3 for a careful first-timer; stones lost to overlooked dashed rings and to
+        crumble combos the red rings missed) and fixes (AI v4, rules and replays unchanged): red rings now come from
+        `threatenedNext` (the tile after your move falls first, then every reply with its own falling tile: shoved
+        onto the next tile or into the new hole counts); green rings on coral stones you can take now (`chancesNow`);
+        your stone on tile 1/2 pulses, the status bar says "⚠ your stone on 2" and the info line "falls after the AI's
+        reply: move it off!"; header "First tile falls in N moves"; Normal noise 70 + 25% of moves searched a ply
+        shallower, Easy noise 200 + 20%; noisy levels never pick a recent layout unless it is the best; `W.repeat`
+        300 → 500. Self-play: Hard–Normal 93%, Normal–Easy 81-89%, Hard–Easy 100%; first mover Easy 45%, Normal 49%,
+        Hard 35%/48%; longest shove-back run 1-3, repeated layouts 0.1-0.3 a game (Hard repeats only when it judges
+        that worth half a stone or more, i.e. forced defences).
+  - [ ] Next: owner playtest. Watch: can a person now beat Normal? Do the red/green rings make the game too easy to
+        read (maybe an option to hide them)? Is Easy now too soft?
 - [ ] **Kitbag** (dice-placement roguelite: roll dice, slot them into gear cards, 12 floors to The House). Milestones:
   - [x] Core (src/kitbag/core, rules v1): 19 gear cards with conditioned slots (any / even / odd / ≤2 / ≤3 / 2+ / 4+ /
         5+ / 6 / pair / any two) and effects (deal, pierce, block, spike, heal, poison, reroll, split, flip, +1/+2,

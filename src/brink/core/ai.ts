@@ -5,14 +5,19 @@
 
 import { mixSeed, Rng } from '../../shared/rng';
 import { N, NB, RING } from './board';
-import { DARK, EMPTY, HOLE, LIGHT, TUNE, clone, legalMoves, moveCell, moveDir, moveTo, other, play, type Side, type State } from './rules';
+import { DARK, EMPTY, HOLE, LIGHT, TUNE, after, clone, legalMoves, moveCell, moveDir, moveTo, other, play, type Side, type State } from './rules';
 
 export type Level = 'easy' | 'normal' | 'hard';
 
-export const LEVELS: Record<Level, { name: string; depth: number; nodes: number; noise: number; text: string }> = {
-  easy: { name: 'Easy', depth: 2, nodes: 3000, noise: 160, text: 'Sees your reply coming, but often settles for a weaker move.' },
-  normal: { name: 'Normal', depth: 2, nodes: 8000, noise: 60, text: 'Sees your reply coming, now and then picks a lesser move.' },
-  hard: { name: 'Hard', depth: 12, nodes: 70000, noise: 0, text: 'Reads five or six moves deep, watches the falling tiles and punishes loose stones.' },
+/**
+ * depth/nodes: the search; noise: picks among moves within this margin of the best
+ * (seeded); slip: the share of moves (seeded) searched one ply shallower, so a
+ * two-move threat can go unseen.
+ */
+export const LEVELS: Record<Level, { name: string; depth: number; nodes: number; noise: number; slip: number; text: string }> = {
+  easy: { name: 'Easy', depth: 2, nodes: 3000, noise: 200, slip: 0.2, text: 'Often misses your reply and settles for a weaker move.' },
+  normal: { name: 'Normal', depth: 2, nodes: 8000, noise: 70, slip: 0.25, text: 'Sees your reply coming most of the time, and now and then picks a lesser move.' },
+  hard: { name: 'Hard', depth: 12, nodes: 70000, noise: 0, slip: 0, text: 'Reads five or six moves deep, watches the falling tiles and punishes loose stones.' },
 };
 
 const WIN = 100000;
@@ -43,7 +48,7 @@ export const W = {
   /** Root penalty for undoing the opponent's last shove (half for stepping back). */
   loop: 70,
   /** Recreating a stone layout seen in the last REPEAT_PLIES plies (any depth, searching side only). */
-  repeat: 300,
+  repeat: 500,
 };
 
 /** Steps to the void from cell i going in dir d (1 = the next tile is the void). */
@@ -421,11 +426,15 @@ export function search(s: State, maxDepth: number, cap: number, exact = false, p
  */
 export function chooseMove(s: State, level: Level, recent: readonly number[] = [], seen: readonly number[] = []): Choice {
   const L = LEVELS[level];
-  const ch = search(s, L.depth, L.nodes, L.noise > 0, loopPenalty(recent), seen.slice(-REPEAT_PLIES));
+  const slipped = L.slip > 0 && new Rng(mixSeed(s.seed ^ 0x5119, s.ply)).next() < L.slip;
+  const ch = search(s, slipped ? Math.max(1, L.depth - 1) : L.depth, L.nodes, L.noise > 0, loopPenalty(recent), seen.slice(-REPEAT_PLIES));
   if (L.noise > 0 && ch.ranked.length > 1) {
     const rng = new Rng(mixSeed(s.seed ^ 0xea5e, s.ply));
-    // Pick among moves within `noise` of the best (never one that throws away a stone outright).
-    const ok = ch.ranked.filter((r) => r.score >= ch.score - L.noise * (0.5 + rng.next()));
+    // Pick among moves within `noise` of the best (never one that throws away a stone outright),
+    // and never wander back into a recent layout unless that is the best move anyway.
+    const margin = L.noise * (0.5 + rng.next());
+    const recentKeys = new Set(seen.slice(-REPEAT_PLIES));
+    const ok = ch.ranked.filter((r) => r.score >= ch.score - margin && (r.move === ch.move || !recentKeys.has(stoneKey(after(s, r.move)))));
     const pick = ok[Math.floor(rng.next() * ok.length)];
     return { ...ch, move: pick.move, score: pick.score };
   }
