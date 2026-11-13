@@ -185,3 +185,10 @@ button.crowd small { font-size: 12px; }
 button.secondary.small { min-width: 64px; min-height: 44px; font-size: 13px; padding: 0 8px; }
 #dockEvening button[hidden] { display: none; }
 .nw { white-space: nowrap; }
+.request { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 8px; border-radius: 12px; background: #3a2a1c; border: 1px solid #6a4a2a; }
+.request > span { flex: 1; min-width: 0; }
+.request b { display: block; font-size: 14px; }
+.request small { display: block; font-size: 12px; line-height: 1.3; }
+.request .ok { color: var(--good); font-weight: 800; font-size: 13px; white-space: nowrap; }
+.request button.mini { margin-left: 0; white-space: nowrap; }
+#rep small.full { font-size: 10px; font-weight: 800; color: var(--muted); margin-left: 3px; letter-spacing: 0.04em; text-transform: uppercase; }

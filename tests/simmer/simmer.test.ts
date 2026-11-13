@@ -35,6 +35,8 @@ import {
   lossFor,
   recipePreview,
   upgradePayback,
+  allocateStock,
+  ctxOf,
   queuePreview,
   helperPayback,
   wageOf,
@@ -248,6 +250,38 @@ describe('simmer core', () => {
     const h = helperPayback(r, r.lastMenu);
     expect(h.saved).toBeCloseTo(h.before - h.after, 6);
     expect(wageOf(r)).toBeGreaterThan(wageOf(newRun(31)));
+  });
+
+  it('requests: from night reqFrom a kind asks for a loved dish; served it, they are delighted and tip', () => {
+    const r = newRun(41);
+    expect(ctxOf(r).req).toBeUndefined();
+    r.day = TUNE.reqFrom;
+    const q = ctxOf(r).req!;
+    expect(q).toEqual(ctxOf(r).req);
+    expect(DISHES[q.dish].tags).toContain(SPECIES[q.sp].loves);
+    const ctx = ctxOf(r);
+    const menu = [{ dish: q.dish, price: 1 }];
+    const n = simulate([guest(q.sp, 99)], menu, ctx, 1, INGS.map(() => 9));
+    expect(n.visits[0]).toMatchObject({ pick: 0, mood: 'delighted', tip: TUNE.reqTip, paid: 1 + TUNE.reqTip });
+    expect(worthOf(q.dish, q.sp, ctx).parts.some((p) => p.x === TUNE.reqWorth)).toBe(true);
+  });
+
+  it('stock is shared between dishes in proportion to their orders', () => {
+    // Rice ball (rice + greens) and dango (rice + berries) share 4 rice.
+    const have = INGS.map(() => 9);
+    have[0] = 4;
+    expect(allocateStock([{ dish: 0, price: 7 }, { dish: 2, price: 9 }], [6, 2], have)).toEqual([3, 1]);
+    expect(allocateStock([{ dish: 0, price: 7 }], [3], INGS.map(() => 9))).toEqual([3]);
+  });
+
+  it('at full renown, hearts beyond it come back as regulars’ tips', () => {
+    const r = newRun(43);
+    r.rep = 100;
+    for (const a of ['b0.20', 'b2.20', 'b1.20', 'b3.20', 'b5.20', 'o0x5.1x8.2x7']) act(r, a);
+    const l = r.ledgers[0];
+    expect(r.rep).toBeLessThanOrEqual(100);
+    expect(l.tips).toBe(l.overflow * TUNE.fullTip);
+    expect(l.coins).toBe(r.coins);
   });
 
   it('payback estimates: recipes, upgrades, Fill to forecast', () => {

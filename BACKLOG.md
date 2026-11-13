@@ -18,7 +18,7 @@ Ground rules: never break saves without bumping RULES_VERSION; never leave main 
 keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 
 ## Start here (summary, 2026-11-13)
-20 games are live; all but the newest (Simmer, two playtests so far) have had at least two blind playtests and the fixes shipped. Open threads, in order:
+20 games are live; all of them have had at least two blind playtests and the fixes shipped. Open threads, in order:
 1. Owner feedback first: anything the owner reports beats this list.
 2. Loomsong: needs a real-phone check of sound and timing (headless has no audio); then a second playtest.
 3. Third playtests done (2026-11-13) and shipped: Summit v4, Kitbag v4, Sungrazer v4 (+ frame cost cut ~3x), Brink AI v4
@@ -32,7 +32,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
    Brink, Loomsong, Simmer, Gleam). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle.
 7. Simmer: second blind playtest (see its item below). Gleam (new light puzzle): first blind playtest.
    Brink, Loomsong, Simmer). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle.
-7. Simmer: third blind playtest (see its item below).
+7. Simmer: fourth blind playtest (see its item below).
 
 ## Now
 - [ ] **Gleam** (original light-and-mirrors logic puzzle, daily). Milestones:
@@ -114,8 +114,18 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         hint no longer covers a last button that is in view; a reload mid-evening fast-forwards to where it was; the pantry
         folds to one line after Fill (morning ~1.2 screens); ingredient emojis don't wrap. Bots (100 seasons, two seed sets):
         naive ~1880 1★, lazy ~2860 (2★ 82-89%), decent ~3820 (3★ 30-34%), clever ~4150 (3★ 63-68%).
-  - [ ] Next: third blind playtest. Watch: does lazy play now land low 2★ for a person too? Do people buy the second stove
-        when the warning says one helper isn't enough? Is the helper wage clear (12¢ + 1¢ a guest)?
+  - [x] Third blind playtest (lazy 2,887 ★★, middle = lanterns N4 + second stove N7 3,626 ★★, careful 3,727 ★★: careful
+        beat two obvious upgrades by ~100; renown hit 100 by N14-15 and stopped mattering; N12-20 felt samey) and fixes
+        (rules v4): requests from night 6 (a kind asks for a dish it loves: worth ×1.4, delighted, 14¢ tip each; the morning
+        card learns it or puts it on the menu); hearts beyond full renown become regulars' tips (10¢ each, shown in the
+        ledger and as "full" in the header); lanterns +15% for 90¢, stove 140¢; the queue line and warning show a likely
+        range from 8 sample evenings ("0-2") and also warn when the busy end reaches 2; "half a ♥ each, rounded up";
+        "stock covers ~N" and stocked takings split shared ingredients (`allocateStock`); the folded pantry says when coins
+        ran short; the guest log is sorted by time; kind sheets say "~N orders from them". Stars 1200/3000/4400. Bots (100
+        seasons): naive ~2030 1★, lazy ~3140 (2★ 69%), middle ~3960 (3★ 8%), careful ~4520 (3★ 59%), clever ~4250-4410, 3★ 44-51% (its price search over-prices now that requests pay: ~25% walk off as pricey).
+  - [ ] Next: fourth blind playtest. Watch: do requests read as a fun nightly twist or a chore? Is learning a recipe for
+        one night's request tempting in a bad way (the card offers it)? Does full-renown tipping feel like a payoff?
+        Bot note: "buy every recipe and upgrade" (builder ~4770) now tops the bots; clever's price search over-prices.
 
 - [ ] **Loomsong** (original rhythm game with procedurally generated music). Milestones:
   - [x] Core (src/loomsong/core, rules v1): seeded songs (key, mode, 90-140 BPM, verse/chorus progressions, a form

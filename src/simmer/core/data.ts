@@ -122,8 +122,8 @@ export interface UpgradeDef {
 }
 export const UPGRADES: UpgradeDef[] = [
   { key: 'board', name: 'Bigger menu board', icon: '🪧', cost: [40, 90], text: 'One more dish on the menu' },
-  { key: 'stove', name: 'Second stove', icon: '🔥', cost: [110], text: 'Cook two orders at once' },
-  { key: 'lantern', name: 'Paper lanterns', icon: '🏮', cost: [70], text: '20% more passers-by stop to look' },
+  { key: 'stove', name: 'Second stove', icon: '🔥', cost: [140], text: 'Cook two orders at once' },
+  { key: 'lantern', name: 'Paper lanterns', icon: '🏮', cost: [90], text: '15% more passers-by stop to look' },
   { key: 'bench', name: 'A bench', icon: '🪑', cost: [40], text: 'Guests queue 50% longer before giving up' },
   { key: 'cool', name: 'Cool box', icon: '🧊', cost: [35], text: 'Ingredients keep a night longer (fish two); cold dishes worth ×1.15' },
 ];
@@ -138,7 +138,7 @@ export const TUNE = {
   street0: 8,
   streetK: 0.25,
   festival: 1.6,
-  lanterns: 1.2,
+  lanterns: 1.15,
   /** Purse × on paydays and festivals. */
   payday: 1.25,
   festPurse: 1.15,
@@ -162,6 +162,13 @@ export const TUNE = {
   /** Cold dishes are worth this much more with a cool box. */
   coolCold: 1.15,
   lossCap: 5,
+  /** From this night (0-based) a kind of guest asks for a dish each night. */
+  reqFrom: 5,
+  /** The asked-for dish: worth × to that kind, and the tip each of them leaves when served it. */
+  reqWorth: 1.4,
+  reqTip: 14,
+  /** At full renown, each ♥ that can't be added comes back as this many coins in regulars' tips. */
+  fullTip: 10,
   /** Score = coins + repPts × renown. */
   repPts: 10,
 };
@@ -175,4 +182,4 @@ export const SERVE = 2;
 export const MAX_PRICE = 40;
 
 /** Score lines for one, two and three stars. */
-export const STARS = [1200, 2700, 4000];
+export const STARS = [1200, 3000, 4400];

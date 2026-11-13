@@ -10,7 +10,7 @@ export function rngFor(seed: number, ...parts: number[]): Rng {
   for (const p of parts) h = mixSeed(h, p >>> 0);
   return new Rng(h);
 }
-export const T_CROWD = 0x637277, T_WEATHER = 0x776561, T_MARKET = 0x6d6b74, T_FEST = 0x666573, T_PREVIEW = 0x707276;
+export const T_CROWD = 0x637277, T_WEATHER = 0x776561, T_MARKET = 0x6d6b74, T_FEST = 0x666573, T_PREVIEW = 0x707276, T_REQ = 0x726571;
 
 /** What tonight is like, for worth and purses. */
 export interface NightCtx {
@@ -19,6 +19,8 @@ export interface NightCtx {
   payday: boolean;
   /** The stall has a cool box: cold dishes are served properly chilled. */
   cool?: boolean;
+  /** Tonight's request: guests of kind `sp` ask for `dish`. */
+  req?: { sp: number; dish: number };
 }
 
 export interface MenuItem {
@@ -56,13 +58,20 @@ export function worthOf(dish: number, sp: number, ctx: NightCtx): Worth {
   }
   if (ctx.festival && d.tags.includes('sweet')) parts.push({ label: 'festival treat', x: TUNE.festSweet });
   if (ctx.cool && d.tags.includes('cold')) parts.push({ label: 'chilled in the cool box', x: TUNE.coolCold });
+  if (isRequest(ctx, dish, sp)) parts.push({ label: 'they asked for it', x: TUNE.reqWorth });
   let w = d.base;
   for (const p of parts) w *= p.x;
   return { w: Math.round(w), parts };
 }
 
-/** A dish with the tag they love, at a price that leaves a quarter of its worth unspent. */
-export const delights = (dish: number, sp: number, w: number, price: number): boolean => DISHES[dish].tags.includes(SPECIES[sp].loves) && w - price >= TUNE.delight * w;
+export const isRequest = (ctx: NightCtx | undefined, dish: number, sp: number): boolean => !!ctx?.req && ctx.req.dish === dish && ctx.req.sp === sp;
+
+/**
+ * A dish with the tag they love, at a price that leaves a quarter of its worth unspent;
+ * or the dish they asked for tonight, at any price they accept.
+ */
+export const delights = (dish: number, sp: number, w: number, price: number, ctx?: NightCtx): boolean =>
+  isRequest(ctx, dish, sp) || (DISHES[dish].tags.includes(SPECIES[sp].loves) && w - price >= TUNE.delight * w);
 
 export type Why ='pricey' | 'worth' | 'soldout' | 'nolike' | 'slow' | 'closed';
 export type Mood = 'delighted' | 'happy' | 'meh';
@@ -201,8 +210,10 @@ export interface Visit {
   /** Minutes in the queue. */
   waited: number;
   slow: boolean;
-  /** Paid, both dishes. */
+  /** Paid, both dishes, plus any tip. */
   paid: number;
+  /** Tip for serving the dish they asked for. */
+  tip?: number;
   rep: number;
   /** Stove they cooked on, and when their food was ready. */
   stove: number;
@@ -285,12 +296,15 @@ export function simulate(guests: Guest[], menu: MenuItem[], ctx: NightCtx, stove
         }
         markSoldOut(t);
         const w = W[g.sp][c.pick];
-        let mood: Mood = delights(menu[c.pick].dish, g.sp, w, menu[c.pick].price) ? 'delighted' : 'happy';
+        let mood: Mood = delights(menu[c.pick].dish, g.sp, w, menu[c.pick].price, ctx) ? 'delighted' : 'happy';
         // Settling for a second choice is never delightful; a long wait takes a step off.
         if (c.wanted !== c.pick && mood === 'delighted') mood = 'happy';
         if (slow) mood = mood === 'delighted' ? 'happy' : 'meh';
+        // Served the dish they asked for: they leave a tip.
+        const tip = isRequest(ctx, menu[c.pick].dish, g.sp) ? TUNE.reqTip : 0;
+        paid += tip;
         busy[s] = t + mins;
-        visits.push({ g, t, pick: c.pick, pick2, wanted: c.wanted, mood, waited, slow, paid, rep: REP_FOR[mood], stove: s, ready: t + mins });
+        visits.push({ g, t, pick: c.pick, pick2, wanted: c.wanted, mood, waited, slow, paid, tip, rep: REP_FOR[mood], stove: s, ready: t + mins });
       }
     }
     // Anyone who has queued past their patience walks off.
