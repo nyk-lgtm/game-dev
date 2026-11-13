@@ -113,9 +113,14 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     in tutorials.ts and checked by tests; re-run it after any physics or material change).
   - Lull: `npx vite-node scripts/lull/probe.ts [seed] [plants]` (weather spells, then a full garden's day: rules v1 ~1.6 notes
     a step / ~26 a bar, busiest step capped at 6 (`MAX_PER_STEP`), Harpfern runs are the bulk; bees/fireflies/frog out per phase).
-    Frame cost (Playwright, Pixel 7, 30 grown plants): desktop 60 fps (draw JS ~0.4 ms); CPU ×4 throttled ~30-36 fps at DPR 2,
-    ~50 fps after the page steps down to DPR 1.5 on its own (`Scene.slower`). Headless canvas is software: every full-canvas
-    blit costs ~13 ms at ×4, so keep full-size layers off the per-frame path.
+    Frame cost (Playwright, Pixel 7, 30 grown plants): desktop 60 fps (draw JS ~0.4 ms); CPU ×4 throttled ~45-48 fps at DPR 2
+    on a clear day (mist / rainy night ~36), more after the page steps down (`Scene.slower`, by 0.25; `faster` steps back up
+    after 4 good 2-s windows, doubling the wait after a failed step up). Headless canvas is software and its raster runs on
+    the main thread inside Commit (a CDP trace shows `LayerTreeHost::DoUpdateLayers` ≈ 85% of the frame; JS ≈ 7%), so cost
+    is pixels and draw paths, not JS. Profiled and fixed: a sheared drawImage (the sway skew) is the slow path, so sprites
+    go out in 12 px strips, each only shifted and snapped to device pixels (`blitSwayed`); scaled or 'lighter' draws of the
+    beat band and mist cost ~9 fps, so both are built at device size and blitted 1:1; the unlit beat chips and the plant
+    shadows are baked (landscape layer / sprites); at most 3 glows a plant. Ablate with `__game.scene.<method> = () => {}`.
   - Hexhold: `npx vite-node scripts/hexhold/balance.ts 32` (heuristic bot, rules v5: median wave ~27, ~7/32 wins);
     `scripts/hexhold/probe.ts 32` lists each loss with its wave and map shape (one or two portals) and the
     lives lost per band of waves (the difficulty curve: v5 is gentle to wave 10, steady pressure from 15 on,

@@ -88,6 +88,10 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         (`tooEasy`), first wish an echo (`twin`); no-garden visitor wording; dark numbered beat chips (≥ 11 px) with plants
         kept clear of the edges; taller meadow on short screens (360×640: lanes ~34 px); lilies drawn last, willows over
         the pond at 62%. Perf: desktop 60 fps; ×4 throttled ~32 fps at DPR 2, ~55 after stepping down.
+  - [x] Perf pass (profiled with a CDP trace + ablations, not guessed): sheared sprite draws → strip blits, beat band and
+        mist built at device size (1:1 blits, no 'lighter'), unlit beat chips baked into the landscape layer, shadows
+        baked into sprites, ≤ 3 glows a plant; DPR steps back up after a sustained good stretch (with backoff).
+        ×4 throttled first measurement 45-48 fps at DPR 2 (was ~32), desktop 60.
   - [ ] Next: third blind playtest + owner's phone (sound!). Watch: is "left = note, back-to-front = beat" discoverable
         from the ghost label and the sweeping band? Is a full garden too busy (Harpfern runs dominate; MAX_PER_STEP 6)? Do
         seedlings read at the back rows? Is half a day of growth while away welcome? Does the DPR step-down ever fire on
