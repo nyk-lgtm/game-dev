@@ -14,7 +14,7 @@ import type { Dict } from './dict';
 import { PERKS, type PerkId } from './perks';
 import { anyWord } from './search';
 
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 export const DEPTHS = 8;
 export const DEPTH_NAMES = ['Topsoil', 'Clay', 'Sandstone', 'Limestone', 'Slate', 'Granite', 'Basalt', 'Obsidian'];
 /** Words per depth, before perks. */
@@ -36,13 +36,16 @@ export const LONG_FROM = 5;
 export const STREAK_FROM = 5;
 export const STREAK_CAP = 3;
 /** Word-multiplier bonuses (they add to 1 + golds). */
-export const CHISEL = 2;
+/** Chisel: +2 on 3-letter words, +1 on 4-letter ones. */
+export const CHISEL = [0, 0, 0, 2, 1];
 export const OPENING = 2;
 export const ECHO = 1;
 /** Fuses from this depth (0-based) on: one on each fresh face, and they keep turning up. */
 export const FUSE_FROM = 2;
 export const FUSE_RATE = 0.05;
 export const FUSE_WORDS = 3;
+/** After a fuse is used or blows, this many words pass before a new one can drop in. */
+export const FUSE_COOL = 2;
 export const GOLD_RATE = 0.03;
 export const SHAKES = 1;
 /** Each word left over when a depth is cleared pays this × the depth number. */
@@ -71,6 +74,8 @@ export interface Run {
   played: number;
   /** Words of 5+ letters in a row (Hot Seam). */
   streak: number;
+  /** Words until a new fuse may drop in (see FUSE_COOL). */
+  fuseCool: number;
   shakes: number;
   picks: number;
   /** Seed of this depth's face; every tile drawn uses (levelSeed, drawn). */
@@ -121,6 +126,8 @@ export interface Outcome {
   /** Fuses that ran out: their cells and the cells they took with them. */
   blown?: number[];
   lostWords?: number;
+  /** Tremor: the cell a shake gilded. */
+  gilded?: number;
   /** The face had no word left and was shaken for free. */
   reshuffled?: boolean;
   cleared?: boolean;
@@ -132,6 +139,8 @@ export interface Outcome {
 export const has = (r: Run, p: PerkId) => r.perks.includes(p);
 const rngFor = (r: Run) => new Rng(mixSeed(r.levelSeed, r.drawn++));
 export const lenBonus = (letters: number) => letters - 2;
+/** Demolition skips the cooldown. */
+const fuseCool = (r: Run) => (has(r, 'blast') ? 0 : FUSE_COOL);
 export const fuseWords = (r: Run) => FUSE_WORDS + (has(r, 'blast') ? 2 : 0);
 
 function rockTile(r: Run, g: Rng): Tile {
@@ -147,7 +156,7 @@ function fresh(r: Run, board: (Tile | null)[]): Tile {
   const t: Tile = { id: r.nextId++, ch: pickLetter(board, () => g.next()) };
   const golds = board.filter((x) => x?.gold).length;
   if (g.next() < GOLD_RATE * (has(r, 'gold') ? 3 : 1) && golds < (has(r, 'gold') ? 5 : 3)) t.gold = true;
-  else if (r.depth >= FUSE_FROM && !board.some((x) => x?.fuse) && g.next() < FUSE_RATE) t.fuse = fuseWords(r);
+  else if (r.depth >= FUSE_FROM && r.fuseCool <= 0 && !board.some((x) => x?.fuse) && g.next() < FUSE_RATE) t.fuse = fuseWords(r);
   return t;
 }
 
@@ -215,6 +224,7 @@ function startDepth(r: Run, d: number, dict: Dict): void {
   r.got = 0;
   r.played = 0;
   r.streak = 0;
+  r.fuseCool = 0;
   r.target = TARGETS[d];
   r.wordsLeft = WORDS[d] + (has(r, 'shift') ? 1 : 0);
   r.shakes = SHAKES + (has(r, 'shake') ? 2 : 0);
@@ -252,7 +262,7 @@ function startDepth(r: Run, d: number, dict: Dict): void {
   }
   for (let k = has(r, 'wild') ? 2 : 0; k > 0; k--) {
     const i = take(() => true);
-    if (i >= 0) r.board[i] = { id: r.nextId++, ch: '*' };
+    if (i >= 0) r.board[i] = { id: r.nextId++, ch: '*', gold: true };
   }
   ensureWord(r, dict);
 }
@@ -272,6 +282,7 @@ export function newRun(seed: number, dict: Dict): Run {
     wordsLeft: 0,
     played: 0,
     streak: 0,
+    fuseCool: 0,
     shakes: 0,
     picks: 0,
     levelSeed: 0,
@@ -338,10 +349,9 @@ export function evaluate(r: Run, path: number[], dict: Dict): Eval {
   const boosts: [string, number][] = [];
   const golds = tiles.filter((t) => t.gold).length;
   if (golds) boosts.push([golds > 1 ? `${golds} gold` : 'gold', golds]);
-  if (has(r, 'short') && w.length <= 4) boosts.push(['Chisel', CHISEL]);
+  if (has(r, 'short') && w.length <= 4) boosts.push(['Chisel', CHISEL[w.length]]);
   if (has(r, 'echo') && new Set(w).size < w.length) boosts.push(['Echo', ECHO]);
-  const rares = has(r, 'rare') ? tiles.filter(isRare).length : 0;
-  if (rares) boosts.push(['Prospector', rares]);
+  if (has(r, 'rare') && tiles.some(isRare)) boosts.push(['Prospector', 1]);
   if (has(r, 'first') && r.played === 0) boosts.push(['Opening Strike', OPENING]);
   const factor = 1 + boosts.reduce((k, [, n]) => k + n, 0);
   const wild = tiles.filter((t) => t.ch === '*').length;
@@ -353,7 +363,7 @@ export function tileValue(_r: Run, t: Tile): number {
   return VALUES[t.ch] ?? 0;
 }
 
-/** Prospector: letters worth this much or more add +1 word multiplier each. */
+/** Prospector: a word with a letter worth this much or more gets +1 word multiplier. */
 export const RARE_FROM = 4;
 export const isRare = (t: Tile) => (VALUES[t.ch] ?? 0) >= RARE_FROM;
 
@@ -412,6 +422,7 @@ function playWord(r: Run, path: number[], dict: Dict): Outcome | null {
   r.played++;
   r.words++;
   r.streak = e.word.length >= STREAK_FROM ? r.streak + 1 : 0;
+  r.fuseCool = path.some((i) => r.board[i].fuse) || blasted.some((i) => r.board[i].fuse) ? fuseCool(r) : Math.max(0, r.fuseCool - 1);
   if (!r.best || total > r.best.points) r.best = { word: e.word, points: total };
   if (e.word.length > r.longest.length) r.longest = e.word;
   if (r.got >= r.target) {
@@ -436,6 +447,7 @@ function playWord(r: Run, path: number[], dict: Dict): Outcome | null {
   }
   for (const i of blown) board[i] = null;
   if (lost) {
+    r.fuseCool = fuseCool(r);
     o.blown = blown;
     o.lostWords = Math.min(lost, r.wordsLeft);
     r.wordsLeft = Math.max(0, r.wordsLeft - lost);
@@ -475,7 +487,16 @@ export function act(r: Run, a: string, dict: Dict): Outcome | null {
       if (r.shakes <= 0) return null;
       r.shakes--;
       jumble(r);
-      o = { kind: 'shake', reshuffled: ensureWord(r, dict) };
+      // Tremor: each shake gilds a tile.
+      let gilded: number | undefined;
+      if (has(r, 'shake')) {
+        const plain = [...Array(N).keys()].filter((c) => !r.board[c].rock && !r.board[c].gold && !r.board[c].fuse);
+        if (plain.length) {
+          gilded = rngFor(r).pick(plain);
+          r.board[gilded] = { ...r.board[gilded], gold: true };
+        }
+      }
+      o = { kind: 'shake', gilded, reshuffled: ensureWord(r, dict) };
     } else if (kind === 'X') {
       const i = Number(a.slice(1));
       if (r.picks <= 0 || !Number.isInteger(i) || i < 0 || i >= N) return null;
@@ -483,7 +504,11 @@ export function act(r: Run, a: string, dict: Dict): Outcome | null {
       const board: (Tile | null)[] = r.board.slice();
       const t = board[i]!;
       board[i] = null;
+      const first = r.nextId;
       refill(r, board);
+      // The tile that drops in for it is gold.
+      const fresh = r.board.findIndex((x) => x.id >= first && !x.rock);
+      if (fresh >= 0) r.board[fresh] = { ...r.board[fresh], gold: true };
       o = { kind: 'pick', broken: t.rock ? [i] : [], reshuffled: ensureWord(r, dict) };
     }
   }

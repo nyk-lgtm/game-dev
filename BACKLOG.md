@@ -45,6 +45,15 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         avoid cramped spots. Bot (300 runs): v1 28% wins / median depth 6 → v2 32% / 7; weakest perks 17%;
         favoring any single perk 18-33% (v1 the perk mattered far more: Hot Seam alone 69% under the additive
         draft before its nerf).
+  - [x] Second blind playtest (agent won both runs, 3,095 and 2,721; "scoring fully predictable", "targets fair")
+        and fixes (rules v3): score chips wrap to up to three rows that fit 360 px; the multiplier chip spells the
+        sum ("×6 = 1 + gold + Echo + Prospector + 2 Opening"); a "granite cracked" chip; POOF and other informal
+        words (yay, phew, yikes, oof, nah…) added; shakes keep gold and fuses (checked: core and DOM both keep
+        them) and say so; a new fuse waits 2 words after one is used or blows (Demolition skips the wait); Chisel
+        +2 on 3-letter / +1 on 4-letter words; Prospector +1 per word (was +1 per rare letter); utility perks
+        got teeth: Tremor gilds a tile per shake, Pickaxe's replacement tile is gold, Wild Stone's blanks are gold.
+        Bot (300 runs, targets unchanged): smart picks 45% wins / median depth 8 (perk order re-ranked from the
+        table), weakest picks 22% / 6, SEEN=0.05 20%, per-perk table 19-36%.
   - [ ] Next: owner playtest. Watch: are 7-8 letter words findable on a phone? Do fuses feel fair? A hint button?
 - [ ] **Summit** (peaks-solitaire roguelite). Milestones:
   - [x] Core (src/summit/core): 8 floors of hand-drawn peak layouts (3 rows of 16-18 cards, then 4 rows of

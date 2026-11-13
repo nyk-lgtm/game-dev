@@ -53,6 +53,8 @@ interface Profile {
 }
 const loadProfile = () => store.load<Profile>('profile', { runs: 0, best: 0, bestDepth: 0, wins: 0, bestWord: null });
 
+/** Shorter names for the score chips. */
+const SHORT: Record<string, string> = { 'Opening Strike': 'Opening' };
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const fmt = (n: number) => n.toLocaleString('en-US');
 const upper = (w: string) => w.toUpperCase();
@@ -322,10 +324,10 @@ export class Game {
       this.last = { msg: this.msg, text: `${upper(s.word)} +${o.total}` };
     } else if (o.kind === 'shake') {
       this.sfx.shake();
-      this.msg = o.reshuffled ? 'Shaken (and again, for a face with words on it).' : `Shaken. ${plural(r.shakes, 'shake')} left on this depth.`;
+      this.msg = `Shaken: gold and fuses move with their tiles.${o.gilded !== undefined ? ' <b>Tremor</b> turned a tile gold.' : ''} ${plural(r.shakes, 'shake')} left.`;
     } else if (o.kind === 'pick') {
       this.sfx.crack();
-      this.msg = 'Knocked out.';
+      this.msg = has(r, 'pick') ? 'Knocked out. The tile that dropped in is <b>gold</b>.' : 'Knocked out.';
     }
     if (o.cleared) {
       this.busy = true;
@@ -346,6 +348,7 @@ export class Game {
     const extra: string[] = [];
     if (o.blastPts) extra.push(`<span class="c">+${o.blastPts} blast</span>`);
     if (o.rockPts) extra.push(`<span class="c">+${o.rockPts} ${o.broken!.length === 1 ? 'rock' : 'rocks'}</span>`);
+    if (o.cracked?.length) extra.push(`<span class="c">granite cracked${o.cracked.length > 1 ? ` ×${o.cracked.length}` : ''}</span>`);
     if (o.lostWords) extra.push(`<span class="c warn">fuse blew −${plural(o.lostWords, 'word')}</span>`);
     if (o.reshuffled) extra.push('<span class="c warn">no words left: shaken</span>');
     return this.chips(s, '', extra);
@@ -358,7 +361,8 @@ export class Game {
   private chips(s: Score, lead: string, extra: string[] = []): string {
     const c: string[] = [`<span class="c">${s.base} pts${s.wild ? ` <i>(?=0)</i>` : ''}</span>`, `<span class="c">×${s.lenMult} length</span>`];
     for (const [name, n] of s.adds) c.push(`<span class="c len">+${n} ${name}</span>`);
-    if (s.factor > 1) c.push(`<span class="c x">×${s.factor} ${s.boosts.map(([name, n]) => (n > 1 && !name.endsWith('gold') ? `${name} +${n}` : name)).join(', ')}</span>`);
+    // Spell the sum: "×4 = 1 + 2 gold + Prospector".
+    if (s.factor > 1) c.push(`<span class="c x">×${s.factor} = 1 + ${s.boosts.map(([name, n]) => (n > 1 && !name.endsWith('gold') ? `${n} ${SHORT[name] ?? name}` : (SHORT[name] ?? name))).join(' + ')}</span>`);
     return `<div class="chips">${lead}${c.join('')}${extra.join('')}</div>`;
   }
 
@@ -699,7 +703,7 @@ export class Game {
          <li><span class="chip gold">A</span> Gold: <b>×2</b> for the word, <b>×3</b> with two golds. Perk bonuses like Chisel add to that multiplier the same way.</li>
          <li><span class="chip rock"></span> Rocks break when you spell <b>beside</b> them (+5). From depth 5 some are <b>granite</b> (two dots): two hits.</li>
          <li><span class="chip fuse">E<em>3</em></span> From depth 3, fuses: use one in a word within its count and it blasts its neighbours for points. Left alone it blows and <b>costs a word</b>.</li>
-         <li>🌀 <b>Shake</b> jumbles the face, once per depth.</li>
+         <li>🌀 <b>Shake</b> jumbles the face once per depth; gold and fuses move with their tiles.</li>
        </ul>`,
       [{ label: 'Start digging', primary: true, onClick: closeOverlay }],
     );

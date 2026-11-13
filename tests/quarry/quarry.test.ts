@@ -50,6 +50,8 @@ describe('dictionary', () => {
     for (const w of ['cat', 'dog', 'stone', 'quarry', 'house', 'running', 'quiet', 'jumped', 'zebra', 'apples', 'colour', 'color', 'water', 'mineral'])
       expect(dict.has(w), w).toBe(true);
     for (const w of ['cat', 'stone', 'house', 'water']) expect(dict.common.has(w), w).toBe(true);
+    // Informal words people try (a playtest missed POOF).
+    for (const w of ['poof', 'yeah', 'okay', 'wow', 'oops', 'yay', 'meh', 'yikes', 'phew']) expect(dict.has(w), w).toBe(true);
   });
 
   it('keeps out junk, names, abbreviations and offensive words', () => {
@@ -259,8 +261,54 @@ describe('perks', () => {
     [...'keep'].forEach((ch, y) => (r.board[at(1, y)] = { id: 50 + y, ch }));
     const e = evaluate(r, [0, 1, 2, 3].map((y) => at(1, y)), dict);
     expect(isScore(e) && e.word).toBe('keep');
-    expect(isScore(e) && e.boosts).toEqual([['Chisel', 2], ['Echo', 1], ['Prospector', 1]]);
-    expect(isScore(e) && e.points).toBe((5 + 1 + 1 + 3) * 2 * 5);
+    // Chisel +1 (4 letters), Echo +1, Prospector +1 (one bonus however many rare letters).
+    expect(isScore(e) && e.boosts).toEqual([['Chisel', 1], ['Echo', 1], ['Prospector', 1]]);
+    expect(isScore(e) && e.points).toBe((5 + 1 + 1 + 3) * 2 * 4);
+  });
+
+  it('a shake keeps gold and fuses (they move with their tiles); Tremor gilds one more', () => {
+    for (let s = 0; s < 20; s++) {
+      const r = newRun(500 + s, dict);
+      r.board[at(2, 2)] = { ...r.board[at(2, 2)], fuse: 2 };
+      const gold = r.board.filter((t) => t.gold).length;
+      const ids = r.board.map((t) => t.id).sort();
+      expect(act(r, 'S', dict)).not.toBeNull();
+      expect(r.board.filter((t) => t.gold).length).toBe(gold);
+      expect(r.board.filter((t) => t.fuse).length).toBe(1);
+      expect(r.board.map((t) => t.id).sort()).toEqual(ids);
+    }
+    const r = newRun(600, dict);
+    r.perks = ['shake'];
+    r.shakes = 3;
+    const gold = r.board.filter((t) => t.gold).length;
+    const o = act(r, 'S', dict)!;
+    expect(o.gilded).toBeDefined();
+    expect(r.board.filter((t) => t.gold).length).toBe(gold + 1);
+  });
+
+  it('after a fuse is used or blows, no new fuse drops in for two words', () => {
+    let quietWords = 0;
+    let used = 0;
+    for (let s = 0; s < 30; s++) {
+      const r = newRun(700 + s, dict);
+      for (let k = 0; k < 150 && r.phase !== 'over'; k++) {
+        const cool = r.fuseCool;
+        const depth = r.depth;
+        const fuses = new Set(r.board.filter((t) => t.fuse).map((t) => t.id));
+        const o = act(r, botAction(r, dict, { mode: 'human', perks: ['streak', 'long', 'first', 'gold', 'shift'] }), dict)!;
+        if (o.kind !== 'word' || r.depth !== depth || r.phase !== 'play' || r.perks.includes('blast')) continue;
+        if (fuses.size && !r.board.some((t) => fuses.has(t.id) && t.fuse)) {
+          used++;
+          expect(r.fuseCool).toBe(2);
+        }
+        if (cool >= 2) {
+          quietWords++;
+          expect(r.board.filter((t) => t.fuse && !fuses.has(t.id)).length).toBe(0);
+        }
+      }
+    }
+    expect(used).toBeGreaterThan(10);
+    expect(quietWords).toBeGreaterThan(5);
   });
 
   it('a fuse never stays in a cramped spot when it drops in', () => {

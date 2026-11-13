@@ -28,9 +28,9 @@ export interface BotOpts {
 }
 
 /** Perk preference, best first. */
-export const PRIORITY: PerkId[] = ['shift', 'long', 'streak', 'rare', 'gold', 'first', 'echo', 'rocks', 'blast', 'short', 'wild', 'shake', 'pick'];
+export const PRIORITY: PerkId[] = ['streak', 'long', 'first', 'wild', 'gold', 'pick', 'shake', 'blast', 'shift', 'rare', 'rocks', 'short', 'echo'];
 /** The weakest perks first (from `PERKTABLE=1` on balance.ts): a run with unlucky picks. */
-export const WORST: PerkId[] = ['pick', 'shake', 'wild', 'blast', 'rocks', 'short', 'first', 'echo', 'gold', 'rare', 'streak', 'long', 'shift'];
+export const WORST: PerkId[] = ['echo', 'short', 'rocks', 'rare', 'shift', 'blast', 'shake', 'pick', 'gold', 'wild', 'first', 'long', 'streak'];
 
 interface Cand {
   path: number[];
