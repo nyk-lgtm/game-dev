@@ -40,8 +40,31 @@ const simmer = makeStore('simmer.');
 const gleam = makeStore('gleam.');
 const lull = makeStore('lull.');
 const trestle = makeStore('trestle.');
+const tidings = makeStore('tidings.');
 
 const GAMES: GameCard[] = [
+  {
+    path: './tidings/',
+    title: 'Tidings',
+    tag: 'Narrative roguelite',
+    pitch: 'Carry the winter post over the mountains to Hollin. Each stop deals three little stories; face two, trading food, oil, coin, health and your band’s trust. Recruit a climber, a fiddler or a tinker, keep your promises, and meet strangers you helped again further up the road.',
+    accent: '#e9b45a',
+    best: () => {
+      const p = tidings.load<{ runs?: number; arrivals?: number; best?: number; bestStars?: number; endings?: string[] } | null>('profile', null);
+      if (!p?.runs) return null;
+      return `${p.arrivals ?? 0}/${p.runs} reached Hollin${p.best ? ` · best ${'★'.repeat(p.bestStars ?? 0)} ${p.best}` : ''} · ${p.endings?.length ?? 0} endings`;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><defs><linearGradient id="tdsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#36345f"/><stop offset="1" stop-color="#e8936a"/></linearGradient></defs>
+      <rect width="76" height="76" fill="url(#tdsky)"/>
+      <circle cx="58" cy="20" r="6" fill="#ffd38a"/>
+      <path d="M0 52L14 30L22 40L34 18L48 42L58 32L76 50V76H0Z" fill="#8ea2b8"/>
+      <path d="M30 24L34 18L38 24L35 23L34 26L32 23Z" fill="#fff"/>
+      <path d="M0 62C20 54 40 66 76 56V76H0Z" fill="#2f5446"/>
+      <path d="M10 70C24 64 34 66 46 60" stroke="#e9b45a" stroke-width="2" stroke-dasharray="3 3" fill="none"/>
+      <rect x="20" y="44" width="22" height="15" rx="2" fill="#f4e9d0" transform="rotate(-6 31 51)"/>
+      <path d="M20.5 45.5l10.5 7 10-9" stroke="#8a5a2e" stroke-width="1.6" fill="none" transform="rotate(-6 31 51)"/>
+      <circle cx="52" cy="58" r="3.4" fill="#ffcf6a"/><circle cx="52" cy="58" r="7" fill="#ffcf6a" opacity="0.25"/></svg>`,
+  },
   {
     path: './trestle/',
     title: 'Trestle',
@@ -499,8 +522,8 @@ const GAMES: GameCard[] = [
 const KINDS: Record<string, string[]> = {
   Puzzle: ['trestle', 'gleam', 'triad', 'unspoken', 'grove', 'quarry', 'ninefold', 'summit'],
   Action: ['loomsong', 'sungrazer', 'afterglow', 'nightline', 'hexhold'],
-  Strategy: ['simmer', 'brink', 'kitbag', 'glyph', 'telegraph', 'rewild', 'hexhold', 'summit'],
-  Story: ['lastlight', 'lantern', 'delve', 'unspoken'],
+  Strategy: ['tidings', 'simmer', 'brink', 'kitbag', 'glyph', 'telegraph', 'rewild', 'hexhold', 'summit'],
+  Story: ['tidings', 'lastlight', 'lantern', 'delve', 'unspoken'],
   Calm: ['lull', 'simmer', 'grove', 'ninefold'],
 };
 const slug = (path: string) => path.replace(/[./]/g, '');
@@ -565,6 +588,7 @@ const DAILY = [
   { path: './simmer/?daily', title: 'Simmer', store: simmer, accent: '#ffb35c' },
   { path: './gleam/?daily', title: 'Gleam', store: gleam, accent: '#ff5cf0' },
   { path: './trestle/?daily', title: 'Trestle', store: trestle, accent: '#e0b25a' },
+  { path: './tidings/?daily', title: 'Tidings', store: tidings, accent: '#e9b45a' },
 ];
 const daily = document.getElementById('daily')!;
 daily.innerHTML = `<h3>Daily challenges <span>${prettyDay()}</span></h3><p>The same run for everyone today. A new one at midnight.</p>`;

@@ -50,6 +50,7 @@ export default defineConfig({
         gleam: resolve(__dirname, 'gleam/index.html'),
         lull: resolve(__dirname, 'lull/index.html'),
         trestle: resolve(__dirname, 'trestle/index.html'),
+        tidings: resolve(__dirname, 'tidings/index.html'),
       },
     },
   },

@@ -39,6 +39,23 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
    Simmer, Gleam, Lull). Ideas: a co-op-free social/daily puzzle, a short narrative roguelite, a physics builder.
 
 ## Now
+- [ ] **Tidings** (original narrative roguelite: carry the winter post from Tarrow Bridge over the hills and the Teeth to
+  Hollin; 11 stops, each deals 3 illustrated event cards, face 2; trade food/oil/coin/health/trust; companions gate choices,
+  promises, callbacks; journal of events/companions/endings; daily). Milestones:
+  - [x] Core (src/tidings/core, rules v1): ~100 authored cards (8 recruits, ~60 place cards, 8 anywhere, 13 callbacks, 8
+        companion stories, text variants), seeded map of 2 nodes a row by region, deal with callbacks first and one ⚑ at
+        most, gambles from the seed with shown odds, leg costs by region/kind/band, scoring, 11 endings. 21 tests.
+        Balance (`balance.ts 400`): careful ~55% (51-56% by seed set), casual ~11%, random/safe/risky/greedy ~0%. Learned:
+        one companion must be free to feed (pairs eat) or the bot never recruits; health/trust were free currencies until
+        legs cost them (rivers/heights health, forest trust); the last leg is free (no deaths on Hollin's doorstep);
+        hills/pass food 2 is the touchy knob (1 → ~85%).
+  - [x] UI: resource pills (tap for rules, low ones pulse), journey strip (tap: route card with every leg cost), hand
+        rows with SVG landscape art, focus card with every number as chips (☠, odds, boosts, upkeep, promises, ✦), flip to
+        outcome, road buttons with costs, ending card with score table and a card-by-card recap, journal, help, menu, bug
+        report, daily, hub card (Story + Strategy) + Daily link + NEWS. Pixel 7 and 360×640 checked; a touch play-through.
+  - [ ] Next: first blind playtest. Watch: is it too hard for a thoughtful human (casual bot only ~11%; food is ~65% of
+        deaths)? Do players find the ⚑ rule and companion upkeep clear? Are 2 callbacks a run enough to feel the "stranger
+        returns"? Maybe: sound, a short intro vignette, more endings tied to companions, a gentler first journey.
 - [ ] **Trestle** (original physics builder: planks, twigs and twine on a peg grid; carry the beetle's cart over a gap or
   hold a lantern at a ring; stars for matching the surveyor bot's cost and part count). Milestones:
   - [x] Core (src/trestle/core, rules v1): XPBD sim at 480 Hz (rigid members, one-sided twine, smoothed forces snap past

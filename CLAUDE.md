@@ -14,7 +14,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 `simmer/` (cozy management sim: a night-market food stall for 20 nights, critter guests on a watchable evening),
 `gleam/` (light-and-mirrors logic puzzle: place mirrors/splitters/filters so every crystal gets its exact colour),
 `lull/` (musical garden sandbox: plants sing a pentatonic loop, creatures carry notes, no fail state),
-`trestle/` (physics builder: planks/twigs/twine on a peg grid carry a cart over a gap or hold a lantern at a ring).
+`trestle/` (physics builder: planks/twigs/twine on a peg grid carry a cart over a gap or hold a lantern at a ring),
+`tidings/` (narrative roguelite: carry the winter post over 11 stops; face 2 of 3 event cards a stop, trade five resources).
 
 - The owner plays and tests only on an Android phone (Chrome, portrait). Every UI
   change must work by touch at ~390 CSS px wide; tap targets ≥ 44px.
@@ -106,6 +107,13 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     `show.ts <seed> [size]` prints a puzzle, its light and the model's eliminations; `hints.ts <seed> [size]` the hint
     texts in order (`hints.ts longest 150`: the longest; #info is 76 px = 4 lines at 360 px and must hold them); `stress.ts 200` checks the model never rules out an answer piece from part-filled boards and
     hints always finish.
+  - Tidings: `npx vite-node scripts/tidings/balance.ts 400 [careful,casual,random,safe,risky,greedy,crowd,miser]` (rules v1:
+    careful (plans every order of this stop's cards and choices, gambles by their shown odds, then the road, valuing stock
+    against the cheapest remaining leg costs on the map) arrives ~55% (51-56% over seed sets 1000/5000/9000), ★★★ ~14% of
+    arrivals; casual (one choice at a time, 25% whim) ~11%; random 0%; safe (never gambles, smallest loss) 0% (starves by
+    stop 4-5); risky/greedy ~0%; deaths mostly food (~65%), then oil, spread over stops 4-10; ~2 callbacks faced a run).
+    `TUNE=startF:6,legFoodHills:1` tries numbers (careful: legFood hills/pass 2 → ~55%, 1 → ~85%: the touchiest knob),
+    `W=reserve:0.7` bot weights; `trace.ts <seed> [policy]` prints a journey stop by stop and its `?seed=&a=`.
   - Trestle: `npx vite-node scripts/trestle/probe.ts 200` (rules v2, 200 levels over d 0..1: first layout
     proven 81% (crossings ~90%, lanterns ~62%), every level within ≤ 12 layouts; par/budget median 0.76 (0.62-0.86); twists:
     wind 27%, two rings 9%, log 8%, floor 10%, island 5%; gen median ~370 ms, p90 ~0.9 s, max ~1.7 s on a laptop (runs in the
@@ -146,7 +154,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   with batched `fillText` runs; art lives in each game's `art.ts`.
 - Daily challenges (src/shared/daily.ts): `<game>/?daily` plays today's seed (`dailySeed(game, day)`,
   local date); each game keeps its in-progress daily under `dailyRun` and today's best under `daily`.
-  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad, Ninefold, Summit, Quarry, Sungrazer, Kitbag, Brink (a daily win-in-N puzzle), Loomsong (a daily song), Simmer (a daily season), Gleam (a Medium puzzle) and Trestle (a d 0.55 level); the hub's Daily section links them.
+  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad, Ninefold, Summit, Quarry, Sungrazer, Kitbag, Brink (a daily win-in-N puzzle), Loomsong (a daily song), Simmer (a daily season), Gleam (a Medium puzzle), Trestle (a d 0.55 level) and Tidings (a daily road); the hub's Daily section links them.
 - Afterglow extras: Nights 1-5 (`NIGHTS` in content.ts, unlocked by `profile.nightsWon`), arenas
   (`ARENAS`/pillars in core/arena.ts, hashed from the seed), unions (`union` on a WeaponDef: two
   maxed weapons merge in a chest), and player damage is attributed (`w.taken`, `w.killedBy`).
@@ -476,6 +484,24 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   AudioContext clock once sound runs (perf clock before/without), notes scheduled 0.22 s ahead; `?seed=N` opens a fresh
   garden as a visit, `__game.fill(n)` / `__game.jump(step)` for screenshots. Bump `RULES_VERSION` if old codes would grow
   or sing differently.
+- Tidings (src/tidings/core): data.ts (resources f/o/c/h/t, `TUNE`, 8 kinds of place with oil cost and notes, 8 companions,
+  3 promises, 11 endings, `STARS`), cards.ts (~100 authored cards: `at` stop range, `where` kinds, `when` {flag, comp,
+  promise, gap (default 2)}, `cb` callbacks dealt first, `must` (⚑ can't be passed; ≤ 1 a hand), `repeat`, `alts` tellings;
+  choices are `ch(label, 'f+2 c-1', outcome, {need, join, set, clear, promise, breaks})` or `gam(label, odds, win, out, lose,
+  out, {boost: [comp, +odds]})`; a gamble's `breaks` only applies when it's lost), run.ts. Map: rows 0 (Tarrow Bridge) …
+  11 (Hollin), rows 1-10 two nodes of different kinds from the region (lowlands 0-3, hills 4-7, the Teeth 8-10). A stop
+  deals 3 (`rngFor(seed, T_DEAL, stop)`: callbacks first, then weighted: matching `where` 4, anywhere 2, repeat 1,
+  must ×0.7); face 2 (`P<h>.<c>`), then `M<k>` walks a leg: food 1 / 2 / 2 by region + 1 per full pair of companions,
+  oil by kind (heights 2; town/inn/river 0), heights and rivers −1 health, forest −1 trust; the last leg is free. Food,
+  oil, health or trust at 0 ends it (coin can't go below 0: choices that cost more are blocked). Gambles roll
+  `rngFor(seed, T_GAMBLE, stop, cardIndex)` against `oddsOf` (boosts, ≤ 95%); `act(r, a, force)` decides one for bots.
+  Every card keeps a choice with no gate and no coin (test). Score at Hollin = f+o+h+t + ⌊c/2⌋ + 3/companion +
+  5/promise kept. Endings by priority: wedding (ring kept), thin (a resource ≤ 1), full (3 companions), beloved (trust ≥ 9),
+  rich (coin ≥ 14), alone, plain. The page is DOM: resource pills, a journey strip (SVG + emoji nodes, tap = route
+  card with every leg's cost), hand rows (SVG landscape art per card from art.ts: sky by `sky`, ground by region, emoji
+  figures), a focus card with choices (chips for every number, ☠ when it would empty a resource, odds and boosts,
+  upkeep a recruit adds, promises, "✦ may be remembered"), a flip to the outcome, then the road buttons. Journal
+  (`profile`: cards faced, companions met, endings) survives runs. Reports `TIDINGS v… seed=… a=…`.
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)
   plus a shape in render/draw.ts and a color in palette.ts; tests in
   tests/telegraph/enemies.test.ts. Telegraphed attacks set `aim` and resolve via
