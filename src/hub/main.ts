@@ -34,8 +34,30 @@ const summit = makeStore('summit.');
 const quarry = makeStore('quarry.');
 const sungrazer = makeStore('sungrazer.');
 const kitbag = makeStore('kitbag.');
+const brink = makeStore('brink.');
 
 const GAMES: GameCard[] = [
+  {
+    path: './brink/',
+    title: 'Brink',
+    tag: 'Strategy duel',
+    pitch: 'Sumo on a crumbling island. Step and shove your stones against the AI: lines of two go over, lines of three hold firm. Push three off while the edge falls away. Daily win-in-2 puzzles.',
+    accent: '#ff8a6e',
+    best: () => {
+      const p = brink.load<{ games?: number; won?: Record<string, number>; dailies?: number } | null>('profile', null);
+      if (!p?.games && !p?.dailies) return null;
+      const w = p.won ?? {};
+      const top = (['hard', 'normal', 'easy'] as const).find((l) => (w[l] ?? 0) > 0);
+      const wins = (w.easy ?? 0) + (w.normal ?? 0) + (w.hard ?? 0);
+      return `${wins} win${wins === 1 ? '' : 's'}${top ? ` · beat ${top[0].toUpperCase()}${top.slice(1)}` : ''}${p.dailies ? ` · ${p.dailies} daily` : ''}`;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#0b1020"/>
+      <g stroke="#1c2523" stroke-width="1.2"><path d="M22 20l10 0 5 8.7-5 8.7H22l-5-8.7z" fill="#4d625e"/><path d="M37 28.7l10 0 5 8.7-5 8.7H37l-5-8.7z" fill="#4d625e"/><path d="M22 37.4l10 0 5 8.7-5 8.7H22l-5-8.7z" fill="#4d625e"/><path d="M37 46.1l10 0 5 8.7-5 8.7H37l-5-8.7z" fill="#5a3a33"/><path d="M52 37.4l10 0 5 8.7-5 8.7H52l-5-8.7z" fill="#4d625e"/></g>
+      <path d="M39 50l4 3 3-2M41 56l3-2" stroke="#1a0806" stroke-width="1.2" fill="none"/>
+      <circle cx="27" cy="46" r="6.5" fill="#f4ecd8" stroke="#a8987a"/><circle cx="42" cy="37.4" r="6.5" fill="#e8553c" stroke="#8e2a1d"/>
+      <circle cx="62" cy="27" r="6" fill="#e8553c" stroke="#8e2a1d" opacity="0.45"/>
+      <path d="M31 43l6-3" stroke="#ffd77a" stroke-width="2" stroke-linecap="round"/><path d="M48 33l7-4" stroke="#ff5a4a" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="2 2.5"/></svg>`,
+  },
   {
     path: './kitbag/',
     title: 'Kitbag',
@@ -373,6 +395,7 @@ const DAILY = [
   { path: './quarry/?daily', title: 'Quarry', store: quarry, accent: '#ffc857' },
   { path: './sungrazer/?daily', title: 'Sungrazer', store: sungrazer, accent: '#ffc35a' },
   { path: './kitbag/?daily', title: 'Kitbag', store: kitbag, accent: '#e8b04a' },
+  { path: './brink/?daily', title: 'Brink', store: brink, accent: '#ff8a6e' },
 ];
 const daily = document.getElementById('daily')!;
 daily.innerHTML = `<h3>Daily challenges <span>${prettyDay()}</span></h3><p>The same run for everyone today. A new one at midnight.</p>`;

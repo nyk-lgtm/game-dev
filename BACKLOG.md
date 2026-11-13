@@ -18,6 +18,32 @@ Ground rules: never break saves without bumping RULES_VERSION; never leave main 
 keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 
 ## Now
+- [ ] **Brink** (original two-player abstract: sumo on a crumbling hex island, vs an AI, plus puzzles). Milestones:
+  - [x] Rules design by self-play (src/brink/core, rules v1): 37-tile hex island, six stones a side in a V two rows
+        apart; step one tile, or shove the line in front if it is at most two stones (either colour; three won't
+        budge); off the edge or into a hole = gone; from ply 6 one tile falls after every ply (seeded order, rim first,
+        mirror pairs, shown as cracks), taking any stone on it; three lost loses. Tried and dropped: a rim wedge start
+        with crumbling from ply 14 (both AIs shuffle for 14 plies; Hard mirror first mover 80%), a scrum start in contact
+        (first mover 97%), "the tile you leave crumbles" (second player forced win at Normal), sliding stones (first
+        mover wins in 5 plies). A komi lever (`TUNE.komi`: each pair's first tile falls on the starter's side) moves the
+        first-mover rate ~-15 points; unused because the V start is already balanced.
+  - [x] AI (ai.ts): negamax alpha-beta, TT, killers/history, knock-off quiescence, iterative deepening with a node cap
+        (deterministic). Eval: stones ×1000, worst-line distance to the void, ring, doomed tiles, knock threats, braces.
+        Easy depth 2 + seeded noise (160), Normal depth 3 / 8k nodes, Hard depth ≤12 / 90k nodes. Self-play (40 games
+        each, scripts/brink/selfplay.ts): first mover 58% (Easy and Normal mirrors), 43% (Hard mirror); Hard–Normal
+        63%, Hard–Easy 100%, Normal–Easy 95%; median 24 / 29 / 28 plies; Hard ~130 ms per move (p90 150, max 290) on a
+        laptop in node, so ~0.5 s on a phone.
+  - [x] Puzzles: exact `winningMoves` (AND-OR) search; five hand-made lessons (Shove, Two in a row, Holes, Crumble,
+        Brace = win in 2), each with one winning move (tested); 400 daily puzzles (137 win-in-2, 263 win-in-3) from 875
+        self-play games, each exactly N with a single winning first move (all 400 verified once, every 10th in tests).
+  - [x] UI: canvas island with cliffs, cracks (1-3 plies), pulsing red next tile, stones slide / go over and drop /
+        tiles fall away, shake (off with reduced effects), dots and arrows on selection (red = knocks a coral stone off,
+        purple = your own), danger rings, last-move trail, drag or tap, hint (gold arrow), undo, AI "thinking" line,
+        result card with won–lost per level and "Try Normal/Hard", new-game card (level, who starts: you / AI / take
+        turns), puzzles card, help card with a shove diagram, synth sounds, bug report, `?daily`, hub card + Daily link.
+        Pixel 7 checked: help, selection, mid-game, lesson, daily, result, new game.
+  - [ ] Next: owner playtest. Watch: does the AI's waiting (it shuffles while the rim crumbles) feel dull? Is Hard
+        hard enough for a person (it beats Normal only 63%)? Are the 2-3-ply cracks readable? Easy may blunder too much.
 - [ ] **Kitbag** (dice-placement roguelite: roll dice, slot them into gear cards, 12 floors to The House). Milestones:
   - [x] Core (src/kitbag/core, rules v1): 19 gear cards with conditioned slots (any / even / odd / ≤2 / ≤3 / 2+ / 4+ /
         5+ / 6 / pair / any two) and effects (deal, pierce, block, spike, heal, poison, reroll, split, flip, +1/+2,

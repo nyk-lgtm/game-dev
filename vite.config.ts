@@ -44,6 +44,7 @@ export default defineConfig({
         quarry: resolve(__dirname, 'quarry/index.html'),
         sungrazer: resolve(__dirname, 'sungrazer/index.html'),
         kitbag: resolve(__dirname, 'kitbag/index.html'),
+        brink: resolve(__dirname, 'brink/index.html'),
       },
     },
   },

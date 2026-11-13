@@ -1,0 +1,59 @@
+/* Brink: a basalt island in a night sea. */
+body {
+  --bg: #0b1020;
+  --panel: #121a2c;
+  --line: #24304a;
+  --text: #f1ece0;
+  --muted: #94a0bb;
+  --accent: #ffd77a;
+  --danger: #ff6a55;
+  --heal: #7fe0a8;
+}
+#app { background: radial-gradient(120% 70% at 50% 45%, #13203a 0%, #0b1020 70%); }
+#hud .spacer { flex: 1; }
+#hud .side { gap: 4px; min-width: 70px; }
+.pips { display: flex; gap: 4px; height: 18px; align-items: center; }
+.pip {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 1.5px dashed #3a4762; display: inline-flex; align-items: center; justify-content: center;
+}
+.pip.on { border: 0; }
+#status {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 6px 12px; min-height: 32px; font-size: 13.5px; color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+#status b { color: var(--text); }
+#status .good, #info .good { color: var(--heal); }
+#status .bad, #info .bad { color: var(--danger); }
+#status .red { color: #ff7a5e; }
+#status .think { color: var(--accent); }
+#controls {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 8px 12px max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line); background: var(--panel);
+}
+body #info { min-height: 40px; height: 40px; overflow-y: auto; font-size: 13.5px; line-height: 1.4; color: var(--muted); }
+#info svg { vertical-align: -3px; }
+#tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+#tools button {
+  min-height: 48px; border-radius: 12px; border: 1px solid var(--line);
+  background: #1a2438; color: var(--text); font-size: 15px; font-weight: 700;
+}
+#tools button:disabled { opacity: 0.45; }
+#tools button:active { transform: scale(0.97); }
+#overlay .levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+#overlay .levels button {
+  min-height: 48px; border-radius: 10px; border: 1px solid var(--line);
+  background: #1a2438; color: var(--muted); font-size: 15px; font-weight: 700;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.15;
+}
+#overlay .levels button small { font-size: 11px; font-weight: 600; opacity: 0.8; }
+#overlay .levels button.on { border-color: var(--accent); color: var(--accent); background: #2e2a1e; }
+#overlay .card .label { margin-top: 2px; }
+#overlay .score { font-size: 17px; color: var(--text); display: flex; align-items: center; gap: 6px; }
+#overlay .stats { display: flex; flex-direction: column; gap: 4px; }
+#overlay .stats > div { display: flex; gap: 6px; flex-wrap: wrap; }
+.lv { padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.lv.cur { border-color: var(--accent); }
+.lv b { color: var(--text); }
