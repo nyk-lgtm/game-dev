@@ -49,6 +49,7 @@ export default defineConfig({
         simmer: resolve(__dirname, 'simmer/index.html'),
         gleam: resolve(__dirname, 'gleam/index.html'),
         lull: resolve(__dirname, 'lull/index.html'),
+        trestle: resolve(__dirname, 'trestle/index.html'),
       },
     },
   },

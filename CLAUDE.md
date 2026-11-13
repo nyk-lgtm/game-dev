@@ -13,7 +13,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 `loomsong/` (rhythm game: seeded synth songs, notes charted from the song's own onsets, 4 lanes),
 `simmer/` (cozy management sim: a night-market food stall for 20 nights, critter guests on a watchable evening),
 `gleam/` (light-and-mirrors logic puzzle: place mirrors/splitters/filters so every crystal gets its exact colour),
-`lull/` (musical garden sandbox: plants sing a pentatonic loop, creatures carry notes, no fail state).
+`lull/` (musical garden sandbox: plants sing a pentatonic loop, creatures carry notes, no fail state),
+`trestle/` (physics builder: planks/twigs/twine on a peg grid carry a cart over a gap or hold a lantern at a ring).
 
 - The owner plays and tests only on an Android phone (Chrome, portrait). Every UI
   change must work by touch at ~390 CSS px wide; tap targets ≥ 44px.
@@ -105,6 +106,11 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     `show.ts <seed> [size]` prints a puzzle, its light and the model's eliminations; `hints.ts <seed> [size]` the hint
     texts in order (`hints.ts longest 150`: the longest; #info is 76 px = 4 lines at 360 px and must hold them); `stress.ts 200` checks the model never rules out an answer piece from part-filled boards and
     hints always finish.
+  - Trestle: `npx vite-node scripts/trestle/probe.ts 200` (rules v1, 200 levels over d 0..1: first layout proven solvable 74%
+    (crossings ~79%, lanterns ~62%), every level proven within ≤ 6 layouts; par/budget median 0.72 (0.60-0.80); gen median ~75 ms,
+    p90 ~170 ms, max ~0.6 s on a laptop (pages cache levels); one test run ~2 ms). `why.ts 50 [cross|reach]` tallies why
+    first layouts fail (V=1 lists them); `tutorials.ts` re-surveys the hand-made levels (their par/parParts/ref are pinned
+    in tutorials.ts and checked by tests; re-run it after any physics or material change).
   - Lull: `npx vite-node scripts/lull/probe.ts [seed] [plants]` (weather spells, then a full garden's day: rules v1 ~1.6 notes
     a step / ~26 a bar, busiest step capped at 6 (`MAX_PER_STEP`), Harpfern runs are the bulk; bees/fireflies/frog out per phase).
     Frame cost (Playwright, Pixel 7, 30 grown plants): desktop 60 fps (draw JS ~0.4 ms); CPU ×4 throttled ~30-36 fps at DPR 2,
@@ -131,7 +137,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   with batched `fillText` runs; art lives in each game's `art.ts`.
 - Daily challenges (src/shared/daily.ts): `<game>/?daily` plays today's seed (`dailySeed(game, day)`,
   local date); each game keeps its in-progress daily under `dailyRun` and today's best under `daily`.
-  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad, Ninefold, Summit, Quarry, Sungrazer, Kitbag, Brink (a daily win-in-N puzzle), Loomsong (a daily song), Simmer (a daily season) and Gleam (a Medium puzzle); the hub's Daily section links them.
+  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad, Ninefold, Summit, Quarry, Sungrazer, Kitbag, Brink (a daily win-in-N puzzle), Loomsong (a daily song), Simmer (a daily season), Gleam (a Medium puzzle) and Trestle (a d 0.55 level); the hub's Daily section links them.
 - Afterglow extras: Nights 1-5 (`NIGHTS` in content.ts, unlocked by `profile.nightsWon`), arenas
   (`ARENAS`/pillars in core/arena.ts, hashed from the seed), unions (`union` on a WeaponDef: two
   maxed weapons merge in a chest), and player damage is attributed (`w.taken`, `w.killedBy`).
@@ -389,6 +395,28 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   route over the rings from a lamp of its colour), Medium a filter (white lamp always); seeds hash `mixSeed(mixSeed(mixSeed(seed, tag), n), attempt)`. A run is seed + actions
   (`<sock b36><code>`, `H…` hint, `M<a><b>` swap, `U`, `R`); `replay(p, a)`. Reports `GLEAM v… seed=… size=… a=…`,
   `?seed=&size=&a=`. Bump `RULES_VERSION` when the generator or rules change puzzles.
+- Trestle (src/trestle/core): a 13×12 grid of build points (y down, `pt(x,y)`), rock as axis boxes (`Rock`: bank, wall,
+  spire), fixed anchors, a goal: `cross` (cart from `startX` to past `goalX`, road from anchor `from` to `to`) or `reach`
+  (a peg on `ring` must hold a lantern within `RING_TOL` for the last 1.5 s of 4 s). Materials (build.ts `MATS`): plank =
+  road (the cart only rolls on planks and rock), twig, twine (pulls only, max 4.5); cost = round(length × cost/unit). A
+  build = actions (`P|T|R|D` + two 2-char base-36 points, `U`, `C`, `G` = a test run); members through a peg split there.
+  sim.ts: XPBD at 480 Hz, 2 iterations, rigid distance constraints (ropes one-sided), force = λ/h² smoothed ~85 ms
+  (`SMOOTH`), a member snaps when |force| > strength; the cart is 3 particles (wheels collide with plank segments, both
+  sides corrected, and rock; a motor pushes along the contact tangent to `CART_SPEED`); only + − × ÷ and sqrt, so runs are
+  exact everywhere. Masses: pegs 0.06 + half of each member (density per unit); self-weight matters on long spans.
+  solve.ts (the surveyor): Warren trusses, braced bands over/under the road, rope-hung roads, cantilever rails to the ring
+  (pairs of anchors in one column; rails stay ≥ 1 apart until the tip), two-cord Vs; keeps those that pass with nothing
+  snapping (`stopOnBreak`), strips them (idle members at once, then least-stressed first) and swaps pulling twigs for
+  twine. gen.ts: `layout(seed, d, t)` draws a crossing (70%) or a lantern level; `priceLevel` surveys it (rejects lanterns
+  hanging straight under an anchor and builds of < 3 parts) and sets par = surveyor cost, parParts, budget =
+  ceil(par × (1.45 − 0.2d) / 10) × 10, `ref` = its actions; `makeLevel` redraws from the next sub-seed until proven.
+  Stars (`starsFor`): ★ within budget, ★★ cost ≤ par, ★★★ also parts ≤ parParts. Trail: 6 tutorials, then
+  `trailLevel(n)` = `makeLevel(trailSeed(n−6), diffOf(n−7))` (d reaches 1 at level 31), id `n<n>`; daily = d 0.55. The
+  page caches generated levels (`g<n>`, `gd<day>` with RULES_VERSION) and saves each level's build (`b<n>`); drag from a
+  peg (a 2× loupe shows the landing point; the target is the nearest grid point within the material's reach), tap a
+  piece's middle to remove it, pinch / ⤢ to zoom (one finger pans when zoomed). Members are coloured by stress during a
+  run; after it, pieces that peaked ≥ 70% glow until the next edit. `?lv=n&a=` / `?seed=&d=&a=` replay a build (not
+  saved); reports `TRESTLE v… lv=…|seed=… d=… a=…`.
 - Lull (src/lull/core): a sandbox garden, no fail state. x 0..999 = pitch (10 columns of the garden's major pentatonic,
   `colOf`, low left), y 0..35 rows = depth (8 lanes = which 8th of the bar it sings, `laneOf`, back row first); time is
   16th steps (84 BPM, `DAY` = 84 bars ≈ 4 min; dawn/day/dusk/night in sky.ts, weather in half-day spells `spellKind`,

@@ -1,0 +1,70 @@
+/* Trestle: dusk blues, warm wood. */
+body {
+  --bg: #161b33;
+  --panel: #1c2140;
+  --line: #2e3560;
+  --text: #f3ecdf;
+  --muted: #a8a6c4;
+  --accent: #ffc35c;
+  background: var(--bg);
+}
+#hud { gap: 10px; }
+#hud .spacer { flex: 1; }
+#hud .lvl { min-width: 0; flex: 0 1 auto; max-width: 140px; }
+#hud .name { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#cost { font-variant-numeric: tabular-nums; white-space: nowrap; }
+#cost small { font-size: 13px; font-weight: 600; color: var(--muted); }
+#cost.over { color: var(--danger); }
+#cost.par { color: var(--heal); }
+#best { font-size: 15px; color: var(--gold); letter-spacing: 1px; white-space: nowrap; }
+#controls {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 8px 12px max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line); background: var(--panel);
+}
+/* A fixed box so the canvas never jumps when the line wraps. */
+body #info { flex: none; height: 56px; max-height: 56px; overflow-y: auto; font-size: 13.5px; line-height: 1.36; color: var(--muted); }
+#info .th { color: #8f8cb0; font-size: 12px; white-space: nowrap; }
+#mats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+#mats button {
+  min-height: 52px; border-radius: 12px; border: 1px solid var(--line);
+  background: #232850; color: var(--text);
+  display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; align-items: center;
+  column-gap: 6px; padding: 4px 8px; text-align: left;
+}
+#mats button .ic { grid-row: 1 / 3; display: flex; }
+#mats button .nm { font-weight: 700; font-size: 15px; }
+#mats button .pr { font-size: 12px; color: var(--muted); }
+#mats button.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: #3a3446; }
+#tools { display: grid; grid-template-columns: 1fr 1fr 1fr 2fr; gap: 8px; }
+#tools button {
+  min-height: 48px; border-radius: 12px; border: 1px solid var(--line);
+  background: #232850; color: var(--text); font-size: 20px; font-weight: 700;
+}
+#tools button.go { background: var(--accent); color: #2a1a06; border: 0; font-size: 17px; }
+#tools button.go.stop { background: #3a3f6e; color: var(--text); }
+#tools button:disabled { opacity: 0.4; }
+#controls button:active { transform: scale(0.97); }
+.card .stars { color: var(--gold); letter-spacing: 2px; }
+.card .th { font-size: 13.5px; }
+.card .levels { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; max-height: 46vh; overflow-y: auto; padding: 2px; }
+.card .levels button {
+  min-height: 52px; border-radius: 10px; border: 1px solid var(--line); background: #232850; color: var(--text);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 2px;
+}
+.card .levels button b { font-size: 16px; }
+.card .levels button span { font-size: 10.5px; color: var(--gold); letter-spacing: 0.5px; }
+.card .levels button.tut { background: #262a46; }
+.card .levels button.cur { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.card svg { vertical-align: middle; }
+@media (max-width: 370px) {
+  #mats button { grid-template-columns: 1fr; text-align: center; justify-items: center; }
+  #mats button .ic { grid-row: auto; }
+  #mats button .pr { display: none; }
+  #hud .lvl { max-width: 96px; }
+}
+@media (max-height: 700px) {
+  #mats button { min-height: 46px; }
+  body #info { height: 54px; max-height: 54px; font-size: 13px; line-height: 1.3; }
+}
+#hud .stat[hidden] { display: none; }

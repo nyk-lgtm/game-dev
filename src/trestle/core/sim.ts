@@ -1,0 +1,419 @@
+// The test run: a fixed-step position-based solver (XPBD with stiff distance
+// constraints, small steps). Members carry the force their constraint needed,
+// smoothed over ~40 ms; one that goes past its material's strength snaps.
+// The cart is three particles (two wheels and a body) rolling on planks and
+// rock; the lantern hangs from its ring peg on a short cord.
+//
+// Pure and deterministic: only + − × ÷ and Math.sqrt (correctly rounded
+// everywhere), fixed step, members solved in list order.
+
+import { MATS, pegs, type Member } from './build';
+import { COLS, WATER, px, py, type Level } from './level';
+
+export const HZ = 480;
+const H = 1 / HZ;
+const H2 = H * H;
+export const GRAVITY = 10;
+const ITER = 2;
+const DAMP = 1 - 0.6 * H;
+/** Force smoothing per step (time constant ~85 ms). */
+const SMOOTH = 0.025;
+
+export const WHEEL_R = 0.24;
+const WHEELBASE = 0.8;
+const BODY_UP = 0.42;
+const BODY_R = 0.26;
+export const CART_SPEED = 2.4;
+const CART_ACC = 6;
+const LANTERN_CORD = 0.7;
+/** How close the ring peg must stay, and for how long before the end of a reach run. */
+export const RING_TOL = 0.4;
+const REACH_STEPS = HZ * 4;
+const REACH_HOLD = Math.round(HZ * 1.5);
+
+export type Outcome = 'crossed' | 'fell' | 'stalled' | 'held' | 'sagged' | 'dropped' | 'nohook';
+export const WON: ReadonlySet<Outcome> = new Set(['crossed', 'held']);
+
+export class Sim {
+  readonly level: Level;
+  readonly members: Member[];
+  /** Particles: the pegs (in `pegIds` order), then cart wheels + body, or the lantern. */
+  x: Float64Array;
+  y: Float64Array;
+  private ox: Float64Array;
+  private oy: Float64Array;
+  vx: Float64Array;
+  vy: Float64Array;
+  w: Float64Array;
+  readonly pegIds: number[];
+  /** Particle index per member end. */
+  readonly ma: Int32Array;
+  readonly mb: Int32Array;
+  private rest: Float64Array;
+  /** Per member: rope (1) / road (1) flags and strength. */
+  private isRope: Uint8Array;
+  private isRoad: Uint8Array;
+  private str: Float64Array;
+  private lam: Float64Array;
+  /** Smoothed force per member (+ tension, − compression). */
+  force: Float64Array;
+  /** Highest |force| / strength seen, and the most compression seen. */
+  peak: Float64Array;
+  minF: Float64Array;
+  broken: Uint8Array;
+  /** Step at which each member snapped (−1 intact). */
+  brokeAt: Int32Array;
+  breaks = 0;
+  /** Cart particles (rear wheel, front wheel, body) or −1. */
+  readonly cart: [number, number, number] | null;
+  /** Lantern particle and its ring peg's particle (−1 if the ring has no peg). */
+  readonly lantern: number;
+  readonly ringPeg: number;
+  /** Wheel contact normals from the last step (0,0 = airborne). */
+  private cn = new Float64Array(4);
+  steps = 0;
+  outcome: Outcome | null = null;
+  outcomeAt = -1;
+  /** Steps the cart has barely moved / the ring has held. */
+  private still = 0;
+  private held = 0;
+  private lastCx = 0;
+  readonly maxSteps: number;
+  /** Stop solving at the first snap (the surveyor wants clean builds). */
+  stopOnBreak = false;
+
+  constructor(level: Level, members: readonly Member[]) {
+    this.level = level;
+    this.members = [...members];
+    const used = new Set<number>();
+    for (const m of members) used.add(m.a).add(m.b);
+    const g = level.goal;
+    if (g.kind === 'reach') used.add(g.ring);
+    this.pegIds = [...pegs(level, members)].filter((p) => used.has(p)).sort((a, b) => a - b);
+    const idx = new Map(this.pegIds.map((p, i) => [p, i]));
+    const extra = g.kind === 'cross' ? 3 : 1;
+    const n = this.pegIds.length + extra;
+    this.x = new Float64Array(n);
+    this.y = new Float64Array(n);
+    this.ox = new Float64Array(n);
+    this.oy = new Float64Array(n);
+    this.vx = new Float64Array(n);
+    this.vy = new Float64Array(n);
+    this.w = new Float64Array(n);
+    const mass = new Float64Array(n);
+    this.pegIds.forEach((p, i) => {
+      this.x[i] = px(p);
+      this.y[i] = py(p);
+      mass[i] = 0.06;
+    });
+    const M = members.length;
+    this.ma = new Int32Array(M);
+    this.mb = new Int32Array(M);
+    this.rest = new Float64Array(M);
+    this.isRope = new Uint8Array(M);
+    this.isRoad = new Uint8Array(M);
+    this.str = new Float64Array(M);
+    this.lam = new Float64Array(M);
+    this.force = new Float64Array(M);
+    this.peak = new Float64Array(M);
+    this.minF = new Float64Array(M);
+    this.broken = new Uint8Array(M);
+    this.brokeAt = new Int32Array(M).fill(-1);
+    members.forEach((m, k) => {
+      const a = idx.get(m.a)!;
+      const b = idx.get(m.b)!;
+      this.ma[k] = a;
+      this.mb[k] = b;
+      const dx = this.x[a] - this.x[b];
+      const dy = this.y[a] - this.y[b];
+      const L = Math.sqrt(dx * dx + dy * dy);
+      this.rest[k] = L;
+      this.isRope[k] = MATS[m.mat].rope ? 1 : 0;
+      this.isRoad[k] = MATS[m.mat].road ? 1 : 0;
+      this.str[k] = MATS[m.mat].strength;
+      const half = (L * MATS[m.mat].density) / 2;
+      mass[a] += half;
+      mass[b] += half;
+    });
+    const anchors = new Set(level.anchors);
+    this.pegIds.forEach((p, i) => (this.w[i] = anchors.has(p) ? 0 : 1 / mass[i]));
+    const base = this.pegIds.length;
+    if (g.kind === 'cross') {
+      this.cart = [base, base + 1, base + 2];
+      const cy = g.startY - WHEEL_R;
+      this.x[base] = g.startX - WHEELBASE / 2;
+      this.x[base + 1] = g.startX + WHEELBASE / 2;
+      this.y[base] = this.y[base + 1] = cy;
+      this.x[base + 2] = g.startX;
+      this.y[base + 2] = cy - BODY_UP;
+      // The load rides mostly on the body.
+      this.w[base] = this.w[base + 1] = 1 / (g.cart * 0.3);
+      this.w[base + 2] = 1 / (g.cart * 0.4);
+      this.lantern = -1;
+      this.ringPeg = -1;
+      this.lastCx = g.startX;
+      this.maxSteps = Math.round(HZ * ((g.goalX - g.startX) / CART_SPEED + 4));
+    } else {
+      this.cart = null;
+      this.lantern = base;
+      this.ringPeg = members.some((m) => m.a === g.ring || m.b === g.ring) ? idx.get(g.ring)! : -1;
+      this.x[base] = px(g.ring);
+      this.y[base] = py(g.ring) + LANTERN_CORD;
+      this.w[base] = 1 / g.weight;
+      this.maxSteps = REACH_STEPS;
+      if (this.ringPeg < 0) this.decide('nohook');
+    }
+    this.ox.set(this.x);
+    this.oy.set(this.y);
+  }
+
+  private decide(o: Outcome): void {
+    if (this.outcome) return;
+    this.outcome = o;
+    this.outcomeAt = this.steps;
+  }
+
+  /** The cart's middle (between the wheels). */
+  cartMid(): [number, number] {
+    const c = this.cart!;
+    return [(this.x[c[0]] + this.x[c[1]]) / 2, (this.y[c[0]] + this.y[c[1]]) / 2];
+  }
+
+  step(): void {
+    const { x, y, ox, oy, vx, vy, w } = this;
+    const n = x.length;
+    const c = this.cart;
+    // Motor: wheels touching something push along it toward the flag.
+    if (c && !this.outcome) {
+      for (let k = 0; k < 2; k++) {
+        const nx = this.cn[2 * k];
+        const ny = this.cn[2 * k + 1];
+        if (nx === 0 && ny === 0) continue;
+        let tx = -ny;
+        let ty = nx;
+        if (tx < 0) (tx = -tx), (ty = -ty);
+        const i = c[k];
+        const vt = vx[i] * tx + vy[i] * ty;
+        let dv = 0;
+        if (vt < CART_SPEED) dv = Math.min(CART_ACC * H, CART_SPEED - vt);
+        else if (vt > CART_SPEED + 0.6) dv = -Math.min(CART_ACC * H, vt - CART_SPEED);
+        vx[i] += tx * dv;
+        vy[i] += ty * dv;
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      ox[i] = x[i];
+      oy[i] = y[i];
+      if (w[i] === 0) continue;
+      vy[i] += GRAVITY * H;
+      x[i] += vx[i] * H;
+      y[i] += vy[i] * H;
+    }
+    const M = this.members.length;
+    const lam = this.lam;
+    lam.fill(0);
+    for (let it = 0; it < ITER; it++) {
+      for (let k = 0; k < M; k++) {
+        if (this.broken[k]) continue;
+        const a = this.ma[k];
+        const b = this.mb[k];
+        const ws = w[a] + w[b];
+        if (ws === 0) continue;
+        const dx = x[a] - x[b];
+        const dy = y[a] - y[b];
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < 1e-9) continue;
+        const C = d - this.rest[k];
+        if (C <= 0 && this.isRope[k]) continue;
+        const dl = -C / ws;
+        lam[k] += dl;
+        const nx = dx / d;
+        const ny = dy / d;
+        x[a] += w[a] * dl * nx;
+        y[a] += w[a] * dl * ny;
+        x[b] -= w[b] * dl * nx;
+        y[b] -= w[b] * dl * ny;
+      }
+      if (c) {
+        this.rigid(c[0], c[1], WHEELBASE);
+        const side = Math.sqrt((WHEELBASE / 2) * (WHEELBASE / 2) + BODY_UP * BODY_UP);
+        this.rigid(c[0], c[2], side);
+        this.rigid(c[1], c[2], side);
+      } else if (this.ringPeg >= 0) this.rope(this.ringPeg, this.lantern, LANTERN_CORD);
+      this.collide();
+    }
+    for (let i = 0; i < n; i++) {
+      if (w[i] === 0) continue;
+      vx[i] = ((x[i] - ox[i]) / H) * DAMP;
+      vy[i] = ((y[i] - oy[i]) / H) * DAMP;
+    }
+    // Forces, peaks and snapping.
+    for (let k = 0; k < M; k++) {
+      if (this.broken[k]) continue;
+      const f = -lam[k] / H2;
+      const s = (this.force[k] += (f - this.force[k]) * SMOOTH);
+      const r = (s < 0 ? -s : s) / this.str[k];
+      if (r > this.peak[k]) this.peak[k] = r;
+      if (s < this.minF[k]) this.minF[k] = s;
+      if (r > 1 && (s > 0 || !this.isRope[k])) {
+        this.broken[k] = 1;
+        this.brokeAt[k] = this.steps;
+        this.breaks++;
+        this.force[k] = 0;
+      }
+    }
+    this.steps++;
+    this.judge();
+  }
+
+  private rigid(a: number, b: number, L: number): void {
+    const { x, y, w } = this;
+    const dx = x[a] - x[b];
+    const dy = y[a] - y[b];
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d < 1e-9) return;
+    const dl = -(d - L) / (w[a] + w[b]);
+    x[a] += (w[a] * dl * dx) / d;
+    y[a] += (w[a] * dl * dy) / d;
+    x[b] -= (w[b] * dl * dx) / d;
+    y[b] -= (w[b] * dl * dy) / d;
+  }
+
+  private rope(a: number, b: number, L: number): void {
+    const dx = this.x[a] - this.x[b];
+    const dy = this.y[a] - this.y[b];
+    if (dx * dx + dy * dy > L * L) this.rigid(a, b, L);
+  }
+
+  private collide(): void {
+    const { x, y, w } = this;
+    const c = this.cart;
+    // Pegs stay out of rock.
+    for (let i = 0; i < this.pegIds.length; i++) if (w[i] > 0) this.pushOut(i, 0);
+    if (!c) return;
+    this.pushOut(c[2], BODY_R);
+    for (let k = 0; k < 2; k++) {
+      const i = c[k];
+      let nx = 0;
+      let ny = 0;
+      // Planks.
+      for (let m = 0; m < this.members.length; m++) {
+        if (this.broken[m] || !this.isRoad[m]) continue;
+        const a = this.ma[m];
+        const b = this.mb[m];
+        const ex = x[b] - x[a];
+        const ey = y[b] - y[a];
+        const ee = ex * ex + ey * ey;
+        let t = ee > 0 ? ((x[i] - x[a]) * ex + (y[i] - y[a]) * ey) / ee : 0;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const qx = x[a] + ex * t;
+        const qy = y[a] + ey * t;
+        const dx = x[i] - qx;
+        const dy = y[i] - qy;
+        const dd = dx * dx + dy * dy;
+        if (dd >= WHEEL_R * WHEEL_R || dd < 1e-12) continue;
+        const d = Math.sqrt(dd);
+        const ux = dx / d;
+        const uy = dy / d;
+        const C = d - WHEEL_R;
+        const wa = w[a] * (1 - t);
+        const wb = w[b] * t;
+        const ws = w[i] + wa * (1 - t) + wb * t;
+        const dl = -C / ws;
+        x[i] += w[i] * dl * ux;
+        y[i] += w[i] * dl * uy;
+        x[a] -= wa * dl * ux;
+        y[a] -= wa * dl * uy;
+        x[b] -= wb * dl * ux;
+        y[b] -= wb * dl * uy;
+        nx += ux;
+        ny += uy;
+      }
+      const r = this.pushOut(i, WHEEL_R);
+      if (r) (nx += r[0]), (ny += r[1]);
+      const d = Math.sqrt(nx * nx + ny * ny);
+      this.cn[2 * k] = d > 0 ? nx / d : 0;
+      this.cn[2 * k + 1] = d > 0 ? ny / d : 0;
+    }
+  }
+
+  /** Pushes particle i (radius r) out of every rock; returns the last push direction. */
+  private pushOut(i: number, r: number): [number, number] | null {
+    const { x, y } = this;
+    let hit: [number, number] | null = null;
+    for (const k of this.level.terrain) {
+      const cx = x[i] < k.x0 ? k.x0 : x[i] > k.x1 ? k.x1 : x[i];
+      const cy = y[i] < k.y0 ? k.y0 : y[i] > k.y1 ? k.y1 : y[i];
+      const dx = x[i] - cx;
+      const dy = y[i] - cy;
+      const dd = dx * dx + dy * dy;
+      if (dd > 1e-12) {
+        if (dd >= r * r) continue;
+        const d = Math.sqrt(dd);
+        x[i] = cx + (dx / d) * r;
+        y[i] = cy + (dy / d) * r;
+        hit = [dx / d, dy / d];
+        continue;
+      }
+      // Inside: out through the nearest face.
+      const l = x[i] - k.x0;
+      const rr = k.x1 - x[i];
+      const t = y[i] - k.y0;
+      const b = k.y1 - y[i];
+      const m = Math.min(l, rr, t, b);
+      if (m === t) (y[i] = k.y0 - r), (hit = [0, -1]);
+      else if (m === l) (x[i] = k.x0 - r), (hit = [-1, 0]);
+      else if (m === rr) (x[i] = k.x1 + r), (hit = [1, 0]);
+      else (y[i] = k.y1 + r), (hit = [0, 1]);
+    }
+    return hit;
+  }
+
+  private judge(): void {
+    if (this.outcome) return;
+    const g = this.level.goal;
+    if (this.stopOnBreak && this.breaks) {
+      this.decide(g.kind === 'cross' ? 'fell' : 'dropped');
+      return;
+    }
+    if (g.kind === 'cross') {
+      const c = this.cart!;
+      if (Math.min(this.x[c[0]], this.x[c[1]]) >= g.goalX) return this.decide('crossed');
+      if (this.y[c[2]] > g.startY + 2.5 || this.y[c[2]] > WATER) return this.decide('fell');
+      const [cx] = this.cartMid();
+      if (Math.abs(cx - this.lastCx) < 0.05) {
+        if (++this.still > HZ * 1.5) return this.decide('stalled');
+      } else (this.still = 0), (this.lastCx = cx);
+      if (this.steps >= this.maxSteps) return this.decide('stalled');
+      return;
+    }
+    const i = this.ringPeg;
+    const rx = px(g.ring);
+    const ry = py(g.ring);
+    const dx = this.x[i] - rx;
+    const dy = this.y[i] - ry;
+    if (dy > 1.5 || this.y[i] > WATER) return this.decide('dropped');
+    if (dx * dx + dy * dy <= RING_TOL * RING_TOL) this.held++;
+    else this.held = 0;
+    if (this.steps >= this.maxSteps) this.decide(this.held >= REACH_HOLD ? 'held' : 'sagged');
+  }
+}
+
+export interface RunResult {
+  outcome: Outcome;
+  steps: number;
+  breaks: number;
+  /** Per member: peak |force| / strength and the most compression (≤ 0). */
+  peak: Float64Array;
+  minF: Float64Array;
+}
+
+/** Runs a build to its outcome. */
+export function runSim(level: Level, members: readonly Member[], stopOnBreak = false): RunResult {
+  const s = new Sim(level, members);
+  s.stopOnBreak = stopOnBreak;
+  while (!s.outcome) s.step();
+  return { outcome: s.outcome, steps: s.steps, breaks: s.breaks, peak: s.peak, minF: s.minF };
+}
+
+export const ringXY = (l: Level): [number, number] | null => (l.goal.kind === 'reach' ? [l.goal.ring % COLS, Math.floor(l.goal.ring / COLS)] : null);
