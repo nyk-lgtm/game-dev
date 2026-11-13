@@ -9,7 +9,9 @@ export type Phase = 'dawn' | 'day' | 'dusk' | 'night';
 export const DAWN_END = 0.07;
 export const DUSK = 0.5;
 export const NIGHT = 0.6;
-export const DAWN = 0.94;
+export const DAWN = 0.97;
+/** Light when the day's first phase (dawn) begins its second half, at t = 0. */
+const DAWN_LIGHT = 0.3;
 
 export interface DayTime {
   /** 1-based day number. */
@@ -28,7 +30,7 @@ export function dayTime(step: number): DayTime {
   let light: number;
   if (t < DAWN_END) {
     phase = 'dawn';
-    light = 0.35 + 0.65 * (t / DAWN_END);
+    light = DAWN_LIGHT + (1 - DAWN_LIGHT) * (t / DAWN_END);
   } else if (t < DUSK) {
     phase = 'day';
     light = 1;
@@ -40,7 +42,7 @@ export function dayTime(step: number): DayTime {
     light = 0;
   } else {
     phase = 'dawn';
-    light = (0.35 * (t - DAWN)) / (1 - DAWN);
+    light = (DAWN_LIGHT * (t - DAWN)) / (1 - DAWN);
   }
   return { day: day + 1, t, phase, light };
 }

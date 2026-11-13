@@ -5,8 +5,51 @@ import { Rng } from '../../src/shared/rng';
 import {
   BAR, BEE, DAY, FLY, FLOURISH, MAX_PER_STEP, MAX_PLANTS, PENT, ROWS, SPECIES, START, XS, apply, colOf, critterCount, crittersAt,
   dayTime, decode, decodeActions, eligible, encode, groundAt, growth, newGarden, notesAt, plantError, replay, rootOf, sameGarden, target,
-  weatherAt, wishesMet, type Action, type Garden,
+  weatherAt, wishesMet, GARDEN_WISHES, fillWishes, gardenWish, gardenWishAt, grantWishes, newWishState, type Action, type Garden,
 } from '../../src/lull/core';
+
+describe('garden wishes', () => {
+  it('every garden draws three valid, not-yet-true wishes in a seeded order', () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      const g = fullGarden(seed);
+      const ws = fillWishes(g, newWishState());
+      expect(ws.a.length).toBe(GARDEN_WISHES);
+      for (const id of ws.a) {
+        const w = gardenWish(id);
+        expect(w, id).not.toBeNull();
+        expect(w!.test(g)).toBe(false);
+      }
+      expect(JSON.stringify(fillWishes(g, newWishState()))).toBe(JSON.stringify(ws));
+    }
+    for (let n = 0; n < 300; n++) expect(gardenWish(gardenWishAt(7, n)), String(n)).not.toBeNull();
+  });
+
+  it('the first wish asks for a plant on a note; planting it grants it and draws another', () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      const g = newGarden(seed);
+      const ws = fillWishes(g, newWishState());
+      const first = gardenWishAt(seed, 0);
+      expect(first).toMatch(/^sing\.\d\.\d$/);
+      expect(ws.a[0]).toBe(first);
+      const [, sp, col] = first.split('.').map(Number);
+      let planted = false;
+      for (let y = 0; y < ROWS && !planted; y++) for (let x = col * 100; x < col * 100 + 100 && !planted; x += 7) planted = apply(g, { t: g.now, k: 'P', sp, x, y });
+      expect(planted, `seed ${seed}`).toBe(true);
+      expect(grantWishes(g, ws)).toContain(first);
+      expect(ws.done).toContain(first);
+      expect(ws.a.length).toBe(GARDEN_WISHES);
+      expect(ws.a).not.toContain(first);
+    }
+  });
+
+  it('dawn starts dark and brightens; the label and the sky agree', () => {
+    expect(dayTime(Math.round(DAY * 0.95)).phase).toBe('night');
+    const d0 = dayTime(Math.round(DAY * 0.971));
+    expect(d0.phase).toBe('dawn');
+    expect(d0.light).toBeLessThan(0.05);
+    expect(dayTime(DAY + 10).light).toBeGreaterThan(0.3);
+  });
+});
 
 /** A random session: plants, waterings and digs over a few in-game minutes. */
 function randomActs(seed: number, n = 80): Action[] {

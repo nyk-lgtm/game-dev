@@ -30,8 +30,8 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 5. Grove: owner said keep it as is (board and balance); only bugs/clarity. Afterglow: leave alone unless asked.
 6. New games are welcome when the queue is quiet (recent additions: Ninefold, Summit, Quarry, Sungrazer, Kitbag,
    Brink, Loomsong, Simmer, Gleam, Lull). Ideas: a co-op-free social/daily puzzle. (The creative/sandbox toy is Lull.)
-7. Simmer: second blind playtest (see its item below). Gleam (new light puzzle): first blind playtest. Lull: first blind
-   playtest and a real-phone sound check.
+7. Simmer: second blind playtest (see its item below). Gleam (new light puzzle): first blind playtest. Lull: first playtest fixes shipped;
+   second blind playtest and a real-phone sound check next.
    Brink, Loomsong, Simmer). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle.
 7. Simmer: fourth blind playtest (see its item below).
 
@@ -48,7 +48,15 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         sound / bug report), help, hub card (new "Calm" filter) + NEWS. Synths: bell, pluck, reed, glass, wood, bass, reverb
         wetter at night and in mist, rain/wind beds; scheduled on the AudioContext clock. Pixel 7 + 360×640 checked.
         Perf (30 grown plants): 60 fps desktop; CPU ×4: ~30-36 fps at DPR 2, ~50 fps once it steps down to DPR 1.5.
-  - [ ] Next: first blind playtest + owner's phone (sound!). Watch: is "left = note, back-to-front = beat" discoverable
+  - [x] First blind playtest (no jank, "art lovely"; all 9 wishes done in ~15 min, several by accident) and fixes (rules
+        v1 unchanged, codes unchanged): per-garden rotating wishes (3 active, seeded order, skip any already true; 9
+        milestones stay), beat band brighter (added light) + numbered edge beat dots + plant pop/ring on each note (night
+        and mist checked), strum trail + stronger pulses, "Tap the garden to listen" after a reload (first meadow tap only
+        wakes audio; 🔇 until audio runs), `?g=` kept while visiting (rewritten with the visit's state), edge plants
+        narrowed/nudged inside, dawn synced with the sky (moon sets, stars fade), HUD weather word in the small label, wish
+        toasts on one line, plurals ("Moonlilies"), one name per plant everywhere (Whistlereed → Pipereed), sapling look for
+        young Humwillows, a sandier dashed shore. Perf unchanged (60 fps desktop; ×4: ~30 fps DPR 2, ~50 at 1.5).
+  - [ ] Next: second blind playtest + owner's phone (sound!). Watch: is "left = note, back-to-front = beat" discoverable
         from the ghost label and the sweeping band? Is a full garden too busy (Harpfern runs dominate; MAX_PER_STEP 6)? Do
         seedlings read at the back rows? Is half a day of growth while away welcome? Does the DPR step-down ever fire on
         a real phone (it never steps back up)? Maybe: a gentle master volume, more species (a bass drone moss?), seasons.

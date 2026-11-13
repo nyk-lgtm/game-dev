@@ -14,7 +14,21 @@ body {
 #dayLabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #phase { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #hud .icon-btn { flex: none; font-size: 18px; }
-#hud .icon-btn.wide { width: auto; padding: 0 9px; font-size: 14px; font-weight: 700; color: #ffe08a; white-space: nowrap; }
+#hud .icon-btn.wide { width: auto; min-width: 48px; padding: 0 9px; font-size: 14px; font-weight: 700; color: #ffe08a; white-space: nowrap; }
+#soundBtn.waiting { border-color: #ffe08a; animation: lullPulse 1.6s ease-in-out infinite; }
+@keyframes lullPulse { 50% { box-shadow: 0 0 0 4px rgba(255, 224, 138, 0.25); } }
+/* "Tap to listen" after a reload: sound needs a tap before it can start. */
+#listen {
+  position: absolute; left: 50%; top: 34%; transform: translateX(-50%); z-index: 2;
+  padding: 10px 16px; border-radius: 999px; pointer-events: none;
+  background: rgba(18, 28, 36, 0.86); border: 1px solid #ffe08a; color: #fff6dc;
+  font-size: 15px; font-weight: 700; white-space: nowrap;
+  animation: lullPulse 1.6s ease-in-out infinite;
+}
+#listen[hidden] { display: none; }
+/* Wish toasts on one line (shell toasts shrink to fit and wrapped "One of / each"). */
+.toast { width: max-content; max-width: calc(100vw - 24px); text-align: center; }
+.toast.wish { color: #ffe08a; font-weight: 700; }
 #stage { background: #0e1a20; }
 /* Two layers: the slow landscape under the live garden. */
 #land { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
@@ -28,10 +42,10 @@ body #info { flex: none; height: 38px; max-height: 38px; overflow-y: auto; font-
 #species { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; transition: opacity 0.2s; }
 #species.dim { opacity: 0.55; }
 #species .sp {
-  min-width: 0; min-height: 54px; padding: 2px 0 3px;
+  min-width: 0; min-height: 54px; padding: 2px 1px 3px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
   border-radius: 12px; border: 1px solid var(--line); background: #1f2e36; color: var(--muted);
-  font-size: 11px; font-weight: 700;
+  font-size: 10.5px; font-weight: 700; letter-spacing: -0.2px;
 }
 #species .sp img { width: 30px; height: 30px; pointer-events: none; }
 #species .sp span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -51,8 +65,14 @@ body #info { flex: none; height: 38px; max-height: 38px; overflow-y: auto; font-
 .card ul.wishes li b { color: var(--text); }
 .card ul.wishes li.done { background: #2b3a26; }
 .card ul.wishes li.done b { color: #ffe08a; }
+.card .meta-line { font-size: 13px; }
+.card details.milestones summary { color: var(--text); font-weight: 700; padding: 6px 0; min-height: 44px; display: flex; align-items: center; }
+.card details.milestones summary::after { content: "▾"; margin-left: 6px; color: var(--muted); }
+.card details.milestones[open] summary::after { content: "▴"; }
+.card details.milestones ul { margin-top: 4px; }
 @media (max-width: 370px) {
   #hud .icon-btn.wide { padding: 0 6px; font-size: 13px; }
+  #species .sp { font-size: 9.5px; letter-spacing: -0.3px; }
   #phase { font-size: 15px; }
 }
 @media (max-height: 700px) {

@@ -41,6 +41,8 @@ interface Sprite {
   phase: number;
   kick: number;
   flash: number;
+  /** A quick swell when it sings (0..1). */
+  pop: number;
 }
 
 interface Particle {
@@ -109,6 +111,7 @@ export class Scene {
   private stars: HTMLCanvasElement | null = null;
   private cloud: HTMLCanvasElement | null = null;
   private band: HTMLCanvasElement | null = null;
+  private beatBand: HTMLCanvasElement | null = null;
   private glows = new Map<string, HTMLCanvasElement>();
   private pondPath: Path2D | null = null;
   private pondSeed = -1;
@@ -132,8 +135,8 @@ export class Scene {
     this.landKey = '';
     const u = Math.min(cssW / 390, cssH / 560);
     const top = Math.round(cssH * 0.5);
-    this.L = { W: cssW, H: cssH, dpr, u, horizon: top - 40 * u, top, bot: cssH - 18 * u, padX: 16 * u };
-    this.ground = this.hills = this.stars = this.cloud = this.band = null;
+    this.L = { W: cssW, H: cssH, dpr, u, horizon: top - 40 * u, top, bot: cssH - 18 * u, padX: 22 * u };
+    this.ground = this.hills = this.stars = this.cloud = this.band = this.beatBand = null;
     this.shades.clear();
     this.glows.clear();
     for (const s of this.sprites.values()) s.cv = null;
@@ -176,7 +179,7 @@ export class Scene {
     let s = this.sprites.get(k);
     if (!s) {
       const shape = makeShape(g.seed, p.sp, p.x, p.y);
-      s = { shape, cv: null, gq: -1, sleep: false, tone: '', ox: 0, oy: 0, w: 0, h: 0, phase: (mixSeed(p.x, p.y) % 1000) / 159, kick: 0, flash: 0 };
+      s = { shape, cv: null, gq: -1, sleep: false, tone: '', ox: 0, oy: 0, w: 0, h: 0, phase: (mixSeed(p.x, p.y) % 1000) / 159, kick: 0, flash: 0, pop: 0 };
       this.sprites.set(k, s);
     }
     return s;
@@ -197,7 +200,31 @@ export class Scene {
     const h = hs.length ? hs[n % hs.length] : { x: 0, y: -10 };
     const k = s * sizeAt(vg(p, step));
     const sk = this.skew(sp, p, time, 0);
-    return { x: sx + h.x * k + sk * h.y * k, y: sy + h.y * k + (p.sp === 3 ? this.bob(sp, time) : 0), s };
+    const { f, dx } = this.fit(sp.shape, sx, k);
+    const pk = 1 + 0.1 * sp.pop;
+    return { x: sx + dx + (h.x * k * f + sk * h.y * k) * pk, y: sy + h.y * k * pk + (p.sp === 3 ? this.bob(sp, time) : 0), s };
+  }
+
+  /** Keeps a plant drawn inside the meadow: narrows it (to 60%) and then nudges it in. */
+  private fit(sh: Shape, sx: number, k: number): { f: number; dx: number } {
+    const lo = 3, hi = this.L.W - 3;
+    const left = -sh.minX * k, right = sh.maxX * k;
+    let f = 1;
+    if (sx - left < lo) f = Math.min(f, (sx - lo) / left);
+    if (sx + right > hi) f = Math.min(f, (hi - sx) / right);
+    f = Math.max(0.6, Math.min(1, f));
+    let dx = 0;
+    if (sx - left * f < lo) dx = lo - (sx - left * f);
+    else if (sx + right * f > hi) dx = hi - (sx + right * f);
+    return { f, dx };
+  }
+
+  /** Where a plant's base is drawn (after `fit`). */
+  baseX(g: Garden, i: number): number {
+    const p = g.plants[i];
+    const { sx, s } = this.pos(p.x, p.y);
+    const sp = this.sprite(g, p);
+    return sx + this.fit(sp.shape, sx, s * sizeAt(vg(p, g.now))).dx;
   }
 
   private wind = 0;
@@ -236,6 +263,14 @@ export class Scene {
     if (!p) return;
     const s = this.sprite(g, p);
     s.flash = Math.min(1.2, Math.max(s.flash, v));
+    s.pop = Math.min(1, Math.max(s.pop, v));
+  }
+
+  /** The strum trail: recent finger points (CSS px, seconds). */
+  private trail: { x: number; y: number; t: number }[] = [];
+  addTrail(x: number, y: number, t: number): void {
+    this.trail.push({ x, y, t });
+    if (this.trail.length > 40) this.trail.shift();
   }
 
   kick(g: Garden, i: number, v: number): void {
@@ -403,9 +438,21 @@ export class Scene {
       }
       return p;
     };
-    x.fillStyle = '#9a9a68';
-    x.fill(path(Math.sqrt(1.8)));
-    x.fillStyle = '#b7ab78';
+    // The shore (where reeds grow): sand with a darker edge, so it reads as its own ground.
+    const shore = path(Math.sqrt(1.8));
+    x.fillStyle = '#b3a56c';
+    x.fill(shore);
+    x.save();
+    x.clip(shore);
+    x.fillStyle = 'rgba(255,245,200,0.18)';
+    for (let i = 0; i < 160; i++) x.fillRect(r.next() * W, top + r.next() * (bot - top), 1.2 * u, 1.2 * u);
+    x.restore();
+    x.strokeStyle = 'rgba(70,58,25,0.45)';
+    x.lineWidth = 1.4 * u;
+    x.setLineDash([3 * u, 3 * u]);
+    x.stroke(shore);
+    x.setLineDash([]);
+    x.fillStyle = '#c4b47c';
     x.fill(path(1.12));
     const water = path(1);
     const wg = x.createLinearGradient(0, top, 0, bot);
@@ -463,7 +510,7 @@ export class Scene {
   private landKey = '';
   private landAt = -1;
 
-  private renderLand(g: Garden, light: number, warm: number, grey: number, dark: number, sun: { x: number; y: number } | null, moon: { x: number; y: number } | null): void {
+  private renderLand(g: Garden, light: number, warm: number, grey: number, dark: number, sun: { x: number; y: number } | null, moon: { x: number; y: number; fade?: number } | null): void {
     const { W, H, dpr, u, horizon, top } = this.L;
     const c = this.back.getContext('2d')!;
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -474,7 +521,8 @@ export class Scene {
     c.fillStyle = sg;
     c.fillRect(0, 0, W, top + 2);
     if (light < 0.9) {
-      c.globalAlpha = (1 - light) * (1 - grey);
+      // Stars are gone by the time dawn is a third of the way up.
+      c.globalAlpha = Math.max(0, 1 - light / 0.35) * (1 - grey);
       c.drawImage(this.stars!, 0, 0, W, top);
     }
     if (sun) {
@@ -486,7 +534,7 @@ export class Scene {
       c.fill();
     }
     if (moon) {
-      c.globalAlpha = (1 - light * 0.7) * (1 - grey * 0.7);
+      c.globalAlpha = (1 - light * 0.7) * (1 - grey * 0.7) * (moon.fade ?? 1);
       c.drawImage(this.glow('rgba(190,210,255,0.5)'), moon.x - 50 * u, moon.y - 50 * u, 100 * u, 100 * u);
       c.fillStyle = '#f4f2e6';
       c.beginPath();
@@ -599,7 +647,7 @@ export class Scene {
   draw(f: Frame): void {
     const { g, step, time, dt } = f;
     const L = this.L;
-    const { W, H, dpr, u, horizon, top, bot } = L;
+    const { W, H, dpr, u, horizon, top } = L;
     const c = this.ctx;
     if (!this.ground || this.pondSeed !== g.seed) {
       this.buildStatic(g);
@@ -622,7 +670,8 @@ export class Scene {
     const sunT = dtm.t < 0.62 ? dtm.t + 0.03 : dtm.t - 0.97;
     const sun = sunT >= 0 && sunT <= 0.65 ? arc(sunT, 0, 0.65) : null;
     const moonT = dtm.t >= 0.56 ? dtm.t - 0.56 : dtm.t + 0.44;
-    const moon = moonT <= 0.46 ? arc(moonT, 0, 0.46) : null;
+    // The moon sets as dawn begins (t 0.97), so the sky never shows night while the label says Dawn.
+    const moon = moonT <= 0.41 ? { ...arc(moonT, 0, 0.41), fade: Math.min(1, (0.41 - moonT) / 0.03) } : null;
     const dark = (1 - light) * 0.6 + grey * 0.15;
     const key = [light * 40, warm * 20, grey * 20, (sun?.x ?? -9) / 2, (sun?.y ?? 0) / 2, (moon?.x ?? -9) / 2, (moon?.y ?? 0) / 2].map(Math.round).join('|');
     if (!this.landKey || (key !== this.landKey && time - this.landAt > 0.4) || Math.abs(time - this.landAt) > 30) {
@@ -661,11 +710,6 @@ export class Scene {
       }
     }
     c.stroke();
-    // The bar sweeps from the back row to the front: plants sing as it passes.
-    const pos = (((step % 16) + 16) % 16) / 16;
-    c.globalAlpha = 0.07 + 0.08 * light;
-    c.drawImage(this.band!, 0, top + pos * (bot - top) - 12, W, 24);
-    c.globalAlpha = 1;
     // Plants, back to front (shaded for the light; sprites re-draw when it moves a notch).
     const tone = `${Math.round(dark * 20)}|${Math.round(warm * 10)}`;
     let nSprites = 0;
@@ -679,14 +723,17 @@ export class Scene {
       if (!sp.cv || sp.gq !== gq || sp.sleep !== sleep || sp.tone !== tone) this.redrawSprite(sp, s, gq, sleep, tone);
       sp.kick *= Math.exp(-dt * 2.2);
       sp.flash *= Math.exp(-dt * 3.2);
+      sp.pop *= Math.exp(-dt * 9);
+      const { f: fx, dx } = this.fit(sp.shape, sx, s * sizeAt(gq));
+      const pk = 1 + (f.reduced ? 0.04 : 0.1) * sp.pop;
       const skew = this.skew(sp, p, time, 0) * (f.reduced ? 0.5 : 1);
       const by = p.sp === 3 ? this.bob(sp, time) : 0;
       // Soft shadow.
       c.fillStyle = 'rgba(20,35,20,0.22)';
       c.beginPath();
-      c.ellipse(sx, sy + 1, (p.sp === 5 ? 22 : 10) * s * sizeAt(gr), 3 * s, 0, 0, TAU);
+      c.ellipse(sx + dx, sy + 1, (p.sp === 5 ? 22 : 10) * s * sizeAt(gr) * fx, 3 * s, 0, 0, TAU);
       c.fill();
-      c.setTransform(dpr, 0, skew * dpr, dpr, sx * dpr, (sy + by) * dpr);
+      c.setTransform(dpr * fx * pk, 0, skew * dpr * pk, dpr * pk, (sx + dx) * dpr, (sy + by) * dpr);
       c.drawImage(sp.cv!, -sp.ox, -sp.oy, sp.w, sp.h);
       c.setTransform(dpr, 0, 0, dpr, 0, 0);
       nSprites++;
@@ -768,7 +815,7 @@ export class Scene {
       for (let k = 0; k < n; k++) {
         const h = this.head(g, i, k, step, time);
         const R = (10 + 10 * Math.min(1, v)) * h.s;
-        c.globalAlpha = Math.min(1, v) * (0.5 + 0.4 * night);
+        c.globalAlpha = Math.min(1, v) * (0.75 + 0.2 * night);
         c.drawImage(img, h.x - R, h.y - R, R * 2, R * 2);
       }
     }
@@ -842,6 +889,8 @@ export class Scene {
       }
       c.globalAlpha = 1;
     }
+    this.drawBeat(step, light, f.reduced);
+    this.drawTrail(time);
     // Tools under the finger.
     if (f.ghost) this.drawGhost(g, f.ghost, time);
     if (f.tool?.kind === 'water') this.drawCan(f.tool.x, f.tool.y, time);
@@ -863,7 +912,7 @@ export class Scene {
     const key = `ghost.${gh.sp}`;
     let sp = this.sprites.get(key);
     if (!sp) {
-      sp = { shape: makeShape(7, gh.sp, 500, 18), cv: null, gq: -1, sleep: false, tone: '', ox: 0, oy: 0, w: 0, h: 0, phase: 0, kick: 0, flash: 0 };
+      sp = { shape: makeShape(7, gh.sp, 500, 18), cv: null, gq: -1, sleep: false, tone: '', ox: 0, oy: 0, w: 0, h: 0, phase: 0, kick: 0, flash: 0, pop: 0 };
       this.sprites.set(key, sp);
     }
     if (!sp.cv || Math.abs(sp.w - (sp.shape.maxX - sp.shape.minX) * s - 2) > 0.5) this.redrawSprite(sp, s, 1, false);
@@ -892,6 +941,86 @@ export class Scene {
     c.fillText(gh.label, lx, ly + 1);
     void time;
     void g;
+  }
+
+  /**
+   * The bar's sweep, back row to front: a bright band on the current half-beat's lane
+   * (added light, so it shows at night and through mist) and ticks down both edges of
+   * the meadow, numbered on the beats, the current one lit.
+   */
+  private drawBeat(step: number, light: number, reduced: boolean): void {
+    const c = this.ctx;
+    const { W, u, top, bot } = this.L;
+    const lh = (bot - top) / LANES;
+    const pos = (((step % 16) + 16) % 16) / 16;
+    const lane = Math.floor(pos * LANES);
+    const within = pos * LANES - lane;
+    // The band glides across its lane and fades as the next one takes over.
+    const y = top + pos * (bot - top);
+    if (!this.beatBand) {
+      const { dpr } = this.L;
+      this.beatBand = canvas(W * dpr, 40 * dpr);
+      const x = this.beatBand.getContext('2d')!;
+      x.scale(dpr, dpr);
+      const gr = x.createLinearGradient(0, 0, 0, 40);
+      gr.addColorStop(0, 'rgba(255,236,170,0)');
+      gr.addColorStop(0.5, 'rgba(255,236,170,0.9)');
+      gr.addColorStop(1, 'rgba(255,236,170,0)');
+      x.fillStyle = gr;
+      x.fillRect(0, 0, W, 40);
+    }
+    c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = (reduced ? 0.24 : 0.34) + 0.14 * (1 - light);
+    c.drawImage(this.beatBand, 0, y - lh * 0.9, W, lh * 1.8);
+    c.globalAlpha = 0.3 + 0.15 * (1 - light);
+    c.fillStyle = '#fff3c4';
+    c.fillRect(14 * u, y - 0.75 * u, W - 28 * u, 1.5 * u);
+    // Edge ticks: one per half-beat, bigger on the beats.
+    for (let l = 0; l < LANES; l++) {
+      const ly = top + (l + 0.5) * lh;
+      const on = l === lane;
+      const big = l % 2 === 0;
+      const a = on ? 0.95 - 0.4 * within : 0.28;
+      c.globalAlpha = a;
+      c.fillStyle = on ? '#fff3c4' : '#e8f0d0';
+      const r = (big ? 3.2 : 2) * u * (on ? 1.4 : 1);
+      for (const ex of [7 * u, W - 7 * u]) {
+        c.beginPath();
+        c.arc(ex, ly, r, 0, TAU);
+        c.fill();
+      }
+    }
+    c.globalCompositeOperation = 'source-over';
+    c.globalAlpha = 1;
+    c.font = `800 ${Math.round(9 * Math.max(1, u))}px system-ui, sans-serif`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    for (let b = 0; b < 4; b++) {
+      const ly = top + (b * 2 + 0.5) * lh;
+      // Dark on the lit dot, pale on the others (readable by day, at night and in mist).
+      c.fillStyle = b * 2 === lane ? 'rgba(40,30,10,0.95)' : 'rgba(250,246,220,0.75)';
+      c.fillText(String(b + 1), 7 * u, ly + 0.5);
+    }
+  }
+
+  private drawTrail(time: number): void {
+    const pts = this.trail.filter((p) => time - p.t < 0.45);
+    this.trail = pts;
+    if (pts.length < 2) return;
+    const c = this.ctx;
+    const u = this.L.u;
+    c.globalCompositeOperation = 'lighter';
+    c.lineCap = 'round';
+    for (let i = 1; i < pts.length; i++) {
+      const a = 1 - (time - pts[i].t) / 0.45;
+      c.strokeStyle = `rgba(255,240,190,${(0.75 * a).toFixed(2)})`;
+      c.lineWidth = (2 + 6 * a) * u;
+      c.beginPath();
+      c.moveTo(pts[i - 1].x, pts[i - 1].y);
+      c.lineTo(pts[i].x, pts[i].y);
+      c.stroke();
+    }
+    c.globalCompositeOperation = 'source-over';
   }
 
   private drawCan(x: number, y: number, time: number): void {

@@ -392,7 +392,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 - Lull (src/lull/core): a sandbox garden, no fail state. x 0..999 = pitch (10 columns of the garden's major pentatonic,
   `colOf`, low left), y 0..35 rows = depth (8 lanes = which 8th of the bar it sings, `laneOf`, back row first); time is
   16th steps (84 BPM, `DAY` = 84 bars ≈ 4 min; dawn/day/dusk/night in sky.ts, weather in half-day spells `spellKind`,
-  first morning clear). Six species (`SPECIES`: Chimebell bell, Harpfern pluck run, Whistlereed reed (pond or shore),
+  first morning clear). Six species (`SPECIES`: Chimebell bell, Harpfern pluck run, Pipereed reed (pond or shore; was Whistlereed),
   Moonlily glass (water only), Glowcap wood knock, Humwillow bass) with spacing radii, grow times, `every` bars, phrases;
   growth = (now − born) / grow, watering (`W`) moves `born` back by BOOST (growing) or sets `flourish` (grown: twice as
   often for 8 bars). `notesAt(g, step)` is pure (plant phrases, creature landings, breezy strums every 8 bars, rain drips),
@@ -402,8 +402,17 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   index). A garden = seed + timestamped actions (`P<sp>`, `W`, `X` dig by exact x,y; `apply`/`replay`); `encode` writes the
   live plants as planting actions with ages (6 chars a plant; flourish is dropped), `decode` replays them, so saves
   (`lull.garden` {code, at}) and share links (`?g=CODE`, opened as a visit until "Keep") are the same thing; time away
-  grows the garden on by up to half a day. Wishes (wishes.ts) are pure tests of the garden at its step, remembered in the
-  profile once met (dusk chord, night lights…). Page: two canvases (#land: sky/hills/meadow/pond shaded for the light,
+  grows the garden on by up to half a day. Wishes (wishes.ts) are pure tests of the garden at its step: 9 milestones
+  (`WISHES`, once per player, in the profile) and each garden's own rotating wishes: 3 active ids from a seeded order
+  (`gardenWishAt(seed, n)`, first always "a <kind> on <note>"; ids like `sing.0.3`, `run.1`, `beat.4`, `twin.5`, `chord1`,
+  `pond3`…, built by `gardenWish(id)`), `fillWishes` skips repeats and any already true when drawn (so they aren't met by
+  accident), `grantWishes` swaps met ones for the next; the `WishState` saves with the garden (`lull.garden.w`), not in
+  codes. Dawn starts at t 0.97 with light 0 (moon sets, stars fade by light 0.35), so the sky matches the label.
+  A shared link (`?g=`) stays in the address while visiting and is rewritten with the visit's current code on save, until
+  Keep / Back to my garden. After a reload the sound needs a tap: 🔇 pulses and "Tap the garden to listen" shows, and that
+  first meadow tap only wakes the audio. Plants near the edges are drawn narrowed (to 60%) then nudged in (`Scene.fit`;
+  creatures, glows and strum use `baseX`). The beat: a bright added-light band on the current half-beat's lane, edge dots
+  (numbered on beats 1-4, the current lit) and each plant pops (scale + ring at its base) when it sings. Page: two canvases (#land: sky/hills/meadow/pond shaded for the light,
   re-drawn ≤ 2-3×/s; #board: transparent, cleared each frame), plants are cached sprites re-drawn per growth notch (1/48)
   and light notch (tone), swayed by a skew; audio.ts has six synth voices + reverb + rain/wind beds; the garden clock is the
   AudioContext clock once sound runs (perf clock before/without), notes scheduled 0.22 s ahead; `?seed=N` opens a fresh

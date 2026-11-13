@@ -16,7 +16,7 @@ const q = new URLSearchParams(location.search);
 const shared = q.get('g');
 const visit = shared ? decode(shared) : null;
 if (visit) {
-  history.replaceState(null, '', location.pathname);
+  // The link stays in the address until Keep or Back to my garden, so a reload keeps the visit.
   game.open(visit, true);
   showCard(
     `<h2>A shared garden</h2><p>Someone sent you their garden: ${visit.plants.length} plant${visit.plants.length === 1 ? '' : 's'}. Listen, strum and play with it; your own garden stays as it is.</p>`,
@@ -26,8 +26,8 @@ if (visit) {
     ],
   );
 } else if (q.has('seed') && Number.isFinite(Number(q.get('seed')))) {
-  history.replaceState(null, '', location.pathname);
   game.open(newGarden(Number(q.get('seed')) >>> 0), true);
+  game.save(true);
 } else {
   if (store.load('garden', null)) game.resumeOwn();
   else game.open(newGarden(randomSeed()));

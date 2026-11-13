@@ -10,7 +10,7 @@ import { randomSeed } from '../shared/rng';
 import {
   DAY, KEY_NAMES, MAX_PLANTS, RULES_VERSION, SPECIES, STEP_SEC, WISHES, XS, apply, cloneGarden, colOf, crittersAt,
   dayTime, decode, encode, growth, keyOf, laneOf, midiOf, newGarden, noteName, notesAt, plantError, rootOf, watered, weatherAt,
-  wishesMet, type Action, type Garden, type Plant, type PlantError,
+  wishesMet, fillWishes, gardenWish, grantWishes, newWishState, type Action, type Garden, type Plant, type PlantError, type WishState,
 } from './core';
 import { GardenAudio } from './audio';
 import { Scene, type Ghost } from './render/draw';
@@ -24,6 +24,8 @@ export interface SavedGarden {
   code: string;
   /** Date.now() when saved: time away lets the garden grow on a little. */
   at: number;
+  /** This garden's rotating wishes. */
+  w?: WishState;
 }
 
 export interface Profile {
@@ -40,7 +42,6 @@ const TOOL_HINT: Record<Tool, string> = {
   strum: 'Drag across the garden to <b>strum</b> it like a harp.',
   dig: 'Tap a plant to dig it up. <b>Undo</b> puts it back.',
 };
-const SHORT = ['Chime', 'Fern', 'Reed', 'Lily', 'Glowcap', 'Willow'];
 const PHASE_ICON = { dawn: '🌅', day: '☀️', dusk: '🌇', night: '🌙' } as const;
 const WEATHER_WORD = { clear: '', breezy: 'breezy', rain: 'rainy', mist: 'misty' } as const;
 const WEATHER_ICON = { clear: '', breezy: ' 🍃', rain: ' 🌧', mist: ' 🌫' } as const;
@@ -58,7 +59,12 @@ interface Flash {
 
 export class Game {
   g!: Garden;
+  ws: WishState = newWishState();
   private base!: Garden;
+  /** Sound is wanted but not running yet (after a reload): the first meadow tap only wakes it. */
+  private listenCue = false;
+  private tapped = false;
+  private wasRunning: boolean | null = null;
   private groups: Action[][] = [];
   visiting = false;
   tool: Tool = 'seed';
@@ -98,7 +104,10 @@ export class Game {
     this.canvas.addEventListener('pointerup', (e) => this.up(e));
     this.canvas.addEventListener('pointercancel', () => this.cancel());
     // Any first touch wakes the sound (browsers need a gesture).
-    document.addEventListener('pointerdown', () => this.audio.ensure(), { capture: true });
+    document.addEventListener('pointerdown', () => {
+      this.audio.ensure();
+      this.tapped = true;
+    }, { capture: true });
     new ResizeObserver(() => this.resize()).observe(this.canvas);
     document.addEventListener('visibilitychange', () => this.visibility());
     addEventListener('pagehide', () => this.save(true));
@@ -110,9 +119,13 @@ export class Game {
   // ---------------------------------------------------------------- garden
 
   /** Opens a garden (from a code or fresh). */
-  open(g: Garden, visiting = false): void {
+  open(g: Garden, visiting = false, ws: WishState | null = null): void {
     closeOverlay();
+    // A shared link stays in the address while visiting (a reload comes back to it);
+    // your own garden lives in storage, so its address is plain.
+    if (!visiting && location.search) history.replaceState(null, '', location.pathname);
     this.g = g;
+    this.ws = fillWishes(g, ws ?? newWishState());
     this.base = cloneGarden(g);
     this.groups = [];
     this.visiting = visiting;
@@ -141,25 +154,29 @@ export class Game {
       // Time away lets it grow on a little (at most half a day).
       const away = Math.max(0, (Date.now() - saved.at) / 1000 / STEP_SEC);
       g.now += Math.floor(Math.min(AWAY_MAX, away));
-      this.open(g);
+      this.open(g, false, saved.w && Array.isArray(saved.w.a) ? saved.w : null);
     } else this.newGarden();
   }
 
   keepVisit(): void {
     this.visiting = false;
+    history.replaceState(null, '', location.pathname);
     this.base = cloneGarden(this.g);
     this.groups = [];
     this.save(true);
     toast('This garden is yours now');
     this.say('');
+    this.refreshHud(true);
   }
 
   save(now = false): void {
-    if (!this.g || this.visiting) return;
+    if (!this.g) return;
     const t = performance.now();
     if (!now && t - this.lastSave < 5000) return;
     this.lastSave = t;
-    store.save('garden', { v: RULES_VERSION, code: encode(this.g), at: Date.now() } satisfies SavedGarden);
+    // A visit keeps its current state in the address, so a reload keeps your changes to it too.
+    if (this.visiting) history.replaceState(null, '', `${location.pathname}?g=${encode(this.g)}`);
+    else store.save('garden', { v: RULES_VERSION, code: encode(this.g), at: Date.now(), w: this.ws } satisfies SavedGarden);
   }
 
   shareUrl(): string {
@@ -243,6 +260,10 @@ export class Game {
           const i = f.plant ? this.g.plants.indexOf(f.plant) : -1;
           if (i < 0) continue;
           this.scene.flash(this.g, i, f.vel);
+          if (f.why === 'song' && !this.reduced) {
+            const p = this.g.plants[i];
+            this.scene.burst('ring', this.scene.baseX(this.g, i), this.scene.pos(p.x, p.y).sy, 1, 'rgba(255,245,200,0.75)');
+          }
           if ((f.why === 'visit' || f.why === 'gust') && !this.reduced) {
             const h = this.scene.head(this.g, i, 0, step, t / 1000);
             this.scene.burst('spark', h.x, h.y, 3, '#fff6c8');
@@ -263,6 +284,15 @@ export class Game {
       tool: this.toolPos,
       reduced: this.reduced,
     });
+    const cue = this.audio.on && !this.audio.running && !this.tapped;
+    if (cue !== this.listenCue) {
+      this.listenCue = cue;
+      $('listen').hidden = !cue;
+    }
+    if (this.audio.running !== this.wasRunning) {
+      this.wasRunning = this.audio.running;
+      this.refreshSound();
+    }
     if (t - this.lastCheck > 1000) {
       this.lastCheck = t;
       this.checkWishes();
@@ -298,13 +328,22 @@ export class Game {
 
   private down(e: PointerEvent): void {
     if (this.press) return;
+    if (this.listenCue) {
+      // This tap only wakes the sound (the document listener already asked); nothing gets planted.
+      this.listenCue = false;
+      $('listen').hidden = true;
+      return;
+    }
     this.canvas.setPointerCapture(e.pointerId);
     const p = this.local(e);
     this.press = { id: e.pointerId, x: p.x, y: p.y, moved: false, lastX: p.x, lastY: p.y, col: -1, t: performance.now() };
     this.group = null;
     if (this.tool === 'seed') this.aim(p.x, p.y, true);
     else if (this.tool === 'water') this.water(p.x, p.y, true);
-    else if (this.tool === 'strum') this.toolPos = { kind: 'strum', x: p.x, y: p.y };
+    else if (this.tool === 'strum') {
+      this.toolPos = { kind: 'strum', x: p.x, y: p.y };
+      this.scene.addTrail(p.x, p.y, performance.now() / 1000);
+    }
   }
 
   private move(e: PointerEvent): void {
@@ -369,11 +408,11 @@ export class Game {
       case 'full':
         return { short: 'The garden is full', long: `The garden holds ${MAX_PLANTS} plants. Dig one up to make room.` };
       case 'water':
-        return { short: 'Lilies float: plant on the pond', long: `${s.name}s grow on the water. Plant it on the pond.` };
+        return { short: 'Lilies float: plant on the pond', long: `${s.plural} grow on the water. Plant it on the pond.` };
       case 'dry':
-        return { short: 'Too wet here', long: `${s.name}s don’t grow in water. Only Moonlilies and Whistlereeds do.` };
+        return { short: 'Too wet here', long: `${s.plural} don’t grow in water. Only Moonlilies and Pipereeds do.` };
       case 'edge':
-        return { short: 'Reeds need the pond', long: `${s.name}s grow in the pond or on its sandy shore.` };
+        return { short: 'Reeds need the pond', long: `${s.plural} grow in the pond or on its sandy shore.` };
       case 'close': {
         const p = near !== undefined ? this.g.plants[near] : null;
         return { short: p ? `Too close to the ${SPECIES[p.sp].name}` : 'Too close', long: p ? this.plantInfo(p) : 'Too close to another plant.' };
@@ -439,12 +478,14 @@ export class Game {
 
   private strum(x0: number, y0: number, x1: number, y1: number): void {
     this.toolPos = { kind: 'strum', x: x1, y: y1 };
+    this.scene.addTrail(x1, y1, performance.now() / 1000);
     if (x0 === x1) return;
     const step = this.g.now;
     const t = this.audio.time() + 0.01;
     let n = 0;
     this.g.plants.forEach((p, i) => {
-      const { sx, sy, s } = this.scene.pos(p.x, p.y);
+      const { sy, s } = this.scene.pos(p.x, p.y);
+      const sx = this.scene.baseX(this.g, i);
       if ((x0 - sx) * (x1 - sx) > 0) return;
       const gr = growth(p, step);
       const tall = (p.sp === 5 ? 120 : p.sp === 3 ? 30 : 80) * s * (0.4 + 0.6 * gr);
@@ -452,8 +493,13 @@ export class Game {
       if (fy < sy - tall - 30 * s || fy > sy + 30 * s) return;
       const sp = SPECIES[p.sp];
       this.audio.note(midiOf(this.g.seed, p.sp, colOf(p.x)), sp.voice, 0.4 + 0.4 * gr, Math.max(2, sp.len >> 1) * STEP_SEC, t + n * 0.015);
-      this.scene.flash(this.g, i, 0.9);
-      this.scene.kick(this.g, i, this.reduced ? 0.03 : 0.07);
+      this.scene.flash(this.g, i, 1.2);
+      this.scene.kick(this.g, i, this.reduced ? 0.04 : 0.12);
+      if (!this.reduced) {
+        this.scene.burst('ring', sx, sy, 1, 'rgba(255,240,190,0.9)');
+        const h = this.scene.head(this.g, i, 0, step, performance.now() / 1000);
+        this.scene.burst('spark', h.x, h.y, 4, '#fff3c4');
+      }
       n++;
     });
     if (n) navigator.vibrate?.(4);
@@ -498,15 +544,20 @@ export class Game {
   // ---------------------------------------------------------------- wishes
 
   private checkWishes(): void {
-    if (this.visiting) return;
-    const met = wishesMet(this.g).filter((id) => !this.profile.wishes.includes(id));
-    if (!met.length) return;
-    for (const id of met) {
-      this.profile.wishes.push(id);
-      const w = WISHES.find((x) => x.id === id)!;
-      toast(`★ Wish granted: ${w.name}`);
+    const names: string[] = [];
+    // This garden's own wishes (also while visiting: Keep carries them over).
+    for (const id of grantWishes(this.g, this.ws)) names.push(gardenWish(id)!.name);
+    if (!this.visiting) {
+      const met = wishesMet(this.g).filter((id) => !this.profile.wishes.includes(id));
+      for (const id of met) {
+        this.profile.wishes.push(id);
+        names.push(WISHES.find((x) => x.id === id)!.name);
+      }
+      if (met.length) store.save('profile', this.profile);
     }
-    store.save('profile', this.profile);
+    if (!names.length) return;
+    toast(`★ ${names.join(' · ')}`).classList.add('wish');
+    this.save(true);
     this.audio.chime(rootOf(this.g.seed));
     this.refreshHud(true);
   }
@@ -521,7 +572,7 @@ export class Game {
       b.className = 'sp';
       b.dataset.i = String(i);
       b.setAttribute('aria-label', s.name);
-      b.innerHTML = `${iconImg(i)}<span>${SHORT[i]}</span>`;
+      b.innerHTML = `${iconImg(i)}<span>${s.name}</span>`;
       b.onclick = () => {
         this.sp = i;
         this.setTool('seed');
@@ -557,7 +608,10 @@ export class Game {
   }
 
   private refreshSound(): void {
-    $('soundBtn').textContent = this.audio.on ? '🔊' : '🔇';
+    // Muted until the sound really runs (browsers wait for a tap after a reload).
+    const btn = $('soundBtn');
+    btn.textContent = this.audio.on && this.audio.running ? '🔊' : '🔇';
+    btn.classList.toggle('waiting', this.audio.on && !this.audio.running);
   }
 
   private updateUndo(): void {
@@ -581,13 +635,15 @@ export class Game {
     const d = dayTime(this.g.now);
     const w = weatherAt(this.g.seed, this.g.now);
     const ph = d.phase[0].toUpperCase() + d.phase.slice(1);
-    const wish = `★ ${this.profile.wishes.length}/${WISHES.length}`;
+    const wish = `★ ${this.ws.done.length}`;
     const hud = `${d.day}|${ph}|${w.amt > 0.3 ? w.kind : 'clear'}|${wish}|${this.g.plants.length}|${this.visiting}`;
     if (!force && hud === this.lastHud) return;
     this.lastHud = hud;
     const wet = w.amt > 0.3 && w.kind !== 'clear';
-    $('dayLabel').textContent = this.visiting ? `Visiting · day ${d.day}` : `Day ${d.day} · key of ${KEY_NAMES[keyOf(this.g.seed)]}`;
-    $('phase').textContent = `${PHASE_ICON[d.phase]} ${ph}${wet ? ` · ${WEATHER_ICON[w.kind].trim()} ${WEATHER_WORD[w.kind]}` : ''}`;
+    // The weather word rides in the small label so the big line never gets cut.
+    // Short enough for 360 px: the weather word wins over the key and the word Visiting (the info line says that).
+    $('dayLabel').textContent = wet ? `Day ${d.day} · ${WEATHER_WORD[w.kind]}` : this.visiting ? `Visiting · day ${d.day}` : `Day ${d.day} · key of ${KEY_NAMES[keyOf(this.g.seed)]}`;
+    $('phase').textContent = `${PHASE_ICON[d.phase]} ${ph}${wet ? WEATHER_ICON[w.kind] : ''}`;
     $('wishBtn').textContent = wish;
   }
 
@@ -600,11 +656,11 @@ export class Game {
       <p>A little garden that sings. Nothing here can wilt or go wrong: plant, listen, change things.</p>
       <ul>
         <li><b>Plant</b>: pick a kind and tap the meadow. Slide your finger to hear the note before you let go.</li>
-        <li><b>Left to right is the note</b>, low to high, always in one gentle scale. <b>Back to front is when</b>: a soft band sweeps from the back row to the front every bar, and each plant sings as it passes.</li>
+        <li><b>Left to right is the note</b>, low to high, always in one gentle scale. <b>Back to front is when</b>: a band of light sweeps from the back row to the front every bar (the dots and numbers at the edges count the beats), and each plant sings and pulses as it passes.</li>
         <li>Each kind has its own voice and rhythm. Chimebells sleep at night; Glowcaps and Moonlilies shine then.</li>
         <li><b>Bees</b> by day, <b>fireflies</b> by night and a <b>frog</b> on the lilies hop between plants and make them sing.</li>
         <li><b>Water</b> helps seedlings grow and makes grown plants flourish. <b>Strum</b>: drag across to play the garden like a harp. <b>Dig</b> takes a plant out.</li>
-        <li>Days, rain, breezes and mist drift by on their own. ★ <b>Wishes</b> are little ideas to try.</li>
+        <li>Days, rain, breezes and mist drift by on their own. ★ <b>Wishes</b>: each garden always has three little ideas to try; a granted one is replaced by a new one.</li>
         <li>The garden saves itself. Share it as a link from the menu.</li>
       </ul>`,
       [{ label: 'Start planting', primary: true, onClick: closeOverlay }],
@@ -613,8 +669,18 @@ export class Game {
 
   showWishes(): void {
     const done = new Set(this.profile.wishes);
+    const here = this.ws.a.map((id) => gardenWish(id)).filter((w) => !!w);
+    const now = here.map((w) => `<li><b>☆ ${w!.name}</b><br>${w!.text}</li>`).join('');
+    const n = this.ws.done.length;
+    const left = WISHES.length - WISHES.filter((w) => done.has(w.id)).length;
     const rows = WISHES.map((w) => `<li class="${done.has(w.id) ? 'done' : ''}"><b>${done.has(w.id) ? '★' : '☆'} ${w.name}</b><br>${w.text}</li>`).join('');
-    showCard(`<h2>Wishes</h2><p>Little ideas for your garden. No hurry, no failing.</p><ul class="wishes">${rows}</ul>`, [{ label: 'Back to the garden', primary: true, onClick: closeOverlay }]);
+    showCard(
+      `<h2>Wishes</h2><p>Little ideas for this garden. When one comes true, a new one takes its place. No hurry, no failing.</p>
+      <ul class="wishes">${now}</ul>
+      <p class="meta-line">${n ? `★ ${n} granted in this garden.` : 'None granted in this garden yet.'}</p>
+      <details class="milestones"><summary>Milestones · ${WISHES.length - left}/${WISHES.length}</summary><ul class="wishes">${rows}</ul></details>`,
+      [{ label: 'Back to the garden', primary: true, onClick: closeOverlay }],
+    );
   }
 
   showMenu(): void {

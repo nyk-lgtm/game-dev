@@ -7,12 +7,12 @@
 import { Rng, mixSeed } from '../../shared/rng';
 
 export type Prim =
-  | { k: 'seg'; g0: number; g1: number; x0: number; y0: number; x1: number; y1: number; w: number; c: string }
-  | { k: 'leaf'; g0: number; g1: number; x: number; y: number; a: number; l: number; w: number; c: string }
-  | { k: 'bell'; g0: number; g1: number; x: number; y: number; s: number; c: string; c2: string }
-  | { k: 'cap'; g0: number; g1: number; x: number; y: number; rx: number; ry: number; c: string; c2: string }
-  | { k: 'ell'; g0: number; g1: number; x: number; y: number; rx: number; ry: number; a: number; c: string }
-  | { k: 'pad'; g0: number; g1: number; x: number; y: number; rx: number; ry: number; n: number; c: string; c2: string };
+  | { k: 'seg'; g0: number; g1: number; g2?: number; x0: number; y0: number; x1: number; y1: number; w: number; c: string }
+  | { k: 'leaf'; g0: number; g1: number; g2?: number; x: number; y: number; a: number; l: number; w: number; c: string }
+  | { k: 'bell'; g0: number; g1: number; g2?: number; x: number; y: number; s: number; c: string; c2: string }
+  | { k: 'cap'; g0: number; g1: number; g2?: number; x: number; y: number; rx: number; ry: number; c: string; c2: string }
+  | { k: 'ell'; g0: number; g1: number; g2?: number; x: number; y: number; rx: number; ry: number; a: number; c: string }
+  | { k: 'pad'; g0: number; g1: number; g2?: number; x: number; y: number; rx: number; ry: number; n: number; c: string; c2: string };
 
 export interface Pt {
   x: number;
@@ -209,10 +209,23 @@ function willow(r: Rng): Shape {
   const leafHue = r.int(85, 130);
   const blossom = r.pick(['#ffc6dc', '#fff0c0', '#e6d4ff']);
   const maxD = 3;
-  const span = [0, 0.28, 0.48, 0.66, 0.84];
+  // The trunk starts a little late: first a green sapling (below) that fades as the trunk takes over.
+  const span = [0.1, 0.3, 0.48, 0.66, 0.84];
   const branch = (x: number, y: number, ang: number, len: number, w: number, d: number) => {
     const x1 = x + Math.cos(ang) * len, y1 = y + Math.sin(ang) * len;
-    prims.push({ k: 'seg', g0: span[d], g1: span[d + 1] + 0.04, x0: x, y0: y, x1, y1, w, c: bark });
+    const g1 = span[d + 1] + 0.04;
+    prims.push({ k: 'seg', g0: span[d], g1, x0: x, y0: y, x1, y1, w, c: bark });
+    // Leaves along the trunk and lower branches, so a young willow is a leafy sapling, not a bare stick.
+    if (d <= 2) {
+      const lc = hsl(leafHue + 10, 45, 50);
+      const marks = d === 0 ? [0.3, 0.55, 0.8, 1] : [0.6, 1];
+      marks.forEach((t, i) => {
+        const lx = x + (x1 - x) * t, ly = y + (y1 - y) * t;
+        const gl = span[d] + (g1 - span[d]) * t;
+        const side = i % 2 ? 1 : -1;
+        prims.push({ k: 'leaf', g0: gl, g1: Math.min(1, gl + 0.1), x: lx, y: ly, a: ang + side * 1.0, l: d === 0 ? 9 : 7, w: d === 0 ? 3 : 2.4, c: lc });
+      });
+    }
     if (d === maxD) {
       heads.push({ x: x1, y: y1 });
       const strands = r.int(2, 4);
@@ -240,6 +253,15 @@ function willow(r: Rng): Shape {
       branch(x1, y1, ang + spread + range(r, -0.12, 0.12), len * range(r, 0.62, 0.78), w * 0.62, d + 1);
     }
   };
+  // A young willow is a green sapling with a leafy top; it gives way to the trunk and branches.
+  const sap = hsl(leafHue, 50, 46), sapLeaf = hsl(leafHue + 8, 55, 56);
+  prims.push({ k: 'seg', g0: 0, g1: 0.16, g2: 0.36, x0: 0, y0: 0, x1: 1, y1: -26, w: 2.2, c: sap });
+  [0.35, 0.6, 0.85, 1].forEach((t, i) => {
+    const gl = 0.02 + 0.14 * t;
+    for (const side of i === 3 ? [-1, 0, 1] : [i % 2 ? 1 : -1]) {
+      prims.push({ k: 'leaf', g0: gl, g1: gl + 0.08, g2: 0.4, x: t, y: -26 * t, a: -Math.PI / 2 + side * 0.9, l: i === 3 ? 11 : 10, w: 3.6, c: sapLeaf });
+    }
+  });
   branch(0, 0, -Math.PI / 2 + range(r, -0.08, 0.08), range(r, 34, 42), 5.5, 0);
   // Keep a few heads (spread out) for glows and landings.
   const keep = heads.filter((_, i) => i % Math.max(1, Math.floor(heads.length / 4)) === 0).slice(0, 4);
@@ -283,7 +305,7 @@ export function drawShape(ctx: CanvasRenderingContext2D, sh: Shape, g: number, s
   ctx.lineCap = 'round';
   for (const p of sh.prims) {
     const t = p.g1 <= p.g0 ? (g >= p.g0 ? 1 : 0) : Math.max(0, Math.min(1, (g - p.g0) / (p.g1 - p.g0)));
-    if (t <= 0) continue;
+    if (t <= 0 || (p.g2 !== undefined && g >= p.g2)) continue;
     const e = 1 - (1 - t) * (1 - t);
     switch (p.k) {
       case 'seg':

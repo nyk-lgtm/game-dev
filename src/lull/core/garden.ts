@@ -37,6 +37,7 @@ export type Ground = 'soil' | 'shore' | 'water';
 export interface Species {
   id: string;
   name: string;
+  plural: string;
   /** Where it grows: soil (incl. the shore), water, or water and shore. */
   wet: 'no' | 'yes' | 'edge';
   /** Spacing radius in x units. */
@@ -63,32 +64,32 @@ export interface Species {
 
 export const SPECIES: Species[] = [
   {
-    id: 'bell', name: 'Chimebell', wet: 'no', r: 46, grow: 224, oct: 1, voice: 'bell', every: 2, phrase: [[0, 0]], len: 8,
+    id: 'bell', name: 'Chimebell', plural: 'Chimebells', wet: 'no', r: 46, grow: 224, oct: 1, voice: 'bell', every: 2, phrase: [[0, 0]], len: 8,
     bees: true, flies: false, sleepsAtNight: true, nightSinger: false,
     blurb: 'Nodding bells that ring by day and fold up at night. Bees love them.',
   },
   {
-    id: 'fern', name: 'Harpfern', wet: 'no', r: 52, grow: 256, oct: 1, voice: 'pluck', every: 2, phrase: [[0, 0], [1, 1], [2, 2]], len: 2,
+    id: 'fern', name: 'Harpfern', plural: 'Harpferns', wet: 'no', r: 52, grow: 256, oct: 1, voice: 'pluck', every: 2, phrase: [[0, 0], [1, 1], [2, 2]], len: 2,
     bees: false, flies: true, sleepsAtNight: false, nightSinger: false,
     blurb: 'Plucks a little three-note run up the scale.',
   },
   {
-    id: 'reed', name: 'Whistlereed', wet: 'edge', r: 40, grow: 192, oct: 0, voice: 'reed', every: 4, phrase: [[0, 0]], len: 10,
+    id: 'reed', name: 'Pipereed', plural: 'Pipereeds', wet: 'edge', r: 40, grow: 192, oct: 0, voice: 'reed', every: 4, phrase: [[0, 0]], len: 10,
     bees: false, flies: true, sleepsAtNight: false, nightSinger: false,
     blurb: 'A long, breathy note. Grows in the pond or on its shore.',
   },
   {
-    id: 'lily', name: 'Moonlily', wet: 'yes', r: 56, grow: 224, oct: 1, voice: 'glass', every: 2, phrase: [[0, 0], [2, 2]], len: 8,
+    id: 'lily', name: 'Moonlily', plural: 'Moonlilies', wet: 'yes', r: 56, grow: 224, oct: 1, voice: 'glass', every: 2, phrase: [[0, 0], [2, 2]], len: 8,
     bees: true, flies: true, sleepsAtNight: false, nightSinger: true,
     blurb: 'Glassy chimes from the water, brightest at night. The frog sits on its pads.',
   },
   {
-    id: 'cap', name: 'Glowcap', wet: 'no', r: 34, grow: 160, oct: 1, voice: 'wood', every: 1, phrase: [[0, 0]], len: 1,
+    id: 'cap', name: 'Glowcap', plural: 'Glowcaps', wet: 'no', r: 34, grow: 160, oct: 1, voice: 'wood', every: 1, phrase: [[0, 0]], len: 1,
     bees: false, flies: true, sleepsAtNight: false, nightSinger: true,
     blurb: 'A soft wooden knock every bar. Glows at night and draws the fireflies.',
   },
   {
-    id: 'willow', name: 'Humwillow', wet: 'no', r: 80, grow: 448, oct: -1, voice: 'bass', every: 4, phrase: [[0, 0]], len: 16,
+    id: 'willow', name: 'Humwillow', plural: 'Humwillows', wet: 'no', r: 80, grow: 448, oct: -1, voice: 'bass', every: 4, phrase: [[0, 0]], len: 16,
     bees: true, flies: false, sleepsAtNight: false, nightSinger: false,
     blurb: 'A slow little tree that hums the low notes. Takes a while to grow.',
   },
