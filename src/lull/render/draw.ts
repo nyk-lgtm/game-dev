@@ -43,6 +43,8 @@ interface Sprite {
   flash: number;
   /** A quick swell when it sings (0..1). */
   pop: number;
+  /** Shadow half-width in plant units. */
+  shadow: number;
 }
 
 interface Particle {
@@ -112,6 +114,7 @@ export class Scene {
   private cloud: HTMLCanvasElement | null = null;
   private band: HTMLCanvasElement | null = null;
   private beatBand: HTMLCanvasElement | null = null;
+  private mist: HTMLCanvasElement | null = null;
   private glows = new Map<string, HTMLCanvasElement>();
   private pondPath: Path2D | null = null;
   private pondRect: { x0: number; x1: number; y0: number; y1: number } | null = null;
@@ -138,11 +141,19 @@ export class Scene {
     // The meadow gets most of a short screen (360×640 leaves ~430 px of stage); the sky shrinks first.
     const top = Math.round(cssH * (cssH < 480 ? 0.33 : cssH < 640 ? 0.4 : 0.44));
     this.L = { W: cssW, H: cssH, dpr, u, horizon: top - 36 * u, top, bot: cssH - 12 * u, padX: 22 * u };
-    this.ground = this.hills = this.stars = this.cloud = this.band = this.beatBand = null;
+    this.ground = this.hills = this.stars = this.cloud = this.band = this.beatBand = this.mist = null;
     this.shades.clear();
     this.glows.clear();
     for (const s of this.sprites.values()) s.cv = null;
     this.pondSeed = -1;
+  }
+
+  /** Frames have been fast for a while: draw at more device pixels again (true if it could). */
+  faster(): boolean {
+    if (this.quality >= 1) return false;
+    this.quality = Math.min(1, this.quality + 0.25);
+    this.resize(this.L.W, this.L.H);
+    return true;
   }
 
   /** Frames are slow: draw at fewer device pixels (true if it could). */
@@ -181,7 +192,7 @@ export class Scene {
     let s = this.sprites.get(k);
     if (!s) {
       const shape = makeShape(g.seed, p.sp, p.x, p.y);
-      s = { shape, cv: null, gq: -1, sleep: false, tone: '', ox: 0, oy: 0, w: 0, h: 0, phase: (mixSeed(p.x, p.y) % 1000) / 159, kick: 0, flash: 0, pop: 0 };
+      s = { shape, cv: null, gq: -1, sleep: false, tone: '', ox: 0, oy: 0, w: 0, h: 0, phase: (mixSeed(p.x, p.y) % 1000) / 159, kick: 0, flash: 0, pop: 0, shadow: p.sp === 5 ? 22 : 10 };
       this.sprites.set(k, s);
     }
     return s;
@@ -220,6 +231,41 @@ export class Scene {
     if (sx - left * f < lo) dx = lo - (sx - left * f);
     else if (sx + right * f > hi) dx = hi - (sx + right * f);
     return { f, dx };
+  }
+
+  /**
+   * Draws a plant sprite swayed by `skew`. A sheared drawImage is the slowest path for a software
+   * canvas (profiled: ~17 fps of 50 under CPU ×4 with 30 plants), so the sprite goes out in
+   * horizontal strips, each only shifted (snapped to device pixels): a plain, fast blit. Strips are
+   * ~12 px tall, so the steps are at most a pixel or two even mid-strum.
+   */
+  private blitSwayed(sp: Sprite, x: number, y: number, skew: number, fx: number, pk: number): void {
+    const c = this.ctx;
+    const { dpr, u } = this.L;
+    const cv = sp.cv!;
+    const sxs = dpr * fx * pk, sys = dpr * pk;
+    const snap = (v: number) => Math.round(v * dpr) / dpr;
+    if (Math.abs(skew * sp.oy) < 0.5 / dpr) {
+      c.setTransform(sxs, 0, 0, sys, snap(x) * dpr, snap(y) * dpr);
+      c.drawImage(cv, -sp.ox, -sp.oy, sp.w, sp.h);
+    } else {
+      const strip = 12 * u;
+      const n = Math.max(1, Math.ceil(sp.oy / strip));
+      const k = cv.height / sp.h;
+      for (let j = 0; j <= n; j++) {
+        // Strip j covers sprite rows [y0, y1] (CSS px from the sprite's top); the last strip is below the base.
+        const y0 = j === n ? sp.oy : Math.max(0, sp.oy - (n - j) * strip);
+        const y1 = j === n ? sp.h : sp.oy - (n - j - 1) * strip;
+        if (y1 - y0 < 0.5) continue;
+        const mid = (y0 + y1) / 2 - sp.oy;
+        const off = skew * mid * pk;
+        const r0 = Math.round(y0 * k), r1 = Math.round(y1 * k);
+        if (r1 <= r0) continue;
+        c.setTransform(sxs, 0, 0, sys, snap(x + off) * dpr, snap(y) * dpr);
+        c.drawImage(cv, 0, r0, cv.width, r1 - r0, -sp.ox, r0 / k - sp.oy, sp.w, (r1 - r0) / k);
+      }
+    }
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
   /** Width kept clear at each side of the meadow for the beat chips. */
@@ -585,6 +631,7 @@ export class Scene {
       c.fillRect(0, y0, W, H - y0);
     }
     c.globalAlpha = 1;
+    this.drawChips(c, -1);
     void g;
   }
 
@@ -618,6 +665,11 @@ export class Scene {
     x.clearRect(0, 0, sp.cv.width, sp.cv.height);
     const k = s * sizeAt(gq);
     x.setTransform(dpr * k, 0, 0, dpr * k, sp.ox * dpr, sp.oy * dpr);
+    // The soft shadow lives in the sprite (one fewer path fill per plant per frame).
+    x.fillStyle = 'rgba(20,35,20,0.22)';
+    x.beginPath();
+    x.ellipse(0, 1 / k, sp.shadow, (3 * s) / k, 0, 0, TAU);
+    x.fill();
     drawShape(x, sh, gq, sleep);
     // A seedling is a pair of tiny leaves even before its first prims show.
     if (gq < 0.15) {
@@ -751,11 +803,6 @@ export class Scene {
       const pk = 1 + (f.reduced ? 0.04 : 0.1) * sp.pop;
       const skew = this.skew(sp, p, time, 0) * (f.reduced ? 0.5 : 1);
       const by = p.sp === 3 ? this.bob(sp, time) : 0;
-      // Soft shadow.
-      c.fillStyle = 'rgba(20,35,20,0.22)';
-      c.beginPath();
-      c.ellipse(sx + dx, sy + 1, (p.sp === 5 ? 22 : 10) * s * sizeAt(gr) * fx, 3 * s, 0, 0, TAU);
-      c.fill();
       // A willow standing in front of the pond lets it show through its canopy.
       let alpha = 1;
       if (p.sp === 5 && pr && sy > pr.y0) {
@@ -764,9 +811,7 @@ export class Scene {
         if (x1 > pr.x0 && x0 < pr.x1 && y0 < pr.y1) alpha = 0.62;
       }
       c.globalAlpha = alpha;
-      c.setTransform(dpr * fx * pk, 0, skew * dpr * pk, dpr * pk, (sx + dx) * dpr, (sy + by) * dpr);
-      c.drawImage(sp.cv!, -sp.ox, -sp.oy, sp.w, sp.h);
-      c.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this.blitSwayed(sp, sx + dx, sy + by, skew, fx, pk);
       c.globalAlpha = 1;
       nSprites++;
     }
@@ -841,9 +886,10 @@ export class Scene {
       const gr = growth(p, step);
       const ambient = p.sp === 4 ? night * 0.55 * Math.min(1, gr * 2) : p.sp === 3 ? night * 0.3 * gr : 0;
       const v = Math.min(1.2, sp.flash * (f.reduced ? 0.6 : 1) + ambient);
-      if (v < 0.04) continue;
+      if (v < 0.08) continue;
       const img = this.glow(sp.shape.glow);
-      const n = Math.max(1, sp.shape.heads.length);
+      // At most three glows a plant (bells have up to nine heads): glows were the next-biggest raster cost.
+      const n = Math.min(3, Math.max(1, sp.shape.heads.length));
       for (let k = 0; k < n; k++) {
         const h = this.head(g, i, k, step, time);
         const R = (10 + 10 * Math.min(1, v)) * h.s;
@@ -914,11 +960,23 @@ export class Scene {
       c.stroke();
     }
     if (wk.kind === 'mist' && wk.amt > 0) {
-      for (let i = 0; i < 4; i++) {
-        const y = top - 70 * u + i * 75 * u;
-        c.globalAlpha = wk.amt * (0.5 + 0.15 * Math.sin(time * 0.3 + i * 1.7));
-        c.drawImage(this.band!, -((time * 5 * (i + 1)) % 60) * u, y, W + 60 * u, 130 * u);
+      // One pre-composed haze image (four soft bands) instead of four full-width draws: mist was the
+      // costliest weather under CPU throttling. It drifts and breathes as a whole.
+      const { dpr } = L;
+      if (!this.mist) {
+        // At device resolution, so the per-frame draw is an unscaled blit.
+        this.mist = canvas((W + 20 * u) * dpr, 375 * u * dpr);
+        const x = this.mist.getContext('2d')!;
+        x.scale(dpr, dpr);
+        for (let i = 0; i < 4; i++) {
+          x.globalAlpha = 0.5 + 0.15 * Math.sin(i * 1.7);
+          x.drawImage(this.band!, (i % 2) * -20 * u, i * 75 * u, W + 40 * u, 130 * u);
+        }
       }
+      c.globalAlpha = wk.amt * (0.9 + 0.1 * Math.sin(time * 0.3));
+      c.setTransform(1, 0, 0, 1, Math.round(-((time * 3) % 20) * u * dpr), Math.round((top - 70 * u) * dpr));
+      c.drawImage(this.mist, 0, 0);
+      c.setTransform(dpr, 0, 0, dpr, 0, 0);
       c.globalAlpha = 1;
     }
     this.drawBeat(step, light, f.reduced);
@@ -944,7 +1002,7 @@ export class Scene {
     const key = `ghost.${gh.sp}`;
     let sp = this.sprites.get(key);
     if (!sp) {
-      sp = { shape: makeShape(7, gh.sp, 500, 18), cv: null, gq: -1, sleep: false, tone: '', ox: 0, oy: 0, w: 0, h: 0, phase: 0, kick: 0, flash: 0, pop: 0 };
+      sp = { shape: makeShape(7, gh.sp, 500, 18), cv: null, gq: -1, sleep: false, tone: '', ox: 0, oy: 0, w: 0, h: 0, phase: 0, kick: 0, flash: 0, pop: 0, shadow: 10 };
       this.sprites.set(key, sp);
     }
     if (!sp.cv || Math.abs(sp.w - (sp.shape.maxX - sp.shape.minX) * s - 2) > 0.5) this.redrawSprite(sp, s, 1, false);
@@ -989,36 +1047,51 @@ export class Scene {
     const within = pos * LANES - lane;
     // The band glides across its lane and fades as the next one takes over.
     const y = top + pos * (bot - top);
-    if (!this.beatBand) {
-      const { dpr } = this.L;
-      this.beatBand = canvas(W * dpr, 40 * dpr);
+    const { dpr } = this.L;
+    // Built at its exact size in device pixels, so each frame is a plain blit (a scaled or
+    // 'lighter' draw of it cost ~9 fps under CPU ×4).
+    const bw = Math.round((W - 28 * u) * dpr), bh = Math.max(2, Math.round(lh * dpr));
+    if (!this.beatBand || this.beatBand.width !== bw || this.beatBand.height !== bh) {
+      this.beatBand = canvas(bw, bh);
       const x = this.beatBand.getContext('2d')!;
-      x.scale(dpr, dpr);
-      const gr = x.createLinearGradient(0, 0, 0, 40);
-      gr.addColorStop(0, 'rgba(255,236,170,0)');
-      gr.addColorStop(0.5, 'rgba(255,236,170,0.9)');
-      gr.addColorStop(1, 'rgba(255,236,170,0)');
+      const gr = x.createLinearGradient(0, 0, 0, bh);
+      gr.addColorStop(0, 'rgba(255,240,180,0)');
+      gr.addColorStop(0.5, 'rgba(255,240,180,1)');
+      gr.addColorStop(1, 'rgba(255,240,180,0)');
       x.fillStyle = gr;
-      x.fillRect(0, 0, W, 40);
+      x.fillRect(0, 0, bw, bh);
     }
-    c.globalCompositeOperation = 'lighter';
-    c.globalAlpha = (reduced ? 0.24 : 0.34) + 0.14 * (1 - light);
-    c.drawImage(this.beatBand, 0, y - lh * 0.9, W, lh * 1.8);
-    c.globalAlpha = 0.3 + 0.15 * (1 - light);
+    // Profiled (CDP trace, CPU ×4): the live layer's raster is most of the frame, so the band
+    // is one lane tall (it was 1.8) and the edge chips are drawn once into the landscape layer;
+    // only the lit chip is drawn per frame.
+    c.globalAlpha = (reduced ? 0.26 : 0.36) + 0.1 * (1 - light);
+    c.setTransform(1, 0, 0, 1, Math.round(14 * u * dpr), Math.round((y - lh * 0.5) * dpr));
+    c.drawImage(this.beatBand, 0, 0);
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.globalAlpha = 0.45 + 0.2 * (1 - light);
     c.fillStyle = '#fff3c4';
     c.fillRect(14 * u, y - 0.75 * u, W - 28 * u, 1.5 * u);
-    c.globalCompositeOperation = 'source-over';
-    // Edge markers, drawn over everything (plants are kept clear of the edges, see `fit`):
-    // numbered chips on the beats, small dots on the "and"s; the current one is lit.
-    // Dark chips with pale numbers read on bright grass, in mist and at night alike.
+    this.drawChips(c, lane, within);
+    c.globalAlpha = 1;
+  }
+
+  /**
+   * Edge markers (plants are kept clear of the edges, see `fit`): numbered chips on the beats,
+   * small dots on the "and"s. Dark chips with pale numbers read on bright grass, in mist and at
+   * night alike. lit < 0 draws them all unlit (into the landscape layer); else only lane `lit`, lit.
+   */
+  private drawChips(c: CanvasRenderingContext2D, lit: number, within = 0): void {
+    const { W, u, top, bot } = this.L;
+    const lh = (bot - top) / LANES;
     const fs = Math.max(11, Math.round(11 * u));
     const R = Math.max(7.5, fs * 0.68);
     c.font = `800 ${fs}px system-ui, sans-serif`;
     c.textAlign = 'center';
     c.textBaseline = 'middle';
     for (let l = 0; l < LANES; l++) {
+      if (lit >= 0 && l !== lit) continue;
       const ly = top + (l + 0.5) * lh;
-      const on = l === lane;
+      const on = l === lit;
       for (const ex of [R + 1, W - R - 1]) {
         if (l % 2 === 0) {
           c.globalAlpha = on ? 1 : 0.82;

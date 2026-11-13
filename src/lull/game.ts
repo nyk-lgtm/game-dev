@@ -94,6 +94,9 @@ export class Game {
   private lastHud = '';
   profile = loadProfile();
   private gaps: number[] = [];
+  private good = 0;
+  private goodNeed = 4;
+  private steppedUp = false;
   /** Frame times (ms) for the perf probe. */
   frameMs: number[] = [];
 
@@ -310,7 +313,19 @@ export class Game {
     if (this.gaps.length >= 120) {
       const avg = this.gaps.reduce((a, b) => a + b, 0) / this.gaps.length;
       this.gaps = [];
-      if (avg > 0.024 && !document.hidden) this.scene.slower();
+      if (document.hidden) return;
+      if (avg > 0.024) {
+        // A step down soon after a step up means the higher DPR can't hold: wait twice as long next time.
+        if (this.scene.slower() && this.steppedUp) this.goodNeed = Math.min(32, this.goodNeed * 2);
+        this.steppedUp = false;
+        this.good = 0;
+      } else if (avg < 0.0175 && this.scene.quality < 1) {
+        // A sustained good stretch (goodNeed windows of 2 s, 8 s at first) steps back up.
+        if (++this.good >= this.goodNeed) {
+          this.good = 0;
+          this.steppedUp = this.scene.faster();
+        }
+      } else this.good = 0;
     }
   }
 
