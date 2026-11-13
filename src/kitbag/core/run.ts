@@ -24,12 +24,14 @@ import {
   type GearId,
 } from './gear';
 
-export const RULES_VERSION = 3;
+export const RULES_VERSION = 4;
 export const FLOORS = 12;
 export const START_HP = 40;
 export const MAX_GEAR = 6;
 export const MAX_DICE = 5;
 export const WIN_BONUS = 1000;
+/** Points per hit point taken off The House. */
+export const BOSS_PTS = 5;
 /** Points for completing floor f (0-based): deeper floors are worth more, so depth decides the score. */
 export const floorPoints = (f: number): number => 40 * (f + 1);
 /** Numbers a balance probe may tweak. */
@@ -84,6 +86,8 @@ export interface Enemy {
   stunned: boolean;
   /** Damage multiplier from the floor (enemies grow through each stage). */
   dmul: number;
+  /** Which script (boss only). */
+  pat?: number;
 }
 
 export interface Fight {
@@ -161,6 +165,8 @@ export interface Run {
   won: boolean;
   /** What ended the run. */
   killedBy: string | null;
+  /** Gear ids and upgrades (`up<card>`) offered in the last two rewards. */
+  offered: string[][];
   stats: Stats;
 }
 
@@ -177,7 +183,7 @@ export function rngFor(seed: number, ...parts: number[]): Rng {
   for (const p of parts) h = mixSeed(h, p >>> 0);
   return new Rng(h);
 }
-const T_MAP = 0x6d6170, T_FIGHT = 0x666967, T_ROLL = 0x726f6c, T_REROLL = 0x727272, T_CHOICE = 0x63686f;
+const T_BOSS = 0x626f73, T_MAP = 0x6d6170, T_FIGHT = 0x666967, T_ROLL = 0x726f6c, T_REROLL = 0x727272, T_CHOICE = 0x63686f;
 
 // ---------------------------------------------------------------- map
 
@@ -259,17 +265,28 @@ export function newRun(seed: number): Run {
     score: 0,
     won: false,
     killedBy: null,
+    offered: [],
     stats: { fights: 0, turns: 0, dealt: 0, taken: 0, biggest: 0, blocked: 0 },
   };
 }
 
+/** An enemy's cycle of intents (the boss plays the script picked for this run). */
+export function patternOf(id: string, pat = 0): Intent[] {
+  const d = enemyDef(id);
+  return d.scripts ? d.scripts[pat % d.scripts.length].pattern : d.pattern;
+}
+/** The boss script a run seed picks. */
+export const scriptFor = (seed: number, id: string): number => {
+  const d = enemyDef(id);
+  return d.scripts ? rngFor(seed, T_BOSS).int(0, d.scripts.length - 1) : 0;
+};
 export const intentOf = (e: Enemy): Intent => {
-  const p = enemyDef(e.id).pattern;
+  const p = patternOf(e.id, e.pat);
   return p[e.step % p.length];
 };
 /** The intent after the current one (shown while an enemy winds up). */
 export const nextIntentOf = (e: Enemy): Intent => {
-  const p = enemyDef(e.id).pattern;
+  const p = patternOf(e.id, e.pat);
   return p[(e.step + 1) % p.length];
 };
 /** Damage of one hit of an intent, after strength and tuning. */
@@ -281,19 +298,24 @@ const intoStage = (floor: number): number => (floor < 4 ? floor : floor < 8 ? fl
 export const HP_STEP = 0.08;
 export const DMG_STEP = 0.05;
 
-/** An enemy as it would appear on a floor: hit points, damage multiplier, and its biggest single blow. */
-export function foeStats(id: string, floor: number): { hp: number; dmul: number; big: number } {
+/**
+ * An enemy as it would appear on a floor: hit points, damage multiplier, and its hardest turn (all hits of one
+ * attack), counting the strength its own buffs add over one full cycle.
+ */
+export function foeStats(id: string, floor: number, pat = 0): { hp: number; dmul: number; big: number } {
   const def = enemyDef(id);
   const k = def.tier === 9 ? 0 : intoStage(floor);
   const hp = Math.round(def.hp * TUNE.hp * (1 + HP_STEP * k));
   const dmul = 1 + DMG_STEP * k;
-  const big = Math.max(...def.pattern.map((it) => (it.atk ? Math.round(it.atk * TUNE.dmg * dmul) * (it.hits ?? 1) : 0)));
+  const p = patternOf(id, pat);
+  const str = p.reduce((a, it) => a + (it.buff ?? 0), 0);
+  const big = Math.max(...p.map((it) => (it.atk ? (Math.round(it.atk * TUNE.dmg * dmul) + str) * (it.hits ?? 1) : 0)));
   return { hp, dmul, big };
 }
 
 /** Pattern steps a fight may open on: no wind-up, and not the blow right after one. */
-export function openingSteps(id: string): number[] {
-  const p = enemyDef(id).pattern;
+export function openingSteps(id: string, pat = 0): number[] {
+  const p = patternOf(id, pat);
   const ok = p.map((it, i) => !it.charge && !p[(i + p.length - 1) % p.length].charge);
   const steps = p.map((_, i) => i).filter((i) => ok[i]);
   return steps.length ? steps : [0];
@@ -306,10 +328,11 @@ function startFight(r: Run, node: MapNode): void {
   const rng = rngFor(r.seed, T_FIGHT, r.floor);
   const elite = node.kind === 'elite';
   const boss = node.kind === 'boss';
-  const st = foeStats(def.id, r.floor);
+  const pat = scriptFor(r.seed, def.id);
+  const st = foeStats(def.id, r.floor, pat);
   const max = st.hp;
   r.fight = {
-    enemy: { id: def.id, hp: max, max, block: 0, poison: 0, str: 0, step: boss ? 0 : rng.pick(openingSteps(def.id)), stunned: false, dmul: st.dmul },
+    enemy: { id: def.id, hp: max, max, block: 0, poison: 0, str: 0, step: boss ? 0 : rng.pick(openingSteps(def.id)), stunned: false, dmul: st.dmul, pat },
     elite,
     boss,
     turn: 0,
@@ -375,7 +398,10 @@ function hurtPlayer(r: Run, n: number, by: string): void {
     r.hp = 0;
     r.phase = 'over';
     r.killedBy = by;
-    r.fight && (r.hist = []);
+    r.hist = [];
+    // Damage dealt to The House counts even when it wins.
+    const f = r.fight;
+    if (f?.boss) r.score += BOSS_PTS * (f.enemy.max - f.enemy.hp);
   }
 }
 
@@ -595,7 +621,7 @@ function enemyTurn(r: Run): void {
     if (it.heal) e.hp = Math.min(e.max, e.hp + it.heal);
     if (it.buff) e.str += it.buff;
   }
-  e.step = (e.step + 1) % enemyDef(e.id).pattern.length;
+  e.step = (e.step + 1) % patternOf(e.id, e.pat).length;
   startTurn(r);
 }
 
@@ -611,7 +637,7 @@ function winFight(r: Run): void {
   if (f.boss) {
     r.won = true;
     r.phase = 'over';
-    r.score += WIN_BONUS + r.hp * 10;
+    r.score += WIN_BONUS + r.hp * 10 + BOSS_PTS * f.enemy.max;
     return;
   }
   r.fight = null;
@@ -620,13 +646,23 @@ function winFight(r: Run): void {
 
 // ---------------------------------------------------------------- rewards, rests, shrines
 
-const RARITY_W = [0, 6, 3, 1];
+const RARITY_W = [0, 6, 3, 2];
+const BLOCKERS: GearId[] = ['buckler', 'ward', 'tower', 'spiked'];
+/** Gear and upgrades offered in the last two rewards (not offered again right away). */
+const recentOffers = (r: Run): Set<string> => new Set(r.offered.flat());
 
-function pickGear(rng: Rng, r: Run, n: number, rare: boolean): GearId[] {
+function pickGear(rng: Rng, r: Run, n: number, rare: boolean, only?: GearId[]): GearId[] {
   const out: GearId[] = [];
   const owned = new Set(r.gear.map((g) => g.id));
+  const count = (id: GearId) => r.gear.filter((g) => g.id === id).length;
+  const recent = recentOffers(r);
   for (let k = 0; k < n; k++) {
-    const pool = GEAR.filter((g) => !out.includes(g.id) && !(owned.has(g.id) && g.rarity > 1));
+    // Not one just offered, not a third copy, rarer cards only once.
+    const fits = (fresh: boolean) =>
+      GEAR.filter((g) => !out.includes(g.id) && (!only || only.includes(g.id)) && count(g.id) < 2 && !(owned.has(g.id) && g.rarity > 1) && (!fresh || !recent.has(g.id)));
+    let pool = fits(true);
+    if (!pool.length) pool = fits(false);
+    if (!pool.length) break;
     const w = pool.map((g) => (rare ? [0, 3, 4, 3][g.rarity] : RARITY_W[g.rarity]) * (owned.has(g.id) ? 0.4 : 1));
     let x = rng.next() * w.reduce((a, b) => a + b, 0);
     let i = 0;
@@ -653,23 +689,32 @@ function openChoice(r: Run, kind: Choice['kind'], more: number, pick: number): v
   const rng = rngFor(r.seed, T_CHOICE, r.floor, pick);
   const options: Option[] = [];
   const one = (g: Gift): Option => ({ cost: 0, gifts: [g] });
-  const ups = rng.shuffle(upgradable(r));
+  // Upgrades just offered go to the back of the line.
+  const recentUp = recentOffers(r);
+  const ups = rng.shuffle(upgradable(r)).sort((a, b) => Number(recentUp.has(`up${a}`)) - Number(recentUp.has(`up${b}`)));
   if (kind === 'reward') {
     const elite = more > 0 || pick > 0;
-    const [g1, g2] = pickGear(rng, r, 2, elite);
-    options.push(one({ t: 'gear', id: g1 }));
+    let [g1, g2] = pickGear(rng, r, 2, elite);
+    // From floor 6, a kit with a single block card is offered a second one first.
+    const blockers = r.gear.filter((g) => slotsOf(g).some((d) => d.fx === 'block' || d.fx === 'spike')).length;
+    if (r.floor >= 5 && blockers < 2) g1 = pickGear(rng, r, 1, elite, BLOCKERS)[0] ?? g1;
+    let spare: GearId | undefined = g2 !== g1 ? g2 : undefined;
+    if (g1) options.push(one({ t: 'gear', id: g1 }));
     // Second option: an upgrade or a die.
     // A new die only when the kit has a slot to spend it in.
     const dieOk = r.dice.length < MAX_DICE && r.dice.length < diceRoom(r);
     if (ups.length && (!dieOk || rng.next() < 0.5)) options.push(one({ t: 'up', card: ups[0] }));
     else if (dieOk) options.push(one({ t: 'die', kind: rng.pick(r.dice.length < 4 ? ['d6', 'loaded', 'even', 'd8'] : NEW_DICE) }));
-    else if (g2) options.push(one({ t: 'gear', id: g2 }));
-    else options.push(one({ t: 'hone', die: weakestDie(r) }));
+    else if (spare) {
+      options.push(one({ t: 'gear', id: spare }));
+      spare = undefined;
+    } else options.push(one({ t: 'hone', die: weakestDie(r) }));
     // Third: heal when hurt, else another gear card or a hone.
     const hurt = r.hp < r.maxHp * 0.7;
     // Never a heal at full HP.
     if (r.hp < r.maxHp && (hurt || rng.next() < 0.3)) options.push(one({ t: 'heal', n: TUNE.heal }));
-    else if (rng.next() < 0.5) options.push(one({ t: 'gear', id: g2 }));
+    else if (spare && rng.next() < 0.5) options.push(one({ t: 'gear', id: spare }));
+    else if (options.some((o) => o.gifts[0]?.t === 'hone')) options.push(one({ t: 'maxhp', n: 4 }));
     else options.push(one({ t: 'hone', die: weakestDie(r) }));
   } else if (kind === 'rest') {
     if (r.hp < r.maxHp) options.push(one({ t: 'heal', n: Math.round(r.maxHp * TUNE.rest) }));
@@ -687,6 +732,10 @@ function openChoice(r: Run, kind: Choice['kind'], more: number, pick: number): v
     rng.shuffle(deals);
     options.push(...deals.slice(0, 2));
     options.push(r.hp < r.maxHp ? { cost: 0, gifts: [{ t: 'heal', n: 8 }], label: 'Rest a while' } : { cost: 0, gifts: [], label: 'Walk on' });
+  }
+  if (kind === 'reward') {
+    const keys = options.flatMap((o) => o.gifts.map((g) => (g.t === 'gear' ? g.id : g.t === 'up' ? `up${g.card}` : '')).filter(Boolean));
+    r.offered = [keys, ...r.offered].slice(0, 2);
   }
   r.choice = { kind, options, more, pick };
   r.phase = 'choice';

@@ -59,9 +59,9 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     delay, timing jitter, a two-level release planner; rules v3 (40 runs): novice median ~22 s (alt ~470), human
     ~50-70 s (alt ~700-900; seed noise is large), good ~115 s (alt ~1900, p75 ~158 s), perfect survives 10 min;
     most good-bot deaths are cinders it brushes after a jittered grab). `SG_MODE=s|t|m` for modes, `CHECK=1` verifies replays.
-  - Kitbag: `npx vite-node scripts/kitbag/balance.ts 1000` (planning bot, rules v3: first two fights 100%, median floor 12,
-    ~23% wins (24% seeds 1000+, 22% SEED=9000), ~35 turns a run; losses: The House ~39% of runs, floors 9-10 ~22%,
-    floors 3-8 ~11% (enemies grow through each stage, so the end of a stage bites). `TUNE=hp:1.04,dmg:1.05`
+  - Kitbag: `npx vite-node scripts/kitbag/balance.ts 1000` (planning bot, rules v4: first two fights 100%, median floor 12,
+    ~27% wins (28% seeds 1000+, 24% SEED=9000), ~34 turns a run; losses: The House ~36% of runs (it wins ~57% of
+    its fights; the balance line splits that by script), floors 9-10 ~24%, floors 3-8 ~11%). `TUNE=hp:1.04,dmg:1.05`
     tries numbers (win rate is touchy: hp ×1.04 alone ≈ −3 points); `trace.ts <seed>` prints a bot run turn by turn,
     `upto.ts <seed> <floorsDone> [phase] [extra]` gives actions for `?seed=&a=`.
   - Loomsong: `npx vite-node scripts/loomsong/charts.ts 300` (charts unchanged since v1: songs 90-120 s at 90-140 BPM; notes/s median Easy
@@ -214,7 +214,12 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   ordinary enemies and elites through each stage (+8% HP, +5% damage a floor into floors 1-4 / 5-8 / 9-11; the boss
   is fixed) and gives the map its HP and 💥 biggest-blow labels; fights open only on `openingSteps` (never a wind-up
   or the blow after it); block raised on the enemy's wind-up turn carries into its blow turn (`f.brace`); score =
-  enemy HP (elites ×1.5) + `floorPoints(f)` = 40·(f+1) per floor done + boss 500 + win 1000 + 10·HP, so depth rules. Map: 12 floors × 2 nodes, a free pick per
+  enemy HP (elites ×1.5) + `floorPoints(f)` = 40·(f+1) per floor done + 5 per HP taken off The House (`BOSS_PTS`,
+  also when it wins) + boss 500 + win 1000 + 10·HP. Rules v4: The House plays one of three scripts per seed
+  (`scripts` on its EnemyDef, `scriptFor(seed, id)`, `patternOf(id, pat)`, `Enemy.pat`; blows 30, 176 HP); the map's
+  💥 is the hardest turn with one cycle of the enemy's own buffs; rewards skip gear and upgrades offered in the last
+  two rewards (`r.offered`) and third copies, rares weigh 2, and from floor 6 a kit with one block card is offered a
+  second one first. Map: 12 floors × 2 nodes, a free pick per
   floor (floors 1-2 fights, 6 rest|shrine, 11 rest|…, 12 The House; elites ≥ `ELITE_GAP` = 3 floors apart); walking
   into a rest/shrine completes the floor. Actions `M<k>`, `P<die>.<card>.<slot>`, `U`
   (undo within the turn, snapshots in `hist`), `E`, `C<k>[.<r>]`, `S`, `X`; `replay(seed, a)`; `previewPlace` runs a

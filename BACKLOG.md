@@ -136,8 +136,16 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         nudges "a die could still block N"; never a heal at full HP; the boss name wraps; "The House awaits" on
         floor 12; score counts depth (40·floor per floor done), so a deeper run outscores a shallower one. The House
         176. Bot (1,500 runs): ~23% wins, first two fights 100%, deaths spread out (House 39%).
-  - [ ] Next: owner playtest. Watch: is the brace rule clear? Are Powder Keg and the Lucky Coin too strong? Do the
-        tiny `≤3`/`pair` labels read at arm's length?
+  - [x] Third blind pass (all three runs died to The House on its wind-up blow, 22-87 HP left on it; brace and map
+        threat "genuinely useful") and fixes (rules v4): The House plays one of three scripts per seed (High Roller,
+        Card Sharp, Pit Boss; blows 30 instead of 36, named on the map); 💥 on the map counts the enemy's own buffs,
+        one style plus a legend; 5 points per HP taken off The House; rewards don't repeat gear or upgrades from the
+        last two rewards or offer a third copy, rare cards come twice as often (Powder Keg), and a second block card
+        is offered from floor 6; the enemy-block note is shorter and the info line scrolls; a lone last gear card
+        spans the row. Bot (1,000 + 500 runs): before 24% / 22% (House killed 39% of runs, won 38% of its fights),
+        after 28% / 24% (House kills 36%, wins ~57%; per script 40-49%).
+  - [ ] Next: owner playtest. Watch: does The House feel fair now? Is the brace rule clear? Are Powder Keg and the
+        Lucky Coin too strong? Do the tiny `≤3`/`pair` labels read at arm's length?
 - [ ] **Sungrazer** (one-thumb arcade: hold to swing a comet round a star, let go to fling). Milestones:
   - [x] Core (src/sungrazer/core, rules v1): fixed 240 Hz sim, lazily grown seeded sky (spine stars ≤ 40 apart,
         bonus stars, motes, cinders from altitude 450, pulsars 1000, giants and drifting cinders 1700, sparser past

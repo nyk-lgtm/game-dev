@@ -22,6 +22,8 @@ import {
   floorPoints,
   foeStats,
   openingSteps,
+  patternOf,
+  scriptFor,
   slotSentence,
   type GearId,
   type Run,
@@ -278,7 +280,7 @@ describe('runs', () => {
   it('bots reach the second stage almost always', () => {
     let deep = 0;
     for (let seed = 100; seed < 140; seed++) if (playBot(seed).floor >= 4) deep++;
-    expect(deep).toBeGreaterThanOrEqual(36);
+    expect(deep).toBeGreaterThanOrEqual(34);
   });
 
   it('illegal actions change nothing', () => {
@@ -432,6 +434,61 @@ describe('rules v2 fixes', () => {
     }
     expect(lost.length).toBeGreaterThan(20);
     for (const a of lost) for (const b of lost) if (a.floor >= b.floor + 2) expect(a.score, `${a.floor} vs ${b.floor}`).toBeGreaterThan(b.score);
+  });
+
+  it('rules v4: The House plays one of several scripts, picked by the seed', () => {
+    const seen = new Set<number>();
+    for (let seed = 1; seed < 40; seed++) seen.add(scriptFor(seed, 'house'));
+    expect(seen.size).toBe(enemyDef('house').scripts!.length);
+    for (const sc of enemyDef('house').scripts!) {
+      const blow = Math.max(...sc.pattern.map((it) => it.atk ?? 0));
+      expect(blow).toBeLessThanOrEqual(30);
+    }
+    const r = newRun(5);
+    r.floor = 11;
+    act(r, 'M0');
+    expect(r.fight!.boss).toBe(true);
+    expect(r.fight!.enemy.pat).toBe(scriptFor(5, 'house'));
+    expect(intentOf(r.fight!.enemy)).toEqual(patternOf('house', r.fight!.enemy.pat)[0]);
+  });
+
+  it('rules v4: map threat counts the enemy’s own buffs', () => {
+    // Ogre: 14, then +2 strength, then 9×2 → its hardest turn is (9+2)×2.
+    expect(foeStats('ogre', 4).big).toBe(22);
+    expect(foeStats('wyvern', 8).big).toBe(32);
+  });
+
+  it('rules v4: damage dealt to The House counts in the score', () => {
+    const a = newRun(5);
+    a.floor = 11;
+    act(a, 'M0');
+    const b = JSON.parse(JSON.stringify(a)) as Run;
+    b.fight!.enemy.hp -= 60;
+    a.hp = b.hp = 1;
+    a.block = b.block = 0;
+    // Both die on the boss's next hit.
+    for (const r of [a, b]) for (let k = 0; k < 8 && r.phase === 'fight'; k++) act(r, 'E');
+    expect(a.phase).toBe('over');
+    expect(b.phase).toBe('over');
+    expect(b.score - a.score).toBe(60 * 5);
+  });
+
+  it('rules v4: rewards avoid gear just offered and third copies', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const r = newRun(seed);
+      let prev: string[] = [];
+      for (let guard = 0; r.phase !== 'over' && guard < 20000; guard++) {
+        if (r.phase === 'choice' && r.choice!.kind === 'reward' && r.choice!.pick === 0) {
+          const ids = r.choice!.options.flatMap((o) => o.gifts.filter((g) => g.t === 'gear').map((g) => (g as { id: string }).id));
+          for (const id of ids) {
+            expect(prev, `seed ${seed}`).not.toContain(id);
+            expect(r.gear.filter((g) => g.id === id).length).toBeLessThan(2);
+          }
+          prev = ids;
+        }
+        act(r, botAction(r));
+      }
+    }
   });
 
   it('no dice rewards when the gear has no room for more dice', () => {

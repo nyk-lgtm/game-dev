@@ -29,7 +29,16 @@ export interface EnemyDef {
   /** 1-3 for ordinary fights by stage, 4-6 elites, 9 the boss. */
   tier: number;
   pattern: Intent[];
+  /** Alternative scripts (the boss): one is picked per run seed; `pattern` is the first. */
+  scripts?: { name: string; pattern: Intent[] }[];
 }
+
+// The House plays one of three scripts per run, so the finale isn't the same fight every time.
+const HOUSE_SCRIPTS: { name: string; pattern: Intent[] }[] = [
+  { name: 'High Roller', pattern: [{ atk: 14, hex: 1 }, { block: 15, buff: 2 }, { atk: 7, hits: 3 }, { wither: 2, atk: 12 }, { charge: true }, { atk: 30 }] },
+  { name: 'Card Sharp', pattern: [{ atk: 7, hits: 2, hex: 1 }, { block: 14, poison: 4 }, { atk: 17 }, { heal: 12, wither: 1 }, { charge: true }, { atk: 30 }] },
+  { name: 'Pit Boss', pattern: [{ atk: 14 }, { buff: 3, block: 12 }, { atk: 8, hits: 2, hex: 1 }, { atk: 16 }, { charge: true }, { atk: 30 }] },
+];
 
 export const ENEMIES: EnemyDef[] = [
   // Stage 1 (floors 1-4).
@@ -60,7 +69,8 @@ export const ENEMIES: EnemyDef[] = [
     icon: '🎩',
     hp: 176,
     tier: 9,
-    pattern: [{ atk: 14, hex: 1 }, { block: 16, buff: 2 }, { atk: 6, hits: 3 }, { wither: 2, atk: 11 }, { charge: true }, { atk: 36 }],
+    pattern: HOUSE_SCRIPTS[0].pattern,
+    scripts: HOUSE_SCRIPTS,
   },
 ];
 

@@ -91,7 +91,7 @@ body {
 /* ---------------------------------------------------------------- kit */
 #kit {
   flex: 0 1 auto; min-height: 0; overflow-y: auto; padding: 10px 10px 12px;
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-content: end;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-auto-flow: row dense; gap: 8px; align-content: end;
 }
 .gear {
   position: relative; display: flex; gap: 8px; align-items: center; min-height: 84px;
@@ -195,7 +195,7 @@ body {
 #you.flash { animation: flash 0.4s; }
 @keyframes flash { 30% { background: rgba(255, 80, 60, 0.35); } }
 #bar { display: flex; align-items: center; gap: 8px; }
-body #info { flex: 1; min-height: 40px; max-height: 58px; overflow: hidden; font-size: 13px; line-height: 1.3; color: var(--muted); display: block; }
+body #info { flex: 1; min-height: 40px; max-height: 58px; overflow-y: auto; font-size: 13px; line-height: 1.3; color: var(--muted); display: block; }
 #info b { color: var(--text); }
 #info .warn { color: var(--hurt); font-weight: 700; }
 #info .good { color: var(--venom); font-weight: 700; }

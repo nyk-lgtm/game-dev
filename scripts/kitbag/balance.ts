@@ -4,7 +4,7 @@
 // Targets: the first fights almost always won, wins ~15-30% (people plan better).
 // SEED=n moves the seeds; TUNE=hp:1.1,dmg:0.9 tries other numbers.
 
-import { FLOORS, TUNE, act, floorReached, newRun } from '../../src/kitbag/core';
+import { FLOORS, TUNE, act, enemyDef, floorReached, newRun, scriptFor } from '../../src/kitbag/core';
 import { botAction } from './bot';
 
 const n = Number(process.argv[2] ?? 100);
@@ -21,6 +21,8 @@ const endedOn = Array(FLOORS + 1).fill(0);
 const killers: Record<string, number> = {};
 const gear: Record<string, number> = {};
 let wins = 0;
+// The House's script per run: [reached, won].
+const houseBy: number[][] = (enemyDef('house').scripts ?? []).map(() => [0, 0]);
 let firstTwo = 0;
 const t0 = performance.now();
 for (let k = 0; k < n; k++) {
@@ -28,6 +30,11 @@ for (let k = 0; k < n; k++) {
   for (let guard = 0; r.phase !== 'over' && guard < 20000; guard++) {
     const a = botAction(r);
     if (!act(r, a)) throw new Error(`bot made an illegal move ${a} on seed ${seed0 + k} at ${r.actions.length}`);
+  }
+  if (r.floor >= FLOORS - 1) {
+    const h = houseBy[scriptFor(r.seed, 'house')];
+    h[0]++;
+    if (r.won) h[1]++;
   }
   reached.push(floorReached(r));
   scores.push(r.score);
@@ -48,4 +55,5 @@ console.log(
 );
 console.log(`ended on floor: ${endedOn.map((c, f) => (c ? `${f}:${c}` : '')).filter(Boolean).join(' ')}`);
 console.log('killed by:', Object.entries(killers).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', '));
+console.log('The House by script (won/reached):', houseBy.map(([n, w], i) => `${enemyDef('house').scripts![i].name} ${w}/${n} ${n ? Math.round((100 * w) / n) : 0}%`).join(', '));
 console.log('gear at the end:', Object.entries(gear).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', '));

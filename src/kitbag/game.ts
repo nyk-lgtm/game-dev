@@ -19,6 +19,8 @@ import {
   attackOf,
   diceRoom,
   foeStats,
+  patternOf,
+  scriptFor,
   incomingOf,
   diceFor,
   dieDef,
@@ -229,7 +231,7 @@ export class Game {
       if (!f) return;
       const e = f.enemy;
       const def = enemyDef(e.id);
-      const pat = def.pattern.map((it) => intentWords(e, it)).join(' → ');
+      const pat = patternOf(e.id, e.pat).map((it) => intentWords(e, it)).join(' → ');
       this.msg = `<b>${def.name}</b> repeats: ${pat}.`;
       this.renderInfo();
     };
@@ -504,7 +506,7 @@ export class Game {
         const eb = r.fight?.enemy.block ?? 0;
         if (eb && !store.load('seenEnemyBlock', false)) {
           store.save('seenEnemyBlock', true);
-          this.msg = `<b>🛡 ${eb} on the enemy:</b> its block soaks your damage this turn and drops when it acts again. Pierce and the Powder Keg go straight through.`;
+          this.msg = `<b>Enemy 🛡 ${eb}</b> soaks your hits until it acts again (Pierce and Keg ignore it).`;
         }
         this.render();
       },
@@ -650,6 +652,10 @@ export class Game {
     const r = this.r;
     const f = r.fight;
     const sel = this.sel;
+    // Two-dice cards take a whole row; an odd card out at the end spans the row too (no half-empty row).
+    const wideOf = r.gear.map((g) => slotsOf(g).some((x) => diceFor(x.need) === 2));
+    const singles = r.gear.map((_, c) => c).filter((c) => !wideOf[c]);
+    if (singles.length % 2) wideOf[singles[singles.length - 1]] = true;
     const html = r.gear
       .map((g, c) => {
         const def = gearDef(g.id);
@@ -700,7 +706,7 @@ export class Game {
           return (x.uses > 0 && y.used >= x.uses) || (!!x.perFight && y.fight >= x.perFight);
         });
         const dim = sel >= 0 && !pvAny;
-        return `<div class="gear ${g.up ? 'up' : ''} ${spent ? 'spent' : ''} ${dim ? 'dim' : ''} ${slots.some((x) => diceFor(x.need) === 2) ? 'wide' : ''}" data-c="${c}">${slotHtml}<div class="txt"><span class="nm"><span class="ic">${def.icon}</span>${def.name}${g.up ? '<span class="plus">+</span>' : ''}</span>${fxLine}${note}</div></div>`;
+        return `<div class="gear ${g.up ? 'up' : ''} ${spent ? 'spent' : ''} ${dim ? 'dim' : ''} ${wideOf[c] ? 'wide' : ''}" data-c="${c}">${slotHtml}<div class="txt"><span class="nm"><span class="ic">${def.icon}</span>${def.name}${g.up ? '<span class="plus">+</span>' : ''}</span>${fxLine}${note}</div></div>`;
       })
       .join('');
     $('kit').innerHTML = html;
@@ -816,10 +822,12 @@ export class Game {
     }
     // Enemies show their own icon (elites wear a crown badge), their HP on that floor, and their biggest blow.
     const d = enemyDef(n.foe);
-    const st = foeStats(n.foe, floor);
-    const threat = `${st.hp} HP · ${st.big >= 15 ? `<b class="big">💥${st.big}</b>` : `⚔≤${st.big}`}`;
+    const pat = scriptFor(this.r.seed, n.foe);
+    const st = foeStats(n.foe, floor, pat);
+    const threat = `${st.hp} HP · <b class="${st.big >= 15 ? 'big' : ''}">💥${st.big}</b>`;
     const tag = n.kind === 'elite' ? '<i class="crown">👑</i>' : '';
-    const sub = n.kind === 'elite' ? `elite, 2 rewards · ${threat}` : n.kind === 'boss' ? `boss · ${threat}` : threat;
+    const script = d.scripts ? d.scripts[pat].name : '';
+    const sub = n.kind === 'elite' ? `elite, 2 rewards · ${threat}` : n.kind === 'boss' ? `${script} · ${threat}` : threat;
     return `<span class="ni">${d.icon}${tag}</span><span>${d.name}<small>${sub}</small></span>`;
   }
 
@@ -842,7 +850,7 @@ export class Game {
       .join('');
     const title = peek ? 'The map' : r.floor === 0 ? 'The climb to The House' : r.floor === FLOORS - 1 ? 'The House awaits' : `Floor ${r.floor + 1}: choose a room`;
     showCard(
-      `<h2>${title}<span class="sub">${peek ? `Floor ${floorReached(r)} of ${FLOORS}. ` : ''}Pick either room on the lit row: rooms aren’t linked, so you can switch sides on any floor. The House waits on floor ${FLOORS}.</span></h2><div class="map">${rows}</div>`,
+      `<h2>${title}<span class="sub">${peek ? `Floor ${floorReached(r)} of ${FLOORS}. ` : ''}Pick either room on the lit row: rooms aren’t linked, so you can switch sides on any floor. The House waits on floor ${FLOORS}.</span></h2><p class="legend">💥 = its hardest turn, own buffs included (red: 15+)</p><div class="map">${rows}</div>`,
       peek ? [{ label: 'Back', primary: true, onClick: () => this.back() }] : [],
       peek,
     );
