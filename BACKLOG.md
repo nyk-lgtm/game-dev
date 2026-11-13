@@ -257,7 +257,16 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         or charm card; Rewind chip lost its duplicate count; the charm card splits floor draws into base +
         charms. Bot (1000 runs, two seed ranges): floor 1 98%, floor 2 93-95%, median floor 5, 14-17% wins;
         floor-4 losses 219 → 158-181 per 1000. 34 tests.
-  - [ ] Next: third playtest. Watch: does the 15-draw carry cap feel fair; High Stakes is weak for survival.
+  - [x] Third blind pass (floors 2, 2, 3, then a 9,330 win; carry cap "fair", High Stakes "a score engine") and
+        fixes (rules v4): dead floors (one 10 left, no 9/J in 15 draws) can't happen any more: the lucky draw
+        falls back to the undealt rest of the deck, and `hopeless` (exact) ends a floor when nothing can ever fit;
+        Spyglass marks lucky draws ✨ and edges only cards that fit an open card; the pile shows "✨ in 2/next";
+        "Streak ended" and the fit hint show together; draws 34,14,11,11,10,9,8,8 → 28,16,9,9,8,8,7,7 (floor 1
+        was loose, floor 2 a cliff); Long Stride twice per deal and it keeps the top card when that card fits
+        something (was: 3 per deal, always discards; bot 27% → 43% with it). Bot (1000 runs, two seed sets):
+        floor 1 100%, floor 2 98%, median floor 5, 14-15% wins. 35 tests.
+  - [ ] Next: fourth playtest. Watch: does the deep lucky draw make late floors too soft for people; Spyglass's
+        ✨ reading; High Stakes as a score charm.
 - [ ] **Ninefold** (seeded mini-golf). Milestones:
   - [x] Core: corridor holes on a 6×9 grid, rails, posts, bumpers, sand, water (+1, replay the spot), slopes;
         240 Hz physics, exact replays, 8-stroke pick-up, formula par. Search bot sinks everything (noise-free

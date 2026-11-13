@@ -47,10 +47,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   - Glyphwright: `npx vite-node scripts/glyph/balance.ts 100 smart,favor` (rules v3: smart bot ~37% wins, median wave 15;
     `favor` pushes it toward each caster). `scripts/glyph/probe.ts 2` ranks every caster × modifier build by real leaks
     with a per-caster best/top-10 line (`TWEAK='beam.dmg=17,MOD.pierceThrough=t'` tries numbers without editing rules).
-  - Summit: `npx vite-node scripts/summit/balance.ts 1000` (greedy bot with chain lookahead, rules v3: floor 1
-    ~98%, floor 2 ~94%, median floor 5, ~14-17% win all 8); `DRAWS=34,13,…` tries other allotments, `TUNE=mirrors:1`
+  - Summit: `npx vite-node scripts/summit/balance.ts 1000` (greedy bot with chain lookahead, rules v4: floor 1
+    ~100%, floor 2 ~98%, median floor 5, ~14-15% win all 8); `DRAWS=34,13,…` tries other allotments, `TUNE=mirrors:1`
     other charm strengths, and `CHARM=mirror` starts every run holding one charm (the fair way to compare charms:
-    v3 wins 16% with none, ~36-43% Pockets/Flags/Mirror/Joker/Blast, ~27-34% Lantern/Wind/Stride/Momentum).
+    v4 wins 15% with none, ~40-48% Pockets/Flags/Stride/Joker/Mirror/Blast, ~32-34% Lantern/Wind/Momentum).
   - Quarry: `npx vite-node scripts/quarry/balance.ts 300 human` (bot that spots 8% of the common words ≤ 6 letters;
     rules v3 (depth 6-8 targets raised to 365/430/495 after these numbers, ~40% / ~16% expected): median depth 8, ~45% wins with its perk order (`PRIORITY` in bot.ts); `PICK=worst` (`WORST`) ~22%;
     `SEEN=0.05` ~20%; `best` mode ~99%); `PERKTABLE=1` favors each perk in turn (others weakest-first: ~19-36% wins);
@@ -153,12 +153,17 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 - Summit (src/summit/core): 8 floors; each deal is a hand-drawn layout (layouts.ts: rows as strings in
   half-card steps, ≤ 8 cards across; a card is covered by the next row's cards at x±1) from a seeded 52-card
   deck, plus a draw pile. A card plays if uncovered and one rank from the waste (A-K wraps). Draws are a run-wide
-  supply: each floor adds `DEAL_DRAWS[f]` (34, 14, 11, 11, 10, 9, 8, 8) to what's left, of which at most
+  supply: each floor adds `DEAL_DRAWS[f]` (28, 16, 9, 9, 8, 8, 7, 7) to what's left, of which at most
   `TUNE.carry` (15) carry up; no plays and no draws = run over. Every draw goes through `drawStep`: it never
   turns up the waste's rank (`noRepeat`), and from the `MERCY`-th (3rd) draw in a row without a play it swaps in
-  the nearest deeper card that fits an open card, a plain card before the Joker (`o.noLuck` when none can).
-  Spyglass shows `nextDraws(r, 3)`, which runs the same steps on a copy, so it's exact for draws in a row.
-  Undo keeps cards you have seen face up. Charm strengths live in `TUNE` (Mirror 2 / Long Stride 3 plays per
+  the nearest deeper card that fits an open card, a plain card before the Joker, else the next fitting card
+  of the undealt rest of the deck (`reserve`, `o.deep`); `o.noLuck` when none can. `hopeless(r)` (exact: no
+  open card fits the waste and no pile/deck card fits an open card) ends the floor at once (`o.dead`) unless a
+  blast or undo is left (then `cornered` shows End run); Second Wind fires on it too.
+  Spyglass shows `nextDraws(r, 3)` ({card, lucky}), which runs the same steps on a copy, so it's exact for draws
+  in a row; ✨ marks a lucky one (gone if you play first). Long Stride discards the top card only when that card
+  fits nothing open (`strideDiscards`, `TUNE.strideCost` 2).
+  Undo keeps cards you have seen face up. Charm strengths live in `TUNE` (Mirror 2 / Long Stride 2 plays per
   deal, Flags 1 draw per peak top, Wind 12, carry 15); a test checks the charm texts quote them.
   Streaks score 10·n. 13 charms (charms.ts), one of three after each floor (`offersFor`, seeded per floor).
   Actions: `P<slot>`, `D`, `B<slot>` (Blasting Cap), `U` (Rewind: snapshots in `hist`), `C<charm>`, `X` give up;

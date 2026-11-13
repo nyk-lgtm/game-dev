@@ -35,7 +35,7 @@ export const CHARMS: CharmDef[] = [
   { id: 'stakes', name: 'High Stakes', icon: '🎲', text: 'Streak points ×2.', catch: '1 fewer draw every deal.' },
   { id: 'lantern', name: 'Lantern', icon: '🏮', text: 'Face-down cards are shown, so you can plan chains through them, and +1 draw every deal.' },
   { id: 'wind', name: 'Second Wind', icon: '🌬️', text: 'Once per run, when you are out of moves, take 12 fresh draws.' },
-  { id: 'stride', name: 'Long Stride', icon: '🦘', text: 'Three times per deal, a card two ranks away also plays (5 on 7).', catch: 'Each such play discards the top card of the pile, scores nothing and ends your streak.' },
+  { id: 'stride', name: 'Long Stride', icon: '🦘', text: 'Twice per deal, a card two ranks away also plays (5 on 7).', catch: 'It scores nothing, ends your streak, and discards the top card of the pile unless that card fits an open card.' },
   { id: 'flags', name: 'Peak Flags', icon: '🚩', text: 'Clearing a peak’s top card (marked 🚩) gives back a draw.' },
   { id: 'momentum', name: 'Momentum', icon: '🔥', text: 'Every 5th card of a streak gives back a draw.' },
 ];

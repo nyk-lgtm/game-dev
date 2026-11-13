@@ -13,10 +13,10 @@ import { freshDeck, rankGap, type Card } from './cards';
 import { CHARMS, type CharmId } from './charms';
 import { layoutFor, slotsOf } from './layouts';
 
-export const RULES_VERSION = 3;
+export const RULES_VERSION = 4;
 export const FLOORS = 8;
 /** New draws added to the pile on each floor, before charms. Unused draws carry over. */
-export const DEAL_DRAWS = [34, 14, 11, 11, 10, 9, 8, 8];
+export const DEAL_DRAWS = [28, 16, 9, 9, 8, 8, 7, 7];
 /** Chance a covered card starts face down, per floor. */
 export const FACE_DOWN = [0, 0.25, 0.45, 0.6, 0.7, 0.8, 0.9, 1];
 /** Charm strengths (an object so balance probes can try other values). */
@@ -24,7 +24,9 @@ export const TUNE = {
   /** Same-rank plays per deal (Mirror). */
   mirrors: 2,
   /** Long-stride plays per deal. */
-  strides: 3,
+  strides: 2,
+  /** Long Stride discards the top card of the pile: 0 never, 1 always, 2 only when that card fits nothing open. */
+  strideCost: 2,
   /** Draws given back per peak top (Peak Flags). */
   flags: 1,
   /** Fresh draws from Second Wind. */
@@ -121,8 +123,14 @@ export interface Outcome {
   won?: boolean;
   /** The mercy rule swapped in a card that fits. */
   lucky?: boolean;
-  /** The mercy rule was due but no card left in the pile fits an open card. */
+  /** A Long Stride discarded the top card of the pile. */
+  burned?: boolean;
+  /** The lucky card came from the rest of the deck (nothing in the pile fit). */
+  deep?: boolean;
+  /** The mercy rule was due but no card left anywhere fits an open card. */
   noLuck?: boolean;
+  /** The floor was lost because no card that could still come up fits any open card. */
+  dead?: boolean;
   /** A Mirror play (same rank). */
   mirror?: boolean;
   /** Second Wind just blew. */
@@ -246,14 +254,24 @@ export function playable(r: Run, i: number): boolean {
 export const playableSlots = (r: Run): number[] => r.deal.slots.map((_, i) => i).filter((i) => playable(r, i));
 export const cardsLeft = (d: Deal) => d.slots.reduce((k, s) => k + (s.gone ? 0 : 1), 0);
 
-/** No play, no draw, no blast and no undo left. */
+/** Nothing can ever be played again (see hopeless), and no blast or undo left. */
 export function stuck(r: Run): boolean {
   const d = r.deal;
-  return !playableSlots(r).length && !d.stock.length && !(d.blasts > 0) && !(r.undos > 0 && r.hist.length > 0);
+  return hopeless(r) && !(d.blasts > 0) && !(r.undos > 0 && r.hist.length > 0);
 }
 
-/** Out of plays and draws, but a blast or undo could still help (the player decides). */
-export const cornered = (r: Run): boolean => r.phase === 'play' && !playableSlots(r).length && !r.deal.stock.length;
+/** Nothing can ever be played again, but a blast or undo could still help (the player decides). */
+export const cornered = (r: Run): boolean => hopeless(r);
+
+/** Whether a Long Stride play now would discard the top card of the pile. */
+export function strideDiscards(r: Run): boolean {
+  const d = r.deal;
+  if (TUNE.strideCost !== 2) return TUNE.strideCost === 1;
+  const t = d.stock[d.stock.length - 1];
+  if (!t) return false;
+  // The top card is spared if it fits an open card (other than the one striding away).
+  return !d.slots.some((s, i) => !s.gone && !isCovered(d, i) && fitKind(r, s.card, t) === 'play');
+}
 
 export function offersFor(r: Run): CharmId[] {
   const rng = new Rng(mixSeed(r.seed, 500 + r.floor));
@@ -264,7 +282,7 @@ export function offersFor(r: Run): CharmId[] {
 }
 
 function cloneDeal(d: Deal): Deal {
-  return { ...d, slots: d.slots.map((s) => ({ ...s })), stock: d.stock.slice(), waste: d.waste.slice() };
+  return { ...d, slots: d.slots.map((s) => ({ ...s })), stock: d.stock.slice(), waste: d.waste.slice(), reserve: d.reserve.slice() };
 }
 
 function snap(r: Run): void {
@@ -325,7 +343,7 @@ function afterRemove(r: Run, o: Outcome): void {
  * Mercy: if the card about to be drawn fits nothing that's open, swap in the
  * nearest card further down the pile that does. Returns whether it swapped.
  */
-function mercy(r: Run): 'fits' | 'lucky' | 'none' {
+function mercy(r: Run): 'fits' | 'lucky' | 'deep' | 'none' {
   const d = r.deal;
   const t = top(d);
   const open = d.slots.filter((s, i) => !s.gone && !isCovered(d, i));
@@ -339,7 +357,27 @@ function mercy(r: Run): 'fits' | 'lucky' | 'none' {
         [d.stock[k], d.stock[j]] = [d.stock[j], d.stock[k]];
         return 'lucky';
       }
+  // Nothing in the pile fits: the next fitting card from the rest of the deck takes the top card's place.
+  for (let j = d.ri; j < d.reserve.length; j++)
+    if (fits(d.reserve[j])) {
+      [d.stock[k], d.reserve[j]] = [d.reserve[j], d.stock[k]];
+      return 'deep';
+    }
   return 'none';
+}
+
+/**
+ * Nothing can ever be played again: no open card fits the waste, and no card that a
+ * draw could still turn up (the pile, or the rest of the deck via the lucky draw) fits one.
+ * Exact, because without a play the open cards never change.
+ */
+export function hopeless(r: Run): boolean {
+  const d = r.deal;
+  if (r.phase !== 'play' || playableSlots(r).length) return false;
+  if (!d.stock.length) return true;
+  const open = d.slots.filter((s, i) => !s.gone && !isCovered(d, i));
+  const fits = (c: Card) => open.some((s) => fitKind(r, s.card, c) === 'play');
+  return !d.stock.some(fits) && !d.reserve.slice(d.ri).some(fits);
 }
 
 /** A draw never turns up the rank already on the waste: swap in the nearest deeper card that differs. */
@@ -364,7 +402,8 @@ function drawStep(r: Run, o?: Outcome): void {
   noRepeat(d);
   if (d.dry >= MERCY) {
     const m = mercy(r);
-    if (o && m === 'lucky') o.lucky = true;
+    if (o && (m === 'lucky' || m === 'deep')) o.lucky = true;
+    if (o && m === 'deep') o.deep = true;
     if (o && m === 'none') o.noLuck = true;
   }
   d.waste.push(d.stock.pop()!);
@@ -374,12 +413,13 @@ function drawStep(r: Run, o?: Outcome): void {
  * The next n cards you would turn up drawing n times in a row from here
  * (Spyglass). Exact unless you play a card in between, which changes the rules' choices.
  */
-export function nextDraws(r: Run, n: number): Card[] {
+export function nextDraws(r: Run, n: number): { card: Card; lucky: boolean }[] {
   const sim = { ...r, deal: cloneDeal(r.deal) };
-  const out: Card[] = [];
+  const out: { card: Card; lucky: boolean }[] = [];
   for (let k = 0; k < n && sim.deal.stock.length; k++) {
-    drawStep(sim);
-    out.push(top(sim.deal));
+    const o: Outcome = { kind: 'draw' };
+    drawStep(sim, o);
+    out.push({ card: top(sim.deal), lucky: !!o.lucky });
   }
   return out;
 }
@@ -387,15 +427,16 @@ export function nextDraws(r: Run, n: number): Card[] {
 function checkStuck(r: Run, o: Outcome): void {
   if (r.phase !== 'play') return;
   // Second Wind blows as soon as plays and draws run out, before any blast or undo.
-  if (cornered(r) && has(r, 'wind') && !r.windUsed) {
+  if (hopeless(r) && has(r, 'wind') && !r.windUsed) {
     r.windUsed = true;
     for (let k = 0; k < TUNE.wind; k++) giveBack(r.deal);
     o.wind = true;
-    return;
+    if (!hopeless(r)) return;
   }
   if (!stuck(r)) return;
   r.phase = 'over';
   o.over = true;
+  if (r.deal.stock.length) o.dead = true;
 }
 
 /** Applies one action; returns what happened, or null if it isn't legal now. */
@@ -441,8 +482,11 @@ export function act(r: Run, a: string): Outcome | null {
     o = { kind: 'play', slot: n, points: 0, refund: 0 };
     d.dry = 0;
     if (kind === 'stride') {
-      // A long stride discards the top card of the pile.
-      d.stock.pop();
+      // A long stride may discard the top card of the pile (see TUNE.strideCost).
+      if (strideDiscards(r)) {
+        d.stock.pop();
+        o.burned = true;
+      }
       o.stride = true;
       d.streak = 0;
       d.suitRun = 0;

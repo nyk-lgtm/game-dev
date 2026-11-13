@@ -18,6 +18,9 @@ import {
   playable,
   playableSlots,
   nextDraws,
+  hopeless,
+  cornered,
+  strideDiscards,
   rankGap,
   replay,
   shown,
@@ -196,11 +199,19 @@ describe('charms', () => {
     const j = setup(s, { r: 7, s: 0 }, { r: 5, s: 1 });
     s.deal.streak = 3;
     const n = s.deal.stock.length;
+    const burns = strideDiscards(s);
     const o = act(s, `P${j}`)!;
     expect(o.stride).toBe(true);
     expect(o.points).toBe(0);
     expect(s.deal.streak).toBe(0);
-    expect(s.deal.stock.length).toBe(n - 1);
+    expect(!!o.burned).toBe(burns);
+    expect(s.deal.stock.length).toBe(n - (burns ? 1 : 0));
+    // The top card is spared when it fits an open card.
+    setup(s, { r: 7, s: 0 }, { r: 5, s: 1 });
+    s.deal.stock.push({ r: 6, s: 2 });
+    const topFits = s.deal.slots.some((q, i) => !q.gone && !isCovered(s.deal, i) && fitKind(s, q.card, { r: 6, s: 2 }) === 'play');
+    expect(topFits).toBe(true);
+    expect(strideDiscards(s)).toBe(false);
     s.deal.stock = [];
     const k = setup(s, { r: 7, s: 0 }, { r: 9, s: 1 });
     expect(playable(s, k)).toBe(false);
@@ -352,7 +363,7 @@ describe('draws and charms keep their word', () => {
       const peek = nextDraws(r, 3);
       const sim = JSON.parse(JSON.stringify(r)) as Run;
       const got = peek.map(() => (act(sim, 'D'), JSON.stringify(top(sim.deal))));
-      expect(got).toEqual(peek.map((c) => JSON.stringify(c)));
+      expect(got).toEqual(peek.map((p) => JSON.stringify(p.card)));
       checked++;
     });
     expect(checked).toBeGreaterThan(200);
@@ -372,14 +383,41 @@ describe('draws and charms keep their word', () => {
     expect(top(d).r).toBe(4);
     expect(d.stock.some((c) => c.r === 0)).toBe(true);
   });
-  it('says so when no card in the pile can fit', () => {
+  it('when nothing in the pile fits, the lucky draw comes from the rest of the deck', () => {
+    // The tester's dead floor: one 10 left, no 9 or J in the pile.
+    const r = startAt(3, 1);
+    const d = r.deal;
+    d.slots.forEach((s, i) => (s.gone = i !== 0));
+    d.slots[0].card = { r: 10, s: 3 };
+    d.waste.push({ r: 4, s: 0 });
+    d.stock = [...Array(15)].map((_, k) => ({ r: [2, 3, 5, 6, 7][k % 5], s: k % 4 }));
+    expect(hopeless(r)).toBe(false);
+    act(r, 'D');
+    act(r, 'D');
+    const o = act(r, 'D')!;
+    expect(o.lucky && o.deep).toBe(true);
+    expect(playable(r, 0)).toBe(true);
+  });
+  it('a floor where nothing can ever fit ends at once (or waits for a blast)', () => {
     const r = startAt(3, 2);
     const d = r.deal;
     d.waste.push({ r: 7, s: 0 });
     d.slots.forEach((s) => (s.card = { r: 1, s: 1 }));
     d.stock = [{ r: 10, s: 0 }, { r: 11, s: 1 }, { r: 10, s: 2 }];
-    d.dry = MERCY - 1;
-    expect(act(r, 'D')!.noLuck).toBe(true);
+    d.reserve = d.reserve.filter((c) => c.r !== 2 && c.r !== 13);
+    d.ri = 0;
+    expect(hopeless(r)).toBe(true);
+    const o = act(r, 'D')!;
+    expect(o.over && o.dead).toBe(true);
+    const b = startAt(3, 2, ['blast']);
+    b.deal.waste.push({ r: 7, s: 0 });
+    b.deal.slots.forEach((s) => (s.card = { r: 1, s: 1 }));
+    b.deal.stock = [{ r: 10, s: 0 }, { r: 11, s: 1 }];
+    b.deal.reserve = [];
+    b.deal.ri = 0;
+    act(b, 'D');
+    expect(b.phase).toBe('play');
+    expect(cornered(b)).toBe(true);
   });
   it('undo never hides a card you have already seen', () => {
     const r = startAt(9, FLOORS - 1, ['rewind']);

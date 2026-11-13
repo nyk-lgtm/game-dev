@@ -30,6 +30,8 @@ import {
   replay,
   shown,
   top,
+  MERCY,
+  strideDiscards,
   TUNE,
   type Card,
   type Outcome,
@@ -241,11 +243,11 @@ export class Game {
       navigator.vibrate?.(8);
       if (o.stride) {
         this.sfx.play(1);
-        this.msg = `Long stride: the top card of the pile was discarded, no points, streak over. ${plural(d.strides, 'stride')} left this deal.`;
+        this.msg = `Long stride${o.burned ? ', top card of the pile discarded' : ''}. ${plural(d.strides, 'stride')} left.`;
       } else {
         this.sfx.play(d.streak);
         this.float(`+${o.points}`, o.flush ? 'Flush ×2' : '');
-        if (o.mirror) this.msg = `Mirror play. ${plural(d.mirrors, 'mirror play')} left this deal.`;
+        if (o.mirror) this.msg = `Mirror play. ${plural(d.mirrors, 'mirror play')} left.`;
         if (d.streak >= 2 && d.streak > streakBefore && !reducedFx()) {
           const st = $('combo');
           st.classList.remove('pop');
@@ -255,9 +257,10 @@ export class Game {
       }
     } else if (o.kind === 'draw') {
       this.sfx.draw();
-      if (o.lucky) this.msg = '<b>Lucky draw:</b> the 3rd draw in a row without a play (and every one after it) turns up a card that fits, while the pile still has one.';
-      else if (o.noLuck) this.msg = '<span class="warn">No card left in the pile fits an open card</span>, so no lucky draw this time.';
-      else if (streakBefore >= 3) this.msg = `Streak of ${streakBefore} ended.`;
+      const ended = streakBefore >= 3 ? `Streak of ${streakBefore} ended. ` : '';
+      if (o.lucky) this.msg = `${ended}<b>✨ Lucky draw</b>${o.deep ? ' (from the rest of the deck)' : ''}.`;
+      else if (o.noLuck) this.msg = `${ended}<span class="warn">No card left fits an open card.</span>`;
+      else if (ended) this.msg = ended;
     } else if (o.kind === 'blast') {
       this.sfx.blast();
       navigator.vibrate?.([20, 30, 40]);
@@ -383,8 +386,15 @@ export class Game {
     $('stock').classList.toggle('empty', !d.stock.length);
     $('stockN').textContent = String(d.stock.length);
     // What the next three draws in a row would turn up (lucky draws included), next one last.
+    // Gold edge: it fits an open card now. ✨: it only comes up if you keep drawing (a lucky draw).
     const peek = has(r, 'spyglass') && r.phase === 'play' ? nextDraws(r, 3).reverse() : [];
-    $('peek').innerHTML = peek.map((c) => cardHtml(c)).join('');
+    const open = d.slots.filter((s, i) => !s.gone && !isCovered(d, i));
+    $('peek').innerHTML = peek
+      .map((p) => cardHtml(p.card, `${open.some((s) => fitKind(r, s.card, p.card) === 'play') ? 'fits' : ''} ${p.lucky ? 'lucky' : ''}`, p.lucky ? 'title="lucky draw: only if you keep drawing"' : ''))
+      .join('');
+    // How many draws in a row until the lucky draw.
+    const luckIn = MERCY - d.dry;
+    $('luck').textContent = r.phase === 'play' && d.stock.length && d.dry > 0 ? (luckIn <= 1 ? '✨ next' : `✨ in ${luckIn}`) : '';
     // Tools.
     const undo = $('undoBtn') as HTMLButtonElement;
     undo.hidden = !has(r, 'rewind');
@@ -456,11 +466,13 @@ export class Game {
   private renderInfo(): void {
     const r = this.r;
     const d = r.deal;
-    let html = this.msg ?? '';
+    const note = this.msg ?? '';
     this.msg = null;
-    if (!html && r.phase === 'play') {
-      if (cornered(r)) html = `<span class="warn">Out of plays and draws.</span> ${this.rescue() ? `You can still ${this.rescue()}, or end the run.` : 'End the run.'}`;
-      else if (!playableSlots(r).length) html = 'No card fits. <b>Tap the pile</b> to draw a new waste card.';
+    let html = '';
+    if (r.phase === 'play' && !this.blastMode) {
+      if (cornered(r))
+        html = `<span class="warn">${d.stock.length ? 'Nothing left in the pile or the deck fits an open card.' : 'Out of plays and draws.'}</span> ${this.rescue() ? `You can still ${this.rescue()}, or end the run.` : 'End the run.'}`;
+      else if (!playableSlots(r).length) html = `No card fits. <b>Tap the pile</b> to draw${d.dry > 0 ? ` (✨ lucky ${MERCY - d.dry <= 1 ? 'next' : `in ${MERCY - d.dry}`})` : ''}.`;
       else if (!d.stock.length) html = '<span class="warn">No draws left.</span> Only plays now: make them count.';
       else if (r.floor === 0 && d.waste.length <= 2 && !d.slots.some((s) => s.gone)) html = 'Tap a <b>gold-edged</b> card: one higher or lower than the waste card below. K and A connect.';
       else {
@@ -469,9 +481,10 @@ export class Game {
         const names = (k: string) => fits.filter((c) => how(r, c) === k).map(label).join(', ');
         html = plain.length ? `${plural(plain.length, 'card')} ${plain.length === 1 ? 'fits' : 'fit'} on ${label(top(d))}.` : `Nothing fits ${label(top(d))} the usual way.`;
         if (names('mirror')) html += ` <b class="mi">${names('mirror')}</b>: mirror play (${d.mirrors} left).`;
-        if (names('stride')) html += ` <b class="st">${names('stride')}</b>: long stride, discards the top card of the pile and ends the streak (${d.strides} left).`;
+        if (names('stride')) html += ` <b class="st">${names('stride')}</b>: long stride, ends the streak${strideDiscards(r) ? ' and discards the top card of the pile' : ''} (${d.strides} left).`;
       }
     }
+    html = [note, html].filter(Boolean).join(' ');
     $('info').innerHTML = html || '&nbsp;';
   }
 
@@ -541,6 +554,7 @@ export class Game {
     showCard(
       `<h2>${r.won ? 'Summit reached!' : this.daily ? 'Daily climb over' : 'The climb ends'}</h2>${this.climb()}
        <p class="big">${fmt(r.score)}</p>
+       ${!r.won && r.phase === 'over' && r.deal.stock.length && !r.deal.slots.every((s) => s.gone) && r.actions[r.actions.length - 1] !== 'X' ? '<p class="meta2">No card left in the pile or the deck could fit an open card.</p>' : ''}
        <p class="meta2">${r.won ? 'All eight floors cleared' : `Ended on floor ${r.floor + 1}`} · best streak ${r.bestStreak}${charms ? ` · ${charms}` : ''}</p>
        ${daily ? `<p class="meta2">Today’s best: ${daily.label} · ${plural(daily.plays, 'try')}</p>` : p.runs ? `<p class="meta2">Best ${fmt(p.best)} · ${plural(p.runs, 'climb')}${p.wins ? ` · ${plural(p.wins, 'summit')}` : ''}</p>` : ''}`,
       [
@@ -566,7 +580,7 @@ export class Game {
        <p>A solitaire climb: eight deals, each a ridge of card peaks.</p>
        <ul>
          <li><b>Tap a card one higher or lower</b> than the waste card at the bottom to move it there. K and A connect. Only cards with nothing on top can move; those that fit have a <b>gold edge</b>.</li>
-         <li>No fit? <b>Tap the pile</b> to draw a new waste card. Plays in a row make a <b>streak</b> worth 10, 20, 30… points; a draw ends it. A draw never repeats the waste card’s rank, and the 3rd draw in a row without a play (and each one after) is <b>lucky</b>: it turns up a card that fits, if any card left in the pile does.</li>
+         <li>No fit? <b>Tap the pile</b> to draw a new waste card. Plays in a row make a <b>streak</b> worth 10, 20, 30… points; a draw ends it. A draw never repeats the waste card’s rank, and the 3rd draw in a row without a play (and each one after) is <b>lucky</b>: it turns up a card that fits, from the rest of the deck if nothing in the pile does. The pile counts down to it (✨ in 2). If nothing can ever fit again, the floor ends.</li>
          <li>Clear every card to climb. <b>Unused draws carry up</b> (at most ${TUNE.carry}) and later floors add fewer, so bank some early. No plays and no draws left: the climb ends.</li>
          <li>After each floor pick one of three <b>charms</b>. Higher floors deal more cards face down.</li>
        </ul>`,

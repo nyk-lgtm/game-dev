@@ -121,7 +121,16 @@ body #info { flex: 1; min-height: 36px; font-size: 13.5px; line-height: 1.35; co
 #peek .pc .pip { display: none; }
 #peek .pc .ix { width: 100%; display: flex; justify-content: center; gap: 1px; font-size: 15px; top: 7px; }
 #peek .pc .ix i { display: inline; margin: 0; font-size: 13px; }
-#peek .pc:last-child { box-shadow: 0 0 0 2px var(--accent); }
+#peek .pc.fits { box-shadow: 0 0 0 2px var(--accent); }
+#peek .pc.lucky::after {
+  content: '✨'; position: absolute; right: 1px; top: 0; font-size: 10px; line-height: 1;
+}
+#stock .luck {
+  position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); white-space: nowrap;
+  background: rgba(8, 12, 20, 0.85); color: var(--accent); border-radius: 8px; padding: 1px 6px;
+  font-size: 11.5px; font-weight: 800;
+}
+#stock .luck:empty { display: none; }
 #wasteBox { position: relative; width: 72px; height: 100px; flex: none; }
 #waste .pc { --cw: 72px; --ch: 100px; left: 0; top: 0; }
 #combo {
