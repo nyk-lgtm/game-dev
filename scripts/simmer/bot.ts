@@ -29,6 +29,9 @@ import {
   type MenuItem,
   type Run,
   REP_MAX,
+  STOVE_WARN,
+  fillNeed,
+  upgradePayback,
 } from '../../src/simmer/core';
 
 export interface Strat {
@@ -40,7 +43,7 @@ export interface Strat {
   mul: number;
   add: number;
   /** flat: top up to `flat` portions a dish; forecast: expected orders × cover + pad. */
-  stock: 'flat' | 'forecast';
+  stock: 'flat' | 'forecast' | 'fill';
   flat: number;
   cover: number;
   pad: number;
@@ -50,14 +53,17 @@ export interface Strat {
   learn: 'none' | 'order' | 'value';
   learnMax: number;
   order: number[];
-  /** Upgrades: bought by rule (keys in order, `upMinDaysLeft`), or none. */
+  /** Upgrades: bought by rule (keys in order, `upMinDaysLeft`), or by the page's payback estimate. */
   ups: number[];
+  upMode: 'rule' | 'payback';
   upMinDaysLeft: number;
   reserve: number;
-  helper: 'never' | 'festival' | 'busy';
+  helper: 'never' | 'festival' | 'busy' | 'warn';
   /** Coins a point of reputation is worth when planning (plus `repPerDay` per night left). */
   repValue: number;
   repPerDay: number;
+  /** Keep every menu line filled (a person rarely leaves one empty). */
+  fillMenu?: boolean;
   /** Only these dishes may go on the menu (single-minded strategies). */
   only?: number[];
 }
@@ -77,6 +83,7 @@ const BASE: Strat = {
   learnMax: 10,
   order: [3, 4, 6, 7, 9, 5, 8],
   ups: [UP.board, UP.board, UP.lantern, UP.stove, UP.bench],
+  upMode: 'payback',
   upMinDaysLeft: 8,
   reserve: 30,
   helper: 'busy',
@@ -86,17 +93,25 @@ const BASE: Strat = {
 
 export const STRATS: Record<string, Strat> = {
   naive: { ...BASE, name: 'naive', menu: 'fixed', price: 'base', stock: 'flat', flat: 6, bulk: false, learn: 'none', ups: [], helper: 'never' },
-  decent: {
+  // The tester's lazy play: starting menu at listed prices, Fill to forecast, never shops.
+  lazy: { ...BASE, name: 'lazy', menu: 'fixed', price: 'base', stock: 'fill', bulk: false, learn: 'none', ups: [], helper: 'never' },
+  // ...plus a helper whenever the page warns the stoves are short.
+  lazyhelp: { ...BASE, name: 'lazyhelp', menu: 'fixed', price: 'base', stock: 'fill', bulk: false, learn: 'none', ups: [], helper: 'warn' },
+  // A careful player using the page: dishes by their "~N orders", listed prices, Fill to forecast,
+  // a helper when warned, recipes and upgrades whose payback lines look good.
+  decent: { ...BASE, name: 'decent', price: 'base', stock: 'fill', bulk: false, helper: 'warn', repValue: 0, repPerDay: 0, fillMenu: true },
+  // The old decent bot: a fixed two recipes and the menu board, stock with a margin.
+  steady: {
     ...BASE,
-    name: 'decent',
+    name: 'steady',
     price: 'base',
-    add: 0,
     cover: 1.1,
     pad: 1,
     bulk: false,
     learn: 'order',
     learnMax: 2,
     ups: [UP.board],
+    upMode: 'rule',
     upMinDaysLeft: 6,
     reserve: 50,
     helper: 'festival',
@@ -110,7 +125,7 @@ export const STRATS: Record<string, Strat> = {
   greedy: { ...BASE, name: 'greedy', repValue: 0, repPerDay: 0 },
   fame: { ...BASE, name: 'fame', repValue: 25, repPerDay: 2 },
   hoard: { ...BASE, name: 'hoard', learn: 'none', ups: [], helper: 'never' },
-  builder: { ...BASE, name: 'builder', ups: [UP.board, UP.board, UP.lantern, UP.stove, UP.bench, UP.cool], upMinDaysLeft: 0, reserve: 0, learn: 'order', learnMax: 10 },
+  builder: { ...BASE, name: 'builder', ups: [UP.board, UP.board, UP.lantern, UP.stove, UP.bench, UP.cool], upMode: 'rule', upMinDaysLeft: 0, reserve: 0, learn: 'order', learnMax: 10 },
   sweets: { ...BASE, name: 'sweets', only: [2, 4, 5, 9] },
   fishy: { ...BASE, name: 'fishy', only: [0, 3, 6, 8] },
   overstock: { ...BASE, name: 'overstock', cover: 1.6, pad: 2 },
@@ -178,7 +193,7 @@ export function planMenu(r: Run, s: Strat, f = forecast(r), stoves = stovesOf(r)
       const v = optPrices(r, s, trial, f, stoves, lam, 1, trial.length - 1);
       if (v > bestV) (bestV = v), (bestD = d), (bestP = trial[trial.length - 1].price);
     }
-    if (bestD < 0 || (menu.length > 0 && bestV <= cur + 0.5)) break;
+    if (bestD < 0 || (menu.length > 0 && !s.fillMenu && bestV <= cur + 0.5)) break;
     menu.push({ dish: bestD, price: bestP });
     cur = bestV;
   }
@@ -192,6 +207,7 @@ const lamOf = (r: Run, s: Strat) => s.repValue + s.repPerDay * daysLeft(r);
 function needFor(r: Run, s: Strat, menu: MenuItem[], f: Forecast, helper: boolean): number[] {
   const need = INGS.map(() => 0);
   if (s.stock === 'flat') for (const m of menu) for (const u of DISHES[m.dish].uses) need[u] += s.flat;
+  else if (s.stock === 'fill') return fillNeed(r, menu, stovesOf(r, helper));
   else {
     const d = demand(r, menu, f, stovesOf(r, helper));
     const capShare = Math.min(1, (d.capacity * 0.85) / Math.max(1, d.cookMins));
@@ -241,24 +257,39 @@ export function planDay(r: Run, s: Strat): string[] {
     }
     if (best >= 0) doAct(`l${best}`);
   }
-  // Upgrades, in the strategy's order, while affordable and worth it.
+  // Upgrades: by the page's payback estimate, or in the strategy's order.
   const last = r.ledgers[r.ledgers.length - 1];
-  for (const k of s.ups) {
-    const c = upCost(r, k);
-    if (c === null) continue;
-    if (r.coins < c + stockBudget() || daysLeft(r) < s.upMinDaysLeft) break;
-    if (k === UP.stove && s.name !== 'builder') {
-      const d = demand(r, planMenu(r, s, f, 1, lam).menu, f, 1);
-      const queued = last ? (last.left.slow ?? 0) + (last.left.closed ?? 0) : 0;
-      if (d.cookMins < d.capacity * 0.6 && queued < 3) continue;
+  if (s.upMode === 'payback' && s.ups.length) {
+    const menu = planMenu(r, s, f, stovesOf(r), lam).menu;
+    let best = -1, gain = 0;
+    for (let k = 0; k < UPGRADES.length; k++) {
+      const c = upCost(r, k);
+      if (c === null || r.coins < c + stockBudget()) continue;
+      const g = upgradePayback(r, k, menu).perNight * daysLeft(r) * 0.7 - c;
+      if (g > gain) (gain = g), (best = k);
     }
-    if (k === UP.bench && s.name !== 'builder' && last && (last.left.slow ?? 0) < 2) continue;
-    doAct(`u${k}`);
-    break;
-  }
+    if (best >= 0) doAct(`u${best}`);
+  } else
+    for (const k of s.ups) {
+      const c = upCost(r, k);
+      if (c === null) continue;
+      if (r.coins < c + stockBudget() || daysLeft(r) < s.upMinDaysLeft) break;
+      if (k === UP.stove && s.name !== 'builder') {
+        const d = demand(r, planMenu(r, s, f, 1, lam).menu, f, 1);
+        const queued = last ? (last.left.slow ?? 0) + (last.left.closed ?? 0) : 0;
+        if (d.cookMins < d.capacity * 0.6 && queued < 3) continue;
+      }
+      if (k === UP.bench && s.name !== 'builder' && last && (last.left.slow ?? 0) < 2) continue;
+      doAct(`u${k}`);
+      break;
+    }
   // Helper tonight?
   let helper = false;
   if (s.helper === 'festival') helper = f.ctx.festival && r.coins >= TUNE.wage + stockBudget();
+  else if (s.helper === 'warn') {
+    const d = demand(r, planMenu(r, s, f, stovesOf(r), lam).menu, f);
+    helper = d.cookMins > d.capacity * STOVE_WARN && r.coins >= TUNE.wage + stockBudget();
+  }
   else if (s.helper === 'busy' && r.coins >= TUNE.wage + stockBudget()) {
     const one = planMenu(r, s, f, stovesOf(r), lam).v;
     const two = planMenu(r, s, f, stovesOf(r, true), lam).v;

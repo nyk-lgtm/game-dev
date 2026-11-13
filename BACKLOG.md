@@ -18,7 +18,7 @@ Ground rules: never break saves without bumping RULES_VERSION; never leave main 
 keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 
 ## Start here (summary, 2026-11-13)
-20 games are live; all but the newest (Simmer) have had at least two blind playtests and the fixes shipped. Open threads, in order:
+20 games are live; all but the newest (Simmer, one playtest so far) have had at least two blind playtests and the fixes shipped. Open threads, in order:
 1. Owner feedback first: anything the owner reports beats this list.
 2. Loomsong: needs a real-phone check of sound and timing (headless has no audio); then a second playtest.
 3. Third playtests done (2026-11-13) and shipped: Summit v4, Kitbag v4, Sungrazer v4 (+ frame cost cut ~3x), Brink AI v4
@@ -28,7 +28,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 5. Grove: owner said keep it as is (board and balance); only bugs/clarity. Afterglow: leave alone unless asked.
 6. New games are welcome when the queue is quiet (recent additions: Ninefold, Summit, Quarry, Sungrazer, Kitbag,
    Brink, Loomsong, Simmer). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle.
-7. Simmer: first blind playtest (see its item below).
+7. Simmer: second blind playtest (see its item below).
 
 ## Now
 - [ ] **Simmer** (cozy management sim: a night-market food stall for 20 nights, critter guests). Milestones:
@@ -48,10 +48,20 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         canvas (original critter art, red-panda keeper, lanterns, rain/fog/fireflies/leaves, bubbles, coins and hearts,
         Normal/Fast/Skip), guest log with "why" cards, nightly ledger, season end with stars, guest book, season ledger,
         help, bug report, `?daily`, hub card (Strategy filter) + Daily link + NEWS. Pixel 7 and 360×640 checked.
-  - [ ] Next: blind playtest. Watch: is the morning too much reading on a phone (five sections)? Does Fill to forecast make
-        decent play automatic? Is 30 s an evening at Normal right? Renown saturates near 100 for good play (late let-downs
-        then cost more than delights earn): fun or frustrating? The clever bot leans on recipes + second stove + lanterns;
-        check humans find those paybacks without the bot's arithmetic.
+  - [x] First blind playtest (3,066★★ and 3,710★★ careful, 2,287★ lazy; festival queues cost ♥18-25 a night) and fixes
+        (rules v2): a reload mid-evening replays that evening (it skipped to morning, no ledger); the ledger closes to the
+        guest log (dock Ledger / Night N ▶); header ♥ and coins update when the night ends; no "friends tomorrow" on the
+        last night; "1 order"; recipes/upgrades bought this morning can be undone (replay without them); dishes priced below
+        cost say so; Open warns in one card about short stock, a stove that can't keep up (offers the helper) and below-cost
+        prices; let-downs cost one ♥ per two, at most 5 a night; recipe cards show orders tonight, what they'd replace and who
+        loves them, upgrade cards a ¢-a-night payback; the cool box is 35¢ and also chills cold dishes (×1.15), bought in
+        ~55% of clever seasons (was ~0-8%); help says a long wait cancels a delight. Stars 1200/2700/4000. Bots (100
+        seasons): naive 1★, lazy ~2560 (2★ 10-19%), lazy + helper when warned ~3210 (2★), decent ~3650 (3★ ~27%),
+        clever ~4140 (3★ ~65%); nothing single-minded beats clever. The bots' lazy (~3290 under v1) scored ~1,000 above the
+        tester's lazy run; unexplained (maybe Fill wasn't pressed every night).
+  - [ ] Next: second blind playtest. Watch: is the 2★ line at 2,700 right for lazy play (bot says just under)? Do people
+        find the payback lines and the helper? Is the morning still too much reading? Does renown near 100 still feel harsh?
+
 - [ ] **Loomsong** (original rhythm game with procedurally generated music). Milestones:
   - [x] Core (src/loomsong/core, rules v1): seeded songs (key, mode, 90-140 BPM, verse/chorus progressions, a form
         sized to 90-120 s, drums with fills, bass, pads, chorus arpeggio, motif-based lead); charts from the song's own
