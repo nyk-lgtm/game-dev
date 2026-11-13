@@ -8,7 +8,8 @@ describe('descent bot', () => {
     () => {
       let deep = 0;
       for (let seed = 1; seed <= 20; seed++) {
-        const r = playDescent(seed);
+        // Played only until it reaches depth 6 (the whole run would take ~3x longer on CI).
+        const r = playDescent(seed, 8000, 6);
         if (r.state.depth >= 6) deep++;
         expect(replay(seed, r.actions), `seed ${seed}`).toEqual(r.state);
       }

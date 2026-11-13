@@ -346,6 +346,18 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
   wisps 20% → 22% (bot: 276 → 248 turns, Spirit Tree 49/60 → 30/60); help says wisps never merge and
   what traps pay; brighter labels; empty stash is dashed and says so. Still long for one sitting —
   owner said keep the board as is (no smaller board).
+- Delve second blind playtest (depth 7 to a cultist at a door, depth 8 between a wraith and a golem, daily depth 2)
+  and fixes (rules v5): at most 1 golem (only on open ground, never corridors/dead ends), 2 wraiths, 2 cultists per
+  floor; cultists gather flame a turn after each firebolt (logged, a tell); a sleeping monster spends the turn it
+  notices you; "You hear something behind the door" + "?" on the door (view and maps); hunters blocked by another
+  monster take an equally short step, so wraiths stop idling on diagonals; HIT strikes a front-corner foe (arrows
+  say "(HIT)"), never shuts a door with a foe beside you or in the doorway, "You swing at nothing"; wall bumps say so
+  and shake the view (not with reduced effects); scrolls of seeing are carried and read from the MAP card (MAP ?n);
+  a/an and "(same as yours)"; spell menu in fixed order; player "@" with a facing notch on the maps; foes stay bright
+  far off; the title offers "Continue daily descent". Warden HP 340 → 420 to keep the end hard. Bot (100 runs):
+  v4 44% wins, deaths d6 11 / d7 7 / d8 6 / d10 17 (of 61), floor damage d6-7 ~170 → v5 58% wins, d6 5 / d7 1 /
+  d8 3 / d10 20 (of 78), d6-7 ~118. Depth 5 (10 deaths, ghouls) is now the bump to watch. The bot test plays only
+  to depth 6 (17 s locally).
 - Lantern second blind playtest (finished at level 6, 804 turns, 0 falls) and fixes (rules v2): taps into the
   dark re-plan every step (`planWalk`) so a walk goes on until arrival; a walk stops only for a new monster, a met
   one coming within 3, a monster in the way or an event, and says why; tap elsewhere to re-route, tap yourself to

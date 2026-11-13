@@ -10,6 +10,8 @@ import { DX, DY, type Action, type Dir, type GameEvent, type GameState, type Mon
 const LOG_MAX = 30;
 export const SIGHT = 7;
 export const MP_REGEN_EVERY = 6;
+/** How far past a closed door (in steps) you hear what's there. */
+export const NOISE_RANGE = 5;
 
 export const idx = (x: number, y: number) => y * SIZE + x;
 export const inside = (x: number, y: number) => x >= 0 && y >= 0 && x < SIZE && y < SIZE;
@@ -32,9 +34,18 @@ function the(kind: MonsterKind, start = false): string {
   if (name.startsWith('The ')) return start ? name : `the ${name.slice(4)}`;
   return `${start ? 'The' : 'the'} ${name.toLowerCase()}`;
 }
+/** "a Sword", "an Axe". */
+export function article(name: string): string {
+  return `${/^[aeiou]/i.test(name) ? 'an' : 'a'} ${name}`;
+}
 function say(s: GameState, text: string): void {
   s.log.push(text);
   if (s.log.length > LOG_MAX) s.log.splice(0, s.log.length - LOG_MAX);
+}
+
+/** Like say, but not twice in a row (repeated bumps and whiffs). */
+function sayOnce(s: GameState, text: string): void {
+  if (s.log[s.log.length - 1] !== text) say(s, text);
 }
 
 /** Straight-line visibility between cell centers (DDA over the grid). */
@@ -71,6 +82,8 @@ export function isLegal(s: GameState, a: Action): boolean {
       return p.potions > 0 && p.hp < p.maxHp;
     case 'ether':
       return p.ethers > 0 && p.mp < p.maxMp;
+    case 'read':
+      return p.scrolls > 0 && !isRevealed(s);
     case 'cast':
       return p.spells.includes(a.spell) && p.mp >= SPELLS[a.spell].cost && (a.spell !== 'heal' || p.hp < p.maxHp);
     default:
@@ -120,6 +133,12 @@ export function applyAction(prev: GameState, a: Action): StepResult {
       p.ethers--;
       say(s, 'You drink an ether. Your mind clears.');
       break;
+    case 'read':
+      p.scrolls--;
+      reveal(s);
+      say(s, 'You read a scroll of seeing. The floor unfolds in your mind.');
+      ev.push({ type: 'reveal' });
+      break;
     case 'cast':
       cast(s, a.spell, ev);
       break;
@@ -153,7 +172,8 @@ function walk(s: GameState, dir: Dir, ev: GameEvent[], canAttack: boolean): bool
   const m = monsterAt(s, nx, ny);
   if (m) {
     if (!canAttack) {
-      ev.push({ type: 'bump' });
+      sayOnce(s, `${the(m.kind, true)} is in the way. Face it to fight.`);
+      ev.push({ type: 'bump', what: 'foe' });
       return false;
     }
     attack(s, m, ev);
@@ -167,7 +187,8 @@ function walk(s: GameState, dir: Dir, ev: GameEvent[], canAttack: boolean): bool
     return true;
   }
   if (solid(t)) {
-    ev.push({ type: 'bump' });
+    sayOnce(s, t === 'pillar' ? 'You bump into a pillar.' : 'You bump into the wall.');
+    ev.push({ type: 'bump', what: 'wall' });
     return false;
   }
   p.x = nx;
@@ -175,7 +196,72 @@ function walk(s: GameState, dir: Dir, ev: GameEvent[], canAttack: boolean): bool
   ev.push({ type: 'move' });
   pickup(s, ev);
   if (t === 'stairs') descend(s, ev);
+  else if (doorNoises(s).length) say(s, 'You hear something behind the door.');
   return true;
+}
+
+/**
+ * Closed doors next to you with something lurking within a few steps beyond them
+ * (out of your sight): the "?" on the maps and the warning when you step up to one.
+ */
+export function doorNoises(s: GameState): { x: number; y: number }[] {
+  const p = s.player;
+  const out: { x: number; y: number }[] = [];
+  for (let k = 0; k < 4; k++) {
+    const dx = p.x + DX[k];
+    const dy = p.y + DY[k];
+    if (tileAt(s, dx, dy) !== 'door') continue;
+    // Search the far side only: start past the door, never back through it.
+    const fx = dx + DX[k];
+    const fy = dy + DY[k];
+    if (solid(tileAt(s, fx, fy)) && tileAt(s, fx, fy) !== 'door') continue;
+    const seen = new Set<number>([idx(dx, dy), idx(fx, fy)]);
+    let frontier = [[fx, fy]];
+    let heard = false;
+    for (let step = 1; step <= NOISE_RANGE && frontier.length && !heard; step++) {
+      const next: number[][] = [];
+      for (const [x, y] of frontier) {
+        const m = monsterAt(s, x, y);
+        if (m && !los(s, p.x, p.y, x, y)) {
+          heard = true;
+          break;
+        }
+        for (let j = 0; j < 4; j++) {
+          const nx = x + DX[j];
+          const ny = y + DY[j];
+          const t = tileAt(s, nx, ny);
+          if (!inside(nx, ny) || t === 'wall' || t === 'pillar' || seen.has(idx(nx, ny))) continue;
+          seen.add(idx(nx, ny));
+          next.push([nx, ny]);
+        }
+      }
+      frontier = next;
+    }
+    if (heard) out.push({ x: dx, y: dy });
+  }
+  return out;
+}
+
+/** The foe in a front corner (ahead-left / ahead-right) that HIT reaches, if nothing is straight ahead. */
+export function cornerFoe(s: GameState): Monster | null {
+  const p = s.player;
+  const fx = p.x + DX[p.dir];
+  const fy = p.y + DY[p.dir];
+  for (const turn of [3, 1]) {
+    const sd = (p.dir + turn) % 4;
+    const m = monsterAt(s, fx + DX[sd], fy + DY[sd]);
+    if (!m) continue;
+    // Not around a solid corner (a ghost inside a wall is fair game).
+    const open = !solid(tileAt(s, fx, fy)) || !solid(tileAt(s, p.x + DX[sd], p.y + DY[sd]));
+    if (open || MONSTERS[m.kind].ghost) return m;
+  }
+  return null;
+}
+
+/** The nearest live monster next to you (8 neighbours), for warnings. */
+function adjacentFoe(s: GameState, x: number, y: number): Monster | null {
+  for (const m of s.monsters) if (m.hp > 0 && Math.max(Math.abs(m.x - x), Math.abs(m.y - y)) === 1) return m;
+  return null;
 }
 
 function use(s: GameState, ev: GameEvent[]): boolean {
@@ -187,18 +273,34 @@ function use(s: GameState, ev: GameEvent[]): boolean {
     attack(s, m, ev);
     return true;
   }
+  const corner = cornerFoe(s);
+  if (corner) {
+    attack(s, corner, ev);
+    return true;
+  }
   if (tileAt(s, nx, ny) === 'door') {
     s.level.tiles[idx(nx, ny)] = 'open';
+    say(s, 'The door creaks open.');
     ev.push({ type: 'door' });
     return true;
   }
   if (tileAt(s, nx, ny) === 'open') {
+    // Never slam a door (and lose the turn) with a foe at your back or in the doorway.
+    const near = adjacentFoe(s, p.x, p.y);
+    const past = adjacentFoe(s, nx, ny);
+    if (near || past) {
+      const f = (near ?? past)!;
+      sayOnce(s, near ? `${the(f.kind, true)} is right beside you. Turn to face it.` : `${the(f.kind, true)} is in the doorway. You can't shut it.`);
+      ev.push({ type: 'bump', what: 'foe' });
+      return false;
+    }
     s.level.tiles[idx(nx, ny)] = 'door';
     say(s, 'You pull the door shut.');
     ev.push({ type: 'door' });
     return true;
   }
-  ev.push({ type: 'bump' });
+  sayOnce(s, 'You swing at nothing.');
+  ev.push({ type: 'bump', what: 'air' });
   return false;
 }
 
@@ -288,20 +390,20 @@ function pickup(s: GameState, ev: GameEvent[]): void {
         text = `${it.value} gold`;
         break;
       case 'map':
-        reveal(s);
-        text = 'a scroll of seeing. The floor unfolds in your mind';
+        p.scrolls++;
+        text = isRevealed(s) ? 'a scroll of seeing (kept for later)' : 'a scroll of seeing (read it from the map)';
         break;
       case 'weapon':
         if (it.value > p.weapon) {
           p.weapon = it.value;
-          text = `a ${WEAPONS[it.value]} (equipped)`;
-        } else text = `a ${WEAPONS[it.value]} (you have better)`;
+          text = `${article(WEAPONS[it.value])} (equipped)`;
+        } else text = `${article(WEAPONS[it.value])} (${it.value === p.weapon ? 'same as yours' : 'you have better'})`;
         break;
       case 'armor':
         if (it.value > p.armor) {
           p.armor = it.value;
           text = `${ARMORS[it.value]} (equipped)`;
-        } else text = `${ARMORS[it.value]} (you have better)`;
+        } else text = `${ARMORS[it.value]} (${it.value === p.armor ? 'same as yours' : 'you have better'})`;
         break;
       default:
         text = 'something';
@@ -327,15 +429,21 @@ function descend(s: GameState, ev: GameEvent[]): void {
   }
 }
 
+/** Cells a scroll of seeing shows: every walkable cell and the walls around it. */
+function revealable(s: GameState, x: number, y: number): boolean {
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (inside(x + dx, y + dy) && s.level.tiles[idx(x + dx, y + dy)] !== 'wall') return true;
+  return false;
+}
+
 /** Mark every walkable cell of the floor (and the walls around it) as seen. */
 export function reveal(s: GameState): void {
-  for (let y = 0; y < SIZE; y++)
-    for (let x = 0; x < SIZE; x++) {
-      if (s.level.seen[idx(x, y)]) continue;
-      let near = false;
-      for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1 && !near; dx++) near = s.level.tiles[idx(x + dx, y + dy)] !== 'wall' && inside(x + dx, y + dy);
-      if (near) s.level.seen[idx(x, y)] = true;
-    }
+  for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) if (!s.level.seen[idx(x, y)] && revealable(s, x, y)) s.level.seen[idx(x, y)] = true;
+}
+
+/** Has the whole floor been seen already (so a scroll of seeing would show nothing new)? */
+export function isRevealed(s: GameState): boolean {
+  for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) if (!s.level.seen[idx(x, y)] && s.level.tiles[idx(x, y)] !== 'wall') return false;
+  return true;
 }
 
 // ---------- the merchant ----------
@@ -390,7 +498,7 @@ function buy(s: GameState, o: Offer, ev: GameEvent[]): void {
       p.ethers++;
       break;
     case 'map':
-      reveal(s);
+      p.scrolls++;
       break;
     case 'weapon':
       p.weapon = o.value;
@@ -473,8 +581,11 @@ function monsterTurn(s: GameState, ev: GameEvent[]): void {
     if (m.hp <= 0 || s.status !== 'playing') continue;
     const def = MONSTERS[m.kind];
     const d = Math.abs(m.x - p.x) + Math.abs(m.y - p.y);
-    if (!m.awake && d <= SIGHT && los(s, m.x, m.y, p.x, p.y)) m.awake = true;
-    if (!m.awake) continue;
+    if (!m.awake) {
+      // Noticing you costs a sleeping monster its turn (so opening a door is never an instant ambush).
+      if (d <= SIGHT && los(s, m.x, m.y, p.x, p.y)) m.awake = true;
+      continue;
+    }
     if (m.stun > 0) {
       m.stun--;
       continue;
@@ -484,6 +595,8 @@ function monsterTurn(s: GameState, ev: GameEvent[]): void {
       continue;
     }
     m.wait = def.slow;
+    const charged = !m.cd;
+    if (m.cd) m.cd--;
 
     // Boss: every few turns, raise a skeleton.
     if (m.kind === 'warden' && s.turn % 7 === 0 && s.monsters.filter((o) => o.hp > 0).length < 8) {
@@ -510,42 +623,56 @@ function monsterTurn(s: GameState, ev: GameEvent[]): void {
       continue;
     }
     // Ranged: shoot along a clear straight line.
-    if (def.range && (m.x === p.x || m.y === p.y) && d <= def.range && los(s, m.x, m.y, p.x, p.y) && !monsterBetween(s, m) && roll(s) < 0.7) {
+    const inLine = def.range && (m.x === p.x || m.y === p.y) && d <= def.range && los(s, m.x, m.y, p.x, p.y) && !monsterBetween(s, m);
+    if (inLine && !charged) {
+      // A cultist gathers flame for a turn after each firebolt: a tell to step out of line.
+      say(s, `${the(m.kind, true)} gathers flame.`);
+      continue;
+    }
+    if (inLine && roll(s) < 0.7) {
       ev.push({ type: 'shot', by: m.kind });
       hurt(s, m, def.atk, ev, m.kind === 'mage' ? 'A firebolt' : m.kind === 'warden' ? 'A wave of grave-cold' : 'An arrow');
+      if (m.kind === 'mage') m.cd = 1;
       continue;
     }
     // Move: erratic flutter, ghosts beeline through walls, others path around.
-    let step: [number, number] | null = null;
+    // Hunters try their best step first, then an equally good one if a monster blocks it.
+    const steps: [number, number][] = [];
     if (def.erratic && roll(s) < def.erratic) {
       const k = rollInt(s, 0, 3);
-      step = [DX[k], DY[k]];
+      steps.push([DX[k], DY[k]]);
     } else if (def.ghost) {
-      step = Math.abs(p.x - m.x) > Math.abs(p.y - m.y) ? [Math.sign(p.x - m.x), 0] : [0, Math.sign(p.y - m.y)];
+      const sx: [number, number] = [Math.sign(p.x - m.x), 0];
+      const sy: [number, number] = [0, Math.sign(p.y - m.y)];
+      const xFirst = Math.abs(p.x - m.x) > Math.abs(p.y - m.y);
+      for (const st of xFirst ? [sx, sy] : [sy, sx]) if (st[0] || st[1]) steps.push(st);
     } else {
       dist ??= distances(s.level.tiles.map((t) => (t === 'door' ? 'floor' : t)), p);
-      let best = dist[idx(m.x, m.y)];
+      const here = dist[idx(m.x, m.y)];
+      const opts: { k: number; nd: number }[] = [];
       for (let k = 0; k < 4; k++) {
         const nx = m.x + DX[k];
         const ny = m.y + DY[k];
         const nd = inside(nx, ny) ? dist[idx(nx, ny)] : -1;
-        if (nd >= 0 && (fleeing ? nd > best : best < 0 || nd < best)) {
-          best = nd;
-          step = [DX[k], DY[k]];
-        }
+        if (nd >= 0 && (fleeing ? nd > here : here < 0 || nd < here)) opts.push({ k, nd });
       }
+      opts.sort((a, b) => (fleeing ? b.nd - a.nd : a.nd - b.nd));
+      for (const o of opts) steps.push([DX[o.k], DY[o.k]]);
     }
+    const step = steps.find(([sx, sy]) => {
+      const x = m.x + sx;
+      const y = m.y + sy;
+      return inside(x, y) && !(x === p.x && y === p.y) && !monsterAt(s, x, y) && !(def.ghost && (x <= 0 || y <= 0 || x >= SIZE - 1 || y >= SIZE - 1));
+    });
     if (!step) continue;
     const nx = m.x + step[0];
     const ny = m.y + step[1];
-    if ((nx === p.x && ny === p.y) || monsterAt(s, nx, ny) || !inside(nx, ny)) continue;
     const t = tileAt(s, nx, ny);
     if (t === 'door' && !def.ghost) {
       s.level.tiles[idx(nx, ny)] = 'open';
       continue;
     }
     if (!def.ghost && solid(t)) continue;
-    if (def.ghost && (nx <= 0 || ny <= 0 || nx >= SIZE - 1 || ny >= SIZE - 1)) continue;
     m.x = nx;
     m.y = ny;
     // Out of sight with your gold, a cutpurse slips away for good.
@@ -616,7 +743,7 @@ export function newGame(seed: number): GameState {
     turn: 0,
     rolls: 0,
     level: { w: SIZE, h: SIZE, tiles: [], seen: [] },
-    player: { x: 0, y: 0, dir: 0, hp: 30, maxHp: 30, mp: 6, maxMp: 6, level: 1, xp: 0, baseAtk: 4, baseDef: 0, weapon: 0, armor: 0, gold: 0, potions: 2, ethers: 1, spells: ['fire'] },
+    player: { x: 0, y: 0, dir: 0, hp: 30, maxHp: 30, mp: 6, maxMp: 6, level: 1, xp: 0, baseAtk: 4, baseDef: 0, weapon: 0, armor: 0, gold: 0, potions: 2, ethers: 1, scrolls: 0, spells: ['fire'] },
     monsters: [],
     items: [],
     nextId: 1,

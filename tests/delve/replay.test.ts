@@ -12,6 +12,7 @@ const ALL: Action[] = [
   { type: 'wait' },
   { type: 'potion' },
   { type: 'ether' },
+  { type: 'read' },
   { type: 'cast', spell: 'fire' },
   { type: 'cast', spell: 'frost' },
   { type: 'cast', spell: 'heal' },

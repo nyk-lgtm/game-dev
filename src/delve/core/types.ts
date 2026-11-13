@@ -25,6 +25,8 @@ export interface Monster {
   stun: number;
   /** Gold a cutpurse has snatched from you (dropped when it dies). */
   loot?: number;
+  /** Turns until a caster may shoot again (cultists rest a turn after each firebolt). */
+  cd?: number;
 }
 
 export type ItemKind =
@@ -78,6 +80,8 @@ export interface Player {
   gold: number;
   potions: number;
   ethers: number;
+  /** Scrolls of seeing carried (read on demand). */
+  scrolls: number;
   spells: SpellId[];
 }
 
@@ -119,6 +123,7 @@ export type Action =
   | { type: 'wait' }
   | { type: 'potion' }
   | { type: 'ether' }
+  | { type: 'read' }
   | { type: 'cast'; spell: SpellId }
   | { type: 'buy'; slot: number }
   | { type: 'leave' };
@@ -126,7 +131,7 @@ export type Action =
 export type GameEvent =
   | { type: 'move' }
   | { type: 'turn'; dir: Dir }
-  | { type: 'bump' }
+  | { type: 'bump'; what?: 'wall' | 'foe' | 'air' }
   | { type: 'hit'; target: number; dmg: number; crit: boolean }
   | { type: 'miss'; target: number }
   | { type: 'hurt'; dmg: number; by: MonsterKind }
@@ -134,6 +139,7 @@ export type GameEvent =
   | { type: 'bolt'; spell: SpellId; dist: number }
   | { type: 'pickup'; text: string }
   | { type: 'door' }
+  | { type: 'reveal' }
   | { type: 'descend'; depth: number }
   | { type: 'levelUp'; level: number }
   | { type: 'shot'; by: MonsterKind }
