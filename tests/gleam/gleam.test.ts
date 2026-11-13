@@ -171,13 +171,13 @@ describe('gleam play', () => {
   it('reasons name the rule that breaks, in plain words', () => {
     const q = tiny();
     expect(reasonText(q, { k: 'dark', cell: 7, mask: 1 })).toBe('red light would hit a dark crystal');
-    expect(reasonText(q, { k: 'unreach', cell: 14, mask: 1 })).toBe('no red light could reach the red crystal');
+    expect(reasonText(q, { k: 'unreach', cell: 14, mask: 1 })).toBe('red light could no longer reach the red crystal');
     q.target[14] = 5;
-    expect(reasonText(q, { k: 'unreach', cell: 14, mask: 5 })).toBe('neither red nor blue light could reach the magenta crystal');
-    expect(reasonText(q, { k: 'wrong', cell: 14, mask: 2 })).toBe('green light would reach the magenta crystal, which takes red and blue only');
+    expect(reasonText(q, { k: 'unreach', cell: 14, mask: 5 })).toBe('red or blue light could no longer reach the magenta crystal');
+    expect(reasonText(q, { k: 'wrong', cell: 14, mask: 2 })).toBe('green light would reach the magenta crystal (red + blue only)');
     q.given = [2];
     expect(reasonText(q, { k: 'unlit', cell: 6 })).toMatch(/^the fixed ⟍ mirror would sit in the dark/);
-    expect(reasonText(q, { k: 'deep', depth: 2, inner: { k: 'over', t: 0 } })).toBe('one forced step later, the tray has only 1 mirror');
+    expect(reasonText(q, { k: 'deep', depth: 2, inner: { k: 'over', t: 0 } })).toBe('a step later, the tray has only 1 mirror');
   });
 
   it('a hint points at a wrong piece first', () => {
@@ -223,5 +223,14 @@ describe('gleam play', () => {
     }
     expect(seen.at(-1)).toBe(0);
     expect(seen.length).toBeGreaterThan(1);
+    expect(seen.length).toBeLessThanOrEqual(3);
+    // With a mirror armed: place it, then only turn it.
+    let c = cycleCode(p, blankBoard(p), i, 0);
+    expect(c).toBe(1);
+    b = setCode(p, blankBoard(p), i, c)!;
+    c = cycleCode(p, b, i, 0);
+    expect(c).toBe(2);
+    b = setCode(p, b, i, c)!;
+    expect(cycleCode(p, b, i, 0)).toBe(1);
   });
 });

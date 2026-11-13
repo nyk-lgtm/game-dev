@@ -65,9 +65,17 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         crystal cut off). Small was too easy (3 of 4 direct): it now needs `trapped` (some crystal's answer route
         bends more than its most direct route; was 9% of Small puzzles), Medium always has a white lamp and a filter
         (was 22%), menu says so. Large puzzles unchanged. Stats: gen median 2.6 / 3.2 / 14 ms, max 43 / 24 / 97 ms.
-  - [ ] Next: second blind playtest. Watch: does Small now feel like a puzzle (not too hard for a first board)? Are the
-        reworded hints clear? Is the tap cycle (up to 7 options with filters) tedious next to the tray drag? Frame cost
-        on the phone (photons)? Does reopening the daily from the hub card (last mode) surprise anyone?
+  - [x] Second blind playtest fixes (rules v2 unchanged): long hints were clipped (75 px text in a 58 px box) → #info is
+        76 px (4 lines at 360 px, checked with `hints.ts longest` in Playwright at 360×640/780, 390, Pixel 7; board never
+        moves) and hints are shorter ("A ⟍ mirror goes here. Left empty, … Flipped, …", no look-ahead note); a Large drag
+        dropped one cell high (the piece floated ~1 cell above the finger and the drop used the piece's spot) → the drop
+        is the ring under the finger, the piece floats 0.45 cell up, the ring is outlined; "New best!" only for a
+        better time on the clock (whole seconds); taps: armed = place then only turn, unarmed = first type left → turned
+        → empty (≤ 3 states); hint wording names the concrete cause ("the circled ring would need a piece but get no
+        light", "a mirror would be left over, with no free ring in the light", "the white lamp's red light"); Small's menu
+        says "two lamps, mostly mirrors" (splitters show up in ~30% of Small puzzles).
+  - [ ] Next: third playtest. Watch: are hints followable now; is the unarmed tap (first type in the tray) a surprise
+        when the tray has several kinds; photons' frame cost on the phone; is Small now the right first step?
 - [ ] **Simmer** (cozy management sim: a night-market food stall for 20 nights, critter guests). Milestones:
   - [x] Core (src/simmer/core, rules v1): ingredients that spoil (fish 1 night … rice 6) with seeded cheap/dear market days,
         10 dishes (3 known, 7 to learn), 8 critter kinds with loves/dislikes, purses, patience, arrival windows and weather

@@ -99,7 +99,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     ~43 / 24 / 97 ms; unique 100%; deduction depth 2 needed in 0% / ~33% / 100% (Large requires it); Small's most direct
     route is always a trap (`trapped`), Medium always has a white lamp and a filter; hints ≤ ~30 ms).
     `show.ts <seed> [size]` prints a puzzle, its light and the model's eliminations; `hints.ts <seed> [size]` the hint
-    texts in order; `stress.ts 200` checks the model never rules out an answer piece from part-filled boards and
+    texts in order (`hints.ts longest 150`: the longest; #info is 76 px = 4 lines at 360 px and must hold them); `stress.ts 200` checks the model never rules out an answer piece from part-filled boards and
     hints always finish.
   - Hexhold: `npx vite-node scripts/hexhold/balance.ts 32` (heuristic bot, rules v5: median wave ~27, ~7/32 wins);
     `scripts/hexhold/probe.ts 32` lists each loss with its wave and map shape (one or two portals) and the
@@ -361,7 +361,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   `solveAll` branches on frontier sockets (exact, uniqueness); `deduce(p, depth)` eliminates codes whose assumption
   fails `check` (depth 1) or fails after depth-1 deductions (depth 2), and `nextHint` replays that log to the first
   ring pinned to a piece; `check` reports the most direct broken rule first (dark/wrong crystal, a piece left in the dark,
-  a crystal cut off, tray counts) and `reasonText` words it as cause → effect. Generator (gen.ts): beam walk on fresh tiles, decoys, dark crystals, uniqueness fixes,
+  a crystal cut off, tray counts) and `reasonText` words it as cause → effect ("the white lamp's red light" when only a white lamp gives it).
+  Taps (`cycleCode(p, board, i, armed)`): with a tray piece armed, place it then only turn it; with none, an empty ring
+  takes the first type left, a piece turns once, then comes off. A drag drops on the ring under the finger (the piece
+  floats 0.45 cell above it, the ring is outlined). Generator (gen.ts): beam walk on fresh tiles, decoys, dark crystals, uniqueness fixes,
   `CHECK_LIMIT` per attempt; Small needs `trapped(p)` (some crystal's answer route bends more than its most direct
   route over the rings from a lamp of its colour), Medium a filter (white lamp always); seeds hash `mixSeed(mixSeed(mixSeed(seed, tag), n), attempt)`. A run is seed + actions
   (`<sock b36><code>`, `H…` hint, `M<a><b>` swap, `U`, `R`); `replay(p, a)`. Reports `GLEAM v… seed=… size=… a=…`,

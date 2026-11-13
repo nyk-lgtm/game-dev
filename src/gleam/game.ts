@@ -250,7 +250,7 @@ export class Game {
     this.a += setToken(h.socket, h.code, true);
     this.rebuild();
     this.hint = { socket: h.socket, cells: h.cells, bad: false };
-    this.info(`${h.text}${h.depth >= 2 ? ' <i>(This one needs a look ahead.)</i>' : ''}`);
+    this.info(h.text);
     navigator.vibrate?.(10);
     this.save(true);
     if (this.st.solved) this.win();
@@ -296,10 +296,10 @@ export class Game {
     // The piece floats above the finger so it stays in sight.
     const g = this.ghost!;
     g.style.left = `${e.clientX}px`;
-    g.style.top = `${e.clientY - Math.max(30, this.view.s * 0.7)}px`;
+    g.style.top = `${e.clientY - this.lift()}px`;
     // Ring the socket the piece would land on (red when it can't take it).
     const [lx, ly] = this.local(e);
-    const to = this.sockIdx(cellAt(this.view, lx, ly - Math.max(30, this.view.s * 0.7)));
+    const to = this.sockIdx(cellAt(this.view, lx, ly));
     const drop = to < 0 ? null : { socket: to, ok: this.p.given[to] < 0 };
     if (drop?.socket !== this.drop?.socket) {
       this.drop = drop;
@@ -318,7 +318,7 @@ export class Game {
     }
     // Drop where the piece was shown (above the finger).
     const [lx, ly] = this.local(e);
-    const to = this.sockIdx(cellAt(this.view, lx, ly - Math.max(30, this.view.s * 0.7)));
+    const to = this.sockIdx(cellAt(this.view, lx, ly));
     if (pr.type >= 0) {
       if (to < 0) return;
       const cur = this.board[to];
@@ -329,6 +329,12 @@ export class Game {
     if (to === pr.from) return;
     if (to < 0) this.act(setToken(pr.from, 0));
     else if (this.p.given[to] < 0) this.act(`M${pr.from.toString(36)}${to.toString(36)}`);
+  }
+
+  /** How far a dragged piece floats above the finger: enough to peek out, less than half a cell,
+   *  so the ring it lands on is the one under the finger (outlined while dragging). */
+  private lift(): number {
+    return Math.round(this.view.s * 0.45);
   }
 
   private cancelPress(): void {
@@ -363,12 +369,10 @@ export class Game {
         this.draw();
         return;
       }
-      if (this.armed >= 0 && this.board[i] === 0) this.place(i, CODES_OF[this.armed][0]);
-      else {
-        const code = cycleCode(this.p, this.board, i);
-        if (code === this.board[i]) toast('The tray is empty: drag a piece off to free one');
-        else this.place(i, code);
-      }
+      const code = cycleCode(this.p, this.board, i, this.armed);
+      if (code !== this.board[i]) this.place(i, code);
+      else if (this.armed >= 0 && piecesLeft(this.p, this.board)[this.armed] <= 0 && typeOf(this.board[i]) !== this.armed) toast(`No ${TYPES[this.armed]}s left`);
+      else if (this.board[i] === 0) toast('The tray is empty: drag a piece off to free one');
       return;
     }
     this.selected = this.selected === cell ? -1 : cell;
@@ -388,7 +392,8 @@ export class Game {
     prof.solvedBy[this.size] = (prof.solvedBy[this.size] ?? 0) + 1;
     const score = this.total();
     const prev = prof.best[this.size];
-    const newBest = prev === undefined || score < prev;
+    // Only a better time on the clock counts (0:31 again is not a new best).
+    const newBest = prev === undefined || Math.floor(score / 1000) < Math.floor(prev / 1000);
     if (newBest) prof.best[this.size] = score;
     store.save('profile', prof);
     if (this.daily) recordDaily(store, 1e7 - Math.round(score / 1000), fmt(score), this.daily);
@@ -464,11 +469,11 @@ export class Game {
     else if (this.hint) {
       // Keep the hint text until the next move.
     } else if (this.selected >= 0) this.info(this.describe(this.selected));
-    else if (this.armed >= 0) this.info(`Tap a ring to place a <b>${TYPES[this.armed]}</b>. Tap it again to turn it.`);
+    else if (this.armed >= 0) this.info(`Tap a ring to place a <b>${TYPES[this.armed]}</b>${this.armed <= 1 ? '; tap it again to turn it' : ''}. Tap the tray piece again to stop.`);
     else {
       const bits: string[] = [];
       const fresh = !this.a.length && this.board.every((c, i) => c <= 0 || this.p.given[i] >= 0);
-      if (fresh) bits.push('Light each crystal its colour. Tap a ring to place or turn a piece, or drag one in.');
+      if (fresh) bits.push('Light each crystal its colour. Tap a ring to place a piece, again to turn it.');
       else if (this.st.wrong.length) bits.push(`<span class="bad">${this.st.wrong.some((c) => this.p.target[c] === 0) ? 'A dark crystal is lit' : 'A crystal has the wrong colour'}.</span>`);
       if (!fresh && this.st.unlit.length) bits.push(`<span class="bad">${plural(this.st.unlit.length, 'piece')} in the dark.</span>`);
       if (fresh) {
@@ -576,7 +581,7 @@ export class Game {
     const prof = loadProfile();
     const sizes = Object.keys(SIZES) as Size[];
     const text: Record<Size, string> = {
-      small: 'mirrors and splitters, two lamps',
+      small: 'two lamps, mostly mirrors',
       medium: 'a white lamp and a filter join in',
       large: 'more pieces; needs a look ahead',
     };

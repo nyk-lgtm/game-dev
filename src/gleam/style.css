@@ -19,8 +19,9 @@ body {
   padding: 8px 12px max(12px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--line); background: var(--panel);
 }
-/* A fixed box (shell.css makes #info flex: 1, which let a 3-line hint grow it and push the board up). */
-body #info { flex: none; min-height: 58px; height: 58px; max-height: 58px; overflow-y: auto; font-size: 13.5px; line-height: 1.38; color: var(--muted); }
+/* A fixed box (shell.css makes #info flex: 1, which let a 3-line hint grow it and push the board up),
+   tall enough for the longest hint (4 lines at 360 px); it scrolls if a hint ever runs longer. */
+body #info { flex: none; min-height: 76px; height: 76px; max-height: 76px; overflow-y: auto; font-size: 13.5px; line-height: 1.38; color: var(--muted); }
 #info i { color: var(--muted); }
 #tray { display: flex; gap: 8px; }
 #tray .piece {
@@ -54,6 +55,5 @@ body #info { flex: none; min-height: 58px; height: 58px; max-height: 58px; overf
   #tray .piece .name { display: none; }
 }
 @media (max-height: 700px) {
-  body #info { min-height: 42px; height: 42px; max-height: 42px; }
   #tray .piece { min-height: 50px; }
 }

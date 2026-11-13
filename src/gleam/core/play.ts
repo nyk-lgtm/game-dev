@@ -1,7 +1,7 @@
 // Playing a puzzle: boards (a code per socket), actions and replays, the tap
 // cycle, and hints that replay the deduction model's next step.
 
-import { CODES_OF, COLOR_NAMES, NTYPES, TYPES, typeOf, type Puzzle } from './board';
+import { CODES_OF, COLOR_NAMES, TYPES, typeOf, type Puzzle } from './board';
 import { Ctx, bit, codeOf, deduce, single, type Reason } from './solve';
 import { SIZES, type Size } from './gen';
 
@@ -15,15 +15,26 @@ export function piecesLeft(p: Puzzle, board: readonly number[]): number[] {
   return left;
 }
 
-/** What a tap on a socket turns it into: the next orientation, then the next type with pieces left, then empty. */
-export function cycleCode(p: Puzzle, board: readonly number[], i: number): number {
+/** What a tap on a ring turns it into. With a tray piece armed: that piece, then only turned
+ *  (/ ↔ \). With none: an empty ring takes the first piece type left in the tray; a piece turns
+ *  once (/ → \) and then comes off. Unchanged when the tray can't supply it. */
+export function cycleCode(p: Puzzle, board: readonly number[], i: number, armed = -1): number {
   const cur = board[i];
   const left = piecesLeft(p, board);
   if (cur > 0) left[typeOf(cur)]++;
-  const opts = [0];
-  for (let t = 0; t < NTYPES; t++) if (left[t] > 0) opts.push(...CODES_OF[t]);
-  const k = opts.indexOf(cur);
-  return opts[(k + 1) % opts.length];
+  if (armed >= 0) {
+    if (cur > 0 && typeOf(cur) === armed) {
+      const cs = CODES_OF[armed];
+      return cs[(cs.indexOf(cur) + 1) % cs.length];
+    }
+    return left[armed] > 0 ? CODES_OF[armed][0] : cur;
+  }
+  if (cur === 0) {
+    const t = left.findIndex((k) => k > 0);
+    return t < 0 ? 0 : CODES_OF[t][0];
+  }
+  const cs = CODES_OF[typeOf(cur)];
+  return cs.indexOf(cur) < cs.length - 1 ? cs[cs.indexOf(cur) + 1] : 0;
 }
 
 // ---------------------------------------------------------------- actions
@@ -109,35 +120,41 @@ const and = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).
 const crystal = (p: Puzzle, c: number) => `the ${COLOR_NAMES[p.target[c]]} crystal`;
 const plural = (k: number, w: string) => `${k} ${w}${k === 1 ? '' : 's'}`;
 
+/** "red light", or "the white lamp's red light" when only a white lamp gives that colour. */
+function light(p: Puzzle, m: number): string {
+  const fromWhite = [1, 2, 4].every((b) => !(m & b) || p.lamps.every((l) => !(l.mask & b) || l.mask === 7));
+  return `${fromWhite && p.lamps.some((l) => l.mask === 7) ? "the white lamp's " : ''}${and(parts(m))} light`;
+}
+
 /** One broken rule in plain cause → effect words. `board` names pieces the reason points at. */
 export function reasonText(p: Puzzle, r: Reason, board: readonly number[] = p.given): string {
   switch (r.k) {
     case 'dark':
-      return `${and(parts(r.mask))} light would hit a dark crystal`;
+      return `${light(p, r.mask)} would hit a dark crystal`;
     case 'wrong': {
       const t = p.target[r.cell];
-      return `${and(parts(r.mask))} light would reach ${crystal(p, r.cell)}, which takes ${and(parts(t))} only`;
+      return `${light(p, r.mask)} would reach ${crystal(p, r.cell)}${parts(t).length > 1 ? ` (${parts(t).join(' + ')} only)` : ''}`;
     }
     case 'unreach': {
       const miss = parts(r.mask);
-      const who = miss.length === 1 ? `no ${miss[0]} light` : miss.length === 2 ? `neither ${miss[0]} nor ${miss[1]} light` : 'no light at all';
-      return `${who} could reach ${crystal(p, r.cell)}`;
+      const who = miss.length === 3 ? 'light' : light(p, r.mask).replace(' and ', ' or ');
+      return `${who} could no longer reach ${crystal(p, r.cell)}`;
     }
     case 'unlit': {
       const i = p.sockets.indexOf(r.cell);
       const code = i >= 0 ? (p.given[i] >= 0 ? p.given[i] : board[i]) : 0;
-      if (i >= 0 && p.given[i] >= 0) return `the fixed ${PIECE_NAMES[code]} would sit in the dark (every piece must be lit)`;
-      if (code > 0) return `your ${PIECE_NAMES[code]} would sit in the dark (every piece must be lit)`;
-      return 'a ring that must hold a piece would get no light (every piece must be lit)';
+      if (i >= 0 && p.given[i] >= 0) return `the fixed ${PIECE_NAMES[code]} would sit in the dark`;
+      if (code > 0) return `your ${PIECE_NAMES[code]} would sit in the dark`;
+      return 'the circled ring would need a piece but get no light';
     }
     case 'over':
       return `the tray has only ${plural(p.stock[r.t], TYPES[r.t])}`;
     case 'short':
       return r.t >= 0
-        ? `no lit ring would be left for the ${TYPES[r.t]} (every piece must be placed in the light)`
-        : 'too few lit rings would be left for the pieces still in the tray';
+        ? `a ${TYPES[r.t]} would be left over, with no free ring in the light`
+        : 'pieces would be left over, with too few free rings in the light';
     case 'deep':
-      return `one forced step later, ${reasonText(p, r.inner, board)}`;
+      return `a step later, ${reasonText(p, r.inner, board)}`;
   }
 }
 
@@ -178,16 +195,16 @@ export function nextHint(p: Puzzle, board: readonly number[]): Hint {
       const why: string[] = [];
       const a = empty && reasonText(p, empty.why, board);
       const b = other && reasonText(p, other.why, board);
-      if (a && a === b) why.push(`Whether it stays empty or is turned the other way, ${a}.`);
+      if (a && a === b) why.push(`Left empty or flipped, ${a}.`);
       else {
-        if (a) why.push(`If it stays empty, ${a}.`);
-        if (b) why.push(`If it is turned the other way, ${b}.`);
+        if (a) why.push(`Left empty, ${a}.`);
+        if (b) why.push(`Flipped, ${b}.`);
       }
       const cells = [...new Set([empty, other].flatMap((x) => (x ? reasonCells(x.why) : [])))];
-      return { kind: 'place', socket: i, code, depth: depth[i], text: `This ring takes a <b>${PIECE_NAMES[code]}</b>. ${why.join(' ')}`, cells };
+      return { kind: 'place', socket: i, code, depth: depth[i], text: `A <b>${PIECE_NAMES[code]}</b> goes here. ${why.join(' ')}`, cells };
     }
   }
   // The model is stuck (it shouldn't be): show one piece of the answer.
   const i = p.solution.findIndex((c, k) => c > 0 && board[k] !== c);
-  return { kind: 'place', socket: i, code: p.solution[i], depth: 3, text: `This ring takes a <b>${PIECE_NAMES[p.solution[i]]}</b>.`, cells: [] };
+  return { kind: 'place', socket: i, code: p.solution[i], depth: 3, text: `A <b>${PIECE_NAMES[p.solution[i]]}</b> goes here.`, cells: [] };
 }
