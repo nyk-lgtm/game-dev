@@ -114,6 +114,7 @@ export class Scene {
   private beatBand: HTMLCanvasElement | null = null;
   private glows = new Map<string, HTMLCanvasElement>();
   private pondPath: Path2D | null = null;
+  private pondRect: { x0: number; x1: number; y0: number; y1: number } | null = null;
   private pondSeed = -1;
   private parts: Particle[] = [];
   private seed = -1;
@@ -134,8 +135,9 @@ export class Scene {
     this.cv.height = this.back.height = Math.round(cssH * dpr);
     this.landKey = '';
     const u = Math.min(cssW / 390, cssH / 560);
-    const top = Math.round(cssH * 0.5);
-    this.L = { W: cssW, H: cssH, dpr, u, horizon: top - 40 * u, top, bot: cssH - 18 * u, padX: 22 * u };
+    // The meadow gets most of a short screen (360×640 leaves ~430 px of stage); the sky shrinks first.
+    const top = Math.round(cssH * (cssH < 480 ? 0.33 : cssH < 640 ? 0.4 : 0.44));
+    this.L = { W: cssW, H: cssH, dpr, u, horizon: top - 36 * u, top, bot: cssH - 12 * u, padX: 22 * u };
     this.ground = this.hills = this.stars = this.cloud = this.band = this.beatBand = null;
     this.shades.clear();
     this.glows.clear();
@@ -207,7 +209,8 @@ export class Scene {
 
   /** Keeps a plant drawn inside the meadow: narrows it (to 60%) and then nudges it in. */
   private fit(sh: Shape, sx: number, k: number): { f: number; dx: number } {
-    const lo = 3, hi = this.L.W - 3;
+    // Clear of the beat chips at both edges.
+    const lo = this.edge(), hi = this.L.W - this.edge();
     const left = -sh.minX * k, right = sh.maxX * k;
     let f = 1;
     if (sx - left < lo) f = Math.min(f, (sx - lo) / left);
@@ -217,6 +220,11 @@ export class Scene {
     if (sx - left * f < lo) dx = lo - (sx - left * f);
     else if (sx + right * f > hi) dx = hi - (sx + right * f);
     return { f, dx };
+  }
+
+  /** Width kept clear at each side of the meadow for the beat chips. */
+  edge(): number {
+    return 2 * Math.max(7.5, Math.max(11, Math.round(11 * this.L.u)) * 0.68) + 4;
   }
 
   /** Where a plant's base is drawn (after `fit`). */
@@ -468,6 +476,15 @@ export class Scene {
     x.fill(water);
     x.restore();
     this.pondPath = water;
+    this.pondRect = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
+    for (const e of g.pond) {
+      const c = this.pos(e.cx, e.cy - 0.5);
+      const rx = (e.rx / XS) * (W - 2 * this.L.padX), ry = (e.ry / ROWS) * (bot - top);
+      this.pondRect.x0 = Math.min(this.pondRect.x0, c.sx - rx);
+      this.pondRect.x1 = Math.max(this.pondRect.x1, c.sx + rx);
+      this.pondRect.y0 = Math.min(this.pondRect.y0, c.sy - ry);
+      this.pondRect.y1 = Math.max(this.pondRect.y1, c.sy + ry);
+    }
     this.pondSeed = g.seed;
     // Front lip: the terrarium's soil bed.
     const lip = x.createLinearGradient(0, bot, 0, H);
@@ -510,7 +527,7 @@ export class Scene {
   private landKey = '';
   private landAt = -1;
 
-  private renderLand(g: Garden, light: number, warm: number, grey: number, dark: number, sun: { x: number; y: number } | null, moon: { x: number; y: number; fade?: number } | null): void {
+  private renderLand(g: Garden, light: number, warm: number, grey: number, dark: number, sun: { x: number; y: number; fade?: number } | null, moon: { x: number; y: number; fade?: number } | null): void {
     const { W, H, dpr, u, horizon, top } = this.L;
     const c = this.back.getContext('2d')!;
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -526,7 +543,7 @@ export class Scene {
       c.drawImage(this.stars!, 0, 0, W, top);
     }
     if (sun) {
-      c.globalAlpha = 1 - grey * 0.8;
+      c.globalAlpha = (1 - grey * 0.8) * (sun.fade ?? 1);
       c.drawImage(this.glow(warm > 0.3 ? 'rgba(255,170,90,0.6)' : 'rgba(255,240,170,0.55)'), sun.x - 60 * u, sun.y - 60 * u, 120 * u, 120 * u);
       c.fillStyle = warm > 0.3 ? '#ffd09a' : '#fff6d8';
       c.beginPath();
@@ -667,8 +684,9 @@ export class Scene {
       const k = (t - t0) / (t1 - t0);
       return { x: W * (0.08 + 0.84 * k), y: horizon - Math.sin(Math.PI * k) * (horizon - 34 * u) };
     };
-    const sunT = dtm.t < 0.62 ? dtm.t + 0.03 : dtm.t - 0.97;
-    const sun = sunT >= 0 && sunT <= 0.65 ? arc(sunT, 0, 0.65) : null;
+    // The sun rises at dawn (t 0.97) and sets mid-dusk (t 0.57), fading as it goes down: never up at night.
+    const sunT = dtm.t < 0.6 ? dtm.t + 0.03 : dtm.t - 0.97;
+    const sun = sunT >= 0 && sunT <= 0.6 ? { ...arc(sunT, 0, 0.6), fade: Math.min(1, (0.6 - sunT) / 0.03) } : null;
     const moonT = dtm.t >= 0.56 ? dtm.t - 0.56 : dtm.t + 0.44;
     // The moon sets as dawn begins (t 0.97), so the sky never shows night while the label says Dawn.
     const moon = moonT <= 0.41 ? { ...arc(moonT, 0, 0.41), fade: Math.min(1, (0.41 - moonT) / 0.03) } : null;
@@ -713,7 +731,12 @@ export class Scene {
     // Plants, back to front (shaded for the light; sprites re-draw when it moves a notch).
     const tone = `${Math.round(dark * 20)}|${Math.round(warm * 10)}`;
     let nSprites = 0;
-    for (let i = 0; i < g.plants.length; i++) {
+    // Lilies float on the pond: drawn after everything else so a willow never hides them.
+    const order: number[] = [];
+    for (let i = 0; i < g.plants.length; i++) if (g.plants[i].sp !== 3) order.push(i);
+    for (let i = 0; i < g.plants.length; i++) if (g.plants[i].sp === 3) order.push(i);
+    const pr = this.pondRect;
+    for (const i of order) {
       const p = g.plants[i];
       const sp = this.sprite(g, p);
       const { sx, sy, s } = this.pos(p.x, p.y);
@@ -733,9 +756,18 @@ export class Scene {
       c.beginPath();
       c.ellipse(sx + dx, sy + 1, (p.sp === 5 ? 22 : 10) * s * sizeAt(gr) * fx, 3 * s, 0, 0, TAU);
       c.fill();
+      // A willow standing in front of the pond lets it show through its canopy.
+      let alpha = 1;
+      if (p.sp === 5 && pr && sy > pr.y0) {
+        const k = s * sizeAt(gq);
+        const x0 = sx + dx + sp.shape.minX * k * fx, x1 = sx + dx + sp.shape.maxX * k * fx, y0 = sy + sp.shape.minY * k;
+        if (x1 > pr.x0 && x0 < pr.x1 && y0 < pr.y1) alpha = 0.62;
+      }
+      c.globalAlpha = alpha;
       c.setTransform(dpr * fx * pk, 0, skew * dpr * pk, dpr * pk, (sx + dx) * dpr, (sy + by) * dpr);
       c.drawImage(sp.cv!, -sp.ox, -sp.oy, sp.w, sp.h);
       c.setTransform(dpr, 0, 0, dpr, 0, 0);
+      c.globalAlpha = 1;
       nSprites++;
     }
     this.stats.sprites = nSprites;
@@ -975,32 +1007,37 @@ export class Scene {
     c.globalAlpha = 0.3 + 0.15 * (1 - light);
     c.fillStyle = '#fff3c4';
     c.fillRect(14 * u, y - 0.75 * u, W - 28 * u, 1.5 * u);
-    // Edge ticks: one per half-beat, bigger on the beats.
+    c.globalCompositeOperation = 'source-over';
+    // Edge markers, drawn over everything (plants are kept clear of the edges, see `fit`):
+    // numbered chips on the beats, small dots on the "and"s; the current one is lit.
+    // Dark chips with pale numbers read on bright grass, in mist and at night alike.
+    const fs = Math.max(11, Math.round(11 * u));
+    const R = Math.max(7.5, fs * 0.68);
+    c.font = `800 ${fs}px system-ui, sans-serif`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
     for (let l = 0; l < LANES; l++) {
       const ly = top + (l + 0.5) * lh;
       const on = l === lane;
-      const big = l % 2 === 0;
-      const a = on ? 0.95 - 0.4 * within : 0.28;
-      c.globalAlpha = a;
-      c.fillStyle = on ? '#fff3c4' : '#e8f0d0';
-      const r = (big ? 3.2 : 2) * u * (on ? 1.4 : 1);
-      for (const ex of [7 * u, W - 7 * u]) {
-        c.beginPath();
-        c.arc(ex, ly, r, 0, TAU);
-        c.fill();
+      for (const ex of [R + 1, W - R - 1]) {
+        if (l % 2 === 0) {
+          c.globalAlpha = on ? 1 : 0.82;
+          c.fillStyle = on ? '#fff3c4' : 'rgba(16,24,30,0.78)';
+          c.beginPath();
+          c.arc(ex, ly, on ? R * 1.12 : R, 0, TAU);
+          c.fill();
+          c.fillStyle = on ? '#2a1e08' : '#f6f0d6';
+          c.fillText(String(l / 2 + 1), ex, ly + 0.5);
+        } else {
+          c.globalAlpha = on ? 1 - 0.4 * within : 0.75;
+          c.fillStyle = on ? '#fff3c4' : 'rgba(16,24,30,0.7)';
+          c.beginPath();
+          c.arc(ex, ly, R * 0.38, 0, TAU);
+          c.fill();
+        }
       }
     }
-    c.globalCompositeOperation = 'source-over';
     c.globalAlpha = 1;
-    c.font = `800 ${Math.round(9 * Math.max(1, u))}px system-ui, sans-serif`;
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    for (let b = 0; b < 4; b++) {
-      const ly = top + (b * 2 + 0.5) * lh;
-      // Dark on the lit dot, pale on the others (readable by day, at night and in mist).
-      c.fillStyle = b * 2 === lane ? 'rgba(40,30,10,0.95)' : 'rgba(250,246,220,0.75)';
-      c.fillText(String(b + 1), 7 * u, ly + 0.5);
-    }
   }
 
   private drawTrail(time: number): void {

@@ -19,7 +19,7 @@ body {
 @keyframes lullPulse { 50% { box-shadow: 0 0 0 4px rgba(255, 224, 138, 0.25); } }
 /* "Tap to listen" after a reload: sound needs a tap before it can start. */
 #listen {
-  position: absolute; left: 50%; top: 34%; transform: translateX(-50%); z-index: 2;
+  position: absolute; left: 50%; top: 16%; transform: translateX(-50%); z-index: 2;
   padding: 10px 16px; border-radius: 999px; pointer-events: none;
   background: rgba(18, 28, 36, 0.86); border: 1px solid #ffe08a; color: #fff6dc;
   font-size: 15px; font-weight: 700; white-space: nowrap;

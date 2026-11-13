@@ -284,7 +284,9 @@ export class Game {
       tool: this.toolPos,
       reduced: this.reduced,
     });
-    const cue = this.audio.on && !this.audio.running && !this.tapped;
+    // "Tap the garden to listen" stays until the sound really runs (the tap that wakes it also
+    // plants, waters…); it only gives up if a tap found no Web Audio at all.
+    const cue = this.audio.on && !this.audio.running && !(this.tapped && !this.audio.ctx);
     if (cue !== this.listenCue) {
       this.listenCue = cue;
       $('listen').hidden = !cue;
@@ -328,12 +330,6 @@ export class Game {
 
   private down(e: PointerEvent): void {
     if (this.press) return;
-    if (this.listenCue) {
-      // This tap only wakes the sound (the document listener already asked); nothing gets planted.
-      this.listenCue = false;
-      $('listen').hidden = true;
-      return;
-    }
     this.canvas.setPointerCapture(e.pointerId);
     const p = this.local(e);
     this.press = { id: e.pointerId, x: p.x, y: p.y, moved: false, lastX: p.x, lastY: p.y, col: -1, t: performance.now() };
@@ -689,8 +685,15 @@ export class Game {
       { label: 'Back to the garden', primary: true, onClick: closeOverlay },
       ...(this.visiting
         ? [
-            { label: 'Keep this garden (replaces yours)', onClick: () => this.askKeep() },
-            { label: 'Back to my garden', onClick: () => this.resumeOwn() },
+            ...(this.hasOwn()
+              ? [
+                  { label: 'Keep this garden (replaces yours)', onClick: () => this.askKeep() },
+                  { label: 'Back to my garden', onClick: () => this.resumeOwn() },
+                ]
+              : [
+                  { label: 'Keep this garden', onClick: () => (closeOverlay(), this.keepVisit()) },
+                  { label: 'Start my own garden', onClick: () => this.newGarden() },
+                ]),
           ]
         : [{ label: 'Share garden link', onClick: () => void this.share() }]),
       { label: `Sound: ${this.audio.on ? 'on' : 'off'}`, onClick: () => (this.toggleSound(), this.showMenu()) },
@@ -699,6 +702,11 @@ export class Game {
       { label: 'Copy bug report', onClick: () => void this.copyReport() },
       { label: 'All games', onClick: () => (location.href = '../') },
     ]);
+  }
+
+  /** Does this player have a garden of their own saved? */
+  hasOwn(): boolean {
+    return !!store.load<SavedGarden | null>('garden', null);
   }
 
   private askKeep(): void {
