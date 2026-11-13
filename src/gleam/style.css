@@ -12,13 +12,15 @@ body {
 #hud .spacer { flex: 1; }
 #clock { font-variant-numeric: tabular-nums; min-width: 52px; }
 #clock.pen { color: var(--gold); }
-#lit { font-variant-numeric: tabular-nums; }
+#lit { font-variant-numeric: tabular-nums; white-space: nowrap; }
+#lit small { font-size: 13px; font-weight: 600; color: var(--muted); }
 #controls {
   display: flex; flex-direction: column; gap: 8px;
   padding: 8px 12px max(12px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--line); background: var(--panel);
 }
-body #info { min-height: 56px; height: 56px; overflow-y: auto; font-size: 13.5px; line-height: 1.38; color: var(--muted); }
+/* A fixed box (shell.css makes #info flex: 1, which let a 3-line hint grow it and push the board up). */
+body #info { flex: none; min-height: 58px; height: 58px; max-height: 58px; overflow-y: auto; font-size: 13.5px; line-height: 1.38; color: var(--muted); }
 #info i { color: var(--muted); }
 #tray { display: flex; gap: 8px; }
 #tray .piece {
@@ -40,6 +42,7 @@ body #info { min-height: 56px; height: 56px; overflow-y: auto; font-size: 13.5px
   background: #1a1e38; color: var(--text); font-size: 15px; font-weight: 700;
 }
 #tools button:disabled { opacity: 0.4; }
+#tools button.next { border-color: var(--accent); color: var(--accent); }
 #controls button:active { transform: scale(0.97); }
 .ghost {
   position: fixed; z-index: 15; pointer-events: none;
@@ -51,6 +54,6 @@ body #info { min-height: 56px; height: 56px; overflow-y: auto; font-size: 13.5px
   #tray .piece .name { display: none; }
 }
 @media (max-height: 700px) {
-  body #info { min-height: 40px; height: 40px; }
+  body #info { min-height: 42px; height: 42px; max-height: 42px; }
   #tray .piece { min-height: 50px; }
 }

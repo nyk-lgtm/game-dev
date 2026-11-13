@@ -11,7 +11,7 @@ import { BACK, CRYSTAL, DC, DR, FLOOR, LAMP, NTYPES, SLASH, SOCKET, WALL, trace,
 import { Ctx, deduce, solveAll } from './solve';
 
 /** Bump when the same seed would build a different puzzle (saves record it). */
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 2;
 /** Solver work allowed per attempt (one-look checks); harder layouts are skipped. */
 const CHECK_LIMIT = 4000;
 
@@ -41,12 +41,16 @@ export interface SizeDef {
   mixed: boolean;
   /** Needs at least one depth-2 step (a look ahead). */
   deep: boolean;
+  /** Some crystal's most direct route must be a trap (the answer takes a detour). */
+  trap: boolean;
+  /** Needs a filter in the tray. */
+  filter: boolean;
 }
 
 export const SIZES: Record<Size, SizeDef> = {
-  small: { name: 'Small', n: 6, lamps: [2, 2], pieces: [3, 4], decoys: 2, walls: [1, 3], dark: 1, white: 0, filters: false, splitters: 0.2, maxDepth: 1, targets: 2, givens: 0, mixed: false, deep: false },
-  medium: { name: 'Medium', n: 7, lamps: [2, 3], pieces: [4, 6], decoys: 3, walls: [2, 4], dark: 2, white: 0.4, filters: true, splitters: 0.3, maxDepth: 2, targets: 3, givens: 1, mixed: true, deep: false },
-  large: { name: 'Large', n: 8, lamps: [3, 3], pieces: [6, 8], decoys: 4, walls: [3, 5], dark: 2, white: 0.5, filters: true, splitters: 0.35, maxDepth: 2, targets: 3, givens: 1, mixed: true, deep: true },
+  small: { name: 'Small', n: 6, lamps: [2, 2], pieces: [3, 4], decoys: 2, walls: [1, 3], dark: 1, white: 0, filters: false, splitters: 0.2, maxDepth: 1, targets: 2, givens: 0, mixed: false, deep: false, trap: true, filter: false },
+  medium: { name: 'Medium', n: 7, lamps: [2, 3], pieces: [4, 6], decoys: 3, walls: [2, 4], dark: 2, white: 1, filters: true, splitters: 0.3, maxDepth: 2, targets: 3, givens: 1, mixed: true, deep: false, trap: false, filter: true },
+  large: { name: 'Large', n: 8, lamps: [3, 3], pieces: [6, 8], decoys: 4, walls: [3, 5], dark: 2, white: 0.5, filters: true, splitters: 0.35, maxDepth: 2, targets: 3, givens: 1, mixed: true, deep: true, trap: false, filter: false },
 };
 
 const popcount = (m: number) => (m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1);
@@ -188,6 +192,63 @@ function build(rng: Rng, cfg: SizeDef): Draft | null {
   return { n, kind, target, lamps, piece };
 }
 
+/** The most turns any lit crystal's light needs: for each crystal the fewest pieces that bend
+ *  the light on its way in the answer, then the largest of those (2+ = a detour). */
+export function detour(p: Puzzle): number {
+  const ans = turnsTo(p, false);
+  let worst = 0;
+  p.target.forEach((t, c) => t > 0 && ans[c] < Infinity && (worst = Math.max(worst, ans[c])));
+  return worst;
+}
+
+/** True when some crystal's light takes more turns in the answer than its most direct route over
+ *  the rings would (from a lamp sharing a colour with it): the obvious path is a trap. */
+export function trapped(p: Puzzle): boolean {
+  const ans = turnsTo(p, false);
+  return p.target.some((t, c) => {
+    if (t <= 0) return false;
+    const direct = Math.min(...p.lamps.filter((l) => l.mask & t).map((l) => turnsTo({ ...p, lamps: [l] }, true)[c]));
+    return ans[c] > direct;
+  });
+}
+
+/** Fewest bends on the way into each cell: with the answer's pieces, or (any) with every ring free to bend. */
+function turnsTo(p: Puzzle, any: boolean): number[] {
+  const n = p.n;
+  const N = n * n;
+  const at = new Map(p.sockets.map((c, i) => [c, any ? -1 : p.solution[i]]));
+  const cost = new Array<number>(N * 4).fill(Infinity);
+  const best = new Array<number>(N).fill(Infinity);
+  // 0-1 BFS over (cell, direction of travel).
+  const dq: [number, number, number][] = [];
+  const go = (c: number, d: number, k: number, front: boolean) => {
+    const r = Math.floor(c / n) + DR[d];
+    const q = (c % n) + DC[d];
+    if (r < 0 || r >= n || q < 0 || q >= n) return;
+    const x = r * n + q;
+    if (k >= cost[x * 4 + d]) return;
+    cost[x * 4 + d] = k;
+    if (front) dq.unshift([x, d, k]);
+    else dq.push([x, d, k]);
+  };
+  for (const l of p.lamps) go(l.cell, l.dir, 0, true);
+  while (dq.length) {
+    const [c, d, k] = dq.shift()!;
+    if (k > cost[c * 4 + d]) continue;
+    const kind = p.kind[c];
+    if (kind === WALL || kind === LAMP) continue;
+    if (kind === CRYSTAL) {
+      best[c] = Math.min(best[c], k);
+      continue;
+    }
+    const code = at.get(c) ?? 0;
+    if (code === 0 || code >= 3 || code < 0) go(c, d, k, true);
+    if (code === 1 || code === 3 || code < 0) go(c, SLASH[d], k + 1, false);
+    if (code === 2 || code === 4 || code < 0) go(c, BACK[d], k + 1, false);
+  }
+  return best;
+}
+
 /** Builds the puzzle for a seed and size. */
 export function generate(seed: number, size: Size): Puzzle {
   const cfg = SIZES[size];
@@ -244,6 +305,7 @@ function tryBuild(seed: number, size: Size, cfg: SizeDef, attempt: number): Puzz
   const lit = target.filter((t) => t > 0).length;
   if (lit < cfg.targets) return reject('targets');
   if (cfg.mixed && !target.some((t) => t > 0 && popcount(t) >= 2)) return reject('mixed');
+  if (cfg.filter && ![...piece.values()].some((c) => c >= 5)) return reject('filter');
   // No crystal may glow before any piece is down.
   const bare = trace(p, p.sockets.map(() => 0));
   if (target.some((t, c) => t > 0 && bare.got[c] === t)) return reject('prelit');
@@ -332,5 +394,6 @@ function tryBuild(seed: number, size: Size, cfg: SizeDef, attempt: number): Puzz
     if (i < 0 || ++givens > cfg.givens) return reject('givensD');
     p.given[i] = p.solution[i];
   }
+  if (cfg.trap && !trapped(p)) return reject('direct');
   return p;
 }

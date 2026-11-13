@@ -20,7 +20,7 @@ export const count = (d: number) => {
 };
 
 export type Reason =
-  | { k: 'dark'; cell: number }
+  | { k: 'dark'; cell: number; mask: number }
   | { k: 'wrong'; cell: number; mask: number }
   | { k: 'unreach'; cell: number; mask: number }
   | { k: 'unlit'; cell: number }
@@ -157,9 +157,12 @@ export class Ctx {
     this.run(dom, true);
     for (const c of this.crystals) {
       const x = this.got[c] & ~p.target[c];
-      if (x) return p.target[c] === 0 ? { k: 'dark', cell: c } : { k: 'wrong', cell: c, mask: x };
+      if (x) return p.target[c] === 0 ? { k: 'dark', cell: c, mask: x } : { k: 'wrong', cell: c, mask: x };
     }
     this.run(dom, false);
+    // Reasons go from the most direct (a piece left in the dark) to the most global (tray counts);
+    // the order only changes which reason is reported, never whether one is.
+    for (let i = 0; i < dom.length; i++) if (!this.may[p.sockets[i]] && !(dom[i] & 1)) return { k: 'unlit', cell: p.sockets[i] };
     for (const c of this.crystals) {
       const miss = p.target[c] & ~this.may[c];
       if (miss) return { k: 'unreach', cell: c, mask: miss };
@@ -169,13 +172,10 @@ export class Ctx {
     let need = 0;
     for (let t = 0; t < NTYPES; t++) need += left[t];
     for (let i = 0; i < dom.length; i++) {
-      const c = p.sockets[i];
       const e = dom[i];
-      if (this.may[c]) {
-        if (single(e)) continue;
-        if (e & ~1) anyRoom++;
-        for (let t = 0; t < NTYPES; t++) if (e & TYPE_MASK[t]) room[t]++;
-      } else if (!(e & 1)) return { k: 'unlit', cell: c };
+      if (!this.may[p.sockets[i]] || single(e)) continue;
+      if (e & ~1) anyRoom++;
+      for (let t = 0; t < NTYPES; t++) if (e & TYPE_MASK[t]) room[t]++;
     }
     for (let t = 0; t < NTYPES; t++) if (room[t] < left[t]) return { k: 'short', t };
     if (anyRoom < need) return { k: 'short', t: -1 };

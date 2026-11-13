@@ -95,10 +95,12 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     beats Normal 93%, Easy 100%; Normal beats Easy 81-89%; games 19-25 plies median; Hard ~160 ms/move (p90 ~190) on a
     laptop; shove-back runs ≤ 1-3, repeated layouts 0.1-0.3 a game. vite-node runs the search ~4x slower than the browser; for long probes bundle with esbuild and run node.
     `TUNE=crumbleStart:6,komi:1`, `W=threat:60`, `LV=normal.depth:3`, `SETUP=1` try other rules/weights/levels/starts.
-  - Gleam: `npx vite-node scripts/gleam/stats.ts 200` (rules v1: gen median 0.4 / 1.9 / 14 ms Small/Medium/Large, max
-    ~110 ms Large; unique 100%; deduction depth 2 needed in 0% / ~23% / 100% (Large requires it); hints ≤ ~25 ms).
-    `show.ts <seed> [size]` prints a puzzle, its light and the model's eliminations; `stress.ts 200` checks the model
-    never rules out an answer piece from part-filled boards and hints always finish.
+  - Gleam: `npx vite-node scripts/gleam/stats.ts 200` (rules v2: gen median 2.6 / 3.2 / 14 ms Small/Medium/Large, max
+    ~43 / 24 / 97 ms; unique 100%; deduction depth 2 needed in 0% / ~33% / 100% (Large requires it); Small's most direct
+    route is always a trap (`trapped`), Medium always has a white lamp and a filter; hints ≤ ~30 ms).
+    `show.ts <seed> [size]` prints a puzzle, its light and the model's eliminations; `hints.ts <seed> [size]` the hint
+    texts in order; `stress.ts 200` checks the model never rules out an answer piece from part-filled boards and
+    hints always finish.
   - Hexhold: `npx vite-node scripts/hexhold/balance.ts 32` (heuristic bot, rules v5: median wave ~27, ~7/32 wins);
     `scripts/hexhold/probe.ts 32` lists each loss with its wave and map shape (one or two portals) and the
     lives lost per band of waves (the difficulty curve: v5 is gentle to wave 10, steady pressure from 15 on,
@@ -358,8 +360,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   undecided sockets in place (repeated until stable: a socket narrowed to one piece counts as placed).
   `solveAll` branches on frontier sockets (exact, uniqueness); `deduce(p, depth)` eliminates codes whose assumption
   fails `check` (depth 1) or fails after depth-1 deductions (depth 2), and `nextHint` replays that log to the first
-  ring pinned to a piece. Generator (gen.ts): beam walk on fresh tiles, decoys, dark crystals, uniqueness fixes,
-  `CHECK_LIMIT` per attempt; seeds hash `mixSeed(mixSeed(mixSeed(seed, tag), n), attempt)`. A run is seed + actions
+  ring pinned to a piece; `check` reports the most direct broken rule first (dark/wrong crystal, a piece left in the dark,
+  a crystal cut off, tray counts) and `reasonText` words it as cause → effect. Generator (gen.ts): beam walk on fresh tiles, decoys, dark crystals, uniqueness fixes,
+  `CHECK_LIMIT` per attempt; Small needs `trapped(p)` (some crystal's answer route bends more than its most direct
+  route over the rings from a lamp of its colour), Medium a filter (white lamp always); seeds hash `mixSeed(mixSeed(mixSeed(seed, tag), n), attempt)`. A run is seed + actions
   (`<sock b36><code>`, `H…` hint, `M<a><b>` swap, `U`, `R`); `replay(p, a)`. Reports `GLEAM v… seed=… size=… a=…`,
   `?seed=&size=&a=`. Bump `RULES_VERSION` when the generator or rules change puzzles.
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)

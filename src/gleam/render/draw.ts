@@ -48,6 +48,8 @@ export interface DrawState {
   /** Seconds since solved, or -1. */
   win: number;
   photons: boolean;
+  /** The ring under a dragged piece, if any. */
+  drop?: { socket: number; ok: boolean } | null;
 }
 
 const GEM: [number, number][] = [
@@ -57,6 +59,9 @@ const GEM: [number, number][] = [
   [-0.19, 0.31],
   [-0.31, -0.1],
 ];
+
+/** Crystals are drawn a little larger than the unit gem so their colour dots read easily. */
+const GEM_K = 1.14;
 
 function gemPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, k = 1): void {
   ctx.beginPath();
@@ -106,9 +111,18 @@ export function drawBoard(ctx: CanvasRenderingContext2D, v: View, p: Puzzle, st:
 
   // Beams: per colour bit, three strokes (glow, body, core) with additive blending.
   const L = st.light;
-  const seg = (path: Path2D, c: number, side: number) => {
-    const ax = cx(c);
-    const ay = cy(c);
+  // Light running both ways along a line is drawn as two strands, each shifted to the
+  // right of its own travel, so a red beam meeting a blue one doesn't read as one beam.
+  const shift = s * 0.09;
+  const RIGHT = [
+    [1, 0],
+    [0, 1],
+    [-1, 0],
+    [0, -1],
+  ];
+  const seg = (path: Path2D, c: number, side: number, travel = -1) => {
+    const ax = cx(c) + (travel >= 0 ? RIGHT[travel][0] * shift : 0);
+    const ay = cy(c) + (travel >= 0 ? RIGHT[travel][1] * shift : 0);
     const dx = side === 1 ? 1 : side === 3 ? -1 : 0;
     const dy = side === 2 ? 1 : side === 0 ? -1 : 0;
     const k = p.kind[c];
@@ -117,10 +131,20 @@ export function drawBoard(ctx: CanvasRenderingContext2D, v: View, p: Puzzle, st:
     path.lineTo(ax + (dx * s) / 2, ay + (dy * s) / 2);
   };
   const paths = [new Path2D(), new Path2D(), new Path2D()];
+  const twoWay = (h: number) => L.outw[h] !== 0 && L.inw[h] !== 0;
   for (let h = 0; h < L.half.length; h++) {
     const m = L.half[h];
     if (!m) continue;
-    for (let b = 0; b < 3; b++) if (m & (1 << b)) seg(paths[b], h >> 2, h & 3);
+    const c = h >> 2;
+    const d = h & 3;
+    for (let b = 0; b < 3; b++) {
+      if (!twoWay(h)) {
+        if (m & (1 << b)) seg(paths[b], c, d);
+        continue;
+      }
+      if (L.outw[h] & (1 << b)) seg(paths[b], c, d, d);
+      if (L.inw[h] & (1 << b)) seg(paths[b], c, d, (d + 2) & 3);
+    }
   }
   const esc = [new Path2D(), new Path2D(), new Path2D()];
   for (const e of L.escapes) {
@@ -167,11 +191,15 @@ export function drawBoard(ctx: CanvasRenderingContext2D, v: View, p: Puzzle, st:
         const dx = d === 1 ? 0.5 : d === 3 ? -0.5 : 0;
         const dy = d === 2 ? 0.5 : d === 0 ? -0.5 : 0;
         const k = p.kind[c];
-        for (const f of [out ? u : -1, inn ? 1 - u : -1]) {
+        const two = twoWay(h);
+        for (const [f, t] of [
+          [out ? u : -1, d],
+          [inn ? 1 - u : -1, (d + 2) & 3],
+        ]) {
           if (f < 0) continue;
           if ((k === CRYSTAL && f < 0.6) || (k === LAMP && f < 0.4)) continue;
-          const x = cx(c) + dx * s * f;
-          const y = cy(c) + dy * s * f;
+          const x = cx(c) + dx * s * f + (two ? RIGHT[t][0] * shift : 0);
+          const y = cy(c) + dy * s * f + (two ? RIGHT[t][1] * shift : 0);
           ctx.moveTo(x + s * 0.045, y);
           ctx.arc(x, y, s * 0.045, 0, Math.PI * 2);
         }
@@ -196,6 +224,19 @@ export function drawBoard(ctx: CanvasRenderingContext2D, v: View, p: Puzzle, st:
     }
   }
 
+  // Where a dragged piece would land.
+  if (st.drop) {
+    const c = p.sockets[st.drop.socket];
+    ctx.save();
+    ctx.strokeStyle = st.drop.ok ? '#ffd678' : '#ff5d7a';
+    ctx.fillStyle = st.drop.ok ? 'rgba(255,214,120,0.16)' : 'rgba(255,93,122,0.14)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx(c), cy(c), s * 0.47, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
   // Selection and hint marks.
   if (st.selected >= 0) {
     ctx.strokeStyle = 'rgba(255,255,255,0.55)';
@@ -304,9 +345,10 @@ export function drawPiece(ctx: CanvasRenderingContext2D, x: number, y: number, s
   ctx.save();
   ctx.translate(x, y);
   ctx.fillStyle = 'rgba(20,24,44,0.82)';
-  ctx.strokeStyle = given ? '#d6ae62' : lit ? '#56608c' : '#ff6b81';
-  ctx.lineWidth = given ? 2 : 1.5;
-  if (!lit && !given) ctx.setLineDash([3, 3]);
+  // A piece in the dark (fixed or not) gets a red dashed ring.
+  ctx.strokeStyle = !lit ? '#ff6b81' : given ? '#d6ae62' : '#56608c';
+  ctx.lineWidth = given || !lit ? 2 : 1.5;
+  if (!lit) ctx.setLineDash([3, 3]);
   ctx.beginPath();
   ctx.arc(0, 0, s * 0.38, 0, Math.PI * 2);
   ctx.fill();
@@ -315,7 +357,7 @@ export function drawPiece(ctx: CanvasRenderingContext2D, x: number, y: number, s
   if (given)
     for (let k = 0; k < 4; k++) {
       const ang = (k * Math.PI) / 2;
-      ctx.fillStyle = '#d6ae62';
+      ctx.fillStyle = lit ? '#d6ae62' : '#ff6b81';
       ctx.beginPath();
       ctx.arc(Math.cos(ang) * s * 0.38, Math.sin(ang) * s * 0.38, 2, 0, Math.PI * 2);
       ctx.fill();
@@ -407,7 +449,7 @@ function drawCrystal(ctx: CanvasRenderingContext2D, x: number, y: number, s: num
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
   }
-  gemPath(ctx, x, y, s);
+  gemPath(ctx, x, y, s, GEM_K);
   if (dark) ctx.fillStyle = extra ? '#3a0d1a' : '#0b0912';
   else if (exact) ctx.fillStyle = MASK_CSS[target];
   else ctx.fillStyle = '#161a2e';
@@ -425,14 +467,13 @@ function drawCrystal(ctx: CanvasRenderingContext2D, x: number, y: number, s: num
   ctx.strokeStyle = exact ? 'rgba(255,255,255,0.55)' : dark ? 'rgba(120,100,170,0.35)' : 'rgba(255,255,255,0.18)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(x - s * 0.31, y - s * 0.1);
-  ctx.lineTo(x + s * 0.31, y - s * 0.1);
-  ctx.moveTo(x, y - s * 0.36);
-  ctx.lineTo(x - s * 0.12, y - s * 0.1);
-  ctx.lineTo(x, y + s * 0.31);
-  ctx.moveTo(x, y - s * 0.36);
-  ctx.lineTo(x + s * 0.12, y - s * 0.1);
-  ctx.lineTo(x, y + s * 0.31);
+  // Only the crown is cut, so the colour dots below stay clear.
+  const k = GEM_K * s;
+  ctx.moveTo(x - k * 0.31, y - k * 0.1);
+  ctx.lineTo(x + k * 0.31, y - k * 0.1);
+  ctx.moveTo(x - k * 0.13, y - k * 0.1);
+  ctx.lineTo(x, y - k * 0.36);
+  ctx.lineTo(x + k * 0.13, y - k * 0.1);
   ctx.stroke();
   if (dark) {
     // A hollow eye: no light allowed.
@@ -446,12 +487,12 @@ function drawCrystal(ctx: CanvasRenderingContext2D, x: number, y: number, s: num
   } else {
     // Pips: the colours this crystal needs, filled once they arrive.
     const bits = [0, 1, 2].filter((b) => target & (1 << b));
-    const gap = s * 0.13;
+    const gap = s * 0.19;
     bits.forEach((b, k) => {
       const px = x + (k - (bits.length - 1) / 2) * gap;
-      const py = y + s * 0.1;
+      const py = y + s * 0.13;
       ctx.beginPath();
-      ctx.arc(px, py, s * 0.05, 0, Math.PI * 2);
+      ctx.arc(px, py, s * 0.078, 0, Math.PI * 2);
       const on = got & (1 << b);
       ctx.fillStyle = on ? (exact ? '#ffffff' : MASK_CSS[1 << b]) : '#0b0d18';
       ctx.fill();
@@ -490,9 +531,9 @@ function drawCrystal(ctx: CanvasRenderingContext2D, x: number, y: number, s: num
 
 // ---------------------------------------------------------------- SVG icons (tray, help)
 
-export function pieceSvg(code: number, px = 34): string {
+export function pieceSvg(code: number, px = 34, given = false): string {
   const v = 40;
-  const base = `<circle cx="20" cy="20" r="15" fill="#141830" stroke="#56608c" stroke-width="1.5"/>`;
+  const base = `<circle cx="20" cy="20" r="15" fill="#141830" stroke="${given ? "#d6ae62" : "#56608c"}" stroke-width="${given ? 2.2 : 1.5}"/>`;
   let body = '';
   const d = code % 2 === 1 ? 'M9 31L31 9' : 'M9 9L31 31';
   if (code === 1 || code === 2) body = `<path d="${d}" stroke="#0b0d18" stroke-width="6" stroke-linecap="round"/><path d="${d}" stroke="#dfe6ff" stroke-width="3.6" stroke-linecap="round"/>`;

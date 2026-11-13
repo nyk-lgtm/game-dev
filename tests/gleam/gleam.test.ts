@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  CRYSTAL, Ctx, LAMP, SIZES, SOCKET, WALL, blankBoard, cycleCode, deduce, generate, nextHint, piecesLeft, replay, setCode, setToken, solveAll, status, trace,
+  CRYSTAL, Ctx, LAMP, SIZES, SOCKET, WALL, blankBoard, cycleCode, deduce, generate, nextHint, piecesLeft, replay, setCode, reasonText, setToken, solveAll, status, trace, trapped,
   type Puzzle, type Size,
 } from '../../src/gleam/core';
 
@@ -75,6 +75,9 @@ describe('gleam puzzles', () => {
         expect(d.solved).toBe(true);
         expect(Array.from(d.dom)).toEqual(p.solution.map((c) => 1 << c));
         if (SIZES[size].deep) expect(d.depth).toBe(2);
+        // Small always takes a detour off the most direct route; Medium always hands out a filter.
+        if (SIZES[size].trap) expect(trapped(p)).toBe(true);
+        if (SIZES[size].filter) expect(p.stock[2] + p.stock[3] + p.stock[4]).toBeGreaterThan(0);
         p.given.forEach((g, i) => g >= 0 && expect(g).toBe(p.solution[i]));
         // Pieces only on sockets; the tray is the answer's pieces.
         expect(piecesLeft(p, p.solution).every((x) => x === 0)).toBe(true);
@@ -163,6 +166,18 @@ describe('gleam play', () => {
     }
     expect(status(p, board).solved).toBe(true);
     expect(nextHint(p, board).kind).toBe('done');
+  });
+
+  it('reasons name the rule that breaks, in plain words', () => {
+    const q = tiny();
+    expect(reasonText(q, { k: 'dark', cell: 7, mask: 1 })).toBe('red light would hit a dark crystal');
+    expect(reasonText(q, { k: 'unreach', cell: 14, mask: 1 })).toBe('no red light could reach the red crystal');
+    q.target[14] = 5;
+    expect(reasonText(q, { k: 'unreach', cell: 14, mask: 5 })).toBe('neither red nor blue light could reach the magenta crystal');
+    expect(reasonText(q, { k: 'wrong', cell: 14, mask: 2 })).toBe('green light would reach the magenta crystal, which takes red and blue only');
+    q.given = [2];
+    expect(reasonText(q, { k: 'unlit', cell: 6 })).toMatch(/^the fixed ⟍ mirror would sit in the dark/);
+    expect(reasonText(q, { k: 'deep', depth: 2, inner: { k: 'over', t: 0 } })).toBe('one forced step later, the tray has only 1 mirror');
   });
 
   it('a hint points at a wrong piece first', () => {

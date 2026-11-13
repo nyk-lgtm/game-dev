@@ -102,25 +102,42 @@ export function setCode(p: Puzzle, board: readonly number[], i: number, code: nu
 
 export const PIECE_NAMES = ['nothing', '⟋ mirror', '⟍ mirror', '⟋ splitter', '⟍ splitter', 'red filter', 'green filter', 'blue filter'];
 
-const colour = (m: number) => COLOR_NAMES[m];
+const PRIMARY = ['red', 'green', 'blue'];
+/** The primary colours in a mask: ['red', 'blue']. */
+const parts = (m: number) => PRIMARY.filter((_, b) => m & (1 << b));
+const and = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`);
+const crystal = (p: Puzzle, c: number) => `the ${COLOR_NAMES[p.target[c]]} crystal`;
+const plural = (k: number, w: string) => `${k} ${w}${k === 1 ? '' : 's'}`;
 
-/** One reason in plain words. */
-export function reasonText(p: Puzzle, r: Reason): string {
+/** One broken rule in plain cause → effect words. `board` names pieces the reason points at. */
+export function reasonText(p: Puzzle, r: Reason, board: readonly number[] = p.given): string {
   switch (r.k) {
     case 'dark':
-      return 'light would touch a dark crystal';
-    case 'wrong':
-      return `${colour(r.mask)} light would reach the ${colour(p.target[r.cell])} crystal`;
-    case 'unreach':
-      return `the ${colour(p.target[r.cell])} crystal could no longer get its ${colour(r.mask)}`;
-    case 'unlit':
-      return 'a piece would be left in the dark';
+      return `${and(parts(r.mask))} light would hit a dark crystal`;
+    case 'wrong': {
+      const t = p.target[r.cell];
+      return `${and(parts(r.mask))} light would reach ${crystal(p, r.cell)}, which takes ${and(parts(t))} only`;
+    }
+    case 'unreach': {
+      const miss = parts(r.mask);
+      const who = miss.length === 1 ? `no ${miss[0]} light` : miss.length === 2 ? `neither ${miss[0]} nor ${miss[1]} light` : 'no light at all';
+      return `${who} could reach ${crystal(p, r.cell)}`;
+    }
+    case 'unlit': {
+      const i = p.sockets.indexOf(r.cell);
+      const code = i >= 0 ? (p.given[i] >= 0 ? p.given[i] : board[i]) : 0;
+      if (i >= 0 && p.given[i] >= 0) return `the fixed ${PIECE_NAMES[code]} would sit in the dark (every piece must be lit)`;
+      if (code > 0) return `your ${PIECE_NAMES[code]} would sit in the dark (every piece must be lit)`;
+      return 'a ring that must hold a piece would get no light (every piece must be lit)';
+    }
     case 'over':
-      return r.t >= 0 ? `there ${p.stock[r.t] === 1 ? 'is' : 'are'} only ${p.stock[r.t]} ${TYPES[r.t]}${p.stock[r.t] === 1 ? '' : 's'}` : 'the tray would run out';
+      return `the tray has only ${plural(p.stock[r.t], TYPES[r.t])}`;
     case 'short':
-      return 'not every piece could still find a lit ring';
+      return r.t >= 0
+        ? `no lit ring would be left for the ${TYPES[r.t]} (every piece must be placed in the light)`
+        : 'too few lit rings would be left for the pieces still in the tray';
     case 'deep':
-      return `a step later, ${reasonText(p, r.inner)}`;
+      return `one forced step later, ${reasonText(p, r.inner, board)}`;
   }
 }
 
@@ -158,11 +175,16 @@ export function nextHint(p: Puzzle, board: readonly number[]): Hint {
       const mine = d.log.filter((x) => x.socket === i);
       const empty = mine.find((x) => x.code === 0);
       const other = mine.find((x) => x.code > 0 && typeOf(x.code) === typeOf(code));
-      const parts: string[] = [];
-      if (empty) parts.push(`Left empty, ${reasonText(p, empty.why)}.`);
-      if (other) parts.push(`${code <= 4 ? 'Turned the other way' : `As a ${PIECE_NAMES[other.code]}`}, ${reasonText(p, other.why)}.`);
+      const why: string[] = [];
+      const a = empty && reasonText(p, empty.why, board);
+      const b = other && reasonText(p, other.why, board);
+      if (a && a === b) why.push(`Whether it stays empty or is turned the other way, ${a}.`);
+      else {
+        if (a) why.push(`If it stays empty, ${a}.`);
+        if (b) why.push(`If it is turned the other way, ${b}.`);
+      }
       const cells = [...new Set([empty, other].flatMap((x) => (x ? reasonCells(x.why) : [])))];
-      return { kind: 'place', socket: i, code, depth: depth[i], text: `This ring takes a <b>${PIECE_NAMES[code]}</b>. ${parts.join(' ')}`, cells };
+      return { kind: 'place', socket: i, code, depth: depth[i], text: `This ring takes a <b>${PIECE_NAMES[code]}</b>. ${why.join(' ')}`, cells };
     }
   }
   // The model is stuck (it shouldn't be): show one piece of the answer.

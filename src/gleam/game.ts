@@ -3,7 +3,7 @@
 
 import { closeOverlay, showCard } from '../shared/cards';
 import { copyText, toast } from '../shared/debug';
-import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey } from '../shared/daily';
+import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey, wantsDaily } from '../shared/daily';
 import { reducedFx } from '../shared/settings';
 import { makeStore } from '../shared/storage';
 import {
@@ -47,7 +47,8 @@ export interface SavedRun {
 }
 
 export const validSave = (s: SavedRun | null | undefined): s is SavedRun =>
-  !!s && s.v === RULES_VERSION && typeof s.a === 'string' && Object.hasOwn(SIZES, s.size) && Number.isFinite(s.seed);
+  // v2 changed Small and Medium only; Large boards are the same, so v1 Large saves still load.
+  !!s && (s.v === RULES_VERSION || (s.v === 1 && s.size === 'large')) && typeof s.a === 'string' && Object.hasOwn(SIZES, s.size) && Number.isFinite(s.seed);
 
 interface Profile {
   solved: number;
@@ -98,6 +99,8 @@ export class Game {
   private winT = -1;
   private lastSave = 0;
   private press: Press | null = null;
+  /** The ring under a dragged piece. */
+  private drop: { socket: number; ok: boolean } | null = null;
   private ghost: HTMLDivElement | null = null;
   private photons = !reducedFx();
 
@@ -109,7 +112,8 @@ export class Game {
     new ResizeObserver(() => this.resize()).observe(this.canvas);
     $('undoBtn').onclick = () => this.undo();
     $('resetBtn').onclick = () => this.askReset();
-    $('hintBtn').onclick = () => this.giveHint();
+    // After a win Hint turns into Next (a new puzzle, or back to yours from the daily).
+    $('hintBtn').onclick = () => (this.done ? (this.daily ? this.resumeOwn() : this.newPuzzle(this.size)) : this.giveHint());
     document.addEventListener('visibilitychange', () => this.save(true));
     addEventListener('pagehide', () => this.save(true));
     requestAnimationFrame((t) => this.frame(t));
@@ -122,6 +126,12 @@ export class Game {
     this.seed = seed;
     this.size = size;
     this.daily = daily;
+    // Remember which puzzle is open, in the address and in storage, so a reload (or a
+    // discarded tab) comes back to the daily rather than to your own puzzle.
+    store.save('mode', daily ? 'daily' : 'own');
+    if (daily) {
+      if (!wantsDaily()) history.replaceState(null, '', `${location.pathname}?daily`);
+    } else leaveDaily();
     this.p = generate(seed, size);
     this.a = saved?.a ?? '';
     this.ms = saved?.ms ?? 0;
@@ -287,6 +297,14 @@ export class Game {
     const g = this.ghost!;
     g.style.left = `${e.clientX}px`;
     g.style.top = `${e.clientY - Math.max(30, this.view.s * 0.7)}px`;
+    // Ring the socket the piece would land on (red when it can't take it).
+    const [lx, ly] = this.local(e);
+    const to = this.sockIdx(cellAt(this.view, lx, ly - Math.max(30, this.view.s * 0.7)));
+    const drop = to < 0 ? null : { socket: to, ok: this.p.given[to] < 0 };
+    if (drop?.socket !== this.drop?.socket) {
+      this.drop = drop;
+      if (drop) navigator.vibrate?.(3);
+    }
   }
 
   private up(e: PointerEvent): void {
@@ -315,6 +333,7 @@ export class Game {
 
   private cancelPress(): void {
     this.press = null;
+    this.drop = null;
     this.ghost?.remove();
     this.ghost = null;
     this.draw();
@@ -433,10 +452,13 @@ export class Game {
   refresh(): void {
     if (!this.p) return;
     $('levelLabel').textContent = this.daily ? 'Daily' : SIZES[this.size].name;
-    $('lit').textContent = `${this.st.done}/${this.st.targets}`;
+    $('lit').innerHTML = `<small>Lit</small> ${this.st.done}/${this.st.targets}`;
     this.showClock();
     this.renderTray();
     ($('undoBtn') as HTMLButtonElement).disabled = this.done || !this.undoDepth;
+    ($('resetBtn') as HTMLButtonElement).disabled = this.done;
+    $('hintBtn').textContent = this.done ? (this.daily ? '▶ My puzzle' : '▶ Next') : '💡 Hint';
+    $('hintBtn').classList.toggle('next', this.done);
     const left = this.st.left.reduce((a, b) => a + b, 0);
     if (this.done) this.info(`<b>All aglow!</b> ${fmt(this.total())}${this.hints ? ` · ${plural(this.hints, 'hint')}` : ''}`);
     else if (this.hint) {
@@ -446,7 +468,7 @@ export class Game {
     else {
       const bits: string[] = [];
       const fresh = !this.a.length && this.board.every((c, i) => c <= 0 || this.p.given[i] >= 0);
-      if (fresh) bits.push('Light every crystal in its colour. Tap a ring to place a piece, tap again to turn it, or drag one in from the tray.');
+      if (fresh) bits.push('Light each crystal its colour. Tap a ring to place or turn a piece, or drag one in.');
       else if (this.st.wrong.length) bits.push(`<span class="bad">${this.st.wrong.some((c) => this.p.target[c] === 0) ? 'A dark crystal is lit' : 'A crystal has the wrong colour'}.</span>`);
       if (!fresh && this.st.unlit.length) bits.push(`<span class="bad">${plural(this.st.unlit.length, 'piece')} in the dark.</span>`);
       if (fresh) {
@@ -508,6 +530,7 @@ export class Game {
       time: this.time,
       armed: this.armed,
       dragFrom: this.press?.dragging ? this.press.from : -1,
+      drop: this.drop,
       hint: this.hint,
       selected: this.selected,
       win: this.winT,
@@ -541,6 +564,7 @@ export class Game {
         <li>${pieceSvg(1, 24)} A <b>mirror</b> turns light. ${pieceSvg(3, 24)} A <b>splitter</b> lets it through and turns a copy. ${pieceSvg(5, 24)} A <b>filter</b> lets only its own colour pass.</li>
         <li>Light meeting in a crystal adds up: <b style="color:${MASK_CSS[1]}">red</b> + <b style="color:${MASK_CSS[2]}">green</b> = <b style="color:${MASK_CSS[3]}">yellow</b>, red + <b style="color:${MASK_CSS[4]}">blue</b> = <b style="color:${MASK_CSS[5]}">magenta</b>, green + blue = <b style="color:${MASK_CSS[6]}">cyan</b>, all three = <b>white</b>. The dots on a crystal are the colours it needs.</li>
         <li>${crystalSvg(0, 20)} <b>Dark crystals</b> must stay dark. Stone swallows light.</li>
+        <li>${pieceSvg(1, 24, true)} Pieces on a <b>gold ring</b> are fixed: they are part of the answer and can’t be moved, but they must be lit too (a piece in the dark gets a red dashed ring).</li>
         <li>Tap a ring to place a piece and again to turn it; or drag one from the tray. Drag a piece off the board to take it back.</li>
         <li>One answer, no guessing. <b>Hint</b> shows the next step and why (+30 s).</li>
       </ul>`,
@@ -553,7 +577,7 @@ export class Game {
     const sizes = Object.keys(SIZES) as Size[];
     const text: Record<Size, string> = {
       small: 'mirrors and splitters, two lamps',
-      medium: 'filters and white light join in',
+      medium: 'a white lamp and a filter join in',
       large: 'more pieces; needs a look ahead',
     };
     showCard(

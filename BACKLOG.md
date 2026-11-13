@@ -54,9 +54,20 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         next piece with why the ring can't stay empty / turn the other way, and rings the crystal it's about);
         tap tiles for what they need; saves as seed + actions; `?daily` (Medium), hub card (Puzzle) + Daily + NEWS.
         Pixel 7 and 360×640 checked.
-  - [ ] Next: blind playtest. Watch: are the rules clear from the help card alone (rings, every piece lit, pips)?
-        Is Small too easy (mostly mirrors, 2 crystals) and is Large's depth-2 step fair? Do hints read well? Is the
-        tap cycle (up to 7 options with filters) tedious next to the tray drag? Any frame cost on the phone (photons)?
+  - [x] First blind playtest (Pixel 7) and fixes (rules v2): the daily is kept in the address (`?daily`) and as the
+        saved mode, so a reload or discarded tab reopens it; #info is a fixed box (shell.css's flex: 1 let a 3-line hint
+        push the board up 11 px); after a win Clear is disabled and Hint becomes Next (My puzzle from the daily); a fixed
+        piece in the dark gets the red dashed ring; HUD reads "Lit 0/2"; help explains gold-ring pieces; crystal dots
+        ~2x bigger (gem ×1.14, crown-only facets); light running both ways along a line is two strands, each shifted to
+        the right of its travel; the ring under a dragged piece is outlined (red if fixed); hint reasons are cause →
+        effect ("If it stays empty, green light would hit a dark crystal", "the fixed ⟍ mirror would sit in the dark"),
+        identical reasons merge, and `check` reports the most direct broken rule first (a piece in the dark before a
+        crystal cut off). Small was too easy (3 of 4 direct): it now needs `trapped` (some crystal's answer route
+        bends more than its most direct route; was 9% of Small puzzles), Medium always has a white lamp and a filter
+        (was 22%), menu says so. Large puzzles unchanged. Stats: gen median 2.6 / 3.2 / 14 ms, max 43 / 24 / 97 ms.
+  - [ ] Next: second blind playtest. Watch: does Small now feel like a puzzle (not too hard for a first board)? Are the
+        reworded hints clear? Is the tap cycle (up to 7 options with filters) tedious next to the tray drag? Frame cost
+        on the phone (photons)? Does reopening the daily from the hub card (last mode) surprise anyone?
 - [ ] **Simmer** (cozy management sim: a night-market food stall for 20 nights, critter guests). Milestones:
   - [x] Core (src/simmer/core, rules v1): ingredients that spoil (fish 1 night … rice 6) with seeded cheap/dear market days,
         10 dishes (3 known, 7 to learn), 8 critter kinds with loves/dislikes, purses, patience, arrival windows and weather
