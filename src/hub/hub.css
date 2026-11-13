@@ -72,3 +72,11 @@ header p { margin: 6px 0 0; color: var(--muted); }
 #continue b { grid-column: 1; font-size: 18px; }
 #continue .sub { grid-column: 1; font-size: 13px; color: var(--muted); }
 #continue .go { grid-column: 2; grid-row: 1 / span 3; font-size: 28px; color: var(--accent); }
+#kinds { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 10px; scrollbar-width: none; }
+#kinds::-webkit-scrollbar { display: none; }
+#kinds button {
+  flex: none; min-height: 44px; padding: 0 12px; border-radius: 22px; border: 1px solid var(--line);
+  background: var(--card); color: var(--muted); font-size: 14px; font-weight: 700;
+}
+#kinds button.on { background: var(--text); color: var(--bg, #0f1118); border-color: var(--text); }
+#games a.game[hidden] { display: none; }

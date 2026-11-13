@@ -368,10 +368,46 @@ const GAMES: GameCard[] = [
   },
 ];
 
+// Filter chips: the hub has grown long, so games can be narrowed by kind.
+const KINDS: Record<string, string[]> = {
+  Puzzle: ['triad', 'unspoken', 'grove', 'quarry', 'ninefold', 'summit'],
+  Action: ['sungrazer', 'afterglow', 'nightline', 'hexhold'],
+  Strategy: ['brink', 'kitbag', 'glyph', 'telegraph', 'rewild', 'hexhold', 'summit'],
+  Story: ['lastlight', 'lantern', 'delve', 'unspoken'],
+};
+const slug = (path: string) => path.replace(/[./]/g, '');
 const list = document.getElementById('games')!;
+const chips = document.createElement('div');
+chips.id = 'kinds';
+let kind = 'All';
+try {
+  kind = localStorage.getItem('hub.kind') ?? 'All';
+} catch {
+  kind = 'All';
+}
+if (kind !== 'All' && !KINDS[kind]) kind = 'All';
+const renderKinds = () => {
+  chips.innerHTML = ['All', ...Object.keys(KINDS)].map((k) => `<button class="${k === kind ? 'on' : ''}" data-k="${k}">${k}</button>`).join('');
+  list.querySelectorAll<HTMLElement>('a.game').forEach((el) => {
+    el.hidden = kind !== 'All' && !KINDS[kind].includes(el.dataset.slug ?? '');
+  });
+};
+chips.onclick = (e) => {
+  const k = (e.target as HTMLElement).dataset.k;
+  if (!k) return;
+  kind = k;
+  try {
+    localStorage.setItem('hub.kind', k);
+  } catch {
+    // per-visit only
+  }
+  renderKinds();
+};
+list.before(chips);
 for (const g of GAMES) {
   const a = document.createElement('a');
   a.className = 'game';
+  a.dataset.slug = slug(g.path);
   a.href = g.path;
   a.style.setProperty('--accent', g.accent);
   const best = g.best();
@@ -380,6 +416,7 @@ for (const g of GAMES) {
   }</div><span class="go">›</span>`;
   list.appendChild(a);
 }
+renderKinds();
 // Today's challenges: the same seed for everyone, one per game.
 const DAILY = [
   { path: './afterglow/?daily', title: 'Afterglow', store: afterglow, accent: '#ff3d8b' },
