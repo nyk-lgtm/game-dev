@@ -27,6 +27,18 @@ body {
 #status > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 #status > span:first-child { flex: 1 1 auto; }
 #status > span:last-child { flex: 0 1 auto; }
+/* Narrow phones: each half may take two lines inside the same 34 px bar
+   (so the board still never moves) instead of ending in "…". */
+@media (max-width: 380px) {
+  #status { font-size: 12.5px; line-height: 15px; gap: 10px; }
+  #status > span {
+    white-space: normal; text-overflow: clip;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  }
+  #status > span:last-child { text-align: right; }
+  #status .nw { white-space: nowrap; }
+  #status .badge { width: 15px; height: 15px; font-size: 10px; vertical-align: 0; }
+}
 #status .badge {
   display: inline-flex; width: 17px; height: 17px; border-radius: 50%; align-items: center; justify-content: center;
   background: #ff5a4a; color: #1a0c08; font-weight: 800; font-size: 11px; vertical-align: 1px;

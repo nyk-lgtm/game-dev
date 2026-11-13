@@ -61,7 +61,10 @@ export class Game {
       this.para(out, id.startsWith('go:') ? 'room' : '', id.startsWith('go:') ? this.story.roomName(this.s) : undefined);
     }
     this.markOld();
-    this.render(true);
+    // A resumed night picks up at its latest beat; a new night opens at the top
+    // so the opening isn't scrolled past.
+    this.render(this.ids.length > 0);
+    if (!this.ids.length) $('story').scrollTop = 0;
     this.save();
     if (this.s.over) setTimeout(() => this.showEnd(), 400);
   }

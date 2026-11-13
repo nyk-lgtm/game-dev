@@ -449,6 +449,17 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 - Grove: owner wants it kept as is (no smaller board).
 
 ## Done (recent)
+- Second technical QA sweep (360×640 and Pixel 7, UI only, no RULES_VERSION changes): shared cards take `pin: true`
+  on a secondary button so a long card's sticky footer holds both main actions (Brink help: Play + Lessons; Triad help);
+  Brink status bar wraps to two lines inside its 34 px at ≤380 px (board never moves); Kitbag foe grid column is
+  `auto` on short screens (the fixed 62 px column let the container-query portrait overlap the name/HP) plus a
+  narrow-width container rule (80 px portrait, slimmer intent); Last Light starts a new night scrolled to the top
+  (resumed runs still jump to the latest beat); Glyphwright short screens: 44 px slots, tighter tip/bench/shop, hud
+  via `body #hud` (shell.css comes later in the bundle), lane 128 → 193 px at 640; Afterglow pause has one Resume
+  (top); Hexhold ✕ 44×44, footer buttons nowrap and 14.5 px at ≤380; hub chips share one row at ≤380 (wrap if more
+  come); Triad `?daily` help = "Play the daily" + tutorial second, the tutorial saves under `tut` (reload resumes
+  its step, any `start()` clears it) and its last card returns to today's daily when it came from there; Unspoken
+  place tabs sit in `#placesBar` with ‹ › cues (`:has(.more-left/.more-right)`) over the faded edges.
 - Telegraph second blind playtest fixes (rules v5; see Design follow-ups): Bash/fatal confirm buttons,
   threat sources ringed on tap, amber "then in line for…" on safe previews, bolder guard shields, bomb-aware
   auto-walk, gentler deep floors, bombers hold their ground. Shared cards pin a long card's primary button.

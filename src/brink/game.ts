@@ -704,7 +704,7 @@ export class Game {
     let left = '';
     if (this.mode === 'puzzle') {
       const p = this.puzzle!;
-      left = `<b>${p.title}</b> · win in ${p.n}${s.winner ? '' : ` · ${this.puzzleLeft} move${this.puzzleLeft === 1 ? '' : 's'} left`}`;
+      left = `<b>${p.title}</b> · <span class="nw">win in ${p.n}</span>${s.winner ? '' : ` · <span class="nw">${this.puzzleLeft} move${this.puzzleLeft === 1 ? '' : 's'} left</span>`}`;
     } else if (s.winner) left = s.winner === LIGHT ? '<b class="good">You win!</b>' : '<b class="bad">The AI wins</b>';
     else if (this.thinking) left = '<span class="think">AI is thinking…</span>';
     else left = s.turn === LIGHT ? '<b>Your move</b>' : 'AI to move';
@@ -856,7 +856,7 @@ export class Game {
       <p>Tap a stone to see its moves: dots step, arrows shove, a red arrow pushes a stone off. <b>Puzzles</b> has five short lessons and a daily win-in-2 or 3.</p>`,
       [
         { label: 'Play', primary: true, onClick: closeOverlay },
-        { label: 'Lessons first (two minutes)', onClick: () => this.playLesson('shove') },
+        { label: 'Lessons first (two minutes)', pin: true, onClick: () => this.playLesson('shove') },
       ],
     );
   }

@@ -34,6 +34,18 @@ export const store = makeStore('triad.');
 const $ = (id: string) => document.getElementById(id)!;
 const CODE = '.fwl';
 
+/** An unfinished tutorial (stored as 'tut'): hex values and notes like a SavedRun. */
+export interface TutorialSave {
+  vals: string;
+  notes: string;
+  daily: string | null;
+}
+
+export function validTutorial(t: unknown): t is TutorialSave {
+  const o = t as TutorialSave | null;
+  return !!o && typeof o.vals === 'string' && o.vals.length === 7 && typeof o.notes === 'string' && o.notes.length === 7;
+}
+
 interface SavedRun {
   v: number;
   seed: number;
@@ -118,16 +130,21 @@ export class Game {
 
   /** Guided tutorial: the step being taught, or null when playing normally. */
   tut: number | null = null;
+  /** The daily the tutorial was opened from, so its last card can return to it. */
+  private tutDaily: string | null = null;
 
-  /** The seven-hex guided puzzle (not saved; your own puzzle waits). */
-  startTutorial(): void {
+  /** The seven-hex guided puzzle (your own puzzle waits). Its progress is kept
+   *  under 'tut' so a reload resumes the step instead of dropping it. */
+  startTutorial(saved?: TutorialSave | null): void {
     closeOverlay();
     store.save('seenHelp', true);
+    // Remember the daily it came from ("Try the tutorial again" keeps it).
+    this.tutDaily = saved ? saved.daily : this.tut !== null ? this.tutDaily : this.daily;
     this.tut = 0;
     this.daily = null;
     this.p = TUTORIAL;
-    this.vals = new Array(7).fill(-1);
-    this.notes = new Array(7).fill(0);
+    this.vals = saved ? [...saved.vals].map((c) => CODE.indexOf(c) - 1) : new Array(7).fill(-1);
+    this.notes = saved ? [...saved.notes].map(Number) : new Array(7).fill(0);
     this.ms = 0;
     this.hints = 0;
     this.done = false;
@@ -136,6 +153,7 @@ export class Game {
     this.winT = -1;
     this.resize();
     this.refresh();
+    this.save(true);
   }
 
   /** Advance the tutorial past steps whose hexes are all filled correctly. */
@@ -146,6 +164,7 @@ export class Game {
   }
 
   start(seed: number, size: Size, saved?: SavedRun | null, daily: string | null = null): void {
+    store.save('tut', null);
     this.tut = null;
     this.seed = seed;
     this.size = size;
@@ -219,7 +238,11 @@ export class Game {
   }
 
   save(now = false): void {
-    if (!this.p || this.tut !== null) return;
+    if (this.tut !== null) {
+      store.save('tut', this.done ? null : { vals: this.vals.map((v) => CODE[v + 1]).join(''), notes: this.notes.join(''), daily: this.tutDaily });
+      return;
+    }
+    if (!this.p) return;
     const t = performance.now();
     if (!now && t - this.lastSave < 3000) return;
     this.lastSave = t;
@@ -369,7 +392,9 @@ export class Game {
           showCard(
             `<h2>That's the whole game</h2><p>Every puzzle is solved like that: find a number whose neighbors leave only one way to add up, fill it in, and look again. Bigger boards just chain more of them.</p><p>Notes help when a hex is down to two options, and Hint always shows the next step.</p>`,
             [
-              { label: 'Play a Small puzzle', primary: true, onClick: () => this.newPuzzle('small', 'normal', 'numbers') },
+              this.tutDaily === todayKey()
+                ? { label: 'Play today’s daily', primary: true, onClick: () => this.playDaily() }
+                : { label: 'Play a Small puzzle', primary: true, onClick: () => this.newPuzzle('small', 'normal', 'numbers') },
               { label: 'Try the tutorial again', onClick: () => this.startTutorial() },
             ],
           ),
@@ -519,10 +544,16 @@ export class Game {
         <li>${linkSvg(26)} With <b>Numbers + links</b>, a <b>link</b> on an edge means the two hexes it joins hold the same element.</li>
         <li><b>Hint</b> shows the next step, or a wrong hex (+30 seconds each).</li>
       </ul>`,
-      [
-        { label: 'Show me (60-second tutorial)', primary: true, onClick: () => this.startTutorial() },
-        { label: 'Just play', onClick: closeOverlay },
-      ],
+      // Opened with ?daily: playing it is the main button, the tutorial the other.
+      this.daily
+        ? [
+            { label: 'Play the daily', primary: true, onClick: closeOverlay },
+            { label: 'Show me first (60-second tutorial)', pin: true, onClick: () => this.startTutorial() },
+          ]
+        : [
+            { label: 'Show me (60-second tutorial)', primary: true, onClick: () => this.startTutorial() },
+            { label: 'Just play', pin: true, onClick: closeOverlay },
+          ],
     );
   }
 

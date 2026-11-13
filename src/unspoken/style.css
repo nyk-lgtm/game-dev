@@ -32,6 +32,17 @@ body .icon-btn { background: transparent; border-color: var(--line); color: var(
   border-bottom: 1px solid var(--line); background: var(--bg);
 }
 #places::-webkit-scrollbar { display: none; }
+/* A "›" / "‹" cue over the faded edge while more places hide that way. */
+#placesBar { position: relative; flex: none; }
+#placesBar::before, #placesBar::after {
+  position: absolute; top: 50%; transform: translateY(-50%); pointer-events: none;
+  width: 26px; height: 26px; border-radius: 50%; display: none; align-items: center; justify-content: center;
+  background: var(--panel); border: 1px solid var(--line); color: var(--text); font-size: 18px; font-weight: 700; line-height: 1;
+  box-shadow: 0 1px 4px rgba(43, 33, 24, 0.18);
+}
+#placesBar::before { content: '‹'; left: 4px; }
+#placesBar::after { content: '›'; right: 4px; }
+#placesBar:has(> #places.more-left)::before, #placesBar:has(> #places.more-right)::after { display: flex; }
 #places.more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
 #places.more-left { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent); }
 #places.more-left.more-right {

@@ -2,7 +2,7 @@ import { installErrorOverlay } from '../shared/debug';
 import { wantsDaily } from '../shared/daily';
 import { randomSeed } from '../shared/rng';
 import { CLUE_MODES, LEVELS, SIZES, type ClueMode, type Level, type Size } from './core';
-import { Game, store, validSave } from './game';
+import { Game, store, validSave, validTutorial } from './game';
 
 installErrorOverlay();
 
@@ -22,6 +22,7 @@ if (p.has('seed') && Number.isFinite(Number(p.get('seed'))) && size in SIZES) {
   game.start(Number(p.get('seed')), size);
   history.replaceState(null, '', location.pathname);
 } else if (wantsDaily()) game.playDaily();
+else if (validTutorial(store.load('tut', null))) game.startTutorial(store.load('tut', null));
 else if (validSave(saved)) game.start(saved.seed, saved.size, saved);
 else game.start(randomSeed(), 'small');
 

@@ -106,7 +106,7 @@ button:active { transform: scale(0.97); }
    text never shows under the button, and inherits the card's background. */
 .card .stick {
   position: sticky; bottom: 0; z-index: 1; flex: none;
-  display: flex; flex-direction: column;
+  display: flex; flex-direction: column; gap: 8px;
   padding-top: 8px; padding-bottom: 14px;
   background: inherit;
 }
@@ -121,7 +121,7 @@ button:active { transform: scale(0.97); }
   .card button.primary { min-height: 48px; }
   .card button.secondary { min-height: 44px; }
   .card .more { margin: -6px -16px -14px; bottom: -14px; }
-  .card .stick { padding-top: 6px; padding-bottom: 10px; }
+  .card .stick { padding-top: 6px; padding-bottom: 10px; gap: 6px; }
 }
 #errors {
   position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 20;

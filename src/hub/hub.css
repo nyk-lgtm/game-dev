@@ -79,4 +79,9 @@ header p { margin: 6px 0 0; color: var(--muted); }
   background: var(--card); color: var(--muted); font-size: 14px; font-weight: 700;
 }
 #kinds button.on { background: var(--text); color: var(--bg, #0f1118); border-color: var(--text); }
+/* Narrow phones (360 px): the chips share one row (and wrap, never clip, if more come). */
+@media (max-width: 380px) {
+  #kinds { gap: 5px; flex-wrap: wrap; }
+  #kinds button { flex: 1 1 auto; padding: 0 6px; font-size: 13.5px; }
+}
 #games a.game[hidden] { display: none; }

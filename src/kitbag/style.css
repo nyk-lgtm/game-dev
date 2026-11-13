@@ -278,7 +278,7 @@ body #info { flex: 1; min-height: 40px; max-height: 58px; overflow: hidden; font
 .legend { font-size: 12.5px; color: var(--muted); text-align: center; }
 
 @media (max-height: 700px) {
-  #foe { padding: 6px 10px; grid-template-columns: 62px 1fr auto; }
+  #foe { padding: 6px 10px; grid-template-columns: auto minmax(0, 1fr) auto; }
   #foeArt { width: 62px; height: 62px; font-size: 36px; }
   #intent { min-height: 62px; }
   .gear { min-height: 72px; padding: 6px; }
@@ -301,4 +301,13 @@ body #info { flex: 1; min-height: 40px; max-height: 58px; overflow: hidden; font
   #intent .chip { font-size: 30px; }
   #foeName { font-size: 19px; }
   #intentWords { font-size: 14px; }
+}
+/* Narrow phones (360 px): the portrait and intent stay small enough that the
+   name, HP bar and intent words keep a real column beside them. */
+@container (max-width: 380px) and (min-height: 170px) {
+  #foeArt { width: 80px; height: 80px; font-size: 48px; }
+  #intent { min-width: 92px; max-width: 108px; min-height: 96px; padding: 6px; }
+  #intent .chip { font-size: 24px; }
+  #foeName { font-size: 16px; }
+  #intentWords { font-size: 13px; }
 }

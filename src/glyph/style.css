@@ -138,3 +138,18 @@ body.battle #bench, body.battle #shop { display: none; }
 .lrow .sum .dl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card .runes .tiers { color: #cdb8ff; font-size: 12px; }
 .card p.through { color: #ffb86b; }
+
+/* Short screens (360×640): smaller (still 44 px) slots and tighter help line,
+   bench and shop rows, so the lane keeps ~190 px instead of ~130 in the shop.
+   `body #hud` beats shell.css, which the bundle puts after this file. */
+@media (max-height: 700px) {
+  :root { --slot: min(44px, calc((100vw - 52px) / 6.4)); }
+  body #hud { padding: 3px 10px; min-height: 0; }
+  .lrow { margin-bottom: 3px; }
+  #tip { height: 58px; font-size: 12px; line-height: 1.25; }
+  #tip .txt { max-height: 54px; }
+  #bench { padding: 4px 10px; }
+  #shop { padding: 4px 10px 6px; padding-bottom: max(6px, env(safe-area-inset-bottom)); }
+  #shopBtns { margin-top: 5px; }
+  #shopBtns button { min-height: 44px; }
+}

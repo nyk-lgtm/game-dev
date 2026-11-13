@@ -13,6 +13,8 @@ export function closeOverlay(): void {
 interface CardButton {
   label: string;
   primary?: boolean;
+  /** A second main action: rides in the long card's sticky footer with the primary. */
+  pin?: boolean;
   onClick: () => void;
 }
 
@@ -22,12 +24,14 @@ export function showCard(html: string, buttons: CardButton[], dismissable = true
   const card = document.createElement('div');
   card.className = 'card';
   card.innerHTML = html;
+  const pinned: HTMLButtonElement[] = [];
   for (const b of buttons) {
     const el = document.createElement('button');
     el.className = b.primary ? 'primary' : 'secondary';
     el.textContent = b.label;
     el.onclick = b.onClick;
     card.appendChild(el);
+    if (b.pin && !b.primary) pinned.push(el);
   }
   const meta = document.createElement('div');
   meta.className = 'meta';
@@ -52,6 +56,7 @@ export function showCard(html: string, buttons: CardButton[], dismissable = true
     footer.style.bottom = `-${cs.paddingBottom}`;
     card.insertBefore(footer, primary);
     footer.appendChild(primary);
+    for (const el of pinned) footer.appendChild(el);
   }
   // Long cards get a "more below" hint pinned to the bottom until you scroll
   // there. Only real content counts: not the build line, nor the hint itself.
