@@ -18,6 +18,27 @@ Ground rules: never break saves without bumping RULES_VERSION; never leave main 
 keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 
 ## Now
+- [ ] **Kitbag** (dice-placement roguelite: roll dice, slot them into gear cards, 12 floors to The House). Milestones:
+  - [x] Core (src/kitbag/core, rules v1): 19 gear cards with conditioned slots (any / even / odd / ≤2 / ≤3 / 2+ / 4+ /
+        5+ / 6 / pair / any two) and effects (deal, pierce, block, spike, heal, poison, reroll, split, flip, +1/+2,
+        stun, powder keg fuse), each with a "+" upgrade; 6 dice kinds (d6, d8, weighted, even, pebble, chance) and
+        honing; 17 enemies + 3 elites + The House boss with telegraphed intent cycles (attack, multi-hit, block, hex,
+        wither, poison, heal, strength, wind-up); 12-floor two-path map with campfires and shrines; rewards one of
+        three (elites two picks), kit of 6, 5 dice. Undo within a turn, replay from seed + actions, 19 tests.
+  - [x] Bot (scripts/kitbag/bot.ts): searches every way to spend the turn's dice (rerolls valued as an average roll,
+        no peeking), scores damage vs the telegraphed hit, kills, poison, stuns; plays the first step and replans.
+        500 runs: first two fights 100%, median floor 12, 25% wins (23% on SEED=9000), median 32 turns; losses: The
+        House ~45% of runs, stage-3 entry (floors 9-10) ~20%, Iron Warden elite ~4%.
+  - [x] UI: enemy portrait + HP/block/poison/strength tags + intent box (tap for words; tap the portrait for its whole
+        cycle), gear grid with dashed slots that glow when the held die fits and show the exact result (Deal 7, Block
+        5, Finishes it!, Pair of 4s: deal 14…), drag with a ghost die or tap-tap, roll tumble and fresh-die pop (off
+        with reduced effects), hit shake, enemy lunge, floating numbers, red flash, haptics, synth sounds (rattle,
+        seat click, thud, clank, boom), map card, reward/campfire/shrine cards with a replace-which flow, end card
+        with stats, help, menu (kit, map, bug report), daily (`?daily`), hub card first + Daily link. Pixel 7 checked
+        (help, map, fight, preview with a pair slot, drag, reward, end) and a tap-only playthrough without errors.
+  - [ ] Next: owner playtest. Watch: is the run length right (~30 turns)? Is The House too much of a wall compared
+        with the stage-3 fights? Are Powder Keg and the Lucky Coin too strong, Hourglass/Whetstone too weak? Do the
+        tiny `≤3`/`pair` labels read at arm's length?
 - [ ] **Sungrazer** (one-thumb arcade: hold to swing a comet round a star, let go to fling). Milestones:
   - [x] Core (src/sungrazer/core, rules v1): fixed 240 Hz sim, lazily grown seeded sky (spine stars ≤ 40 apart,
         bonus stars, motes, cinders from altitude 450, pulsars 1000, giants and drifting cinders 1700, sparser past

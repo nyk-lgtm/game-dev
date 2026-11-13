@@ -33,8 +33,30 @@ const ninefold = makeStore('ninefold.');
 const summit = makeStore('summit.');
 const quarry = makeStore('quarry.');
 const sungrazer = makeStore('sungrazer.');
+const kitbag = makeStore('kitbag.');
 
 const GAMES: GameCard[] = [
+  {
+    path: './kitbag/',
+    title: 'Kitbag',
+    tag: 'Dice roguelite',
+    pitch: 'Roll your dice and slot them into your gear: a 2 in the Dagger, a 6 in the Maul, a pair in the Twinblade. Read the enemy’s next move, climb twelve floors and beat The House.',
+    accent: '#e8b04a',
+    best: () => {
+      const p = kitbag.load<{ runs?: number; best?: number; bestFloor?: number; wins?: number } | null>('profile', null);
+      if (!p?.runs) return null;
+      return `Best ${(p.best ?? 0).toLocaleString('en-US')} · ${p.wins ? `${p.wins} win${p.wins === 1 ? '' : 's'}` : `floor ${p.bestFloor ?? 1}`}`;
+    },
+    thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#1c1410"/>
+      <rect x="6" y="40" width="64" height="30" rx="7" fill="#3a2a20" stroke="#5b4031" stroke-width="1.5"/>
+      <rect x="12" y="46" width="20" height="20" rx="4" fill="none" stroke="#e8b04a" stroke-width="2"/>
+      <rect x="40" y="46" width="22" height="20" rx="4" fill="none" stroke="#7a5a3c" stroke-width="2" stroke-dasharray="3 2.5"/>
+      <text x="51" y="60" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="900" font-size="9" fill="#d9b98c">≤3</text>
+      <g transform="rotate(-14 22 22)"><rect x="10" y="10" width="24" height="24" rx="5" fill="#f4ead8"/><g fill="#2a1f18"><circle cx="16" cy="16" r="2.4"/><circle cx="28" cy="16" r="2.4"/><circle cx="22" cy="22" r="2.4"/><circle cx="16" cy="28" r="2.4"/><circle cx="28" cy="28" r="2.4"/></g></g>
+      <g transform="rotate(10 50 20)"><rect x="40" y="10" width="20" height="20" rx="4" fill="#f4ead8"/><g fill="#2a1f18"><circle cx="45" cy="15" r="2"/><circle cx="55" cy="25" r="2"/></g></g>
+      <path d="M22 36v6" stroke="#e8b04a" stroke-width="2" stroke-dasharray="2 2"/>
+</svg>`,
+  },
   {
     path: './sungrazer/',
     title: 'Sungrazer',
@@ -350,6 +372,7 @@ const DAILY = [
   { path: './summit/?daily', title: 'Summit', store: summit, accent: '#8fc4ff' },
   { path: './quarry/?daily', title: 'Quarry', store: quarry, accent: '#ffc857' },
   { path: './sungrazer/?daily', title: 'Sungrazer', store: sungrazer, accent: '#ffc35a' },
+  { path: './kitbag/?daily', title: 'Kitbag', store: kitbag, accent: '#e8b04a' },
 ];
 const daily = document.getElementById('daily')!;
 daily.innerHTML = `<h3>Daily challenges <span>${prettyDay()}</span></h3><p>The same run for everyone today. A new one at midnight.</p>`;

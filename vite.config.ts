@@ -43,6 +43,7 @@ export default defineConfig({
         lastlight: resolve(__dirname, 'lastlight/index.html'),
         quarry: resolve(__dirname, 'quarry/index.html'),
         sungrazer: resolve(__dirname, 'sungrazer/index.html'),
+        kitbag: resolve(__dirname, 'kitbag/index.html'),
       },
     },
   },

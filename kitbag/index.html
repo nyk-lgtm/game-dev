@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#16110e" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Kitbag</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a1f18'/%3E%3Crect x='7' y='7' width='18' height='18' rx='4' fill='%23f4ead8' transform='rotate(-10 16 16)'/%3E%3Cg fill='%232a1f18'%3E%3Ccircle cx='11.5' cy='12.5' r='2'/%3E%3Ccircle cx='16' cy='16' r='2'/%3E%3Ccircle cx='20.5' cy='19.5' r='2'/%3E%3C/g%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="../src/shared/shell.css" />
+    <link rel="stylesheet" href="../src/kitbag/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header id="hud">
+        <div class="stat"><span class="label">Floor</span><span id="floorNo" class="value">1/12</span></div>
+        <div class="stat"><span class="label">Score</span><span id="score" class="value">0</span></div>
+        <span id="dailyTag" hidden>Daily</span>
+        <div class="spacer"></div>
+        <button id="mapBtn" class="icon-btn" aria-label="Map">🗺️</button>
+        <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>
+      </header>
+      <main id="stage">
+        <section id="foe">
+          <div id="foeArt"></div>
+          <div id="foeInfo">
+            <div id="foeName"></div>
+            <div class="bar" id="foeBar"><i></i><span></span></div>
+            <div id="foeTags"></div>
+          </div>
+          <button id="intent" aria-label="Enemy intent"></button>
+        </section>
+        <section id="kit"></section>
+        <div id="banner" hidden></div>
+      </main>
+      <section id="dock">
+        <div id="you">
+          <div class="bar" id="youBar"><i></i><span></span></div>
+          <div id="youTags"></div>
+        </div>
+        <div id="tray"></div>
+        <div id="bar">
+          <button id="undoBtn" class="tool" aria-label="Undo">↶</button>
+          <div id="info"></div>
+          <button id="endBtn" class="primary">End turn</button>
+        </div>
+      </section>
+    </div>
+    <div id="fx"></div>
+    <div id="overlay" hidden></div>
+    <div id="errors"></div>
+    <script type="module" src="../src/kitbag/main.ts"></script>
+  </body>
+</html>
