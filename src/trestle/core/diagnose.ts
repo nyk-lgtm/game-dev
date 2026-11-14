@@ -4,7 +4,7 @@
 // just roll off the road. Pure; used by the page after a run (and on its own
 // for the "not joined yet" note while building).
 
-import { MATS, PLANK, TWINE, type Member } from './build';
+import { MATS, PLANK, TWINE, looseOf, type Member } from './build';
 import { px, py, ringsOf, type Level } from './level';
 import { HZ, WON, type RunResult } from './sim';
 
@@ -61,7 +61,10 @@ export function joined(l: Level, ms: readonly Member[]): Joined {
 }
 
 /** Pegs that can move without stretching any piece (rigidity matrix null space). */
-export function wobbly(l: Level, ms: readonly Member[]): Set<number> {
+export function wobbly(l: Level, all: readonly Member[]): Set<number> {
+  // Pieces with a free end are left out of runs, so they don't count here either.
+  const lo = looseOf(l, all, ringsOf(l));
+  const ms = all.filter((_, k) => !lo[k]);
   const anchors = new Set(l.anchors);
   const free: number[] = [];
   const col = new Map<number, number>();
@@ -122,6 +125,8 @@ export interface Verdict2 {
   text: string;
   /** The first piece to snap, if any. */
   piece: number;
+  /** Planks that climb (when the cart got stuck going uphill). */
+  uphill?: number[];
   wobbly: Set<number>;
 }
 
@@ -143,6 +148,14 @@ export function explain(l: Level, ms: readonly Member[], r: Pick<RunResult, 'out
       piece,
       wobbly: wob,
     };
+  // Stuck with nothing snapped and a plank rising toward the flag: that's the cause, whatever else wobbles.
+  const uphill = ms.flatMap((m, k) => {
+    if (m.mat !== PLANK || px(m.a) === px(m.b)) return [];
+    const [lo, hi] = px(m.a) < px(m.b) ? [m.a, m.b] : [m.b, m.a];
+    return py(hi) < py(lo) ? [k] : [];
+  });
+  if (l.goal.kind === 'cross' && r.outcome === 'stalled' && piece < 0 && uphill.length)
+    return { cause: 'offroad', text: 'Cart stuck: the beetle can’t haul uphill (the climbing plank glows). Keep the road level or going down.', piece, wobbly: new Set(), uphill };
   const j = joined(l, ms);
   const unjoined =
     l.goal.kind === 'cross' && !j.road
@@ -168,12 +181,13 @@ export function explain(l: Level, ms: readonly Member[], r: Pick<RunResult, 'out
     return { cause: 'weak', text: what, piece, wobbly: wob };
   }
   if (unjoined) return { cause: 'unjoined', text: unjoined, piece, wobbly: wob };
-  if (l.goal.kind === 'cross')
+  if (l.goal.kind === 'cross') {
     return {
       cause: 'offroad',
-      text: r.outcome === 'stalled' ? 'Cart stuck: the beetle can’t haul uphill, so keep the road level or going down.' : 'Off the road: nothing snapped, but the road tipped or sagged away under the cart.',
+      text: r.outcome === 'stalled' ? 'Cart stuck: something blocks the road, or it dips below the bank.' : 'Off the road: nothing snapped, but the road tipped or sagged away under the cart.',
       piece,
       wobbly: wob,
     };
+  }
   return { cause: 'sag', text: 'Sagged: nothing snapped, but the arm bends too far. Brace it deeper.', piece, wobbly: wob };
 }

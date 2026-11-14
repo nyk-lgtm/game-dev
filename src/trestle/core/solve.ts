@@ -9,7 +9,7 @@
 // a road peg held by nothing but its two planks is merged into one plank.
 
 import { Rng } from '../../shared/rng';
-import { MATS, PLANK, TWIG, TWINE, costOf, geomWhy, lenOf, type Mat, type Member } from './build';
+import { MATS, PLANK, TWIG, TWINE, costOf, geomWhy, lenOf, looseOf, type Mat, type Member } from './build';
 import { COLS, ROWS, px, py, pt, type Level } from './level';
 import { WON, runSim } from './sim';
 
@@ -199,6 +199,29 @@ function ringShapes(l: Level, R: number): Member[][] {
         else if (!b.ms.some((m) => m.a === R || m.b === R)) continue;
         out.push(b.ms);
       }
+      // A Warren arm: pegs alternate between the rails a column apart, chords two apart (fewer, longer pieces).
+      const zig: number[] = [];
+      for (let j = 0; j <= n; j++) zig.push(j === n ? R : j % 2 ? lower[j] : upper[j]);
+      const w = new Builder(l);
+      w.chain(zig, TWIG);
+      w.add(c, zig[1], TWIG);
+      for (let j = 0; j + 2 <= n; j++) w.add(zig[j], zig[j + 2], TWIG) || w.add(zig[j], zig[j + 2], TWINE);
+      if (w.ms.some((m) => m.a === R || m.b === R)) out.push(w.ms);
+    }
+  // Cable-stayed arms: a strut rail from a lower anchor out to the ring (pegs every one or two columns),
+  // held up by cords from every anchor above it that reaches.
+  for (const c of l.anchors)
+    for (const step of [1, 2]) {
+      if (px(c) === rx) continue;
+      const n = Math.abs(rx - px(c));
+      const sx = rx > px(c) ? 1 : -1;
+      const rail: number[] = [c];
+      for (let j = step; j < n; j += step) rail.push(pt(px(c) + sx * j, Math.round(py(c) + ((ry - py(c)) * j) / n)));
+      rail.push(R);
+      const b = new Builder(l);
+      for (let i = 0; i + 1 < rail.length; i++) b.add(rail[i], rail[i + 1], TWIG) || b.add(rail[i], rail[i + 1], PLANK);
+      for (const a of l.anchors) for (const p of rail.slice(1)) if (py(a) < py(p)) b.add(a, p, TWINE);
+      if (b.ms.some((m) => m.a === R || m.b === R)) out.push(b.ms);
     }
   return out;
 }
@@ -217,6 +240,15 @@ export function reachCandidates(l: Level): Member[][] {
   });
   let combos: Member[][] = [[]];
   for (const list of per) combos = combos.flatMap((c) => list.map((x) => merge(c, x)));
+  // Or hang the next ring off the first one's arm: its pegs act as anchors for the second ring's shapes.
+  if (g.rings.length === 2)
+    for (const [i, j] of [[0, 1], [1, 0]])
+      for (const sa of per[i].slice(0, 2)) {
+        const held = new Set<number>(l.anchors);
+        for (const m of sa) held.add(m.a).add(m.b);
+        const virt: Level = { ...l, anchors: [...held], goal: { ...g, rings: [g.rings[j]] } };
+        for (const sb of ringShapes(virt, g.rings[j]).sort((a, b) => costOf(a) - costOf(b)).slice(0, 8)) combos.push(merge(sa, sb));
+      }
   return combos;
 }
 
@@ -338,4 +370,68 @@ export function survey(l: Level, effort = 1, cap = 160 + 120 * effort): Survey |
     if (better(s, best)) best = s;
   }
   return { members: best!, cost: costOf(best!), parts: best!.length, sims: n.sims, ease: good.length / Math.max(1, cands.length) };
+}
+
+/**
+ * Polishes a passing build by a seeded local search (the offline pool uses it,
+ * so par is near what a clever player finds): each step removes one or two
+ * pieces, maybe swaps a twig for twine (or back), maybe adds a piece or two
+ * between pegs or out to a grid point in reach; a step is kept when the build
+ * still passes cleanly and costs no more (a little more early on, to get out of
+ * corners). Pieces with a free end are dropped at the end.
+ */
+export function polish(l: Level, start: Member[], iters: number, seed = 1): Member[] {
+  const rng = new Rng(seed);
+  const cross = l.goal.kind === 'cross';
+  const rings = l.goal.kind === 'reach' ? l.goal.rings : [];
+  let cur = start;
+  let best = start;
+  const score = (ms: Member[]) => costOf(ms) + ms.length * 0.5;
+  const keyOf = (m: Member) => (m.a < m.b ? m.a * 4096 + m.b : m.b * 4096 + m.a);
+  for (let it = 0; it < iters; it++) {
+    const slack = it < (iters * 2) / 3 ? 14 * (1 - (1.5 * it) / iters) : 0;
+    let next: (Member | null)[] = [...cur];
+    // Remove one or two (never the road planks of a crossing).
+    const removable = cur.map((_, i) => i).filter((i) => !(cross && cur[i].mat === PLANK));
+    const k = rng.next() < 0.6 ? 1 : 2;
+    for (let r = 0; r < k && removable.length; r++) next[removable.splice(Math.floor(rng.next() * removable.length), 1)[0]] = null;
+    let ms = next.filter((m): m is Member => m !== null);
+    if (rng.next() < 0.3 && ms.length) {
+      const i = Math.floor(rng.next() * ms.length);
+      const m = ms[i];
+      if (m.mat === TWIG && lenOf(m.a, m.b) <= MATS[TWINE].maxLen) ms[i] = { ...m, mat: TWINE };
+      else if (m.mat === TWINE && lenOf(m.a, m.b) <= MATS[TWIG].maxLen) ms[i] = { ...m, mat: TWIG };
+    }
+    // Add a piece between two pegs (anchors, rings, member ends), or a new peg braced to two of them.
+    const ps = new Set<number>([...l.anchors, ...rings]);
+    for (const m of ms) ps.add(m.a).add(m.b);
+    const list = [...ps];
+    const add = (a: number, b: number): boolean => {
+      if (b < 0 || b >= COLS * ROWS || a === b || Math.abs(px(b) - px(a)) > 4) return false;
+      const len = lenOf(a, b);
+      const mat: Mat = len > MATS[TWIG].maxLen + 1e-9 || rng.next() < 0.35 ? TWINE : TWIG;
+      if (geomWhy(l, a, b, mat)) return false;
+      const kb = keyOf({ a, b, mat });
+      if (ms.some((m) => keyOf(m) === kb)) return false;
+      ms = [...ms, { a: Math.min(a, b), b: Math.max(a, b), mat }];
+      return true;
+    };
+    const roll = rng.next();
+    if (roll < 0.35) add(list[Math.floor(rng.next() * list.length)], list[Math.floor(rng.next() * list.length)]);
+    else if (roll < 0.85) {
+      const a = list[Math.floor(rng.next() * list.length)];
+      const g = pt(px(a) + rng.int(-2, 2), py(a) + rng.int(-2, 2));
+      if (g >= 0 && g < COLS * ROWS && !ps.has(g) && Math.abs(px(g) - px(a)) <= 2) {
+        const near = list.filter((q) => q !== a && lenOf(q, g) <= MATS[TWINE].maxLen);
+        if (near.length && add(a, g)) add(near[Math.floor(rng.next() * near.length)], g);
+      }
+    }
+    if (score(ms) > score(cur) + slack) continue;
+    if (!passes(l, ms)) continue;
+    cur = ms;
+    if (score(cur) < score(best)) best = cur;
+  }
+  // No free ends in a par build (they'd do nothing anyway).
+  const lo = looseOf(l, best, rings);
+  return best.filter((_, i) => !lo[i]);
 }

@@ -9,5 +9,5 @@ for (let n = from; n <= to; n++) {
   const l = trailLevel(n);
   const g = l.goal;
   const what = g.kind === 'cross' ? `cross span ${px(g.to) - px(g.from)}${py(g.to) !== py(g.from) ? ' tilted' : ''} cart ${g.cart}` : `reach ${ringsOf(l).length} ring${ringsOf(l).length > 1 ? 's' : ''} lantern ${g.weight}`;
-  console.log(`${String(n).padStart(3)} ${l.name.padEnd(18)} ${what.padEnd(28)}${l.wind ? ` wind ${l.wind}` : ''} pegs ${l.anchors.length} · par ${l.par}/${l.parParts} budget ${l.budget}${l.tip && n > 6 ? ` — ${l.tip.replace(/^(Get|Hold)[^.]*\. /, "")}` : ""}`);
+  console.log(`${String(n).padStart(3)} ${l.name.padEnd(18)} ${what.padEnd(28)}${l.wind ? ` wind ${l.wind}` : ''} diff ${(l.diff ?? 0).toFixed(2)} pegs ${l.anchors.length} · par ${l.par}/${l.parParts} budget ${l.budget}${l.tip && n > 6 ? ` — ${l.tip.replace(/^(Get|Hold)[^.]*\. /, "")}` : ""}`);
 }

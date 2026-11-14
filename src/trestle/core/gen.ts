@@ -15,7 +15,10 @@ import { Rng, mixSeed } from '../../shared/rng';
 import { costOf, replayBuild, toActions } from './build';
 import { COLS, pt, px, py, ringsOf, type Level, type Rock } from './level';
 import { WON, runSim } from './sim';
-import { survey } from './solve';
+import { polish, survey } from './solve';
+
+/** Local-search steps on live levels' par builds (bounds generation time). */
+export const LIVE_POLISH = 300;
 
 export interface GenInfo {
   /** Layouts drawn before one was proven (1 = first try). */
@@ -37,7 +40,7 @@ const NAMES_A = ['Moss', 'Fern', 'Bramble', 'Willow', 'Acorn', 'Thistle', 'Hollo
 const NAMES_CROSS = ['Gap', 'Gully', 'Ford', 'Ravine', 'Crossing', 'Cut', 'Dell', 'Brook'];
 const NAMES_REACH = ['Lookout', 'Ledge', 'Overhang', 'Perch', 'Beacon', 'Hook'];
 /** Dailies get their own words, so a daily never shares a name with a trail level. */
-const NAMES_DAILY = ['Dawn', 'Dusk', 'Firefly', 'Moonlit', 'Misty', 'Starlit', 'Dewy', 'Owl', 'Lantern', 'Ember', 'Twilight', 'Glow'];
+const NAMES_DAILY = ['Dawn', 'Dusk', 'Firefly', 'Moonlit', 'Misty', 'Starlit', 'Dewy', 'Owl', 'Cricket', 'Ember', 'Twilight', 'Hush'];
 
 /** A trail name (a pair no other trail level of its kind uses for the first ~100 levels). */
 export function trailName(k: number, lantern: boolean): string {
@@ -89,10 +92,14 @@ function layoutCross(rng: Rng, d: number, id: string, type: LevelType): Level {
     anchors.push(pt(c, top));
   }
   if (type === 'island') {
-    const c = xL + Math.floor(span / 2);
-    terrain.push({ x0: c - 1, y0: yL, x1: c + 1, y1: 14, kind: 'bank' });
-    anchors.push(pt(c - 1, yL), pt(c + 1, yL));
-    tips.push('The road can rest on the island.');
+    // Islands vary: 2 or 3 wide, off centre, and sometimes a step low (posts can stand on it, the road can't).
+    const wide = rng.next() < 0.4 ? 3 : 2;
+    const c = xL + 2 + rng.int(0, Math.max(0, span - wide - 4));
+    const low = d > 0.2 && rng.next() < 0.45;
+    const top = yL + (low ? 1 : 0);
+    terrain.push({ x0: c, y0: top, x1: c + wide, y1: 14, kind: 'bank' });
+    anchors.push(pt(c, top), pt(c + wide, top));
+    tips.push(low ? 'The island sits a step low: prop the road from it.' : 'The road can rest on the island.');
   }
   if (type === 'boat') {
     terrain.push({ x0: xL + 1, y0: yLow + 1, x1: xR - 1, y1: 14, kind: 'clear' });
@@ -135,7 +142,8 @@ function layoutCross(rng: Rng, d: number, id: string, type: LevelType): Level {
 
 /** A lantern over the middle of a gap between two banks. */
 function layoutGap(rng: Rng, d: number, id: string): Level {
-  const span = Math.max(4, Math.min(8, 4 + Math.round(d * 3 + rng.next() * 1.5)));
+  // Gentle ones early: a short gap, the ring level with the bank tops or just below.
+  const span = Math.max(3, Math.min(8, 3 + Math.round(d * 4 + rng.next() * 1.5)));
   const xL = 2 + rng.int(0, 8 - span);
   const xR = xL + span;
   const yL = rng.int(5, 7);
@@ -147,8 +155,8 @@ function layoutGap(rng: Rng, d: number, id: string): Level {
   const anchors = [pt(xL, yL), pt(xR, yR)];
   for (const [x, y] of [[xL, yL], [xR, yR]] as const) for (let k = 1; k <= 3; k++) if (rng.next() < 0.55 - 0.35 * d) anchors.push(pt(x, y + k));
   const rx = xL + Math.floor(span / 2) + (span % 2 ? rng.int(0, 1) : 0);
-  const ry = Math.min(yL, yR) + rng.int(-2, 1);
-  const weight = Math.round((1.2 + 1.0 * d + rng.next() * 0.3) * 10) / 10;
+  const ry = Math.min(yL, yR) + (d < 0.3 ? rng.int(0, 1) : rng.int(-2, 1));
+  const weight = Math.round((1.0 + 1.2 * d + rng.next() * 0.3) * 10) / 10;
   const wind = windFor(rng, d);
   return {
     id,
@@ -160,7 +168,7 @@ function layoutGap(rng: Rng, d: number, id: string): Level {
     par: 0,
     parParts: 0,
     ...(wind ? { wind } : {}),
-    tip: `Hang the lantern over the middle of the gap, from both banks.${wind ? ` ${windTip(wind, true)}` : ''}`,
+    tip: `Hang the lantern over the middle of the gap, from one bank or both.${wind ? ` ${windTip(wind, true)}` : ''}`,
   };
 }
 
@@ -220,11 +228,14 @@ export function priceLevel(l: Level, d: number, info?: GenInfo): Level | null {
   }
   const s = survey(l, SURVEY_EFFORT);
   if (info) info.sims += s?.sims ?? 0;
-  if (!s || s.parts < 3) return null;
+  if (!s) return null;
+  // A short polish (the offline pool polishes far longer).
+  const ms = polish(l, s.members, LIVE_POLISH, 3);
+  if (ms.length < 3) return null;
   // Round-trip through actions, so the proof is exactly what a player could build.
-  const a = toActions(l, s.members);
+  const a = toActions(l, ms);
   const b = replayBuild(l, a).members;
-  if (b.length !== s.members.length || !WON.has(runSim(l, b).outcome)) return null;
+  if (b.length !== ms.length || !WON.has(runSim(l, b).outcome)) return null;
   const cost = costOf(b);
   const slack = 1.4 - 0.25 * d;
   return { ...l, par: cost, parParts: b.length, budget: Math.ceil((cost * slack) / 10) * 10, ref: a, diff: difficulty(s.ease, b.length) };

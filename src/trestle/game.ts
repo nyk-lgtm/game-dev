@@ -26,6 +26,7 @@ import {
   explain,
   joined,
   lenOf,
+  looseOf,
   seedLevel,
   memberCost,
   pegs,
@@ -484,7 +485,7 @@ export class Game {
   }
 
   /** Where a drag from `from` lands: the grid point nearest the finger within the material's reach. */
-  private targetFor(from: number, X: number, Y: number): { p: number; clamped: boolean } {
+  private targetFor(from: number, X: number, Y: number): { p: number; clamped: boolean; stop: boolean } {
     const [x, y] = toWorld(this.view, X, Y);
     const max = MATS[this.mat].maxLen;
     let best = -1;
@@ -497,8 +498,25 @@ export class Game {
         const d = (gx - x) ** 2 + (gy - y) ** 2;
         if (d < bd) (bd = d), (best = p);
       }
-    // Past the reach: the finger is further than half a step beyond the nearest point in reach.
-    return { p: best, clamped: Math.hypot(x - fx, y - fy) > max + 0.25 && bd > 0.3 };
+    // Past the reach (the finger further than half a step beyond the nearest point in reach): never end on
+    // an empty point (that would leave a free end); take the existing peg or ring in reach nearest the line
+    // of the drag (within 25°), or nothing.
+    const far = Math.hypot(x - fx, y - fy);
+    if (far > max + 0.25 && bd > 0.3) {
+      const held = new Set([...pegs(this.level, this.members), ...ringsOf(this.level)]);
+      let pick = -1;
+      let pd = Infinity;
+      for (const p of held) {
+        if (p === from || lenOf(from, p) > max + 1e-9) continue;
+        const dx = px(p) - fx, dy = py(p) - fy;
+        const cos = (dx * (x - fx) + dy * (y - fy)) / (Math.hypot(dx, dy) * far);
+        if (cos < 0.906) continue;
+        const d = (px(p) - x) ** 2 + (py(p) - y) ** 2;
+        if (d < pd) (pd = d), (pick = p);
+      }
+      return { p: pick < 0 ? best : pick, clamped: true, stop: pick < 0 };
+    }
+    return { p: best, clamped: false, stop: false };
   }
 
   private down(e: PointerEvent): void {
@@ -516,7 +534,7 @@ export class Game {
       return;
     }
     if (this.touches.size > 2 || this.sim) {
-      if (this.sim && this.finished) this.info(`${this.debrief ?? OUTCOME_TEXT[this.sim.outcome!]} <b>✎ Edit</b> to change it.`);
+      if (this.sim && this.finished) this.info(`${this.debrief ?? this.said(this.sim.outcome!)} <b>✎ Edit</b> to change it.`);
       return;
     }
     const peg = this.pegAt(X, Y);
@@ -562,11 +580,11 @@ export class Game {
     }
     if (pr.kind !== 'peg') return;
     this.finger = [X, Y];
-    const { p: t, clamped } = this.targetFor(pr.peg, X, Y);
+    const { p: t, clamped, stop } = this.targetFor(pr.peg, X, Y);
     if (t !== pr.target || clamped !== pr.clamped) {
       pr.target = t;
       pr.clamped = clamped;
-      pr.why = t < 0 ? 'nowhere' : whyNot(this.level, this.members, pr.peg, t, this.mat);
+      pr.why = t < 0 ? 'nowhere' : stop ? `Too far: ${MATS[this.mat].name.toLowerCase()} reaches ${MAXLEN[this.mat]}. Come back within the circle` : whyNot(this.level, this.members, pr.peg, t, this.mat);
       if (t >= 0) buzz(3);
       const len = t >= 0 ? lenOf(pr.peg, t) : 0;
       const cue = clamped ? ` <span class="warn">max length: ${MATS[this.mat].name.toLowerCase()} reaches ${MAXLEN[this.mat]}</span>` : '';
@@ -599,7 +617,7 @@ export class Game {
           this.act(addToken(pr.peg, pr.target, this.mat));
           this.sounds.place(this.mat);
           buzz(8);
-          this.info(`${pr.clamped ? `<span class="warn">Stopped at the ${MATS[this.mat].name.toLowerCase()}’s max length (${MAXLEN[this.mat]}).</span> ` : ''}${this.costLine()}`);
+          this.info(`${pr.clamped ? `<span class="warn">Past its reach: joined to the nearest peg in line instead.</span> ` : ''}${this.costLine()}`);
         } else this.info('That piece is already there.');
       } else if (pr.why && pr.why !== 'nowhere') toast(pr.why);
       this.draw();
@@ -640,6 +658,7 @@ export class Game {
     const over = c - this.level.budget;
     const j = joined(this.level, this.members);
     const many = ringsOf(this.level).length > 1;
+    const dangling = looseOf(this.level, this.members, ringsOf(this.level)).reduce((a, b) => a + b, 0);
     const notYet =
       this.level.goal.kind === 'cross' && !j.road
         ? 'the road isn’t joined from bank to bank yet'
@@ -647,7 +666,9 @@ export class Game {
           ? `not joined to the ring${many ? 's' : ''} yet`
           : j.loose
             ? `${plural(j.loose, 'piece')} not joined to the rock`
-            : '';
+            : dangling
+              ? `${plural(dangling, 'piece')} with a free end (faded: ${dangling === 1 ? 'it does' : 'they do'} nothing)`
+              : '';
     const state = over > 0 ? ` <span class="bad">${over} over budget</span>` : notYet ? ` <span class="warn">${notYet}</span>` : c <= this.level.par ? ' <span class="good">at par or under</span>' : '';
     return `${plural(this.members.length, 'part')}, cost ${c}.${state}`;
   }
@@ -685,11 +706,22 @@ export class Game {
     this.refresh();
   }
 
+  /** The outcome in words (plural lanterns and carts where there are several). */
+  private said(o: Outcome): string {
+    const many = ringsOf(this.level).length > 1;
+    const convoy = this.level.goal.kind === 'cross' && (this.level.goal.carts ?? 1) > 1;
+    if (o === 'held' && many) return 'The lanterns hold!';
+    if (o === 'dropped' && many) return 'A lantern fell.';
+    if (o === 'sagged' && many) return 'A lantern sagged out of its ring.';
+    if (o === 'crossed' && convoy) return 'Both carts made it across!';
+    return OUTCOME_TEXT[o];
+  }
+
   /** Back to building; a failed run leaves its glow (and its words) behind. */
   private stopRun(): void {
     const s = this.sim;
     if (s && this.finished && !WON.has(s.outcome!)) {
-      this.hot = this.firstBreakHot(s);
+      this.hot = this.failHot;
     } else if (s) this.hot = null;
     this.sim = null;
     this.finished = false;
@@ -697,10 +729,10 @@ export class Game {
     this.refresh();
   }
 
-  /** After a failure only the piece that snapped first glows (the swinging pegs are ringed apart). */
-  private firstBreakHot(s: Sim): Map<string, number> {
-    const m = this.members[s.firstBreak];
-    return new Map(m ? [[`${m.a}:${m.b}`, 2]] : []);
+  /** After a failure only the piece that snapped first glows (or the climbing planks); swinging pegs are ringed apart. */
+  private failHot: Map<string, number> | null = null;
+  private glowFor(pieces: number[]): Map<string, number> {
+    return new Map(pieces.filter((k) => this.members[k]).map((k) => [`${this.members[k].a}:${this.members[k].b}`, 2]));
   }
 
   private stepRun(dt: number): void {
@@ -758,10 +790,11 @@ export class Game {
       const v = explain(this.level, this.members, { ...s, outcome: s.outcome! });
       this.debrief = `<span class="bad">${v.text}</span>`;
       this.wobbly = v.wobbly.size ? v.wobbly : null;
+      this.failHot = this.glowFor(v.uphill ?? (s.firstBreak >= 0 ? [s.firstBreak] : []));
       // Keep the words and the glow for this exact build, across a reload.
       const k = this.debriefKey();
       if (k) {
-        const hot: [string, number][] = [...this.firstBreakHot(s)];
+        const hot: [string, number][] = [...this.failHot];
         store.save(k, { v: RULES_VERSION, a: builtOnly(this.a), text: this.debrief, hot, wobbly: [...v.wobbly] } satisfies Debrief);
       }
       this.info(this.debrief);
@@ -785,7 +818,7 @@ export class Game {
       const r = recordDaily(store, st * 1000 + Math.max(0, 999 - cost), `${'★'.repeat(st)} ${cost}`, this.day);
       dailyLine = `<p><b style="color:var(--gold)">Daily · ${prettyDay(this.day)}</b><br>Today's best: ${r.best.label}${r.improved ? ' (new best!)' : ''}</p>`;
     }
-    this.info(`<span class="good">${OUTCOME_TEXT[s.outcome!]}</span> ${st ? stars(st) : '<span class="bad">over budget</span>'} · cost ${cost}`);
+    this.info(`<span class="good">${this.said(s.outcome!)}</span> ${st ? stars(st) : '<span class="bad">over budget</span>'} · cost ${cost}`);
     this.refresh();
     const l = this.level;
     const why =
@@ -913,17 +946,19 @@ export class Game {
 
   showHelp(): void {
     store.save('seenHelp', true);
+    const row = (m: number, what: string) =>
+      `<div class="mrow">${matSvg(m, 22)}<b>${MATS[m].name}</b><span>${what}</span><small>${MATS[m].cost}/u · ≤${MAXLEN[m]} · ${MATS[m].rope ? 'pull' : 'holds'} ${MATS[m].strength}</small></div>`;
     showCard(
       `<h2>Trestle</h2>
-      <p>Help the beetle haul its acorn cart over the stream, or hang lanterns where the path needs light, with a few sticks and some string.</p>
-      <ul>
-        <li><b>Drag from a peg</b> to another point to add a piece. The gold rings are fixed to the rock; every piece you add makes new pegs. A magnifier shows where the piece will end.</li>
-        <li>${matSvg(0, 20)} <b>Planks</b> (10 a unit, up to 2.2 long) are the road: the cart only rolls on planks and rock. ${matSvg(1, 20)} <b>Twigs</b> (5 a unit, up to 2.2) push and pull. ${matSvg(2, 20)} <b>Twine</b> (3 a unit, up to 4.5) reaches far but only pulls. Drag past a piece’s reach and it stops at the last point in reach (a dashed circle shows it).</li>
-        <li>Pegs bend freely, so a lone row of planks sags: brace it into <b>triangles</b>. Planks hold 80, twigs 60 (push or pull), twine 45 (pull only). The beetle can’t haul uphill: keep the road level or going down.</li>
-        <li><b>Tap a piece</b> to pick it, tap again (or ✕) to remove it. Pinch or ⤢ to zoom; two fingers pan. Undo takes back anything.</li>
-        <li><b>▶ Go</b> runs a test: pieces turn yellow, then red as they strain, and snap past their limit. After a failed run the line below says why: the piece that snapped first glows red and pegs that can swing are ringed. Wind gusts push sideways and updraughts lift whatever only hangs.</li>
-        <li>★ clear it within the budget, ★★ at the surveyor's cost (par) or less, ★★★ also with no more parts than the surveyor.</li>
-      </ul>`,
+      <p>Get the beetle’s cart to the flag, or hang lanterns at their rings.</p>
+      <h3>Build</h3>
+      <p><b>Drag</b> from a peg to a point. <b>Tap</b> a piece to pick it, again to remove it. Pinch or ⤢ to zoom.</p>
+      <h3>Pieces</h3>
+      ${row(0, 'the road')}${row(1, 'push or pull')}${row(2, 'pulls only')}
+      <h3>Rules</h3>
+      <ul><li><b>Triangles</b> hold; a lone row of planks sags.</li><li>The beetle can’t haul <b>uphill</b>.</li><li><b>Wind</b> lifts whatever only hangs.</li><li>A piece with a <b>free end</b> does nothing.</li></ul>
+      <h3>Stars</h3>
+      <p>★ within budget · ★★ par cost · ★★★ par cost and parts.</p>`,
       [{ label: 'Build', primary: true, onClick: closeOverlay }],
     );
   }

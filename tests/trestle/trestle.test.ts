@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   POOL,
+  looseOf,
   dailyName,
   type Level,
   COLS,
@@ -163,7 +164,15 @@ describe('generated levels', () => {
     expect(names.size).toBe(POOL.length);
     for (const t of TUTORIALS) expect(names.has(t.name)).toBe(false);
     // A daily never borrows a trail name.
-    for (let s = 1; s < 40; s++) expect(names.has(dailyName(s * 7919, s % 3 === 0))).toBe(false);
+    for (let s = 1; s < 40; s++) {
+      const crossing = dailyName(s * 7919, false);
+      expect(names.has(crossing)).toBe(false);
+      // A crossing's name never sounds like a lantern level, and the other way round.
+      expect(crossing).not.toMatch(/Lantern|Lookout|Ledge|Overhang|Perch|Beacon|Hook/);
+      expect(dailyName(s * 7919, true)).not.toMatch(/Gap|Gully|Ford|Ravine|Crossing|Cut|Dell|Brook/);
+    }
+    // No par build leans on a piece with a free end.
+    for (const l of POOL) expect(looseOf(l, replayBuild(l, l.ref!).members, l.goal.kind === 'reach' ? l.goal.rings : []).some(Boolean), l.name).toBe(false);
     POOL.forEach((l, i) => {
       if (i % 5) return;
       const v = judge(l, l.ref!);
@@ -246,6 +255,29 @@ describe('diagnosis', () => {
     const r = runSim(l, ms);
     expect(WON.has(r.outcome)).toBe(false);
     expect(['wobbly', 'weak', 'sag']).toContain(explain(l, ms, r).cause);
+  });
+});
+
+describe('free ends', () => {
+  it('a piece with a free end is left out of the run: it can neither help nor hurt', () => {
+    const l = TUTORIALS[2];
+    const ms = replayBuild(l, l.ref!).members;
+    const stub = addMember(l, ms, pt(5, 6), pt(5, 4), TWIG)!;
+    expect(looseOf(l, stub)[stub.length - 1]).toBe(1);
+    const a = runSim(l, ms);
+    const b = runSim(l, stub);
+    expect(b.outcome).toBe(a.outcome);
+    expect(b.steps).toBe(a.steps);
+    // A chain of two stubs goes too, and the wobble check ignores them.
+    const chain = addMember(l, stub, pt(5, 4), pt(6, 3), TWIG)!;
+    expect([...looseOf(l, chain)].slice(-2)).toEqual([1, 1]);
+    expect(wobbly(l, chain).size).toBe(0);
+  });
+  it('a cart stuck uphill points at the climbing plank', () => {
+    const t3 = TUTORIALS[2];
+    const dip = replayBuild(t3, 'P292oP2o2qP2f2q').members;
+    const v = explain(t3, dip, runSim(t3, dip));
+    expect(v.uphill?.map((k) => dip[k])).toEqual([dip.find((m) => m.a === pt(9, 6) || m.b === pt(9, 6))]);
   });
 });
 
