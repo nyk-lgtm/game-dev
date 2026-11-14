@@ -44,7 +44,7 @@ const The = (i: Item) => the(i).replace(/^./, (c) => c.toUpperCase());
 
 export const NPC_NAMES: Record<Npc, string> = { bassett: 'Bassett', nell: 'Nell' };
 
-const EXITS: Record<Room, Room[]> = {
+export const EXITS: Record<Room, Room[]> = {
   cottage: ['yard'],
   yard: ['cottage', 'tower', 'signal', 'store', 'moor'],
   tower: ['yard'],
@@ -136,6 +136,12 @@ function shipLine(s: State): string {
   return 'The bell is close, off the Teeth. Without the horn she will never find the channel.';
 }
 
+/** What could steer you over the moor in the fog, as this night stands. */
+function steerBy(s: State): string {
+  const dog = s.bramble.withNell ? 'Nell' : 'Bramble’s nose';
+  return s.nell.found && !s.bramble.withNell ? 'the horn, or Nell or Bramble to lead you' : `the horn to walk toward, or ${dog} to lead you`;
+}
+
 function fogLine(s: State): string {
   if (s.t < FOG_T - 6) return 'The fog is thick, but you can still make out the path a few yards ahead.';
   if (s.t < FOG_T) return 'The fog is thickening fast. Soon you won’t see the path at all.';
@@ -220,7 +226,7 @@ function describeRoom(s: State, brief: boolean, skip: string[]): string[] {
             : `A small tin lantern lies in the heather, out, its glass cracked.${s.nell.found ? '' : ' Small boot prints go on up the path toward the Point.'}`,
         );
       if (s.bramble.follows && brambleHere(s) && !s.nell.found) out.push('Bramble strains at her lead, nose down, toward the Point.');
-      if (blind(s) && !guided(s)) out.push('Without something to steer by, you would only walk in circles out here. The wall will take you back to the yard.');
+      if (blind(s) && !guided(s)) out.push(`Without ${steerBy(s)}, you would only walk in circles out here. The wall will take you back to the yard.`);
       break;
     case 'house':
       out.push(brief ? 'The doctor’s house, dark, Nell’s gran snoring upstairs.' : 'The doctor’s house is dark, the door on the latch. From upstairs comes the sound of Nell’s gran snoring.');
@@ -434,7 +440,7 @@ export function act(s: State, id: string): string[] | null {
       break;
     case 'look':
       cost = 0;
-      if (a === 'door') out.push('Padlocked. Mr Bassett, the relief keeper, has the key on his ring up in the tower. The hasp is old and rusty; a crowbar would have it off, though not quietly.');
+      if (a === 'door') out.push(doorLine(s));
       else {
         out.push('Ada taught you this much: heat the bulb with a blowlamp until it glows, swing the flywheel to fire her, then open the air valve to the horn.');
         out.push(
@@ -489,6 +495,14 @@ export function act(s: State, id: string): string[] | null {
   return finish(s, out, cost, t0, verb === 'go');
 }
 
+/** Trying the signal-house door: it follows where Bassett's keys are. */
+function doorLine(s: State): string {
+  if (has(s, 'keys')) return 'Padlocked. But Bassett’s keys are in your pocket, and the big one fits this padlock.';
+  if (s.at.keys === 'bassett')
+    return `Padlocked. Mr Bassett, the relief keeper, has the key on his ring${s.bassett.room === 'tower' ? ' up in the tower' : ''}. The hasp is old and rusty; a crowbar would have it off, though not quietly.`;
+  return `Padlocked. You put Bassett’s keys down ${s.at.keys === s.room ? 'right here' : `in ${ROOM_NAMES[s.at.keys as Room].replace(/^The /, 'the ')}`}. The hasp is old and rusty; a crowbar would have it off, though not quietly.`;
+}
+
 const spend = (s: State, cost: number) => (s.t = Math.min(END_T, s.t + cost));
 
 function go(s: State, to: Room, out: string[]): void {
@@ -498,7 +512,7 @@ function go(s: State, to: Room, out: string[]): void {
     if (to !== 'yard') {
       out.push(
         `You set off for ${ROOM_NAMES[to].replace(/^The /, 'the ')}. Ten steps and the path is gone; there is only heather and grey. You walk until your hands find the wall again, and you are back where you started.`,
-        'Without something to steer by, a sound to walk toward or a nose that knows the way, the moor will only turn you round.',
+        `Without ${steerBy(s)}, the moor will only turn you round.`,
       );
       spend(s, 2);
       return;
@@ -795,14 +809,17 @@ function finish(s: State, out: string[], cost: number, prev: number, arrived = f
   if (crossed(FOG_T - 6))
     out.push(
       told
-        ? 'Soon the moor path will be gone, and out there you’ll need something to steer by.'
-        : `${INDOORS.has(s.room) ? 'Outside, the' : 'The'} fog is thickening. Soon the moor path will be gone, and out there you’ll need something to steer by.`,
+        ? `Soon the moor path will be gone, and out there you’ll need ${steerBy(s)}.`
+        : `${INDOORS.has(s.room) ? 'Outside, the' : 'The'} fog is thickening. Soon the moor path will be gone, and out there you’ll need ${steerBy(s)}.`,
     );
-  if (crossed(FOG_T) && !s.f.horn && !(arrived && s.room === 'moor'))
+  const lead = brambleWithYou(s) ? 'Bramble’s nose' : s.nell.follows && s.nell.room === s.room ? 'Nell, who walks it every day,' : null;
+  if (crossed(FOG_T) && !s.f.horn && lead && !(arrived && s.room === 'moor'))
+    out.push(`${told ? 'Out' : 'The fog closes in completely. Out'} on the moor now, only ${lead} will find the path.`);
+  else if (crossed(FOG_T) && !s.f.horn && !(arrived && s.room === 'moor'))
     out.push(
       told
-        ? 'Out on the moor now, without something to steer by, you’d only walk in circles.'
-        : 'The fog closes in completely. On the moor now, without something to steer by, you’d only walk in circles.',
+        ? `Out on the moor now, without ${steerBy(s)}, you’d only walk in circles.`
+        : `The fog closes in completely. On the moor now, without ${steerBy(s)}, you’d only walk in circles.`,
     );
   else if (crossed(FOG_T) && s.f.horn && !told) out.push('The fog closes in completely. Only the horn gives you a direction now.');
   if (s.f.heatAt >= 0 && !s.f.running && crossed(s.f.heatAt + HEAT)) {

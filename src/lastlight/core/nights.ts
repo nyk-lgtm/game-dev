@@ -1,8 +1,9 @@
 // The nights you can play, as Story objects the UI drives. Night 1's module
-// (story.ts) is untouched; this only wraps it.
+// (story.ts) keeps its rules and ids; this wraps it (hints live in hints.ts).
 
 import * as n1 from './story';
 import * as n2 from './night2';
+import { hint1, hint2 } from './hints';
 import type { Story } from './types';
 
 const cap = (x: string) => x[0].toUpperCase() + x.slice(1);
@@ -37,6 +38,7 @@ export const NIGHT1: Story<n1.State> = {
   carried: (s, k) => k in n1.ITEM_NAMES && n1.has(s, k as n1.Item),
   company: (s) => (s.tomas.follows ? ['Tomas'] : []),
   late: (s) => !s.f.wound && s.t >= 30,
+  hint: hint1,
 };
 
 const N2_THINGS: Record<string, string> = {
@@ -80,6 +82,7 @@ export const NIGHT2: Story<n2.State> = {
       s.bassett.follows && 'Bassett',
     ].filter((x): x is string => !!x),
   late: (s) => !s.f.horn && s.t >= 30,
+  hint: hint2,
 };
 
 export const NIGHTS: Story[] = [NIGHT1 as unknown as Story, NIGHT2 as unknown as Story];

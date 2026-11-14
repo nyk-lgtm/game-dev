@@ -63,7 +63,7 @@ describe('Last Light, night 2', () => {
     s.t = FOG_T;
     const out = act(s, 'go:point')!;
     expect(s.room).toBe('moor');
-    expect(out.join(' ')).toContain('something to steer by');
+    expect(out.join(' ')).toContain('Bramble’s nose to lead you');
     // The wall always leads home.
     act(s, 'go:yard');
     expect(s.room).toBe('yard');
@@ -73,6 +73,12 @@ describe('Last Light, night 2', () => {
     act(d, 'go:point');
     expect(d.room).toBe('point');
     expect(d.nell.trust).toBe(2);
+    // The warning names what will steer you, and says so when Bramble is already on her lead.
+    const w = replay(['lead', 'go:yard']);
+    w.t = FOG_T - 1;
+    const told = act(w, 'go:store')!.join(' ');
+    expect(told).toContain('only Bramble’s nose will find the path');
+    expect(told).not.toContain('walk in circles');
   });
 
   it('the bulb takes a quarter hour to heat; swinging early only coughs', () => {

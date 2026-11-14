@@ -38,7 +38,7 @@ const The = (i: Item) => the(i).replace(/^./, (c) => c.toUpperCase());
 
 export const NPC_NAMES: Record<Npc, string> = { tomas: 'Tomas', ada: 'Ada' };
 
-const EXITS: Record<Room, Room[]> = {
+export const EXITS: Record<Room, Room[]> = {
   cottage: ['yard'],
   yard: ['cottage', 'base', 'cliff'],
   base: ['yard', 'lamp'],

@@ -891,6 +891,14 @@ playtests with fixes shipped. Open threads, in order:
         what he knows and he's asked again only when something changed, Nell comes for the horn without
         a promise and knows the moor herself, stale moor/fog/house lines fixed, blowlamp needs-a-match
         hints, Nell's payoff line; a "With you" line above the choices.
+  - [x] Fourth pass (third blind playtest: N1 0★ then 3★, N2 2★ then 3★; "writing excellent, endings earned") and
+        fixes (no version bumps: text and UI only): the choice panel scrolls above a fixed Go row (the keys/Unlock
+        buttons were half under it), opened options scroll into view, a "more ▾" cue; N2 "Try the door" follows where
+        Bassett's keys are; fog warnings name what steers you (horn, Bramble, Nell) and say so when Bramble already
+        leads; a free 2-level Hint (? in the HUD: nudge, then plain answer + the button glows) from a per-night
+        ladder (core/hints.ts; following it scores 3★ on both nights; `scripts/lastlight/hints.ts`); "Give…" under
+        people; "Best after night 1" on the night picker. Next: watch whether players lean on hints; a hint count is
+        on the ending card only.
 
 - [x] **Nightline fixes from its blind playtest** (agent reached the goal on run 3; no errors):
   steering ~120 px to full lock; HUD on backing panels, 11 px labels, brighter TIME UP; traffic drawn

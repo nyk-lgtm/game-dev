@@ -295,7 +295,14 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   A run is the list of ids, saved per night ('run', 'run2'); `?n=2&a=` replays (reports: `LASTLIGHT v…`,
   `LASTLIGHT2 v…`). Profile: night 1 at the top level, night 2 under `n2`. Never change night 1's ids or
   RULES_VERSION. `npx vite-node scripts/lastlight/walk.ts <night> <ids>` prints a run. tests/lastlight has each
-  night's best route — update it when a story changes.
+  night's best route — update it when a story changes. Hints (core/hints.ts, `Story.hint`): a per-night ladder of
+  conditions along the best route (tide/oil timing on night 1, fog/Bramble on night 2) gives a nudge, a plain pointer
+  and a `target` id (the action, or the next `go:` toward its room) that the page makes glow; free, counted per run
+  (save `h`). Following every target from the start earns 3★ on both nights (test); from random states a hint only
+  lacks a target when nothing is left (`lost`). `scripts/lastlight/hints.ts <night> [ids|random N]` walks them.
+  Change the ladder when a story changes. Text-only changes (door, fog lines) need no version bump; state changes do.
+  UI: choices scroll above a fixed Go row (never under it) with a "more ▾" cue; opened options scroll into view;
+  `give:`/`show:` ids also list under the person ("Give…").
 - Ninefold (src/ninefold/core, rules v8): `makeHole(seed, n)` grows a corridor of 16-unit cells on a 6×9 grid (a
   self-avoiding walk in a 4-column band, never touching itself, plus side pockets), walls = the cells' outer edges,
   obstacles in route cells (never tee/cup). Shapes (`hole.shape`, from hole 3/4): ~1/4 `green` (the last 2-3 cells get

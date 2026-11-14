@@ -5,6 +5,7 @@ installErrorOverlay();
 
 const game = new Game();
 document.getElementById('menuBtn')!.onclick = () => game.showMenu();
+document.getElementById('hintBtn')!.onclick = () => game.showHint();
 
 // ?a=go:yard,... replays a bug report (without touching the saved night); ?n=2 picks the night.
 const p = new URLSearchParams(location.search);

@@ -1,6 +1,8 @@
 // What the Last Light UI needs from a night's story module. Each night is a
 // pure, deterministic module: (actions) -> state + text.
 
+import type { Hint } from './hints';
+
 export interface Choice {
   /** The action, as a token for replays. */
   id: string;
@@ -55,4 +57,6 @@ export interface Story<S extends StoryState = StoryState> {
   company(s: S): string[];
   /** Time is short and the main job isn't done (the clock turns red). */
   late(s: S): boolean;
+  /** The next useful step, as a nudge and a plain pointer (null once the night is over). */
+  hint(s: S): Hint | null;
 }

@@ -26,19 +26,37 @@ body {
   text-transform: uppercase; color: var(--accent);
 }
 @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+/* The choice panel: a scrolling area for people/things, then the Go row below it (never over it). */
 #acts {
-  flex: none; max-height: 46%; overflow-y: auto; padding: 6px 12px 0;
-  border-top: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; gap: 6px;
+  flex: none; max-height: 50%; display: flex; flex-direction: column;
+  border-top: 1px solid var(--line); background: var(--panel);
 }
-#acts > :last-child { margin-bottom: max(12px, env(safe-area-inset-bottom)); }
+#acts .scrollwrap { position: relative; flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; }
+#acts .scroll {
+  flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 6px 12px 10px; display: flex; flex-direction: column; gap: 6px; position: relative;
+}
+#acts > .scroll:only-child { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+/* "more ▾": shown while choices hide below the fold; taps pass through it. */
+#acts .more {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 30px; pointer-events: none;
+  display: flex; align-items: flex-end; justify-content: center;
+  background: linear-gradient(to bottom, transparent, var(--panel) 85%);
+}
+#acts .more[hidden] { display: none; }
+#acts .more span {
+  font: 700 11px/1 system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--accent); background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
+  padding: 3px 10px; margin-bottom: 2px;
+}
 #acts .row { display: flex; flex-direction: column; gap: 3px; }
 #acts .with { font-size: 13px; color: var(--accent); padding-top: 2px; }
 #acts .lab { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
 #acts .list { display: flex; flex-wrap: wrap; gap: 6px; }
-/* The Go row stays pinned at the bottom of the panel while the rest scrolls. */
+#acts .sublab { flex-basis: 100%; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 2px 0 -2px 4px; }
 #acts .row.goes {
-  position: sticky; bottom: 0; z-index: 1; margin: 0 -12px; padding: 4px 12px max(12px, env(safe-area-inset-bottom));
-  background: var(--panel); box-shadow: 0 -10px 12px -8px rgba(0, 0, 0, 0.55);
+  flex: none; padding: 6px 12px max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line); box-shadow: 0 -8px 12px -8px rgba(0, 0, 0, 0.55);
 }
 #acts button {
   min-height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid var(--line);
@@ -50,6 +68,12 @@ body {
 #acts button.go { background: #13203a; border-color: #2a4170; color: #cfe0ff; }
 #acts button.wide { width: 100%; text-align: center; }
 #acts button:active { transform: scale(0.98); }
+/* A plain hint's button glows until the next action. */
+#acts button.hinted { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); animation: hintglow 1.4s ease-in-out infinite; }
+@keyframes hintglow { 50% { box-shadow: 0 0 0 4px rgba(255, 215, 122, 0.35); } }
+#hintBtn { font-weight: 800; color: var(--accent); }
+#hintBtn:disabled { opacity: 0.35; }
+.card p.hint { font: 17px/1.5 Georgia, 'Times New Roman', serif; }
 .card .stars { font-size: 30px; color: var(--accent); letter-spacing: 4px; }
 .card .stars .off { color: #2a3448; }
 .card .meta2 { font-size: 13px; color: var(--muted); }
@@ -68,6 +92,9 @@ body[data-night='2'] #acts button.go { background: #1a2230; border-color: #3a4a6
 }
 .card .nights button.night.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .card .nights small { color: var(--muted); font-size: 13px; }
+.card .nights small.after { color: var(--accent); font-size: 11px; opacity: 0.85; }
 .card .nights .new, .card .nights .best { position: absolute; top: 7px; right: 8px; font-size: 11px; font-weight: 800; }
 .card .nights .new { background: var(--accent); color: #1a1408; padding: 1px 7px; border-radius: 999px; }
 .card .nights .best { color: var(--accent); font-size: 12px; letter-spacing: 1px; }
+#acts .scroll:empty { padding: 0; }
+@media (prefers-reduced-motion: reduce) { #acts button.hinted { animation: none; } }

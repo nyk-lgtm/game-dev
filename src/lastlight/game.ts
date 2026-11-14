@@ -7,6 +7,7 @@ import { makeStore } from '../shared/storage';
 import { NIGHTS } from './core/nights';
 import type { State as N2State } from './core/night2';
 import type { State as N1State } from './core/story';
+import type { Hint } from './core/hints';
 import type { Choice, Story, StoryState } from './core/types';
 import { drawFog, drawSky } from './sky';
 
@@ -33,24 +34,33 @@ export class Game {
   story: Story = NIGHTS[0];
   s: StoryState = this.story.newGame();
   ids: string[] = [];
+  /** Hints asked for on this run (free; the ending card mentions them). */
+  hints = 0;
   private open: string | null = null;
+  /** The action a plain hint points at: highlighted until the next action. */
+  private hintTarget: string | null = null;
+  /** Open the hinted action's group on the next render (once, so other chips still toggle). */
+  private hintOpen = false;
   private sky = $('sky') as HTMLCanvasElement;
   private time = 0;
   private last = 0;
 
   constructor() {
     new ResizeObserver(() => this.sizeSky()).observe(this.sky);
+    new ResizeObserver(() => this.updateCue()).observe($('acts'));
     requestAnimationFrame((t) => this.frame(t));
   }
 
   /** Starts the night fresh, or replays saved actions (rebuilding the story text). */
-  start(ids: string[] = [], night = this.story.night): void {
+  start(ids: string[] = [], night = this.story.night, hints = 0): void {
     this.story = storyFor(night);
     store.save('night', this.story.night);
     document.body.dataset.night = String(this.story.night);
     this.s = this.story.newGame();
     this.ids = [];
+    this.hints = hints;
     this.open = null;
+    this.hintTarget = null;
     $('story').innerHTML = '';
     this.para(this.story.intro, 'intro', `Night ${this.story.night} · ${this.story.name}`);
     this.para(this.story.describe(this.s), 'room', this.story.roomName(this.s));
@@ -73,12 +83,13 @@ export class Game {
   playNight(night: number): void {
     closeOverlay();
     const story = storyFor(night);
-    const saved = store.load<{ v: number; a: string } | null>(story.saveKey, null);
-    this.start(saved && saved.v === story.RULES_VERSION ? saved.a.split(',').filter(Boolean) : [], night);
+    const saved = store.load<{ v: number; a: string; h?: number } | null>(story.saveKey, null);
+    const ok = saved && saved.v === story.RULES_VERSION;
+    this.start(ok ? saved.a.split(',').filter(Boolean) : [], night, ok ? (saved.h ?? 0) : 0);
   }
 
   private save(): void {
-    store.save(this.story.saveKey, { v: this.story.RULES_VERSION, a: this.ids.join(',') });
+    store.save(this.story.saveKey, { v: this.story.RULES_VERSION, a: this.ids.join(','), h: this.hints });
   }
 
   private para(lines: string[], cls = '', heading?: string): void {
@@ -108,6 +119,7 @@ export class Game {
     if (!out) return;
     this.ids.push(id);
     this.open = null;
+    this.hintTarget = null;
     document.querySelectorAll('#story .beat.new').forEach((b) => b.classList.remove('new'));
     this.render(false);
     this.para(out, id.startsWith('go:') ? 'room' : '', id.startsWith('go:') ? this.story.roomName(this.s) : undefined);
@@ -137,30 +149,63 @@ export class Game {
     $('clock').textContent = st.clock(s);
     $('clock').classList.toggle('late', st.late(s));
     $('placeName').textContent = st.roomName(s);
+    ($('hintBtn') as HTMLButtonElement).disabled = !!s.over;
     const box = $('acts');
     box.innerHTML = '';
     if (s.over) {
-      box.innerHTML = '<button class="primary wide" id="endBtn">The night is over</button>';
+      box.innerHTML = '<div class="scroll"><button class="primary wide" id="endBtn">The night is over</button></div>';
       $('endBtn').onclick = () => this.showEnd();
+      this.updateCue();
       return;
     }
+    // The choices scroll in their own area; the Go row sits below it, never over it.
+    const wrap = document.createElement('div');
+    wrap.className = 'scrollwrap';
+    const scroller = document.createElement('div');
+    scroller.className = 'scroll';
+    scroller.onscroll = () => this.updateCue();
+    const cue = document.createElement('div');
+    cue.className = 'more';
+    cue.innerHTML = '<span>more ▾</span>';
+    cue.hidden = true;
+    wrap.append(scroller, cue);
+    box.appendChild(wrap);
     const company = st.company(s);
     if (company.length) {
       const w = document.createElement('div');
       w.className = 'with';
       w.textContent = `With you: ${company.length > 1 ? `${company.slice(0, -1).join(', ')} and ${company[company.length - 1]}` : company[0]}`;
-      box.appendChild(w);
+      scroller.appendChild(w);
     }
     const cs = st.choices(s);
     const go = cs.filter((c) => c.about === 'go');
     const rest = cs.filter((c) => c.about !== 'go');
+    const isPerson = (k: string) => st.people.includes(k);
+    /** "give:flask:bassett" → bassett: things you can hand to someone also show under that person. */
+    const giveTo = (c: Choice) => {
+      const m = /^(give|show):[^:]+:([^:]+)$/.exec(c.id);
+      return m && isPerson(m[2]) ? m[2] : null;
+    };
     // Group by subject: people, then things here, then what you carry.
     const groups = new Map<string, Choice[]>();
-    for (const c of rest) groups.set(c.about, [...(groups.get(c.about) ?? []), c]);
-    const isPerson = (k: string) => st.people.includes(k);
+    const gifts = new Map<string, Choice[]>();
+    for (const c of rest) {
+      groups.set(c.about, [...(groups.get(c.about) ?? []), c]);
+      const who = giveTo(c);
+      if (who) gifts.set(who, [...(gifts.get(who) ?? []), c]);
+    }
+    for (const who of gifts.keys()) if (!groups.has(who)) groups.set(who, []);
     const rank = (k: string) => (isPerson(k) ? 0 : st.carried(s, k) ? 2 : 1);
     const order = [...groups.keys()].sort((a, b) => rank(a) - rank(b));
-    const row = (title: string, els: HTMLElement[], cls = '') => {
+    // A plain hint opens the group its action lives in, so the highlighted button is on screen.
+    const target = this.hintTarget ? cs.find((c) => c.id === this.hintTarget) : undefined;
+    if (target && target.about !== 'go' && this.hintOpen) {
+      const k = giveTo(target) ?? target.about;
+      const n = (groups.get(k)?.length ?? 0) + (isPerson(k) ? (gifts.get(k)?.length ?? 0) : 0);
+      if (n > 1 || st.carried(s, k)) this.open = k;
+    }
+    this.hintOpen = false;
+    const row = (title: string, els: HTMLElement[], cls = '', parent: HTMLElement = scroller) => {
       if (!els.length) return;
       const r = document.createElement('div');
       r.className = `row ${cls}`;
@@ -169,41 +214,124 @@ export class Game {
       list.className = 'list';
       els.forEach((e) => list.appendChild(e));
       r.appendChild(list);
-      box.appendChild(r);
+      parent.appendChild(r);
     };
-    const btn = (label: string, cls: string, on: () => void) => {
+    const btn = (label: string, cls: string, on: () => void, id?: string) => {
       const b = document.createElement('button');
-      b.className = cls;
+      b.className = cls + (id && id === this.hintTarget ? ' hinted' : '');
       b.textContent = label;
+      if (id) b.dataset.id = id;
       b.onclick = on;
       return b;
     };
     const subjects = (filter: (k: string) => boolean) =>
       order.filter(filter).flatMap((k) => {
-        const list = groups.get(k)!;
+        const own = groups.get(k)!;
+        const give = isPerson(k) ? (gifts.get(k) ?? []) : [];
+        const list = [...own, ...give];
         // Carried things always show by name, so you can see what you have.
         const carried = st.carried(s, k);
-        // A lone action stands in for its subject; people keep their name on it.
-        // A lone action under People keeps the person's name, unless it already says it.
+        // A lone action stands in for its subject; under People it keeps the person's name, unless it already says it.
         const who = st.subjectName(s, k);
-        const label = isPerson(k) && !list[0].label.includes(who) ? `${who}: ${list[0].label[0].toLowerCase()}${list[0].label.slice(1)}` : list[0].label;
-        if (list.length === 1 && !carried) return [btn(label, 'act', () => this.do(list[0].id))];
+        const one = list[0];
+        const label = isPerson(k) && !one.label.includes(who) ? `${who}: ${one.label[0].toLowerCase()}${one.label.slice(1)}` : one.label;
+        if (list.length === 1 && !carried) return [btn(label, 'act', () => this.do(one.id), one.id)];
         const chip = btn(st.subjectName(s, k), `chip${this.open === k ? ' on' : ''}`, () => {
           this.open = this.open === k ? null : k;
           this.render(false);
+          if (this.open) this.revealOpen();
         });
-        const out = [chip];
-        if (this.open === k) for (const c of list) out.push(btn(c.label, 'act sub', () => this.do(c.id)));
+        const out: HTMLElement[] = [chip];
+        if (this.open === k) {
+          for (const c of own) out.push(btn(c.label, 'act sub', () => this.do(c.id), c.id));
+          if (give.length) {
+            const lab = document.createElement('span');
+            lab.className = 'sublab';
+            lab.textContent = 'Give…';
+            out.push(lab);
+            for (const c of give) out.push(btn(c.label, 'act sub', () => this.do(c.id), c.id));
+          }
+        }
         return out;
       });
     row('People', subjects(isPerson));
     row('Here', subjects((k) => !isPerson(k) && !st.carried(s, k)));
     row('Carrying', subjects((k) => st.carried(s, k)));
-    row('Go', go.map((c) => btn(`→ ${c.label}`, 'go', () => this.do(c.id))), 'goes');
+    row('Go', go.map((c) => btn(`→ ${c.label}`, 'go', () => this.do(c.id), c.id)), 'goes', box);
     if (scroll) {
       const story = $('story');
       story.scrollTop = story.scrollHeight;
     }
+    requestAnimationFrame(() => {
+      const hinted = box.querySelector<HTMLElement>('.scroll button.hinted');
+      if (hinted) this.reveal(hinted, hinted);
+      this.updateCue();
+    });
+  }
+
+  /** Scrolls the choice area so `from`..`to` are in view (as much as fits, `from` first). */
+  private reveal(from: HTMLElement, to: HTMLElement): void {
+    const sc = $('acts').querySelector<HTMLElement>('.scroll');
+    if (!sc) return;
+    const top = from.offsetTop - 8;
+    // Room below for the "more" cue, so it never sits on the button we meant to show.
+    const bottom = to.offsetTop + to.offsetHeight + 36 - sc.clientHeight;
+    const want = Math.max(0, Math.min(top, Math.max(sc.scrollTop, bottom)));
+    if (Math.abs(want - sc.scrollTop) > 1) sc.scrollTo({ top: want, behavior: 'smooth' });
+  }
+
+  /** After opening a subject, bring its options into view (they can land below the fold). */
+  private revealOpen(): void {
+    requestAnimationFrame(() => {
+      const box = $('acts');
+      const chip = box.querySelector<HTMLElement>('button.chip.on');
+      const subs = box.querySelectorAll<HTMLElement>('.scroll .sub');
+      if (chip && subs.length) this.reveal(chip, subs[subs.length - 1]);
+      this.updateCue();
+    });
+  }
+
+  /** The "more ▾" cue shows while there are choices below the fold. */
+  private updateCue(): void {
+    const sc = document.querySelector<HTMLElement>('#acts .scroll');
+    const cue = document.querySelector<HTMLElement>('#acts .more');
+    if (!sc || !cue) return;
+    cue.hidden = sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 6;
+  }
+
+  // ---------------------------------------------------------------- hints
+
+  /** Hint, level 1: a nudge, with the plain answer one tap further. */
+  showHint(): void {
+    const h = this.story.hint(this.s);
+    if (!h) return;
+    this.hints++;
+    this.save();
+    showCard(`<h2>A nudge</h2><p class="hint">${h.nudge}</p><p class="meta2">Hints are free. Still stuck? Ask for the plain answer.</p>`, [
+      { label: 'Back to the story', primary: true, onClick: closeOverlay },
+      { label: 'Tell me plainly', onClick: () => this.showPointer(h) },
+    ]);
+  }
+
+  /** Hint, level 2: exactly what to do, and the button to tap lights up. */
+  private showPointer(h: Hint): void {
+    const go = h.target?.startsWith('go:') ? this.story.choices(this.s).find((c) => c.id === h.target) : undefined;
+    showCard(
+      `<h2>Plainly</h2><p class="hint">${h.pointer}</p>${go ? `<p class="meta2">First step: → ${go.label}</p>` : ''}`,
+      [
+        {
+          label: h.target ? 'Show me' : 'Back to the story',
+          primary: true,
+          onClick: () => {
+            closeOverlay();
+            this.hintTarget = h.target ?? null;
+            this.hintOpen = true;
+            this.render(false);
+          },
+        },
+        ...(h.key === 'lost' ? [{ label: 'Start the night over', onClick: () => this.restart() }] : []),
+      ],
+    );
   }
 
   // ---------------------------------------------------------------- endings and cards
@@ -229,7 +357,7 @@ export class Game {
     showCard(
       `<h2>${e.title}</h2><div class="stars">${'★'.repeat(e.stars)}<span class="off">${'★'.repeat(3 - e.stars)}</span></div>
        ${e.text.map((t) => `<p>${t}</p>`).join('')}
-       <p class="meta2">${this.story.stars} Best: ${'★'.repeat(n.best) || 'none yet'}.</p>`,
+       <p class="meta2">${this.story.stars} Best: ${'★'.repeat(n.best) || 'none yet'}.${this.hints ? ` Hints asked: ${this.hints}.` : ''}</p>`,
       [...(other === 2 ? [next, again] : [again, next]), { label: 'Read the story so far', onClick: closeOverlay }, { label: 'All games', onClick: () => (location.href = '../') }],
     );
   }
@@ -248,6 +376,7 @@ export class Game {
          <li>Tap a place under <b>Go</b> to move, and people or things to see what you can do with them.</li>
          <li>Most actions take three minutes, talking included (some take longer; looking and reading are free). ${this.story.deadline}</li>
          <li>The weather and the people remember what you do. There are several endings.</li>
+         <li>Stuck? <b>?</b> at the top gives a nudge, then the plain answer. Hints are free.</li>
        </ul>`,
       [{ label: 'Begin', primary: true, onClick: closeOverlay }],
     );
@@ -262,7 +391,9 @@ export class Game {
       const on = k === this.story.night;
       const started = np.plays > 0 || !!store.load<{ a?: string } | null>(st.saveKey, null)?.a;
       const badge = !started && k === 2 ? '<span class="new">New</span>' : np.plays ? `<span class="best">${'★'.repeat(np.best) || '·'}</span>` : '';
-      return `<button class="night${on ? ' on' : ''}" data-night="${k}"><b>Night ${k}</b>${badge}<small>${st.name}</small></button>`;
+      // Night 2 stands alone, but it reads best once you know Corran and Ada.
+      const note = k > 1 && !nightProfile(p, k - 1).plays ? `<small class="after">Best after night ${k - 1}</small>` : '';
+      return `<button class="night${on ? ' on' : ''}" data-night="${k}"><b>Night ${k}</b>${badge}<small>${st.name}</small>${note}</button>`;
     };
     showCard(
       `<h2>Last Light</h2>
