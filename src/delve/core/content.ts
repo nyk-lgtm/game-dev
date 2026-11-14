@@ -34,7 +34,7 @@ export const MONSTERS: Record<MonsterKind, MonsterDef> = {
   wraith: { name: 'Wraith', hp: 32, atk: 15, def: 3, xp: 18, slow: 0, range: 0, erratic: 0, ghost: true, depths: [5, 10], weight: 1.5, blurb: 'Drifts through walls.' },
   mage: { name: 'Cultist', hp: 26, atk: 16, def: 2, xp: 20, slow: 0, range: 6, erratic: 0, ghost: false, depths: [5, 10], weight: 1.5, blurb: 'Hurls fire from afar.' },
   golem: { name: 'Stone golem', hp: 80, atk: 20, def: 5, xp: 30, slow: 1, range: 0, erratic: 0, ghost: false, depths: [6, 10], weight: 1.5, blurb: 'Slow as stone, hits like a landslide.' },
-  warden: { name: 'The Warden', hp: 520, atk: 26, def: 5, xp: 0, slow: 0, range: 0, erratic: 0, ghost: false, depths: [99, 99], weight: 0, blurb: 'Keeper of the deep. Calls the dead.' },
+  warden: { name: 'The Warden', hp: 340, atk: 38, def: 5, xp: 0, slow: 0, range: 0, erratic: 0, ghost: false, depths: [99, 99], weight: 0, blurb: 'Keeper of the deep. Calls the dead.' },
 };
 
 export const WEAPONS = ['Dagger', 'Sword', 'Axe', 'Warblade', 'Runeblade'];
@@ -76,11 +76,11 @@ export const WARDEN: {
   summonAt: number[];
   summon: MonsterKind[];
 } = {
-  chargeEvery: 4,
-  chargeLate: 3,
-  meleeLate: 23,
+  chargeEvery: 5,
+  chargeLate: 4,
+  meleeLate: 34,
   reach: 5,
-  blast: 34,
+  blast: 40,
   rest: 1,
   summonAt: [0.75, 0.5, 0.25],
   summon: ['ghoul', 'ghoul', 'skeleton'],

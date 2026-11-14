@@ -1056,6 +1056,9 @@ blind playtests with fixes shipped (Simmer 5, Trestle 5, Delve 4). Open threads,
   wisps 20% → 22% (bot: 276 → 248 turns, Spirit Tree 49/60 → 30/60); help says wisps never merge and
   what traps pay; brighter labels; empty stash is dashed and says so. Still long for one sitting —
   owner said keep the board as is (no smaller board).
+- Delve v10: Warden fights cut from ~69 to ~48 turns (v9's 520 HP was a slog): 340 HP, melee 38/34 (~28 a hit through
+  Runeplate), wave 40, waves every 5th action (4th below half). Bot (400): 60.0% wins, Warden ends 32.75% of runs;
+  wardenprobe 58% won, ~48 turns, 4.2 waves, melee ~154 over ~6 hits. Big blows: watch that humans don't feel one-shot.
 - Delve v8 blind playtest (2 runs won, 5/5 Warden fights won: too gentle) and fixes (rules v9): a skeleton stepping into
   your only dodge cell after the Warden charged trapped you (seed 2537543396) → `makeRoom` re-checks after the enemy turn
   and crumbles a blocking add (or lets the charge go when stone is the problem), and boxing adds no longer stop the waves

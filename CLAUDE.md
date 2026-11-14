@@ -56,11 +56,12 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     exit. Taps snap to a monster/chest/person within 1.5 tiles unless on something or one step away. Daily: `?daily`.
   - Afterglow: `npx vite-node scripts/afterglow/balance.ts` (bot survival per character).
   - Delve: `npx vite-node scripts/delve/balance.ts 100` (descent bot: rests to the regen cap, dodges the Warden's wave;
-    rules v9, 400 seeds: 59% wins, d10 reached ~92%, deaths d2-4 ~0.5%, d5-9 ~6.5%, the Warden ~34% of runs; floor damage
-    d2-3 ~17, d4 ~25, d5 ~110, d6-8 ~120, d10 ~210; potions on arrival d5 6, d7 5, d10 6). It also prints damage per depth
+    rules v10, 400 seeds: 60% wins, d10 reached ~92%, deaths d2-4 ~0.5%, d5-9 ~6.5%, the Warden ~33% of runs; floor damage
+    d2-3 ~17, d4 ~25, d5 ~110, d6-8 ~120, d10 ~220; potions on arrival d5 6, d7 5, d10 6). It also prints damage per depth
     by kind with the killers there, each floor's monster mix, `DEATHS=1` how each death went, `PLUS=1` Descent+ (~11%).
-    `scripts/delve/wardenprobe.ts 100` splits Warden fights (v9: ~58% won, ~69 turns, ~8.8 waves a fight, all dodged by
-    the bot (a dodge cell is guaranteed), melee ~140 over ~9 hits, minions ~65: humans will eat some waves). Per-floor caps
+    `scripts/delve/wardenprobe.ts 100` splits Warden fights (v10: ~58% won, ~48 turns from arrival (v9 520 HP: ~69), ~4.2
+    waves a fight, all dodged by the bot (a dodge cell is guaranteed), melee ~154 over ~6 hits, minions ~57: humans will eat
+    some 40-damage waves). Each dodged wave is ~3 Warden actions without a blow, so more waves = a longer, safer fight. Per-floor caps
     `FLOOR_CAP`/`floorCap` in gen.ts: a capped kind's first depth holds one (ghouls at depth 4, wraiths and cultists at 5));
     Nightline: `npx vite-node scripts/nightline/balance.ts 100 [clean,crashy,sloppy]`
     (rules v4, 100 seeds × 2 seed sets (SEED=1/5000), always-left / always-right: clean (~10-13 crashes) 100% / 100%,
@@ -185,7 +186,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     `fire.ts 64 1 [random]` (per lightning summer: burns, the idle burn plan, whether the bot plays differently than in a
     drought, and the score vs the same game with lightning turned into drought; v7 greedy: ~1.6 lightning summers a game,
     something burns in ~44/101, mean −7; random −34).
-- Delve rules v9 (src/delve/core/rules.ts): a sleeping monster spends the turn it notices you (so sleepers are mostly seen
+- Delve rules v10 (src/delve/core/rules.ts): a sleeping monster spends the turn it notices you (so sleepers are mostly seen
   far off: zZ in the view, dim letters on the maps out to VIEW_RANGE 12); cultists are spent a turn (`cd`) after each firebolt;
   blocked hunters try another equally short step; `use` (HIT) hits straight ahead only (corner hits were removed: corner foes
   can't strike back), opens/shuts doors (never with a foe beside you or in the doorway), else "You swing at nothing" (no
@@ -193,12 +194,12 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   Regen: 1 HP every `REGEN_EVERY` (4) turns with no awake foe in sight (`foesInSight`), up to `regenCap` = half max HP;
   `canRest` turns the page's WAIT into REST (waits until healed/MP full or a foe shows; many `w`s in the run). Fire/Frost
   reach `BOLT_RANGE` (8); with nothing in reach the cast is refused (no MP, no turn; `boltTarget`); Blink likewise when
-  `blinkReach` is 0, and Frost when it wouldn't hold the Warden. The Warden (`WARDEN` in content.ts, `wardenTurn`, 520 HP):
-  every 4th ordinary action near you (3rd below half HP, `wardenLate`) it draws in the cold (`charge`, event `charge`);
+  `blinkReach` is 0, and Frost when it wouldn't hold the Warden. The Warden (`WARDEN` in content.ts, `wardenTurn`, 340 HP):
+  every 5th ordinary action near you (4th below half HP, `wardenLate`) it draws in the cold (`charge`, event `charge`);
   `makeRoom` guarantees you a `dodgeCells` cell, at the charge and again after the rest of the enemy turn (a skeleton that
   stepped into it): if its dead fill them all, one crumbles; walled in by stone only, the charge waits / is let go. Next
-  action its wave hits its row/column within 5 unless a wall/pillar is between (`inWaveAt`; always lands, armour counts)
-  and "spent: it won't move or strike next turn" is logged that same turn; it then skips one action (`cd`). Melee 26, 23
+  action its wave (40) hits its row/column within 5 unless a wall/pillar is between (`inWaveAt`; always lands, armour counts)
+  and "spent: it won't move or strike next turn" is logged that same turn; it then skips one action (`cd`). Melee 38, 34
   below half HP (`meleeLate`). At 75/50/25% HP it summons 2 ghouls + a skeleton within 2 of it, never beside you, and is
   spent. Frost holds it one action, once between waves (`chilled`, cleared by the wave), never mid-charge (`frostHolds`).
   Merchants at depths 4, 7, 9 (`SHOP_DEPTHS`); `stock` never offers gear you have as good (the other kind, else a
