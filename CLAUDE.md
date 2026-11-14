@@ -26,7 +26,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   afterglow/audio's Sfx and applied in installErrorOverlay). Tests in `tests/<game>/`,
   tools in `scripts/<game>/`.
 - Adding a game: new `<game>/index.html`, `src/<game>/`, an entry in
-  `vite.config.ts` (rollupOptions.input) and a card in `src/hub/main.ts`.
+  `vite.config.ts` (rollupOptions.input) and a card in `src/hub/games.ts` (tests/hub checks every page has one).
 - Every `core/` must stay pure and deterministic (no DOM, no Math.random, no
   Date). All randomness flows from the seed via `Rng`/`mixSeed`; replays and bug
   reports depend on it. Bump a game's `RULES_VERSION` when old saves would replay
