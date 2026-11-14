@@ -1,3 +1,4 @@
 import { makeStore } from '../shared/storage';
 
-export const { load, save } = makeStore('lantern.');
+export const store = makeStore('lantern.');
+export const { load, save } = store;

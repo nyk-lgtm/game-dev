@@ -5,7 +5,7 @@ import { applyAction, newGame } from './rules';
 import type { Action, GameState } from './types';
 
 /** Bump whenever a rules change would make an old game replay differently. */
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 
 const BUY: Record<string, 'sword' | 'leather' | 'chain' | 'potion'> = { S: 'sword', L: 'leather', C: 'chain', P: 'potion' };
 

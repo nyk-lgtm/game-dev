@@ -17,6 +17,8 @@ export interface Monster {
   kind: MonsterKind;
   map: MapId;
   pos: Pos;
+  /** Where it starts this run (seeded); survivors go back there when you fall. */
+  home?: Pos;
   hp: number;
 }
 

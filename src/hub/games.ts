@@ -504,7 +504,7 @@ export const GAMES: GameCard[] = [
     path: './lantern/',
     title: 'Lantern',
     tag: 'ASCII RPG',
-    pitch: 'A tiny text-mode quest. Relight the village Lantern from the dark of the Hollow.',
+    pitch: 'A tiny text-mode quest. Relight the village Lantern from the dark of the Hollow. Monsters and loot shift every run; daily quest.',
     accent: '#ffd166',
     best: () => {
       const t = lantern.load<number | null>('bestTurns', null);
@@ -560,4 +560,5 @@ export const DAILY: DailyLink[] = [
   { path: './tidings/?daily', title: 'Tidings', store: tidings, accent: '#e9b45a' },
   { path: './lull/?daily', title: 'Lull', store: lull, accent: '#b9e48c' },
   { path: './telegraph/?daily', title: 'Telegraph', store: telegraph, accent: '#5ee7ff' },
+  { path: './lantern/?daily', title: 'Lantern', store: lantern, accent: '#ffd166' },
 ];

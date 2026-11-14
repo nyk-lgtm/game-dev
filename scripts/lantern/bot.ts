@@ -122,7 +122,8 @@ function frontier(s: GameState): Pos[] {
     for (let x = 0; x < m.w; x++) {
       const p = { x, y };
       if (seen[idx(m, p)] !== '1' || !passable(m, p) || markerAt(m, p)?.kind === 'exit') continue;
-      if (DIRS8.some((d) => { const n = addPos(p, d); return inMap(m, n) && seen[idx(m, n)] === '0'; })) out.push(p);
+      // Unseen neighbours a step could reach (standing here lights those; others may never be lit).
+      if (DIRS8.some((d, k) => { const n = addPos(p, d); return inMap(m, n) && seen[idx(m, n)] === '0' && canStep(m, p, k); })) out.push(p);
     }
   return out;
 }
@@ -164,6 +165,13 @@ export function botAction(s: GameState, mem: { retreat: boolean }): Action {
 
   if (low && p.potions > 0 && isLegal(s, { type: 'potion' })) return { type: 'potion' };
   if (low && p.potions === 0 && p.map !== 'village') mem.retreat = true;
+  // Wounds don't heal in the dark (rules v3): on first sight of the King, go home to rest and
+  // restock unless nearly full with two potions (or too poor to buy them).
+  const king = s.quest === 'started' && visibleMonsters(s).find((mo) => mo.kind === 'king');
+  if (king && chebyshev(king.pos, p.pos) > 1) {
+    const ready = p.hp >= p.maxHp * 0.8 && (p.potions >= 2 || p.gold < 6 * (2 - p.potions));
+    if (!ready) mem.retreat = true;
+  }
 
   // Adjacent monsters: hit the weakest.
   const dirTo = (q: Pos) => DIRS8.findIndex((v) => v.x === q.x - p.pos.x && v.y === q.y - p.pos.y);
@@ -201,7 +209,9 @@ export function botAction(s: GameState, mem: { retreat: boolean }): Action {
   if (target) return target;
   const on = ONWARD[p.map];
   if (on && known(s, markerPos(m, on))) return stepToward(s, dist, [markerPos(m, on)]) ?? wait;
-  return wait;
+  // Stuck (a guard out of sight blocks the last corridor): head for any live monster here.
+  const hidden = s.monsters.filter((mo) => mo.hp > 0 && mo.map === p.map).map((mo) => mo.pos);
+  return stepToward(s, dist, hidden) ?? wait;
 }
 
 export function playCompletion(seed: number, maxActions = 6000): BotResult {

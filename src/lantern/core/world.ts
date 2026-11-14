@@ -138,6 +138,8 @@ export function los(m: LoadedMap, a: Pos, b: Pos): boolean {
     if (x === b.x && y === b.y) return true;
     if ((x !== a.x || y !== a.y) && opaque(m, { x, y })) return false;
     const e2 = 2 * err;
+    const px = x;
+    const py = y;
     if (e2 >= dy) {
       err += dy;
       x += sx;
@@ -145,6 +147,12 @@ export function los(m: LoadedMap, a: Pos, b: Pos): boolean {
     if (e2 <= dx) {
       err += dx;
       y += sy;
+    }
+    // Sight can't squeeze diagonally between two blocking cells, just as a step
+    // can't (so you never see into a place you can't walk to that way). The
+    // wall right behind such a corner still shows, so room corners draw.
+    if (x !== px && y !== py && opaque(m, { x, y: py }) && opaque(m, { x: px, y })) {
+      if (!(x === b.x && y === b.y && opaque(m, b))) return false;
     }
   }
 }
@@ -170,38 +178,53 @@ export function monsterAt(s: GameState, map: MapId, p: Pos) {
   return s.monsters.find((mo) => mo.hp > 0 && mo.map === map && samePos(mo.pos, p));
 }
 
+/** How far a tap-walk may wander to get closer to an unreachable spot: about twice the straight distance. */
+export const detourLimit = (straight: number) => Math.max(6, 2 * straight);
+
 /**
- * When `to` can't be reached (unexplored dark, behind a wall), the walk to the
- * reachable known cell nearest to it, so a far tap still heads that way.
- * Returns null if no reachable cell is any closer than where you stand.
+ * When `to` can't be reached (unexplored dark, behind a wall), the walk to a
+ * reachable known cell nearer to it, so a far tap still heads that way. Cells
+ * are judged by how close they get you (straight-line) and how far you must
+ * walk to them (path length): 2 per cell of closeness against 1 per step. A
+ * cell more than `detourLimit` steps away never counts, so a tap past a wall
+ * never sends you on a long loop round. Null when nothing within that reach is
+ * any closer than where you stand.
  */
 export function pathToward(s: GameState, to: Pos): number[] | null {
   const m = WORLD[s.player.map];
   const from = s.player.pos;
   const seen = s.seen[m.id];
   const known = (p: Pos) => !MAPS[m.id].dark || (seen !== undefined && seen[p.y * m.w + p.x] === '1');
-  const dist = (p: Pos) => Math.max(Math.abs(p.x - to.x), Math.abs(p.y - to.y)) * 4 + Math.abs(p.x - to.x) + Math.abs(p.y - to.y);
-  let best = from;
-  let bestD = dist(from);
-  const seenK = new Set([posKey(from)]);
+  const crow = (p: Pos) => chebyshev(p, to) * 4 + Math.abs(p.x - to.x) + Math.abs(p.y - to.y);
+  const limit = detourLimit(chebyshev(from, to));
+  const here = crow(from);
+  let best: Pos | null = null;
+  let bestScore = Infinity;
+  let bestCrow = Infinity;
+  const steps = new Map<string, number>([[posKey(from), 0]]);
   const q: Pos[] = [from];
   for (let i = 0; i < q.length; i++) {
     const cur = q[i];
+    const dc = steps.get(posKey(cur))!;
+    if (dc >= limit) continue;
     for (let d = 0; d < 8; d++) {
       const n = addPos(cur, DIRS8[d]);
       const k = posKey(n);
-      if (seenK.has(k) || !inMap(m, n) || !canStep(m, cur, d) || !passable(m, n) || !known(n) || monsterAt(s, m.id, n)) continue;
+      if (steps.has(k) || !inMap(m, n) || !canStep(m, cur, d) || !passable(m, n) || !known(n) || monsterAt(s, m.id, n)) continue;
       if (markerAt(m, n)?.kind === 'exit') continue;
-      seenK.add(k);
+      steps.set(k, dc + 1);
       q.push(n);
-      const dn = dist(n);
-      if (dn < bestD) {
-        bestD = dn;
+      const c = crow(n);
+      if (c >= here) continue;
+      const score = 2 * chebyshev(n, to) + dc + 1;
+      if (score < bestScore || (score === bestScore && c < bestCrow)) {
+        bestScore = score;
+        bestCrow = c;
         best = n;
       }
     }
   }
-  return samePos(best, from) ? null : pathTo(s, best);
+  return best ? pathTo(s, best) : null;
 }
 
 /**
@@ -209,9 +232,12 @@ export function pathToward(s: GameState, to: Pos): number[] | null {
  * through passable known ground, avoiding monsters. If `to` itself is not
  * walkable (a monster, NPC, chest...), the path ends next to it and the final
  * step bumps into it. Returns direction indices, or null if unreachable.
+ * `throughMonsters` plans as if no monster stood in the way (the walk then
+ * stops at the first one that does).
  */
-export function pathTo(s: GameState, to: Pos): number[] | null {
+export function pathTo(s: GameState, to: Pos, throughMonsters = false): number[] | null {
   const m = WORLD[s.player.map];
+  const blocks = (p: Pos) => !throughMonsters && !!monsterAt(s, m.id, p);
   const from = s.player.pos;
   if (samePos(from, to) || !inMap(m, to)) return null;
   const seen = s.seen[m.id];
@@ -236,7 +262,7 @@ export function pathTo(s: GameState, to: Pos): number[] | null {
         prev.set(k, { p: cur, d });
         return unwind(prev, from, n);
       }
-      if (!passable(m, n) || !known(n) || monsterAt(s, m.id, n)) continue;
+      if (!passable(m, n) || !known(n) || blocks(n)) continue;
       // Don't route through other exits on the way.
       if (!isGoal && markerAt(m, n)?.kind === 'exit') continue;
       prev.set(k, { p: cur, d });
@@ -262,11 +288,74 @@ function unwind(prev: Map<string, { p: Pos; d: number }>, from: Pos, to: Pos): n
  * How a tap walks: straight there when known ground reaches it (`direct`),
  * otherwise as close as known ground allows. The UI re-plans a non-direct
  * walk after every step, so a tap into the dark keeps going as the lantern
- * reveals the way. Null when no step gets any closer.
+ * reveals the way. When only monsters stand in the way, the walk goes straight
+ * there and stops at the first one (`blocked`). Null when no step gets any
+ * closer within `detourLimit`.
  */
-export function planWalk(s: GameState, to: Pos): { dirs: number[]; direct: boolean } | null {
+export function planWalk(s: GameState, to: Pos): { dirs: number[]; direct: boolean; blocked?: boolean } | null {
   const dirs = pathTo(s, to);
   if (dirs) return { dirs, direct: true };
+  const past = pathTo(s, to, true);
+  if (past) return { dirs: past, direct: true, blocked: true };
   const toward = pathToward(s, to);
   return toward ? { dirs: toward, direct: false } : null;
+}
+
+/** A known open cell next to an unseen cell that isn't solid rock: the edge of what you've explored. */
+function isFrontier(m: LoadedMap, seen: string, p: Pos): boolean {
+  for (let d = 0; d < 8; d++) {
+    const n = addPos(p, DIRS8[d]);
+    // Only neighbours a step could reach: standing here always lights those.
+    if (inMap(m, n) && seen[n.y * m.w + n.x] !== '1' && !opaque(m, n) && canStep(m, p, d)) return true;
+  }
+  return false;
+}
+
+/**
+ * Auto-explore on a dark map: the walk to the nearest unopened chest you know
+ * of (the last step opens it), else to the nearest edge of the explored
+ * ground. Routes over known, monster-free ground and never through exits.
+ * Null when nothing reachable is left to explore (or the map is lit).
+ */
+export function explorePath(s: GameState): { dirs: number[]; target: Pos; kind: 'chest' | 'frontier' } | null {
+  const m = WORLD[s.player.map];
+  const seen = s.seen[m.id];
+  if (!MAPS[m.id].dark || !seen) return null;
+  const from = s.player.pos;
+  const idx = (p: Pos) => p.y * m.w + p.x;
+  const dist = new Int32Array(m.w * m.h).fill(-1);
+  dist[idx(from)] = 0;
+  const q: Pos[] = [from];
+  let frontier: Pos | null = null;
+  for (let i = 0; i < q.length; i++) {
+    const cur = q[i];
+    for (let d = 0; d < 8; d++) {
+      const n = addPos(cur, DIRS8[d]);
+      if (!inMap(m, n) || dist[idx(n)] >= 0 || !canStep(m, cur, d)) continue;
+      if (!passable(m, n) || seen[idx(n)] !== '1' || monsterAt(s, m.id, n) || markerAt(m, n)?.kind === 'exit') continue;
+      dist[idx(n)] = dist[idx(cur)] + 1;
+      q.push(n);
+      if (!frontier && isFrontier(m, seen, n)) frontier = n;
+    }
+  }
+  // Chests first: the cheapest to bump into.
+  let chest: { p: Pos; c: number } | null = null;
+  for (const [i, v] of m.markers) {
+    if (v.marker.kind !== 'chest' || s.done.includes(v.marker.id) || seen[i] !== '1') continue;
+    const p = { x: i % m.w, y: Math.floor(i / m.w) };
+    for (let d = 0; d < 8; d++) {
+      const n = addPos(p, DIRS8[d]);
+      const dn = inMap(m, n) ? dist[idx(n)] : -1;
+      if (dn >= 0 && canStep(m, n, (d + 4) % 8) && (!chest || dn + 1 < chest.c)) chest = { p, c: dn + 1 };
+    }
+  }
+  if (chest) {
+    const dirs = pathTo(s, chest.p);
+    if (dirs) return { dirs, target: chest.p, kind: 'chest' };
+  }
+  if (frontier) {
+    const dirs = pathTo(s, frontier);
+    if (dirs) return { dirs, target: frontier, kind: 'frontier' };
+  }
+  return null;
 }

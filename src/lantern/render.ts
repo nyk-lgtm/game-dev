@@ -183,8 +183,15 @@ export function draw(
       else if (mk?.kind === 'chest') [glyph, color] = s.done.includes(mk.id) ? ['_', '#6b5a3a'] : ['≡', '#e7b84a'];
       else if (mk?.kind === 'sign') [glyph, color] = ['?', '#d6b47a'];
       else if (mk?.kind === 'lantern') [glyph, color] = s.quest === 'won' ? ['☼', '#ffd166'] : ['¥', '#7d7a73'];
-      if (remembered) color = '#262832';
-      else if (lit) {
+      // Stairs and shut chests stay easy to spot once seen: remembered ones keep a warm,
+      // dimmed colour on a faint plate, and lit ones never fade with distance.
+      const beacon = mk?.kind === 'exit' || (mk?.kind === 'chest' && !s.done.includes(mk.id));
+      if (remembered && beacon) {
+        ctx.fillStyle = 'rgba(255,209,102,0.10)';
+        ctx.fillRect(cx - v.cellW / 2 + 1, cy - v.cellH / 2 + 1, v.cellW - 2, v.cellH - 2);
+        color = mk?.kind === 'exit' ? '#b8953c' : '#a8843a';
+      } else if (remembered) color = '#262832';
+      else if (lit && !beacon) {
         const d = Math.hypot(x - P.x, y - P.y);
         ctx.globalAlpha = Math.max(0.5, 1 - d / 10);
       }

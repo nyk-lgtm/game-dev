@@ -23,10 +23,14 @@ import {
 } from './world';
 
 export const MONSTER_HIT = 0.8;
-/** Regain 1 HP every this many turns while something is hunting you... */
+/** In daylight, regain 1 HP every this many turns while something is hunting you... */
 export const REGEN_EVERY = 10;
 /** ...and this often when nothing is (no monster that can see you). */
 export const CALM_REGEN_EVERY = 3;
+/** Wounds don't close in the dark: no healing on dark maps but potions and level-ups (rules v3). */
+export const healsHere = (map: MapId) => !MAPS[map].dark;
+/** How far (in steps) a monster's start may move from where the map draws it, per run. */
+export const SPAWN_JITTER = 3;
 export const START_POTIONS = 3;
 
 /** Chance your blow lands on a monster of this kind. */
@@ -128,7 +132,7 @@ export function applyAction(prev: GameState, a: Action): StepResult {
     s.turn++;
     monsterPhase(s, events);
     if (p.hp <= 0) knockedOut(s, events);
-    else if (p.hp < p.maxHp && s.turn % (hunted(s) ? REGEN_EVERY : CALM_REGEN_EVERY) === 0) p.hp++;
+    else if (p.hp < p.maxHp && healsHere(p.map) && s.turn % (hunted(s) ? REGEN_EVERY : CALM_REGEN_EVERY) === 0) p.hp++;
   }
   updateSeen(s);
   return { state: s, events };
@@ -264,9 +268,10 @@ function openChest(
   s.done.push(mk.id);
   const p = s.player;
   const got: string[] = [];
-  if (mk.gold) {
-    p.gold += mk.gold;
-    got.push(`${mk.gold} gold`);
+  const gold = chestGold(s.seed, mk.id, mk.gold ?? 0);
+  if (gold) {
+    p.gold += gold;
+    got.push(`${gold} gold`);
   }
   if (mk.potions) {
     p.potions += mk.potions;
@@ -292,7 +297,8 @@ function monsterPhase(s: GameState, events: GameEvent[]): void {
     if (mo.hp <= 0 || mo.map !== p.map || p.hp <= 0) continue;
     const def = MONSTERS[mo.kind];
     const d = chebyshev(mo.pos, p.pos);
-    if (d === 1) {
+    // Adjacent, and not across a wall corner (it can't reach you there, nor you it).
+    if (d === 1 && canStep(m, mo.pos, DIRS8.findIndex((v) => v.x === p.pos.x - mo.pos.x && v.y === p.pos.y - mo.pos.y))) {
       if (roll(s) >= MONSTER_HIT) {
         say(s, `The ${def.name} misses you.`);
         events.push({ type: 'miss', at: p.pos });
@@ -346,14 +352,73 @@ function knockedOut(s: GameState, events: GameEvent[]): void {
   for (const mo of s.monsters) {
     if (mo.hp <= 0) continue;
     mo.hp = MONSTERS[mo.kind].hp;
-    mo.pos = { ...HOMES[mo.id] };
+    mo.pos = { ...(mo.home ?? mo.pos) };
   }
   say(s, 'You fall... and wake by the cold Lantern, your purse lighter.');
   events.push({ type: 'playerDown' });
 }
 
-/** Monsters' starting positions, indexed by id (ids follow map load order). */
-const HOMES: Pos[] = (Object.keys(WORLD) as MapId[]).flatMap((id) => WORLD[id].monsters.map((mo) => mo.pos));
+/** A chest's gold this run: the drawn amount ±40%, from the seed. */
+export function chestGold(seed: number, id: string, base: number): number {
+  if (!base) return 0;
+  let h = 0;
+  for (const c of id) h = (Math.imul(h, 31) + c.charCodeAt(0)) >>> 0;
+  const k = 0.6 + 0.8 * new Rng(mixSeed(mixSeed(seed, 0x4c47), h)).next();
+  return Math.max(1, Math.round(base * k));
+}
+
+/**
+ * Where each monster starts this run: the King and the guards in one-wide
+ * corridors stay put (they hold chokepoints), the rest move up to
+ * `SPAWN_JITTER` steps from where the map draws them, over open ground, never
+ * onto another monster, a marker or within 2 of an exit. Seeded, in map order.
+ */
+export function spawnPositions(seed: number): { kind: MonsterKind; map: MapId; pos: Pos }[] {
+  const out: { kind: MonsterKind; map: MapId; pos: Pos }[] = [];
+  for (const id of Object.keys(WORLD) as MapId[]) {
+    const m = WORLD[id];
+    const exits = [...m.markers].filter(([, v]) => v.marker.kind === 'exit').map(([i]) => ({ x: i % m.w, y: Math.floor(i / m.w) }));
+    const taken = new Set<string>();
+    const key = (p: Pos) => `${p.x},${p.y}`;
+    const ok = (p: Pos) =>
+      passable(m, p) && !markerAt(m, p) && !taken.has(key(p)) && exits.every((e) => chebyshev(e, p) > 2);
+    for (const mo of m.monsters) taken.add(key(mo.pos));
+    m.monsters.forEach((mo) => {
+      taken.delete(key(mo.pos));
+      let pos = mo.pos;
+      if (mo.kind !== 'king' && !chokepoint(m, mo.pos)) {
+        // Open cells within SPAWN_JITTER steps, in a fixed (BFS) order.
+        const seenK = new Set([key(mo.pos)]);
+        const cells: Pos[] = [];
+        let ring: Pos[] = [mo.pos];
+        for (let r = 0; r < SPAWN_JITTER; r++) {
+          const next: Pos[] = [];
+          for (const c of ring)
+            for (let d = 0; d < 8; d++) {
+              const n = addPos(c, DIRS8[d]);
+              if (seenK.has(key(n)) || !inMap(m, n) || !canStep(m, c, d) || !passable(m, n) || markerAt(m, n)) continue;
+              seenK.add(key(n));
+              next.push(n);
+              cells.push(n);
+            }
+          ring = next;
+        }
+        const free = [mo.pos, ...cells].filter(ok);
+        if (free.length) pos = free[Math.floor(new Rng(mixSeed(mixSeed(seed, 0x5350), out.length)).next() * free.length)];
+      }
+      taken.add(key(pos));
+      out.push({ kind: mo.kind, map: id, pos: { ...pos } });
+    });
+  }
+  return out;
+}
+
+/** A cell in a one-wide corridor (open on two opposite sides only): guards there stay put. */
+function chokepoint(m: (typeof WORLD)[MapId], p: Pos): boolean {
+  const open = (d: number) => passable(m, addPos(p, DIRS8[d]));
+  const n = [0, 1, 2, 3, 4, 5, 6, 7].filter(open).length;
+  return n === 2 && ((open(0) && open(4)) || (open(2) && open(6)));
+}
 
 // ---------- setup ----------
 
@@ -369,12 +434,14 @@ function updateSeen(s: GameState): void {
 }
 
 export function newGame(seed: number): GameState {
-  const monsters: Monster[] = [];
-  for (const id of Object.keys(WORLD) as MapId[]) {
-    for (const mo of WORLD[id].monsters) {
-      monsters.push({ id: monsters.length, kind: mo.kind, map: id, pos: { ...mo.pos }, hp: MONSTERS[mo.kind].hp });
-    }
-  }
+  const monsters: Monster[] = spawnPositions(seed).map((mo, id) => ({
+    id,
+    kind: mo.kind,
+    map: mo.map,
+    pos: { ...mo.pos },
+    home: { ...mo.pos },
+    hp: MONSTERS[mo.kind].hp,
+  }));
   const s: GameState = {
     seed,
     turn: 0,

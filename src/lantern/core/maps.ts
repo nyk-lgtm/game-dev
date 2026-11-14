@@ -20,6 +20,8 @@ export interface MapDef {
   ground: ',' | '.';
   rows: string[];
   legend: Record<string, Marker>;
+  /** A hint about the real route for taps there that find no way through (inclusive boxes). */
+  notes?: { x0: number; y0: number; x1: number; y1: number; text: string }[];
 }
 
 export const MONSTER_MARKERS: Record<string, MonsterKind> = {
@@ -158,5 +160,7 @@ export const MAPS: Record<MapId, MapDef> = {
       V: { kind: 'exit', to: 'cave1', entry: 'D', glyph: '<' },
       '1': { kind: 'chest', id: 'deep-chest', gold: 25, potions: 2 },
     },
+    // The King's hall opens only to the south, off the long bottom tunnel's far end.
+    notes: [{ x0: 20, y0: 3, x1: 26, y1: 10, text: 'The way into the King’s hall is from the long tunnel at the bottom.' }],
   },
 };

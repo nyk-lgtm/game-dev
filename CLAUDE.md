@@ -39,11 +39,21 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     depth 3's +2 when starts/stairs moved onto the whole rim, which had pushed depth-3 deaths to ~23%).
   - Grove: `npx vite-node scripts/grove/balance.ts 60` (score, game length, best tier; rules v2:
     median ~248 turns, Spirit Tree in ~half the games).
-  - Lantern: `npx vite-node scripts/lantern/balance.ts 50` (completion bot, rules v2: ~100% finish,
-    0 falls, level 8 at the king; it clears everything). `scripts/lantern/duel.ts [potions]` pits each level
-    against the King (axe, cloth): L6 + 1 potion ~87%, L5 ~29% (`OLD=1` for the v1 King). Maps are hand-drawn strings in src/lantern/core/maps.ts;
-    diagonal steps can't squeeze between two blocked cells, so never connect areas
-    only diagonally.
+  - Lantern: `npx vite-node scripts/lantern/balance.ts 50` (completion bot, rules v3: 100% finish, falls median 0
+    (5/50 fall once, to the King at L6-7), level 8 after the King (7 before it), potions at the kill median ~3; it clears
+    everything and goes home to rest/restock on first sight of the King unless ≥ 80% HP with 2 potions). `scripts/lantern/duel.ts [potions]` pits each level
+    against the King (axe, cloth): L6 + 1 potion ~86%, L5 ~29%, L7 ~97% (`OLD=1` for the v1 King). `upto.ts <seed> <map> [extra]`
+    gives the bot's actions to a map for `?seed=&a=`. Maps are hand-drawn strings in src/lantern/core/maps.ts;
+    diagonal steps can't squeeze between two blocked cells, so never connect areas only diagonally; since v3 sight
+    (`los`) and monster blows can't squeeze through either (a wall right behind the corner still shows). Rules v3: no
+    healing on dark maps (`healsHere`; Rest only in daylight), so potions/gold matter; monsters start up to
+    `SPAWN_JITTER` 3 steps from their drawn spot per seed (`spawnPositions`; the King and one-wide-corridor guards stay;
+    `Monster.home`), chest gold ±40% (`chestGold`). Taps: `planWalk` goes straight when known ground reaches, through
+    monsters if only they block (stops at the first), else `pathToward` (closeness 2 per cell vs 1 per step, never past
+    `detourLimit` = max(6, 2× straight)); a map's `notes` box adds a route hint ("No way through from here. The way into
+    the King's hall…"). `explorePath` (Explore button): nearest unopened known chest, else nearest frontier (a known open
+    cell with an unseen non-rock neighbour a step could reach); the page stops it for any monster in sight or a newly seen
+    exit. Taps snap to a monster/chest/person within 1.5 tiles unless on something or one step away. Daily: `?daily`.
   - Afterglow: `npx vite-node scripts/afterglow/balance.ts` (bot survival per character).
   - Delve: `npx vite-node scripts/delve/balance.ts 100` (descent bot, rules v6: ~58% wins (56% over 400 seeds), d10 reached
     ~84%, deaths mostly at the Warden (450 HP), then depth 5 ~6%, depth 6 ~3%; it also prints damage per depth by kind with the
@@ -161,7 +171,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   with batched `fillText` runs; art lives in each game's `art.ts`.
 - Daily challenges (src/shared/daily.ts): `<game>/?daily` plays today's seed (`dailySeed(game, day)`,
   local date); each game keeps its in-progress daily under `dailyRun` and today's best under `daily`.
-  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad, Ninefold, Summit, Quarry, Sungrazer, Kitbag, Brink (a daily win-in-N puzzle), Loomsong (a daily song), Simmer (a daily season), Gleam (a Medium puzzle), Trestle (a d 0.55 level), Tidings (a daily road), Lull (a daily wish) and Telegraph (a daily run, streak + share line); the hub's Daily section links them.
+  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad, Ninefold, Summit, Quarry, Sungrazer, Kitbag, Brink (a daily win-in-N puzzle), Loomsong (a daily song), Simmer (a daily season), Gleam (a Medium puzzle), Trestle (a d 0.55 level), Tidings (a daily road), Lull (a daily wish), Telegraph (a daily run, streak + share line) and Lantern (a daily quest, fewest turns); the hub's Daily section links them.
 - Afterglow extras: Nights 1-5 (`NIGHTS` in content.ts, unlocked by `profile.nightsWon`), arenas
   (`ARENAS`/pillars in core/arena.ts, hashed from the seed), unions (`union` on a WeaponDef: two
   maxed weapons merge in a chest), and player damage is attributed (`w.taken`, `w.killedBy`).

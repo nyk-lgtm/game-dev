@@ -11,6 +11,7 @@ import {
   WORLD,
   XP_TABLE,
   CALM_REGEN_EVERY,
+  chestGold,
   REGEN_EVERY,
   addPos,
   damageRange,
@@ -188,10 +189,13 @@ describe('stepping', () => {
     const first = applyAction(s, step(2));
     expect(first.state.player.pos).toEqual({ x: 33, y: 16 });
     expect(first.state.turn).toBe(0);
-    expect(first.state.player.gold).toBe(s.player.gold + 12);
+    const gold = chestGold(s.seed, 'forest-chest', 12);
+    expect(gold).toBeGreaterThanOrEqual(7);
+    expect(gold).toBeLessThanOrEqual(17);
+    expect(first.state.player.gold).toBe(s.player.gold + gold);
     expect(first.state.player.potions).toBe(s.player.potions + 1);
     expect(first.state.done).toContain('forest-chest');
-    expect(first.events).toEqual([{ type: 'loot', text: '12 gold, 1 potion' }]);
+    expect(first.events).toEqual([{ type: 'loot', text: `${gold} gold, 1 potion` }]);
     const second = applyAction(first.state, step(2));
     expect(second.state.player.gold).toBe(first.state.player.gold);
     expect(second.state.player.potions).toBe(first.state.player.potions);
@@ -369,12 +373,13 @@ describe('combat', () => {
   });
 
   it('monsters never step onto an exit', () => {
-    // From (35,3) the only cell closer to (37,1) is the cave mouth 'C' at (36,2).
+    // From (35,3) the only cell closer to (37,1) is the cave mouth 'C' at (36,2). (Since rules v3 the
+    // wolf can't see through that diagonal gap, so it only wanders; it still never takes the exit.)
     const s = setup('forest', { x: 37, y: 1 }, [['wolf', { x: 35, y: 3 }]]);
     expect(markerAt(WORLD.forest, { x: 36, y: 2 })?.kind).toBe('exit');
-    for (let k = 0; k < 20; k++) {
+    for (let k = 0; k < 40; k++) {
       s.rolls = k;
-      expect(mon(applyAction(s, WAIT).state).pos).toEqual({ x: 35, y: 3 });
+      expect(mon(applyAction(s, WAIT).state).pos).not.toEqual({ x: 36, y: 2 });
     }
   });
 

@@ -1004,6 +1004,20 @@ playtests with fixes shipped. Open threads, in order:
   v4 44% wins, deaths d6 11 / d7 7 / d8 6 / d10 17 (of 61), floor damage d6-7 ~170 → v5 58% wins, d6 5 / d7 1 /
   d8 3 / d10 20 (of 78), d6-7 ~118. Depth 5 (10 deaths, ghouls) is now the bump to watch. The bot test plays only
   to depth 6 (17 s locally).
+- Lantern third blind playtest (won first run at level 8, 0 falls, King at L7 with 4 potions; moving and bump-fighting
+  very clear) and fixes (rules v3): unreachable taps judge cells by path length (`pathToward`: 2 per cell of closeness
+  vs 1 per step, never past max(6, 2× straight)), go straight through when only monsters block (stopping at the
+  first), else "No way through from here" plus a map note for the King's hall ("…from the long tunnel at the
+  bottom"); sight and monster blows no longer squeeze through diagonal wall gaps (the King was visible, and could hit,
+  through (27,3)/(20,3)); help shortened to fit without scrolling; taps snap to a monster/chest/person within 1.5
+  tiles; an Explore button (nearest unopened chest, else nearest frontier; stops for monsters in sight and newly seen
+  stairs); remembered stairs and shut chests stay warm on a faint plate. Resting: no healing on dark maps (Rest only
+  in daylight), so potions and gold matter. Replay value: monsters start up to 3 steps from their drawn spots per seed
+  (King and corridor guards fixed), chest gold ±40%, and a daily quest (fewest turns; hub Daily link). Bot changes:
+  frontier only counts step-reachable unseen cells, restocks before the King, falls back to known monsters when
+  stuck. Balance (50): 100% finish, 5/50 fall once (to the King at L6-7), potions at the kill median ~3 (was 4+ with
+  free resting); duel unchanged (L6+1 86%, L5 29%, L7 97%). Not done: the King is still a sure win for a full clear at
+  L7 (only harder now because the Deep Hollow doesn't heal); watch whether players find it too easy.
 - Lantern second blind playtest (finished at level 6, 804 turns, 0 falls) and fixes (rules v2): taps into the
   dark re-plan every step (`planWalk`) so a walk goes on until arrival; a walk stops only for a new monster, a met
   one coming within 3, a monster in the way or an event, and says why; tap elsewhere to re-route, tap yourself to

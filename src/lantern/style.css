@@ -28,8 +28,9 @@ body { font-family: var(--mono); }
 #info .goal { color: #e7b84a; }
 #log { font: 13px/1.35 var(--mono); color: var(--muted); height: 54px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
 #log div:last-child { color: var(--text); }
-#buttons { display: flex; gap: 8px; }
-#buttons button { flex: 1; min-height: 48px; font-family: var(--mono); }
+#buttons { display: flex; gap: 6px; }
+#buttons button { flex: 1; min-width: 0; min-height: 48px; padding: 0 4px; font-family: var(--mono); white-space: nowrap; }
+#buttons button.dim { opacity: 0.55; }
 #buttons button:disabled { opacity: 0.4; }
 .card { font-family: var(--mono); }
 .card .speaker { color: var(--accent); font-weight: 700; }

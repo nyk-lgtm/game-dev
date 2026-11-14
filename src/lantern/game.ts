@@ -2,6 +2,7 @@
 
 import { closeOverlay, showCard } from '../shared/cards';
 import { copyText, toast } from '../shared/debug';
+import { dailySeed, enterDaily, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey } from '../shared/daily';
 import {
   ARMORS,
   MAPS,
@@ -18,7 +19,9 @@ import {
   defenceOf,
   dialogue,
   encodeAction,
+  explorePath,
   fov,
+  healsHere,
   hitChance,
   isLegal,
   markerAt,
@@ -40,7 +43,7 @@ import {
 } from './core';
 import { DIRS8, addPos } from './core/world';
 import { MONSTER_COLORS, camera, cellAtPx, draw, fitView, type Banner, type Fx, type View } from './render';
-import { load, save } from './storage';
+import { load, save, store } from './storage';
 
 interface SavedGame {
   seed: number;
@@ -48,9 +51,19 @@ interface SavedGame {
   v: number;
 }
 
+/** Today's daily in progress (the hub reads `day` and `a`). */
+interface DailyRun {
+  day: string;
+  seed: number;
+  a: string;
+  v: number;
+}
+
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const STEP_MS = 95;
 const REST_MS = 40;
+/** A tap snaps to a monster, chest or person within this many tiles of the finger. */
+const SNAP_TILES = 1.5;
 /** Walk-stopping events. */
 const STOP_EVENTS = new Set(['hit', 'miss', 'kill', 'talk', 'read', 'loot', 'levelUp', 'enterMap', 'playerDown', 'win']);
 const cheb = (a: Pos, b: Pos) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
@@ -75,7 +88,11 @@ export class Game {
    * Auto-walk: remaining steps and where they lead. `direct` walks go straight to the
    * target; the others head as close as known ground allows and re-plan every step.
    */
-  private walk: { dirs: number[]; target: Pos; chase: number | null; direct: boolean; steps: number } | null = null;
+  private walk: { dirs: number[]; target: Pos; chase: number | null; direct: boolean; steps: number; explore?: boolean } | null = null;
+  /** The day of the daily being played, or null for the main quest. */
+  private day: string | null = null;
+  /** Set when a daily win was just recorded (for the win card). */
+  private dailyDone: ReturnType<typeof recordDaily> | null = null;
   /** Resting: waiting turn after turn until healed or something shows up. */
   private rest: { from: number; turns: number } | null = null;
   /** The monster you last fought (shown in the info line). */
@@ -99,9 +116,12 @@ export class Game {
       }
       const hp = this.state.player.hp;
       this.act({ type: 'wait' });
-      const gained = this.state.player.hp - hp;
-      this.say(gained > 0 ? `You catch your breath. +${gained} HP.` : 'You wait a moment.');
+      const p = this.state.player;
+      const gained = p.hp - hp;
+      const dark = MAPS[p.map].dark && p.hp < p.maxHp;
+      this.say(gained > 0 ? `You catch your breath. +${gained} HP.` : dark ? 'You wait. Wounds don’t heal in the dark.' : 'You wait a moment.');
     };
+    $('exploreBtn').onclick = () => this.explore();
     $('potionBtn').onclick = () => this.act({ type: 'potion' });
     $('packBtn').onclick = () => this.showPack();
     requestAnimationFrame((t) => this.frame(t));
@@ -109,7 +129,7 @@ export class Game {
 
   // ---------- lifecycle ----------
 
-  start(seed: number, actions = ''): void {
+  start(seed: number, actions = '', day: string | null = null): void {
     let s: GameState;
     try {
       s = replay(seed, actions);
@@ -117,6 +137,8 @@ export class Game {
       actions = '';
       s = newGame(seed);
     }
+    this.day = day;
+    if (!day) leaveDaily();
     this.run = { seed, actions, v: RULES_VERSION };
     this.state = s;
     this.walk = null;
@@ -134,11 +156,36 @@ export class Game {
     this.start(randomSeed());
   }
 
+  /** Today's daily quest: the same monster spots and chest gold for everyone; fewest turns wins. */
+  playDaily(): void {
+    closeOverlay();
+    const day = todayKey();
+    const run = load<DailyRun | null>('dailyRun', null);
+    const seed = dailySeed('lantern', day);
+    const ok = run && run.day === day && run.v === RULES_VERSION && run.seed === seed;
+    enterDaily();
+    this.start(seed, ok ? run.a : '', day);
+  }
+
+  /** Back to the main quest from a daily. */
+  private leaveDailyMode(): void {
+    closeOverlay();
+    const saved = load<SavedGame | null>('game', null);
+    if (saved && saved.v === RULES_VERSION) this.start(saved.seed, saved.actions);
+    else this.start(randomSeed());
+  }
+
   private persist(): void {
+    const s = this.state;
+    if (this.day) {
+      // (A daily win is recorded once, when it happens: see react().)
+      save('dailyRun', { day: this.day, seed: this.run.seed, a: this.run.actions, v: RULES_VERSION } satisfies DailyRun);
+      return;
+    }
     save('game', this.run);
-    if (this.state.quest === 'won') {
+    if (s.quest === 'won') {
       const best = load<number | null>('bestTurns', null);
-      if (best === null || this.state.turn < best) save('bestTurns', this.state.turn);
+      if (best === null || s.turn < best) save('bestTurns', s.turn);
     }
   }
 
@@ -166,7 +213,26 @@ export class Game {
   private tap(px: number, py: number): void {
     if (!$('overlay').hidden) return;
     if (this.rest) return this.stopRest('You stop resting.');
-    const target = cellAtPx(this.view(), px, py);
+    const v = this.view();
+    let target = cellAtPx(v, px, py);
+    // Small tiles: a tap near a monster, chest or person snaps to it (the nearest within
+    // ~1.5 tiles), unless it lands on something itself or one step from you (a deliberate step).
+    if (!this.interactive(target) && cheb(target, this.state.player.pos) > 1) {
+      const fx = (px - v.ox) / v.cellW + v.x0 - 0.5;
+      const fy = (py - v.oy) / v.cellH + v.y0 - 0.5;
+      const k = v.cellH / v.cellW;
+      let best = SNAP_TILES;
+      for (let y = target.y - 2; y <= target.y + 2; y++)
+        for (let x = target.x - 2; x <= target.x + 2; x++) {
+          const c = { x, y };
+          if (!this.interactive(c) || samePos(c, this.state.player.pos)) continue;
+          const d = Math.hypot(x - fx, (y - fy) * k);
+          if (d <= best) {
+            best = d;
+            target = c;
+          }
+        }
+    }
     if (samePos(target, this.state.player.pos)) {
       // Tap yourself to stop.
       if (this.walk) {
@@ -179,22 +245,77 @@ export class Game {
     this.startWalk(target);
   }
 
+  /** A monster you can see, or a chest still shut, a person, a sign or the Lantern you know of. */
+  private interactive(p: Pos): boolean {
+    const s = this.state;
+    const m = WORLD[s.player.map];
+    const mo = monsterAt(s, s.player.map, p);
+    if (mo) return this.canSee(p);
+    const mk = markerAt(m, p);
+    if (!mk || !this.known(p)) return false;
+    if (mk.kind === 'chest') return !s.done.includes(mk.id);
+    return mk.kind === 'npc' || mk.kind === 'sign' || mk.kind === 'lantern';
+  }
+
+  /** The map's hint for a spot with no way through (the King's hall: "from the tunnel below"). */
+  private routeNote(target: Pos): string {
+    const n = MAPS[this.state.player.map].notes?.find((b) => target.x >= b.x0 && target.x <= b.x1 && target.y >= b.y0 && target.y <= b.y1);
+    return n ? ` ${n.text}` : '';
+  }
+
   private startWalk(target: Pos): void {
     const s = this.state;
     const m = WORLD[s.player.map];
     const foe = s.monsters.find((mo) => mo.hp > 0 && mo.map === s.player.map && samePos(mo.pos, target) && this.canSee(mo.pos));
     const plan = planWalk(s, target);
-    const what = foe ? `the ${MONSTERS[foe.kind].name}` : 'there';
+    const what = foe ? ` to the ${MONSTERS[foe.kind].name}` : '';
     // Something you'd stand on or use (not a wall or tree you tapped "that way").
     const place = !!foe || ((passable(m, target) || !!markerAt(m, target)) && this.known(target));
     if (!plan) {
       this.walk = null;
-      this.say(place ? `Can't reach ${what} from here.` : 'No way closer from here.');
+      this.say(`No way through${what} from here.${this.routeNote(target)}`);
       return;
     }
-    if (!plan.direct && place) this.say(`Can't reach ${what} from here; heading as close as you can.`);
-    this.walk = { dirs: plan.dirs, target, chase: foe && plan.direct ? foe.id : null, direct: plan.direct, steps: 0 };
+    if (!plan.direct && place) this.say(`No known way${what || ' there'} yet; heading closer.${this.routeNote(target)}`);
+    const chase = foe && plan.direct && !plan.blocked ? foe.id : null;
+    this.walk = { dirs: plan.dirs, target, chase, direct: plan.direct, steps: 0 };
     this.nextStepAt = 0;
+    this.refreshUi();
+  }
+
+  /** Auto-explore (dark maps): walk to the nearest unexplored edge or unopened chest, step by step. */
+  private explore(): void {
+    if (this.rest) this.stopRest('You stop resting.');
+    if (this.walk?.explore) {
+      this.walk = null;
+      return this.say('You stop exploring.');
+    }
+    const s = this.state;
+    const map = s.player.map;
+    if (!MAPS[map].dark) return this.say(`${MAPS[map].name} lies in daylight: tap where you want to go.`);
+    const foe = this.visibleMonsters()[0];
+    if (foe) return this.say(`Not with the ${MONSTERS[foe.kind].name} in sight.`);
+    const plan = explorePath(s);
+    if (!plan) return this.say(this.exploredText());
+    this.walk = { dirs: plan.dirs, target: plan.target, chase: null, direct: false, steps: 0, explore: true };
+    this.nextStepAt = 0;
+    this.refreshUi();
+  }
+
+  private exploredText(): string {
+    const s = this.state;
+    const m = WORLD[s.player.map];
+    const down = [...m.markers.entries()].find(([i, v]) => v.marker.kind === 'exit' && v.marker.glyph === '>' && this.known({ x: i % m.w, y: Math.floor(i / m.w) }));
+    return `Nothing left to explore that you can reach.${down && s.quest === 'started' ? ' Tap the > to go deeper.' : ''}`;
+  }
+
+  /** Exits (stairs) you know of on this map, by cell index. */
+  private knownExits(): Set<number> {
+    const s = this.state;
+    const m = WORLD[s.player.map];
+    const out = new Set<number>();
+    for (const [i, v] of m.markers) if (v.marker.kind === 'exit' && this.known({ x: i % m.w, y: Math.floor(i / m.w) })) out.add(i);
+    return out;
   }
 
   /** One auto-walk step. A walk only stops on arrival, an event, or a monster showing up, and says why. */
@@ -204,8 +325,14 @@ export class Game {
     const stop = (msg?: string) => {
       this.walk = null;
       if (msg) this.say(msg);
+      else this.refreshUi();
     };
-    if (w.chase !== null) {
+    if (w.explore) {
+      const plan = explorePath(s);
+      if (!plan) return stop(this.exploredText());
+      w.dirs = plan.dirs;
+      w.target = plan.target;
+    } else if (w.chase !== null) {
       // Follow a moving monster.
       const foe = s.monsters.find((m) => m.id === w.chase && m.hp > 0 && m.map === s.player.map);
       if (!foe) return stop();
@@ -231,10 +358,23 @@ export class Game {
     if (!isLegal(s, { type: 'step', dir }) || ++w.steps > 500) return stop('Something blocks the way.');
     w.dirs.shift();
     const nearBefore = new Set(this.visibleMonsters().filter((mo) => cheb(mo.pos, s.player.pos) <= 3).map((mo) => mo.id));
+    const exitsBefore = w.explore ? this.knownExits() : null;
     const events = this.act({ type: 'step', dir }, true);
     if (events.some((e) => STOP_EVENTS.has(e.type))) return stop();
     // A monster you haven't met stops you; act() has just described it.
     if (this.lastAnnounced) return stop();
+    if (w.explore) {
+      // Exploring stops for any monster in sight, and when you first spot a way on.
+      const seen = this.visibleMonsters()[0];
+      if (seen) return stop(`The ${MONSTERS[seen.kind].name} is in sight. You stop exploring.`);
+      const m = WORLD[this.state.player.map];
+      for (const i of this.knownExits()) {
+        if (exitsBefore!.has(i)) continue;
+        const mk = m.markers.get(i)!.marker;
+        return stop(mk.kind === 'exit' && mk.glyph === '>' ? 'You find the way down (>).' : 'You find a way back up (<).');
+      }
+      return;
+    }
     // One you've met only stops you when it comes close.
     const pp = this.state.player.pos;
     const close = this.visibleMonsters().find((mo) => mo.id !== w.chase && cheb(mo.pos, pp) <= 3 && !nearBefore.has(mo.id));
@@ -246,7 +386,7 @@ export class Game {
   private endToward(): void {
     const w = this.walk!;
     this.walk = null;
-    if (cheb(this.state.player.pos, w.target) > 1) this.say('No way closer from here.');
+    if (cheb(this.state.player.pos, w.target) > 1) this.say(`No way through from here.${this.routeNote(w.target)}`);
   }
 
   /** One turn of resting. */
@@ -268,10 +408,10 @@ export class Game {
     this.say(msg);
   }
 
-  /** Hurt, and nothing in sight: Wait becomes Rest. */
+  /** Hurt in daylight, and nothing in sight: Wait becomes Rest. (Wounds don't heal in the dark.) */
   private canRest(): boolean {
     const p = this.state.player;
-    return p.hp < p.maxHp && this.state.quest !== 'won' && this.visibleMonsters().length === 0;
+    return p.hp < p.maxHp && healsHere(p.map) && this.state.quest !== 'won' && this.visibleMonsters().length === 0;
   }
 
   private known(p: Pos): boolean {
@@ -374,6 +514,7 @@ export class Game {
           setTimeout(() => this.showTalk(e.npc), 50);
           break;
         case 'win':
+          this.dailyDone = this.day ? recordDaily(store, 100000 - s.turn, `${s.turn} turns`, this.day) : null;
           setTimeout(() => this.showWin(), 400);
           break;
         case 'playerDown':
@@ -414,6 +555,9 @@ export class Game {
     pot.textContent = `Potion ×${p.potions}`;
     pot.disabled = !isLegal(s, { type: 'potion' });
     $('waitBtn').textContent = this.rest ? 'Stop' : this.canRest() ? 'Rest' : 'Wait';
+    const ex = $<HTMLButtonElement>('exploreBtn');
+    ex.textContent = this.walk?.explore ? 'Stop' : 'Explore';
+    ex.classList.toggle('dim', !MAPS[p.map].dark);
     $('info').innerHTML = this.infoLine();
     $('log').innerHTML = s.log
       .slice(-3)
@@ -514,13 +658,12 @@ export class Game {
     showCard(
       `<h2>How to play Lantern</h2>
       <ul>
-        <li><b>Tap anywhere</b> to walk there; tap somewhere else to change course, tap yourself to stop. A walk stops by itself only when a monster shows up or comes close, and the log says why.</li>
-        <li><b>Tap a monster</b> (or just walk into it) to hit it. One tap, one attack (monsters hit back each turn). The line above the log shows its health, then your chance to hit it and your damage, then its (<i>you 90%: 2-4</i>).</li>
-        <li><b>Tap a person</b> (coloured <b>@</b>) to talk and shop. <b>?</b> is a sign, <b>≡</b> a chest.</li>
-        <li><b>Potion</b> heals 12. <b>Wait</b> passes a turn. You heal over time, quickly when no monster can see you: then Wait becomes <b>Rest</b>, which rests until you are healed (or something shows up).</li>
-        <li>Level up by winning fights (XP bar at the top): the rats near the village are the safe first fights; goblins across the bridge hit hard at level 1. Bram sells steel, Mira heals and sells potions.</li>
-        <li>Caves are dark: you see only what your lantern lights. Explored ground stays dimly remembered.</li>
-        <li>If you fall, you wake in the village with half your gold. Slain monsters stay slain.</li>
+        <li><b>Tap</b> to walk there (taps near a monster or chest snap to it). Tap elsewhere to change course, yourself to stop.</li>
+        <li><b>Walk into a monster</b> to hit it. The line above the log shows its health, then both sides' hit chance and damage.</li>
+        <li><b>Tap a coloured @</b> to talk and shop. <b>?</b> sign, <b>≡</b> chest, <b>&gt;</b> stairs down.</li>
+        <li>Caves are dark. <b>Explore</b> walks to the nearest unexplored spot or chest and stops when a monster shows up.</li>
+        <li><b>Wounds don't heal in the dark.</b> Potions heal 12 (Mira sells them). In daylight, with nothing near, Wait becomes <b>Rest</b>.</li>
+        <li>Rats by the village are the safe first fights. If you fall, you wake in the village with half your gold.</li>
       </ul>`,
       [{ label: 'Begin', primary: true, onClick: closeOverlay }],
     );
@@ -529,26 +672,42 @@ export class Game {
 
   showMenu(): void {
     const s = this.state;
+    const today = todayKey();
+    const best = loadDaily(store, today);
+    const run = load<DailyRun | null>('dailyRun', null);
+    const started = !best && run?.day === today && run.a.length > 0;
+    const head = this.day
+      ? `<h2>Lantern · daily</h2><p>${prettyDay(this.day)}: everyone gets the same monster spots and chest gold. Fewest turns wins.${best ? ` Best today: ${best.label}.` : ''}</p>`
+      : '<h2>Lantern</h2>';
     showCard(
-      `<h2>Lantern</h2><p>${MAPS[s.player.map].name} · Turn ${s.turn} · Falls ${s.deaths}</p>`,
+      `${head}<p>${MAPS[s.player.map].name} · Turn ${s.turn} · Falls ${s.deaths}</p>`,
       [
         { label: 'Resume', primary: true, onClick: closeOverlay },
+        this.day
+          ? { label: 'Back to my quest', onClick: () => this.leaveDailyMode() }
+          : { label: started ? 'Continue today’s daily' : `Daily quest · ${best ? `best ${best.label}` : 'not played'}`, onClick: () => this.playDaily() },
         { label: 'How to play', onClick: () => this.showHelp() },
         { label: 'Copy bug report', onClick: () => this.copyReport() },
         { label: 'All games', onClick: () => (location.href = '../') },
-        { label: 'Abandon & start over', onClick: () => this.newGame() },
+        this.day
+          ? { label: 'Restart today’s daily', onClick: () => (closeOverlay(), this.start(this.run.seed, '', this.day)) }
+          : { label: 'Abandon & start over', onClick: () => this.newGame() },
       ],
     );
   }
 
   private showWin(): void {
     const s = this.state;
+    const d = this.dailyDone;
+    const daily = this.day
+      ? `<p>Daily quest: ${s.turn} turns${d ? (d.improved ? (d.best.plays > 1 ? ' · a new best for today!' : '') : ` · today’s best ${d.best.label}`) : ''}.</p>`
+      : '';
     showCard(
       `<h2>The Lantern burns again</h2><p>Light pours over Emberwick. ${NPC_NAMES.elder} weeps and laughs at once.</p>
-      <p>Level ${s.player.level} · ${s.turn} turns · ${s.deaths} fall${s.deaths === 1 ? '' : 's'}</p>`,
+      <p>Level ${s.player.level} · ${s.turn} turns · ${s.deaths} fall${s.deaths === 1 ? '' : 's'}</p>${daily}`,
       [
         { label: 'Walk the village', primary: true, onClick: closeOverlay },
-        { label: 'New game', onClick: () => this.newGame() },
+        this.day ? { label: 'Back to my quest', onClick: () => this.leaveDailyMode() } : { label: 'New game', onClick: () => this.newGame() },
         { label: 'All games', onClick: () => (location.href = '../') },
       ],
     );
