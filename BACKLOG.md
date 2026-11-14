@@ -841,6 +841,15 @@ playtests with fixes shipped. Open threads, in order:
         ~33 numbers + ~12 links + 4 givens, links settle ~17% of hexes vs ~35%); hints skip pure link
         copies; sheet says "one clue" in links mode and counts solves per level+mode; ＋ works in one
         tap over a card; the help card fits without scrolling.
+  - [x] Third blind playtest fixes: a reload keeps the daily (`?daily` via replaceState + a saved mode); asking for
+        the same hint again with nothing changed is free; hints name every clue the deduction used (traced back and
+        pared to an irreducible set: ~45-60% of steps now name two or more), all ringed; "what if" hints pick the
+        shortest refutation and play it out as numbered ghosts (? on the supposed hex, 1, 2, 3… on what it forces)
+        to a red clue; everything a hint doesn't read dims, icons included; win text always names the level ("Normal
+        small"); daily solves keep their own results (no longer a regular Normal best) with a streak and a
+        spoiler-free "Copy my result" (src/shared/streak.ts, shared with Gleam; hub card shows the streak); bigger
+        note pips (triangle on plain hexes, ~14 px on Large); the notes tip shows once; the board uses the full width
+        (Large hexes ~47 px tall at 390). `scripts/triad/hints.ts`.
   - [ ] Next ideas: a links daily, two-clue deductions for hard.
 - [ ] **Last Light** (tap-driven interactive fiction). Milestones:
   - [x] Core (src/lastlight/core/story.ts): 8 places, 9 items, Tomas (trust, follows, carries) and

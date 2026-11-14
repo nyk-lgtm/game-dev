@@ -223,6 +223,17 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   groups have at most 3 hexes; Hard links keeps the original generator (playtest favourite). Bump `LINKS_VERSION`
   when links puzzles change (saves record `clues` + `lv`; `validSave`); the daily is numbers-only. Hints skip
   hexes that links merely copy from a filled hex unless nothing else is left.
+  Hints (core/play.ts, not part of the generator: no version bump when they change): a step names every clue it
+  leans on (`clues`: traced back through the steps, then pared to an irreducible set with `minimise`; the simplest
+  of the first `TRY` candidates wins), so "the 4 next to it" also names the 3 that made it work; Hard's "what if"
+  picks the refutation with the fewest clues and returns a `TrialView` (supposed cell/value, the `chain` of hexes it
+  forces with the options left, the clue that `breaks`), which the board plays out as numbered ghosts
+  (`trialPhase`, 0.75 s a step; all at once with reduced effects) up to a red clue. A repeated hint with the board
+  unchanged (`boardSig`, saved as `lh`) is shown again free. `scripts/triad/hints.ts [seeds]` walks hints to the end
+  (multi-clue share, chain lengths, ms a hint: ≤ ~7 ms). Daily: `start()` keeps `?daily` in the address (`enterDaily`)
+  and `mode` in storage, so a reload returns to today's daily; daily solves go to `dailies` (streak via
+  src/shared/streak.ts, shared with Gleam; "Copy my result") and never touch the regular bests (`best`/`solvedBy`).
+  Titles always name the level ("Normal small"). The board fills the stage (`layout` pad 3: Large ~47 px tall at 390).
 - Last Light: one pure module per night, night 1 (storm) src/lastlight/core/story.ts, night 2 (fog) core/night2.ts;
   core/nights.ts wraps each as a `Story` (core/types.ts) that game.ts drives. `choices(s)` lists legal action ids
   (`go:<room>`, `take:<item>`, `use:<item>:<target>`, `give:`, `say:<npc>:<topic>`, …); `act(s, id)` returns the text.

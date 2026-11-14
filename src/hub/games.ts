@@ -3,7 +3,7 @@
 
 import { makeStore } from '../shared/storage';
 import type { Store } from '../shared/storage';
-import { streakOf } from '../gleam/streak';
+import { streakOf, type DailyResult } from '../shared/streak';
 
 export interface GameCard {
   path: string;
@@ -336,7 +336,8 @@ export const GAMES: GameCard[] = [
     accent: '#ff8a3d',
     best: () => {
       const p = triad.load<{ solved?: number } | null>('profile', null);
-      return p?.solved ? `${p.solved} solved` : null;
+      const streak = streakOf(triad.load<Record<string, DailyResult>>('dailies', {}));
+      return p?.solved ? `${p.solved} solved${streak ? ` · 🔥 ${streak}-day daily streak` : ''}` : null;
     },
     thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#11141d"/>
       <path d="M38 8l13 7.5v15L38 38l-13-7.5v-15z" fill="#5a2a14" stroke="#ff8a3d" stroke-width="1.5"/>

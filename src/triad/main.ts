@@ -1,5 +1,5 @@
 import { installErrorOverlay } from '../shared/debug';
-import { wantsDaily } from '../shared/daily';
+import { todayKey, wantsDaily } from '../shared/daily';
 import { randomSeed } from '../shared/rng';
 import { CLUE_MODES, LEVELS, SIZES, type ClueMode, type Level, type Size } from './core';
 import { Game, store, validSave, validTutorial } from './game';
@@ -23,6 +23,8 @@ if (p.has('seed') && Number.isFinite(Number(p.get('seed'))) && size in SIZES) {
   history.replaceState(null, '', location.pathname);
 } else if (wantsDaily()) game.playDaily();
 else if (validTutorial(store.load('tut', null))) game.startTutorial(store.load('tut', null));
+// Left in the middle of today's daily (even if the address lost its ?daily): back to it.
+else if (store.load<string>('mode', 'own') === 'daily' && store.load<{ day?: string } | null>('dailyRun', null)?.day === todayKey()) game.playDaily();
 else if (validSave(saved)) game.start(saved.seed, saved.size, saved);
 else game.start(randomSeed(), 'small');
 

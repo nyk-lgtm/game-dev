@@ -35,6 +35,13 @@ export function leaveDaily(): void {
   history.replaceState(null, '', location.pathname + (q ? `?${q}` : ''));
 }
 
+/** Enter daily mode: put ?daily in the address so a reload comes back to the daily. */
+export function enterDaily(): void {
+  if (wantsDaily()) return;
+  const q = location.search;
+  history.replaceState(null, '', `${location.pathname}${q ? `${q}&daily` : '?daily'}${location.hash}`);
+}
+
 export interface DailyBest {
   day: string;
   /** Higher is better; games choose the scale. */

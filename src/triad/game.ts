@@ -3,7 +3,9 @@
 
 import { closeOverlay, showCard } from '../shared/cards';
 import { copyText, toast } from '../shared/debug';
-import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey } from '../shared/daily';
+import { dailySeed, enterDaily, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey } from '../shared/daily';
+import { reducedFx } from '../shared/settings';
+import { pruneDailies, shortDay, streakOf, type DailyResult } from '../shared/streak';
 import { pxToHex } from '../shared/hexlayout';
 import { key } from '../shared/hex';
 import { makeStore } from '../shared/storage';
@@ -23,7 +25,9 @@ import {
   nextHint,
   solved,
   type ClueMode,
+  type Hint,
   type Puzzle,
+  type TrialView,
   type Level,
   type Size,
 } from './core';
@@ -61,6 +65,14 @@ interface SavedRun {
   clues?: ClueMode;
   /** LINKS_VERSION of a links-mode save. */
   lv?: number;
+  /** The last hint and the board it was given on: asking again before a change is free. */
+  lh?: LastHint | null;
+}
+
+interface LastHint {
+  /** `boardSig` right after the hint (a "what if" writes into notes first). */
+  sig: string;
+  h: Hint;
 }
 
 /** A save this version still rebuilds the same puzzle for. */
@@ -68,12 +80,18 @@ export const validSave = (s: SavedRun | null | undefined): s is SavedRun =>
   !!s && s.v === RULES_VERSION && (s.clues !== 'links' || s.level === 'hard' || s.lv === LINKS_VERSION);
 
 interface Profile {
+  /** Every puzzle solved, dailies included. */
   solved: number;
-  /** Solved per level and mode (`level` or `level+links`). */
+  /** Regular puzzles solved per level and mode (`level` or `level+links`); dailies are kept apart. */
   solvedBy?: Record<string, number>;
-  /** Best time per size (normal) or `size-level`, with `+links` in links mode. */
+  /** Best regular time per size (normal) or `size-level`, with `+links` in links mode. */
   best: Partial<Record<string, number>>;
 }
+
+/** Daily results by day (stored as 'dailies'): the streak and the share line. */
+const loadDailies = () => store.load<Record<string, DailyResult>>('dailies', {});
+const HINT_MS = 30000;
+const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 const fmt = (ms: number) => {
   const s = Math.floor(ms / 1000);
@@ -95,7 +113,8 @@ export class Game {
   done = false;
   daily: string | null = null;
   private undoStack: { cell: number; val: number; notes: number }[] = [];
-  private hint: { clue: number; cell: number; clues?: number[] } | null = null;
+  private hint: { clue: number; cell: number; clues?: number[]; trial?: TrialView; t0?: number } | null = null;
+  private lastHint: LastHint | null = null;
   private canvas = $('board') as HTMLCanvasElement;
   private ctx = this.canvas.getContext('2d')!;
   private view!: View;
@@ -142,6 +161,8 @@ export class Game {
     this.tutDaily = saved ? saved.daily : this.tut !== null ? this.tutDaily : this.daily;
     this.tut = 0;
     this.daily = null;
+    // Out of the daily's address, so a reload resumes the tutorial.
+    leaveDaily();
     this.p = TUTORIAL;
     this.vals = saved ? [...saved.vals].map((c) => CODE.indexOf(c) - 1) : new Array(7).fill(-1);
     this.notes = saved ? [...saved.notes].map(Number) : new Array(7).fill(0);
@@ -150,6 +171,7 @@ export class Game {
     this.done = false;
     this.selected = -1;
     this.undoStack = [];
+    this.lastHint = null;
     this.winT = -1;
     this.resize();
     this.refresh();
@@ -169,6 +191,10 @@ export class Game {
     this.seed = seed;
     this.size = size;
     this.daily = daily;
+    // The address and a saved mode both say whether this is the daily, so a reload comes back to it.
+    if (daily) enterDaily();
+    else leaveDaily();
+    store.save('mode', daily ? 'daily' : 'own');
     this.level = daily ? 'normal' : (saved?.level ?? this.level);
     this.mode = daily ? 'numbers' : saved ? (saved.clues ?? 'numbers') : this.mode;
     this.p = generate(seed, SIZES[size].radius, this.level, this.mode);
@@ -184,6 +210,7 @@ export class Game {
     this.done = saved?.done ?? false;
     this.selected = -1;
     this.hint = null;
+    this.lastHint = saved?.lh ?? null;
     this.undoStack = [];
     this.winT = -1;
     this.resize();
@@ -203,7 +230,6 @@ export class Game {
 
   newPuzzle(size: Size = this.size, level: Level = this.level, mode: ClueMode = this.mode): void {
     closeOverlay();
-    leaveDaily();
     this.level = level;
     this.mode = mode;
     store.save('level', level);
@@ -231,7 +257,6 @@ export class Game {
 
   resumeOwn(): void {
     closeOverlay();
-    leaveDaily();
     const saved = store.load<SavedRun | null>('run', null);
     if (validSave(saved)) this.start(saved.seed, saved.size, saved);
     else this.newPuzzle('medium');
@@ -259,6 +284,7 @@ export class Game {
       level: this.level,
       clues: this.mode,
       lv: this.mode === 'links' ? LINKS_VERSION : undefined,
+      lh: this.lastHint,
     };
     store.save(this.daily ? 'dailyRun' : 'run', run);
   }
@@ -351,6 +377,11 @@ export class Game {
     this.save(true);
   }
 
+  /** The board as the hints read it: entries and notes. */
+  private boardSig(): string {
+    return `${this.vals.map((v) => CODE[v + 1]).join('')}|${this.notes.join('')}`;
+  }
+
   private giveHint(): void {
     if (this.done) return;
     if (this.tut !== null) {
@@ -358,24 +389,34 @@ export class Game {
       this.refresh();
       return;
     }
+    // Nothing changed since the last hint: show it again, free (and replay a "what if" from the start).
+    if (this.lastHint && this.lastHint.sig === this.boardSig()) {
+      this.showHint(this.lastHint.h);
+      toast('Same hint again: no charge');
+      return;
+    }
     const h = nextHint(this.p, this.vals, this.notes);
     if (h.kind === 'done') return;
     this.hints++;
+    if (h.kind === 'not') this.notes[h.cell] = (this.notes[h.cell] || 7) & ~(1 << h.not);
+    this.lastHint = { sig: this.boardSig(), h };
+    this.showHint(h);
+    this.save(true);
+  }
+
+  private showHint(h: Hint): void {
+    if (h.kind === 'done') return;
+    this.selected = h.cell;
     if (h.kind === 'wrong') {
-      this.selected = h.cell;
       this.hint = { clue: h.cell, cell: h.cell };
       this.info(`<b>This one is wrong.</b> Clear it (or change it) and look again.`);
-    } else if (h.kind === 'not') {
-      this.notes[h.cell] = (this.notes[h.cell] || 7) & ~(1 << h.not);
-      this.selected = h.cell;
-      this.hint = { clue: h.clue, cell: h.cell };
-      this.info(h.text);
     } else {
-      this.selected = h.cell;
-      this.hint = { clue: h.clue, cell: h.cell, clues: h.clues };
-      this.info(`${h.text}${h.notes ? ' <i>(Use notes to track what nearby hexes can still be.)</i>' : ''}`);
+      this.hint = { clue: h.clue, cell: h.cell, clues: h.clues, trial: h.trial, t0: this.time };
+      // The notes tip shows once, on the first hint that needs it.
+      const tip = h.kind === 'step' && h.notes && !store.load('notesTip', false);
+      if (tip) store.save('notesTip', true);
+      this.info(`${h.text}${tip ? ' <i>Tip: notes track what nearby hexes can still be.</i>' : ''}`);
     }
-    this.save(true);
     this.draw();
   }
 
@@ -405,24 +446,51 @@ export class Game {
     this.save(true);
     const prof = store.load<Profile>('profile', { solved: 0, best: {} });
     prof.solved++;
+    const score = this.total();
+    if (this.daily) {
+      // Dailies keep their own results (streak, share line, today's best) and leave the regular bests alone.
+      store.save('profile', prof);
+      const today = todayKey();
+      const dailies = loadDailies();
+      const had = dailies[this.daily];
+      if (!had || score < had.ms + had.hints * HINT_MS) dailies[this.daily] = { ms: Math.round(this.ms), hints: this.hints, onDay: this.daily === today || !!had?.onDay };
+      pruneDailies(dailies, today);
+      store.save('dailies', dailies);
+      recordDaily(store, 1e7 - Math.round(score / 1000), fmt(score), this.daily);
+      setTimeout(() => this.showWin(false), 1400);
+      return;
+    }
     const sk = this.solvedKey();
     prof.solvedBy = { ...prof.solvedBy, [sk]: (prof.solvedBy?.[sk] ?? 0) + 1 };
     const prev = prof.best[this.bestKey()];
-    const score = this.total();
     const newBest = prev === undefined || score < prev;
     if (newBest) prof.best[this.bestKey()] = score;
     store.save('profile', prof);
-    if (this.daily) recordDaily(store, 1e7 - Math.round(score / 1000), fmt(score), this.daily);
     setTimeout(() => this.showWin(newBest && prev !== undefined), 1400);
   }
 
   private showWin(newBest: boolean): void {
+    const time = `in <b>${fmt(this.total())}</b>${this.hints ? ` (${fmt(this.ms)} + ${this.hints * 30}s for ${plural(this.hints, 'hint')})` : ', no hints'}`;
+    if (this.daily) {
+      const d = loadDaily(store, this.daily);
+      const streak = this.daily === todayKey() ? streakOf(loadDailies()) : 0;
+      showCard(
+        `<h2>Solved</h2>
+         <p>Daily puzzle ${time}.</p>
+         <p><b style="color:var(--gold)">Daily puzzle · ${prettyDay(this.daily)}</b>${d ? `<br>Today's best: ${d.label}` : ''}${streak > 1 ? `<br>🔥 ${streak}-day streak` : streak === 1 ? '<br>🔥 Streak started: come back tomorrow' : ''}</p>`,
+        [
+          { label: 'Copy my result', primary: true, onClick: () => this.share() },
+          { label: 'Back to my puzzle', onClick: () => this.resumeOwn() },
+          { label: 'New puzzle', onClick: () => this.showNew() },
+          { label: 'Look at the board', onClick: closeOverlay },
+        ],
+      );
+      return;
+    }
     const best = store.load<Profile>('profile', { solved: 0, best: {} }).best[this.bestKey()];
-    const d = this.daily ? loadDaily(store, this.daily) : null;
     showCard(
       `<h2>Solved</h2>
-       <p>${this.title()} puzzle in <b>${fmt(this.total())}</b>${this.hints ? ` (${fmt(this.ms)} + ${this.hints * 30}s for ${this.hints} hint${this.hints > 1 ? 's' : ''})` : ', no hints'}.${newBest ? ' <b style="color:var(--gold)">New best!</b>' : best !== undefined ? ` Best ${fmt(best)}.` : ''}</p>
-       ${this.daily ? `<p><b style="color:var(--gold)">Daily puzzle · ${prettyDay(this.daily)}</b>${d ? `<br>Today's best: ${d.label}` : ''}</p>` : ''}`,
+       <p>${this.title()} puzzle ${time}.${newBest ? ' <b style="color:var(--gold)">New best!</b>' : best !== undefined ? ` Best ${fmt(best)}.` : ''}</p>`,
       [
         { label: `Another ${this.title().toLowerCase()} puzzle`, primary: true, onClick: () => this.newPuzzle(this.size) },
         { label: 'Other sizes', onClick: () => this.showNew() },
@@ -430,6 +498,21 @@ export class Game {
         { label: 'All games', onClick: () => (location.href = '../') },
       ],
     );
+  }
+
+  /** A spoiler-free line for today's daily: time, hints, streak. */
+  shareText(): string {
+    const day = this.daily ?? todayKey();
+    const dailies = loadDailies();
+    const r = dailies[day];
+    const ms = r ? r.ms + r.hints * HINT_MS : this.total();
+    const hints = r ? r.hints : this.hints;
+    const streak = day === todayKey() ? streakOf(dailies) : 0;
+    return `Triad daily ${shortDay(day)}: solved in ${fmt(ms)}, ${hints ? plural(hints, 'hint') : 'no hints'}${streak ? ` · 🔥 ${plural(streak, 'day')}` : ''}\n${location.origin}${location.pathname}?daily`;
+  }
+
+  private async share(): Promise<void> {
+    toast((await copyText(this.shareText())) ? 'Result copied: paste it anywhere' : 'Copy failed');
   }
 
   // ---------------------------------------------------------------- UI
@@ -507,6 +590,7 @@ export class Game {
       selected: this.selected,
       broken: new Set(brokenClues(this.p, this.vals.map((v, i) => (this.p.given[i] >= 0 ? this.p.given[i] : v)))),
       hint: this.hint,
+      still: reducedFx(),
       win: this.winT,
       time: this.time,
     });
@@ -542,7 +626,7 @@ export class Game {
         <li>Tap a hex, then an element. <b>Notes</b> pencil in what a hex might be.</li>
         <li><b>＋</b> picks <b>Easy</b>, <b>Normal</b> or <b>Hard</b> (sometimes needs a "what if": suppose a hex is fire and see a number break).</li>
         <li>${linkSvg(26)} With <b>Numbers + links</b>, a <b>link</b> on an edge means the two hexes it joins hold the same element.</li>
-        <li><b>Hint</b> shows the next step, or a wrong hex (+30 seconds each).</li>
+        <li><b>Hint</b> shows the next step and rings every clue it uses, or a wrong hex (+30 seconds; asking again before you change anything is free). A "what if" plays out as numbered ghosts up to the red clue that breaks.</li>
       </ul>`,
       // Opened with ?daily: playing it is the main button, the tutorial the other.
       this.daily
@@ -557,8 +641,9 @@ export class Game {
     );
   }
 
+  /** "Normal small", "Hard large links": the level always first, like every level's win text. */
   private title(): string {
-    return `${this.level === 'normal' ? '' : `${LEVELS[this.level].name} `}${SIZES[this.size].name.toLowerCase()}${this.p?.links ? ' links' : ''}`.replace(/^./, (c) => c.toUpperCase());
+    return `${LEVELS[this.level].name} ${SIZES[this.size].name.toLowerCase()}${this.p?.links ? ' links' : ''}`;
   }
 
   showNew(): void {
@@ -604,10 +689,12 @@ export class Game {
   showMenu(): void {
     const day = todayKey();
     const d = loadDaily(store, day);
+    const streak = streakOf(loadDailies());
     showCard(
-      `<h2>Triad</h2><p>${this.daily ? `Daily puzzle · ${prettyDay(this.daily)}` : `${this.title()} puzzle`} · ${fmt(this.total())}</p>`,
+      `<h2>Triad</h2><p>${this.daily ? `Daily puzzle · ${prettyDay(this.daily)}` : `${this.title()} puzzle`} · ${fmt(this.total())}${streak ? `<br>🔥 ${streak}-day daily streak` : ''}</p>`,
       [
         { label: 'Resume', primary: true, onClick: closeOverlay },
+        ...(this.daily && this.done ? [{ label: 'Copy my result', onClick: () => this.share() }] : []),
         { label: 'New puzzle', onClick: () => this.showNew() },
         this.daily
           ? { label: 'Back to my puzzle', onClick: () => this.resumeOwn() }
