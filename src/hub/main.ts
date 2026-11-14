@@ -4,6 +4,7 @@ import { BUILD } from '../shared/debug';
 import { makeStore } from '../shared/storage';
 import { loadDaily, prettyDay } from '../shared/daily';
 import { NEWS } from './news';
+import { streakOf } from '../gleam/streak';
 import { loadSettings, saveSettings } from '../shared/settings';
 
 interface GameCard {
@@ -126,8 +127,9 @@ const GAMES: GameCard[] = [
     pitch: 'Bend coloured beams with mirrors, splitters and filters until every crystal glows its exact colour: red and blue make magenta where they meet. Dark crystals must stay dark. One answer each, no guessing.',
     accent: '#ff5cf0',
     best: () => {
-      const p = gleam.load<{ solved?: number } | null>('profile', null);
-      return p?.solved ? `${p.solved} solved` : null;
+      const p = gleam.load<{ solved?: number; dailies?: Parameters<typeof streakOf>[0] } | null>('profile', null);
+      const streak = streakOf(p?.dailies ?? {});
+      return p?.solved ? `${p.solved} solved${streak ? ` · 🔥 ${streak}-day daily streak` : ''}` : null;
     },
     thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#0b0d18"/>
       <g fill="#141830"><rect x="4" y="4" width="22" height="22" rx="3"/><rect x="27" y="4" width="22" height="22" rx="3"/><rect x="50" y="4" width="22" height="22" rx="3"/><rect x="4" y="27" width="22" height="22" rx="3"/><rect x="27" y="27" width="22" height="22" rx="3"/><rect x="50" y="27" width="22" height="22" rx="3"/><rect x="4" y="50" width="22" height="22" rx="3"/><rect x="27" y="50" width="22" height="22" rx="3"/><rect x="50" y="50" width="22" height="22" rx="3"/></g>

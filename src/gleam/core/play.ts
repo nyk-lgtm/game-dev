@@ -2,7 +2,7 @@
 // cycle, and hints that replay the deduction model's next step.
 
 import { CODES_OF, COLOR_NAMES, TYPES, typeOf, type Puzzle } from './board';
-import { Ctx, bit, codeOf, deduce, single, type Reason } from './solve';
+import { Ctx, bit, codeOf, deduce, single, type Elim, type Reason } from './solve';
 import { SIZES, type Size } from './gen';
 
 /** The starting board: givens in place, everything else empty. */
@@ -164,6 +164,11 @@ export function reasonCells(r: Reason): number[] {
   return 'cell' in r ? [r.cell] : [];
 }
 
+/** Longest hint (plain characters) that fits the page's 4-line message box at 360 px. */
+export const HINT_MAX = 205;
+const plain = (t: string) => t.replace(/<[^>]+>/g, '');
+const or = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} or ${xs.at(-1)}`);
+
 export type Hint =
   | { kind: 'done' }
   | { kind: 'wrong'; socket: number }
@@ -191,17 +196,36 @@ export function nextHint(p: Puzzle, board: readonly number[]): Hint {
       const code = codeOf(dom[i]);
       const mine = d.log.filter((x) => x.socket === i);
       const empty = mine.find((x) => x.code === 0);
-      const other = mine.find((x) => x.code > 0 && typeOf(x.code) === typeOf(code));
-      const why: string[] = [];
-      const a = empty && reasonText(p, empty.why, board);
-      const b = other && reasonText(p, other.why, board);
-      if (a && a === b) why.push(`Left empty or flipped, ${a}.`);
-      else {
-        if (a) why.push(`Left empty, ${a}.`);
-        if (b) why.push(`Flipped, ${b}.`);
+      const flip = mine.find((x) => x.code > 0 && x.code !== code && typeOf(x.code) === typeOf(code));
+      // Why not the other kind of piece: a splitter's own mirror, a mirror's splitter, else any other type.
+      const prefer = code <= 2 ? [code + 2] : code <= 4 ? [code - 2] : [];
+      const alt =
+        mine.find((x) => prefer.includes(x.code)) ?? mine.find((x) => x.code > 0 && typeOf(x.code) !== typeOf(code));
+      const clauses: [string, Elim | undefined][] = [
+        ['left empty', empty],
+        [alt ? `as a ${TYPES[typeOf(alt.code)]}` : '', alt],
+        ['flipped', flip],
+      ];
+      // Same reason, one sentence; stop before the text outgrows the 4-line message box.
+      const groups: { labels: string[]; text: string; e: Elim }[] = [];
+      for (const [label, e] of clauses) {
+        if (!e) continue;
+        const t = reasonText(p, e.why, board);
+        const g = groups.find((x) => x.text === t);
+        if (g) g.labels.push(label);
+        else groups.push({ labels: [label], text: t, e });
       }
-      const cells = [...new Set([empty, other].flatMap((x) => (x ? reasonCells(x.why) : [])))];
-      return { kind: 'place', socket: i, code, depth: depth[i], text: `A <b>${PIECE_NAMES[code]}</b> goes here. ${why.join(' ')}`, cells };
+      const head = `A <b>${PIECE_NAMES[code]}</b> goes here.`;
+      const why: string[] = [];
+      const used: Elim[] = [];
+      for (const g of groups) {
+        const line = `${or(g.labels).replace(/^./, (ch) => ch.toUpperCase())}, ${g.text}.`;
+        if (why.length && plain([head, ...why, line].join(' ')).length > HINT_MAX) continue;
+        why.push(line);
+        used.push(g.e);
+      }
+      const cells = [...new Set(used.flatMap((x) => reasonCells(x.why)))];
+      return { kind: 'place', socket: i, code, depth: depth[i], text: `${head} ${why.join(' ')}`, cells };
     }
   }
   // The model is stuck (it shouldn't be): show one piece of the answer.

@@ -10,8 +10,11 @@ import { Rng, mixSeed } from '../../shared/rng';
 import { BACK, CRYSTAL, DC, DR, FLOOR, LAMP, NTYPES, SLASH, SOCKET, WALL, trace, typeOf, type Lamp, type Puzzle } from './board';
 import { Ctx, deduce, solveAll } from './solve';
 
-/** Bump when the same seed would build a different puzzle (saves record it). */
-export const RULES_VERSION = 2;
+/** Bump when the same seed would build a different puzzle. Saves record it, and `generate` still
+ *  builds older versions (v1 = v2 = the rules before v3's checks), so old saves and dailies stay as they were. */
+export const RULES_VERSION = 3;
+/** The rules a daily is built with: days up to the v3 release keep the v2 puzzle. */
+export const dailyRules = (day: string): number => (day <= '2026-11-14' ? 2 : RULES_VERSION);
 /** Solver work allowed per attempt (one-look checks); harder layouts are skipped. */
 const CHECK_LIMIT = 4000;
 
@@ -45,6 +48,10 @@ export interface SizeDef {
   trap: boolean;
   /** Needs a filter in the tray. */
   filter: boolean;
+  /** Every piece must matter: taking it out (or a splitter made a mirror) changes what some crystal gets. */
+  busy?: boolean;
+  /** At least this many depth-2 eliminations. */
+  deepSteps?: number;
 }
 
 export const SIZES: Record<Size, SizeDef> = {
@@ -52,6 +59,31 @@ export const SIZES: Record<Size, SizeDef> = {
   medium: { name: 'Medium', n: 7, lamps: [2, 3], pieces: [4, 6], decoys: 3, walls: [2, 4], dark: 2, white: 1, filters: true, splitters: 0.3, maxDepth: 2, targets: 3, givens: 1, mixed: true, deep: false, trap: false, filter: true },
   large: { name: 'Large', n: 8, lamps: [3, 3], pieces: [6, 8], decoys: 4, walls: [3, 5], dark: 2, white: 0.5, filters: true, splitters: 0.35, maxDepth: 2, targets: 3, givens: 1, mixed: true, deep: true, trap: false, filter: false },
 };
+
+/** v3: Small varies (2-3 lamps, 3-5 pieces), Large needs several look-aheads, no piece is idle. */
+const V3: Record<Size, Partial<SizeDef>> = {
+  small: { lamps: [2, 3], pieces: [3, 5], busy: true },
+  medium: { busy: true },
+  large: { busy: true, deepSteps: 3 },
+};
+export const sizeDef = (size: Size, v = RULES_VERSION): SizeDef => (v >= 3 ? { ...SIZES[size], ...V3[size] } : SIZES[size]);
+
+/** Answer pieces that do nothing for the crystals: taking one out (or turning a splitter into
+ *  the mirror it contains) leaves every crystal, dark ones included, with the same light. */
+export function idlePieces(p: Puzzle): number[] {
+  const key = (b: number[]) => {
+    const L = trace(p, b);
+    return p.target.map((t, c) => (t >= 0 ? L.got[c] : 0)).join();
+  };
+  const base = key(p.solution);
+  const out: number[] = [];
+  p.solution.forEach((code, i) => {
+    if (code <= 0 || p.given[i] >= 0) return;
+    const swaps = code === 3 || code === 4 ? [0, code - 2] : [0];
+    if (swaps.some((x) => key(p.solution.map((c, k) => (k === i ? x : c))) === base)) out.push(i);
+  });
+  return out;
+}
 
 const popcount = (m: number) => (m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1);
 
@@ -250,8 +282,8 @@ function turnsTo(p: Puzzle, any: boolean): number[] {
 }
 
 /** Builds the puzzle for a seed and size. */
-export function generate(seed: number, size: Size): Puzzle {
-  const cfg = SIZES[size];
+export function generate(seed: number, size: Size, v = RULES_VERSION): Puzzle {
+  const cfg = sizeDef(size, v);
   for (let attempt = 0; ; attempt++) {
     const p = tryBuild(seed, size, cfg, attempt);
     if (p) return p;
@@ -353,6 +385,8 @@ function tryBuild(seed: number, size: Size, cfg: SizeDef, attempt: number): Puzz
 
   // Unique: add a dark crystal (or drop a decoy, or give a piece) until one answer is left.
   p = draft();
+  // A cheap first look for idle pieces before the (costly) uniqueness search; checked again after it.
+  if (cfg.busy && idlePieces(p).length) return reject('idle');
   let givens = 0;
   for (let round = 0; ; round++) {
     if (round > 14) return reject('rounds');
@@ -380,6 +414,9 @@ function tryBuild(seed: number, size: Size, cfg: SizeDef, attempt: number): Puzz
     p = draft();
   }
 
+  // Every piece must matter (v3): none parked where it changes nothing.
+  if (cfg.busy && idlePieces(p).length) return reject('idle');
+
   // Deducible within the size's depth; a stuck spot gets a given piece.
   const ctx = new Ctx(p);
   for (;;) {
@@ -388,6 +425,7 @@ function tryBuild(seed: number, size: Size, cfg: SizeDef, attempt: number): Puzz
     if (ctx.aborted) return reject('deduceLimit');
     if (dd.solved) {
       if (cfg.deep && dd.depth < 2) return reject('shallow');
+      if (cfg.deepSteps && dd.log.filter((e) => e.depth >= 2).length < cfg.deepSteps) return reject('fewdeep');
       break;
     }
     const i = p.sockets.findIndex((_, i) => p.solution[i] > 0 && p.given[i] < 0 && dd.dom[i] !== 1 << p.solution[i]);

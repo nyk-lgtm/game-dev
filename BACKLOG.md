@@ -215,8 +215,18 @@ playtests with fixes shipped. Open threads, in order:
         → empty (≤ 3 states); hint wording names the concrete cause ("the circled ring would need a piece but get no
         light", "a mirror would be left over, with no free ring in the light", "the white lamp's red light"); Small's menu
         says "two lamps, mostly mirrors" (splitters show up in ~30% of Small puzzles).
-  - [ ] Next: third playtest. Watch: are hints followable now; is the unarmed tap (first type in the tray) a surprise
-        when the tray has several kinds; photons' frame cost on the phone; is Small now the right first step?
+  - [x] Third blind playtest (12 puzzles all fair and deducible, layout clean) and fixes (rules v3; v2 still built for
+        old saves and dailies up to 2026-11-14 via `generate(seed, size, v)` / `dailyRules`, pinned by a hash test): a
+        repeated wrong-piece hint with no move between is free (it charged twice: 0:32 → 1:03, 4 hints); a wrong piece
+        gets a solid red ring + ✕ badge (the dashed red ring stays "in the dark"); beams are clipped to the board (the
+        daily's fixed splitter drew past the bottom); no idle pieces (`idlePieces`: removing it, or a splitter → its
+        mirror, changes no crystal) — was ~20% of Large attempts; Large needs ≥ 3 depth-2 eliminations; Small 2-3 lamps,
+        3-5 pieces; hints add "As a mirror, …" for the other kind (clauses merged, capped at 205 chars). Long-term: daily
+        streak (on-the-day solves), solve counts per size (menu, New card), "Copy my result" share line, Past dailies (8
+        days, `?daily=YYYY-MM-DD`, no streak), hub card shows the streak. Stats (300): gen median 4.4 / 4.1 / 28 ms, max
+        44 / 33 / 196 ms.
+  - [ ] Next: fourth playtest. Watch: does Large now feel harder than Medium; are "As a mirror…" clauses useful or
+        noise; is the unarmed tap (first type in the tray) a surprise with several kinds; photons' frame cost on the phone.
 - [ ] **Simmer** (cozy management sim: a night-market food stall for 20 nights, critter guests). Milestones:
   - [x] Core (src/simmer/core, rules v1): ingredients that spoil (fish 1 night … rice 6) with seeded cheap/dear market days,
         10 dishes (3 known, 7 to learn), 8 critter kinds with loves/dislikes, purses, patience, arrival windows and weather

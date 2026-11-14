@@ -3,7 +3,7 @@
 
 import { closeOverlay, showCard } from '../shared/cards';
 import { copyText, toast } from '../shared/debug';
-import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey, wantsDaily } from '../shared/daily';
+import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey } from '../shared/daily';
 import { reducedFx } from '../shared/settings';
 import { makeStore } from '../shared/storage';
 import {
@@ -12,6 +12,7 @@ import {
   CRYSTAL,
   LAMP,
   RULES_VERSION,
+  dailyRules,
   SIZES,
   SOCKET,
   TYPES,
@@ -28,6 +29,7 @@ import {
   type Size,
   type Status,
 } from './core';
+import { archiveDays, dayBefore, streakOf, type DailyResult } from './streak';
 import { MASK_CSS, cellAt, crystalSvg, drawBoard, lampSvg, layout, pieceSvg, type View } from './render/draw';
 
 export const store = makeStore('gleam.');
@@ -44,19 +46,29 @@ export interface SavedRun {
   hints: number;
   done: boolean;
   day?: string | null;
+  /** The actions when a "wrong piece" hint was last paid for (asking again unchanged is free). */
+  hf?: string;
 }
 
+/** The rules a save's puzzle is built with: `generate` keeps every version (v1 Large = v2 Large;
+ *  v1 Small/Medium puzzles are gone). */
+const rulesOf = (s: SavedRun): number => (s.v === 1 ? 2 : s.v);
 export const validSave = (s: SavedRun | null | undefined): s is SavedRun =>
-  // v2 changed Small and Medium only; Large boards are the same, so v1 Large saves still load.
-  !!s && (s.v === RULES_VERSION || (s.v === 1 && s.size === 'large')) && typeof s.a === 'string' && Object.hasOwn(SIZES, s.size) && Number.isFinite(s.seed);
+  !!s &&
+  ((s.v >= 2 && s.v <= RULES_VERSION) || (s.v === 1 && s.size === 'large')) &&
+  typeof s.a === 'string' &&
+  Object.hasOwn(SIZES, s.size) &&
+  Number.isFinite(s.seed);
 
 interface Profile {
   solved: number;
   solvedBy: Partial<Record<Size, number>>;
   /** Best time per size (ms, hints included). */
   best: Partial<Record<Size, number>>;
+  /** Dailies solved, by day (the last 60 kept). */
+  dailies: Record<string, DailyResult>;
 }
-const loadProfile = (): Profile => ({ solved: 0, solvedBy: {}, best: {}, ...store.load<Partial<Profile>>('profile', {}) });
+const loadProfile = (): Profile => ({ solved: 0, solvedBy: {}, best: {}, dailies: {}, ...store.load<Partial<Profile>>('profile', {}) });
 
 const fmt = (ms: number) => {
   const s = Math.floor(ms / 1000);
@@ -121,18 +133,26 @@ export class Game {
 
   // ---------------------------------------------------------------- lifecycle
 
+  /** Rules this puzzle was built with (old saves and old dailies keep theirs). */
+  v = RULES_VERSION;
+  /** Actions when a "wrong piece" hint was last charged. */
+  private hintFor = '';
+
   start(seed: number, size: Size, saved?: SavedRun | null, daily: string | null = null): void {
     closeOverlay();
     this.seed = seed;
+    this.v = saved && saved.v > 0 ? rulesOf(saved) : daily ? dailyRules(daily) : RULES_VERSION;
+    this.hintFor = saved?.hf ?? '';
     this.size = size;
     this.daily = daily;
     // Remember which puzzle is open, in the address and in storage, so a reload (or a
     // discarded tab) comes back to the daily rather than to your own puzzle.
     store.save('mode', daily ? 'daily' : 'own');
     if (daily) {
-      if (!wantsDaily()) history.replaceState(null, '', `${location.pathname}?daily`);
+      const q = daily === todayKey() ? '?daily' : `?daily=${daily}`;
+      if (location.search !== q) history.replaceState(null, '', `${location.pathname}${q}`);
     } else leaveDaily();
-    this.p = generate(seed, size);
+    this.p = generate(seed, size, this.v);
     this.a = saved?.a ?? '';
     this.ms = saved?.ms ?? 0;
     this.hints = saved?.hints ?? 0;
@@ -154,9 +174,9 @@ export class Game {
     this.start((Math.random() * 0xffffffff) >>> 0, size);
   }
 
-  playDaily(): void {
+  /** Today's daily, or one from the last week (the archive). */
+  playDaily(day = todayKey()): void {
     closeOverlay();
-    const day = todayKey();
     const saved = store.load<SavedRun | null>('dailyRun', null);
     if (validSave(saved) && saved.day === day) this.start(saved.seed, saved.size, saved, day);
     else this.start(dailySeed('gleam', day), 'medium', null, day);
@@ -175,7 +195,7 @@ export class Game {
     const t = performance.now();
     if (!now && t - this.lastSave < 3000) return;
     this.lastSave = t;
-    const run: SavedRun = { v: RULES_VERSION, seed: this.seed, size: this.size, a: this.a, ms: Math.round(this.ms), hints: this.hints, done: this.done, day: this.daily };
+    const run: SavedRun = { v: this.v, seed: this.seed, size: this.size, a: this.a, ms: Math.round(this.ms), hints: this.hints, done: this.done, day: this.daily, hf: this.hintFor || undefined };
     store.save(this.daily ? 'dailyRun' : 'run', run);
   }
 
@@ -239,11 +259,14 @@ export class Game {
     if (this.done) return;
     const h = nextHint(this.p, this.board);
     if (h.kind === 'done') return;
-    this.hints++;
+    // Asking again about the same wrong piece, with nothing changed since, is free.
+    const repeat = h.kind === 'wrong' && this.hintFor === this.a;
+    if (!repeat) this.hints++;
     if (h.kind === 'wrong') {
+      this.hintFor = this.a;
       this.hint = { socket: h.socket, cells: [], bad: true };
       const code = this.board[h.socket];
-      this.info(`<b>This ${TYPES[typeOf(code)]} isn't part of the answer</b>${this.p.solution[h.socket] > 0 ? ' (not this way round)' : ''}. Tap it to change it, or drag it off the board.`);
+      this.info(`<b>This ${TYPES[typeOf(code)]} (marked ✕) isn't part of the answer</b>${this.p.solution[h.socket] > 0 && typeOf(this.p.solution[h.socket]) === typeOf(code) ? ' (not this way round)' : ''}. Tap it to change it, or drag it off the board.${repeat ? ' <i>(Same hint again: no charge.)</i>' : ''}`);
       this.save(true);
       return;
     }
@@ -396,24 +419,78 @@ export class Game {
     const newBest = prev === undefined || Math.floor(score / 1000) < Math.floor(prev / 1000);
     if (newBest) prof.best[this.size] = score;
     store.save('profile', prof);
-    if (this.daily) recordDaily(store, 1e7 - Math.round(score / 1000), fmt(score), this.daily);
+    if (this.daily) {
+      const today = todayKey();
+      const prevDay = prof.dailies[this.daily];
+      if (!prevDay || score < prevDay.ms + prevDay.hints * HINT_MS)
+        prof.dailies[this.daily] = { ms: Math.round(this.ms), hints: this.hints, onDay: this.daily === today || !!prevDay?.onDay };
+      // Keep the last 60 days.
+      for (const d of Object.keys(prof.dailies)) if (d < dayBefore(today, 60)) delete prof.dailies[d];
+      store.save('profile', prof);
+      if (this.daily === today) recordDaily(store, 1e7 - Math.round(score / 1000), fmt(score), this.daily);
+    }
     navigator.vibrate?.([20, 60, 30]);
     this.refresh();
     setTimeout(() => this.showWin(newBest && prev !== undefined), 1500);
   }
 
   private showWin(newBest: boolean): void {
-    const best = loadProfile().best[this.size];
-    const d = this.daily ? loadDaily(store, this.daily) : null;
+    const prof = loadProfile();
+    const best = prof.best[this.size];
+    const streak = streakOf(prof.dailies);
+    const daily = this.daily
+      ? `<p><b style="color:var(--gold)">Daily puzzle · ${prettyDay(this.daily)}</b>${this.daily === todayKey() ? `<br>${streak > 1 ? `🔥 ${streak}-day streak` : streak === 1 ? '🔥 Streak started: come back tomorrow' : ''}` : '<br>From the archive (doesn’t count for the streak)'}</p>`
+      : `<p>${plural(prof.solvedBy[this.size] ?? 0, `${SIZES[this.size].name.toLowerCase()} puzzle`)} solved.</p>`;
+    const buttons = this.daily
+      ? [
+          { label: 'Copy my result', primary: true, onClick: () => this.share() },
+          { label: 'Back to my puzzle', onClick: () => this.resumeOwn() },
+          { label: 'Past dailies', onClick: () => this.showArchive() },
+          { label: 'Look at the light', onClick: closeOverlay },
+        ]
+      : [
+          { label: `Another ${SIZES[this.size].name.toLowerCase()} puzzle`, primary: true, onClick: () => this.newPuzzle(this.size) },
+          { label: 'Other sizes', onClick: () => this.showNew() },
+          { label: 'Look at the light', onClick: closeOverlay },
+          { label: 'All games', onClick: () => (location.href = '../') },
+        ];
     showCard(
       `<h2>All aglow</h2>
-       <p>${this.daily ? 'Daily' : SIZES[this.size].name} puzzle in <b>${fmt(this.total())}</b>${this.hints ? ` (${fmt(this.ms)} + ${this.hints * 30}s for ${plural(this.hints, 'hint')})` : ', no hints'}.${newBest ? ' <b style="color:var(--gold)">New best!</b>' : best !== undefined && !this.daily ? ` Best ${fmt(best)}.` : ''}</p>
-       ${this.daily ? `<p><b style="color:var(--gold)">Daily puzzle · ${prettyDay(this.daily)}</b>${d ? `<br>Today's best: ${d.label}` : ''}</p>` : ''}`,
+       <p>${this.daily ? 'Daily' : SIZES[this.size].name} puzzle in <b>${fmt(this.total())}</b>${this.hints ? ` (${fmt(this.ms)} + ${this.hints * 30}s for ${plural(this.hints, 'hint')})` : ', no hints'}.${newBest && !this.daily ? ' <b style="color:var(--gold)">New best!</b>' : best !== undefined && !this.daily ? ` Best ${fmt(best)}.` : ''}</p>
+       ${daily}`,
+      buttons,
+    );
+  }
+
+  /** A spoiler-free line for today's (or an archived) daily. */
+  shareText(): string {
+    const prof = loadProfile();
+    const r = this.daily ? prof.dailies[this.daily] : undefined;
+    const ms = r ? r.ms + r.hints * HINT_MS : this.total();
+    const hints = r ? r.hints : this.hints;
+    const streak = this.daily === todayKey() ? streakOf(prof.dailies) : 0;
+    const [, m, d] = (this.daily ?? todayKey()).split('-').map(Number);
+    const date = new Date(2000, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    const glow = '💎'.repeat(this.st.targets);
+    return `Gleam daily ${date}: ${glow} all aglow in ${fmt(ms)}, ${hints ? plural(hints, 'hint') : 'no hints'}${streak ? ` · 🔥 ${plural(streak, 'day')}` : ''}\n${location.origin}${location.pathname}?daily`;
+  }
+
+  private async share(): Promise<void> {
+    toast((await copyText(this.shareText())) ? 'Result copied: paste it anywhere' : 'Copy failed');
+  }
+
+  showArchive(): void {
+    const prof = loadProfile();
+    const today = todayKey();
+    showCard(
+      `<h2>Past dailies</h2><p>The last week’s puzzles, the same for everyone. Only today’s counts for the streak${streakOf(prof.dailies) ? ` (🔥 ${plural(streakOf(prof.dailies), 'day')})` : ''}.</p>`,
       [
-        { label: `Another ${SIZES[this.size].name.toLowerCase()} puzzle`, primary: true, onClick: () => this.newPuzzle(this.size) },
-        { label: 'Other sizes', onClick: () => this.showNew() },
-        { label: 'Look at the light', onClick: closeOverlay },
-        { label: 'All games', onClick: () => (location.href = '../') },
+        ...archiveDays(today).map((day) => {
+          const r = prof.dailies[day];
+          const name = day === today ? 'Today' : prettyDay(day);
+          return { label: `${name} · ${r ? `✓ ${fmt(r.ms + r.hints * HINT_MS)}` : 'not solved'}`, primary: day === this.daily, onClick: () => this.playDaily(day) };
+        }),
+        { label: 'Close', onClick: closeOverlay },
       ],
     );
   }
@@ -570,7 +647,7 @@ export class Game {
         <li>Light meeting in a crystal adds up: <b style="color:${MASK_CSS[1]}">red</b> + <b style="color:${MASK_CSS[2]}">green</b> = <b style="color:${MASK_CSS[3]}">yellow</b>, red + <b style="color:${MASK_CSS[4]}">blue</b> = <b style="color:${MASK_CSS[5]}">magenta</b>, green + blue = <b style="color:${MASK_CSS[6]}">cyan</b>, all three = <b>white</b>. The dots on a crystal are the colours it needs.</li>
         <li>${crystalSvg(0, 20)} <b>Dark crystals</b> must stay dark. Stone swallows light.</li>
         <li>${pieceSvg(1, 24, true)} Pieces on a <b>gold ring</b> are fixed: they are part of the answer and can’t be moved, but they must be lit too (a piece in the dark gets a red dashed ring).</li>
-        <li>Tap a ring to place a piece and again to turn it; or drag one from the tray. Drag a piece off the board to take it back.</li>
+        <li>Tap a ring to place a piece, again to turn it, once more to take it off. To place another kind, tap it in the tray first (or drag it in). Drag a piece off the board to take it back.</li>
         <li>One answer, no guessing. <b>Hint</b> shows the next step and why (+30 s).</li>
       </ul>`,
       [{ label: this.daily ? 'Play the daily' : 'Play', primary: true, onClick: closeOverlay }],
@@ -581,9 +658,9 @@ export class Game {
     const prof = loadProfile();
     const sizes = Object.keys(SIZES) as Size[];
     const text: Record<Size, string> = {
-      small: 'two lamps, mostly mirrors',
+      small: 'mostly mirrors, 2-3 lamps',
       medium: 'a white lamp and a filter join in',
-      large: 'more pieces; needs a look ahead',
+      large: 'more pieces; several look-aheads',
     };
     showCard(
       `<h2>New puzzle</h2><p>Every puzzle has one answer you can reason out.</p>`,
@@ -591,7 +668,7 @@ export class Game {
         const b = prof.best[s];
         const n = prof.solvedBy[s] ?? 0;
         return {
-          label: `${SIZES[s].name} ${SIZES[s].n}×${SIZES[s].n} · ${text[s]}${b !== undefined ? ` · best ${fmt(b)}` : n ? ` · ${n} solved` : ''}`,
+          label: `${SIZES[s].name} ${SIZES[s].n}×${SIZES[s].n} · ${text[s]}${n ? ` · ${n} solved` : ''}${b !== undefined ? `, best ${fmt(b)}` : ''}`,
           primary: s === this.size && !this.daily,
           onClick: () => this.newPuzzle(s),
         };
@@ -601,10 +678,15 @@ export class Game {
 
   showMenu(): void {
     const d = loadDaily(store, todayKey());
-    showCard(`<h2>Gleam</h2><p>${this.daily ? `Daily puzzle · ${prettyDay(this.daily)}` : `${SIZES[this.size].name} puzzle`} · ${fmt(this.total())}</p>`, [
+    const prof = loadProfile();
+    const counts = (Object.keys(SIZES) as Size[]).map((s) => `${SIZES[s].name} ${prof.solvedBy[s] ?? 0}`).join(' · ');
+    const streak = streakOf(prof.dailies);
+    showCard(`<h2>Gleam</h2><p>${this.daily ? `Daily puzzle · ${prettyDay(this.daily)}` : `${SIZES[this.size].name} puzzle`} · ${fmt(this.total())}</p><p>Solved: ${counts}${streak ? ` · 🔥 ${streak}-day daily streak` : ''}</p>`, [
       { label: 'Resume', primary: true, onClick: closeOverlay },
       { label: 'New puzzle', onClick: () => this.showNew() },
-      this.daily ? { label: 'Back to my puzzle', onClick: () => this.resumeOwn() } : { label: `Daily puzzle${d ? ` (${d.label})` : ''}`, onClick: () => this.playDaily() },
+      this.daily ? { label: 'Back to my puzzle', onClick: () => this.resumeOwn() } : { label: `Daily puzzle${d ? ` (✓ ${d.label})` : ''}`, onClick: () => this.playDaily() },
+      { label: 'Past dailies', onClick: () => this.showArchive() },
+      ...(this.daily && this.done ? [{ label: 'Copy my result', onClick: () => this.share() }] : []),
       { label: 'Clear the board', onClick: () => this.askReset() },
       { label: 'How to play', onClick: () => this.showHelp() },
       { label: 'Copy bug report', onClick: () => this.copyReport() },
@@ -613,7 +695,7 @@ export class Game {
   }
 
   private async copyReport(): Promise<void> {
-    const text = `GLEAM v${RULES_VERSION} seed=${this.seed} size=${this.size} a=${this.a}\n${location.origin}${location.pathname}?seed=${this.seed}&size=${this.size}&a=${encodeURIComponent(this.a)}`;
+    const text = `GLEAM v${this.v} seed=${this.seed} size=${this.size} a=${this.a}\n${location.origin}${location.pathname}?seed=${this.seed}&size=${this.size}&v=${this.v}&a=${encodeURIComponent(this.a)}`;
     toast((await copyText(text)) ? 'Bug report copied' : 'Copy failed');
   }
 }

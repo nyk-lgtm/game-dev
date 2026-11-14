@@ -101,9 +101,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     beats Normal 93%, Easy 100%; Normal beats Easy 81-89%; games 19-25 plies median; Hard ~160 ms/move (p90 ~190) on a
     laptop; shove-back runs ≤ 1-3, repeated layouts 0.1-0.3 a game. vite-node runs the search ~4x slower than the browser; for long probes bundle with esbuild and run node.
     `TUNE=crumbleStart:6,komi:1`, `W=threat:60`, `LV=normal.depth:3`, `SETUP=1` try other rules/weights/levels/starts.
-  - Gleam: `npx vite-node scripts/gleam/stats.ts 200` (rules v2: gen median 2.6 / 3.2 / 14 ms Small/Medium/Large, max
-    ~43 / 24 / 97 ms; unique 100%; deduction depth 2 needed in 0% / ~33% / 100% (Large requires it); Small's most direct
-    route is always a trap (`trapped`), Medium always has a white lamp and a filter; hints ≤ ~30 ms).
+  - Gleam: `npx vite-node scripts/gleam/stats.ts 300` (rules v3: gen median 4.4 / 4.1 / 28 ms Small/Medium/Large, max
+    ~44 / 33 / 196 ms; unique 100%; deduction depth 2 needed in 0% / ~27% / 100% (Large: ≥ 3 depth-2 eliminations);
+    Small's most direct route is always a trap (`trapped`), Medium always has a white lamp and a filter, no idle pieces
+    (`idlePieces`); hints ≤ ~40 ms).
     `show.ts <seed> [size]` prints a puzzle, its light and the model's eliminations; `hints.ts <seed> [size]` the hint
     texts in order (`hints.ts longest 150`: the longest; #info is 76 px = 4 lines at 360 px and must hold them); `stress.ts 200` checks the model never rules out an answer piece from part-filled boards and
     hints always finish.
@@ -422,9 +423,16 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   takes the first type left, a piece turns once, then comes off. A drag drops on the ring under the finger (the piece
   floats 0.45 cell above it, the ring is outlined). Generator (gen.ts): beam walk on fresh tiles, decoys, dark crystals, uniqueness fixes,
   `CHECK_LIMIT` per attempt; Small needs `trapped(p)` (some crystal's answer route bends more than its most direct
-  route over the rings from a lamp of its colour), Medium a filter (white lamp always); seeds hash `mixSeed(mixSeed(mixSeed(seed, tag), n), attempt)`. A run is seed + actions
+  route over the rings from a lamp of its colour), Medium a filter (white lamp always). v3 (`sizeDef(size, v)`, `V3`):
+  no idle piece (taking it out, or a splitter made its mirror, changes no crystal's light), Large ≥ 3 depth-2
+  eliminations, Small 2-3 lamps and 3-5 pieces. `generate(seed, size, v)` still builds v2 (v1 Large = v2; pinned by a
+  hash test), saves carry `v`, and dailies use `dailyRules(day)` (v2 up to 2026-11-14) so a day's puzzle never changes; seeds hash `mixSeed(mixSeed(mixSeed(seed, tag), n), attempt)`. A run is seed + actions
   (`<sock b36><code>`, `H…` hint, `M<a><b>` swap, `U`, `R`); `replay(p, a)`. Reports `GLEAM v… seed=… size=… a=…`,
-  `?seed=&size=&a=`. Bump `RULES_VERSION` when the generator or rules change puzzles.
+  `?seed=&size=&v=&a=`. Bump `RULES_VERSION` when the generator or rules change puzzles (keep the old path behind `v`).
+  Dailies (streak.ts): `profile.dailies[day]` {ms, hints, onDay}; `streakOf` counts days solved on the day; ☰ → Past
+  dailies plays the last 8 days (`?daily=YYYY-MM-DD`, only today counts); the win card copies a spoiler-free line
+  (`shareText`). A wrong-piece hint asked again with no move in between is free (`hf` in the save); hint text stays ≤
+  `HINT_MAX` 205 chars (#info is 4 lines at 360 px), clauses: left empty / as the other kind / flipped, merged when equal.
 - Trestle (src/trestle/core): a 13×12 grid of build points (y down, `pt(x,y)`), rock as axis boxes (`Rock`: bank, wall,
   spire `rock`, `log` low over a gap, `floor` close under it, `clear` = a boat lane: no building (`geomWhy` says "Keep the boat lane clear"), no collisions), fixed
   anchors, optional `wind` (gusts across, `gust(step)`, and updraughts, `lift(step)` × `LIFT_K`, that lift whatever only

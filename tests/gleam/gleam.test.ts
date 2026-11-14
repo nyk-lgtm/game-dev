@@ -1,8 +1,9 @@
+import { archiveDays, streakOf } from '../../src/gleam/streak';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  CRYSTAL, Ctx, LAMP, SIZES, SOCKET, WALL, blankBoard, cycleCode, deduce, generate, nextHint, piecesLeft, replay, setCode, reasonText, setToken, solveAll, status, trace, trapped,
+  CRYSTAL, Ctx, LAMP, SIZES, SOCKET, WALL, blankBoard, cycleCode, deduce, generate, nextHint, piecesLeft, replay, setCode, reasonText, setToken, solveAll, status, trace, trapped, idlePieces, sizeDef, HINT_MAX,
   type Puzzle, type Size,
 } from '../../src/gleam/core';
 
@@ -77,6 +78,10 @@ describe('gleam puzzles', () => {
         if (SIZES[size].deep) expect(d.depth).toBe(2);
         // Small always takes a detour off the most direct route; Medium always hands out a filter.
         if (SIZES[size].trap) expect(trapped(p)).toBe(true);
+        // v3: every piece matters, and Large needs several look-aheads.
+        expect(idlePieces(p)).toEqual([]);
+        const need = sizeDef(size).deepSteps ?? 0;
+        expect(d.log.filter((e) => e.depth >= 2).length).toBeGreaterThanOrEqual(need);
         if (SIZES[size].filter) expect(p.stock[2] + p.stock[3] + p.stock[4]).toBeGreaterThan(0);
         p.given.forEach((g, i) => g >= 0 && expect(g).toBe(p.solution[i]));
         // Pieces only on sockets; the tray is the answer's pieces.
@@ -123,6 +128,45 @@ describe('gleam puzzles', () => {
   });
 });
 
+describe('gleam rule versions', () => {
+  const fnv = (x: string) => {
+    let h = 2166136261;
+    for (let i = 0; i < x.length; i++) h = Math.imul(h ^ x.charCodeAt(i), 16777619);
+    return h >>> 0;
+  };
+  it('v2 puzzles (old saves, dailies up to 2026-11-14) are still built exactly', () => {
+    const got = (['small', 'medium', 'large'] as const).map((size) => [1, 2, 3].map((k) => fnv(JSON.stringify(generate(k, size, 2)))));
+    expect(got).toEqual([
+      [2398916682, 3639362409, 443326550],
+      [1129677738, 3970143487, 1846672514],
+      [1457852260, 1856517157, 4156411139],
+    ]);
+  });
+  it('an idle piece is spotted: a splitter whose turned beam goes nowhere', () => {
+    const q = tiny();
+    q.stock = [0, 1, 0, 0, 0];
+    q.solution = [4];
+    q.target[7] = 1;
+    // The ⟍ splitter sends red down into the red crystal and on into the (now red) crystal ahead: both matter.
+    expect(idlePieces(q)).toEqual([]);
+    // Without the crystal below, its turned half lights nothing: the splitter is idle.
+    q.kind[14] = 0;
+    q.target[14] = -1;
+    expect(idlePieces(q)).toEqual([0]);
+  });
+});
+
+describe('gleam daily bookkeeping', () => {
+  it('streaks count days solved on the day, up to today or yesterday', () => {
+    const r = (onDay = true) => ({ ms: 1000, hints: 0, onDay });
+    expect(streakOf({}, '2026-11-14')).toBe(0);
+    expect(streakOf({ '2026-11-14': r(), '2026-11-13': r(), '2026-11-11': r() }, '2026-11-14')).toBe(2);
+    expect(streakOf({ '2026-11-13': r(), '2026-11-12': r() }, '2026-11-14')).toBe(2);
+    expect(streakOf({ '2026-11-13': r(), '2026-11-12': r(false) }, '2026-11-14')).toBe(1);
+    expect(archiveDays('2026-11-01')).toEqual(['2026-11-01', '2026-10-31', '2026-10-30', '2026-10-29', '2026-10-28', '2026-10-27', '2026-10-26', '2026-10-25']);
+  });
+});
+
 describe('gleam deduction from part-filled boards', () => {
   it('never rules out the answer, and hints always name an answer piece', () => {
     let k = 0;
@@ -143,6 +187,7 @@ describe('gleam deduction from part-filled boards', () => {
           expect(h.kind, `${size} ${seed}`).toBe('place');
           if (h.kind !== 'place') break;
           expect(h.code).toBe(p.solution[h.socket]);
+          expect(h.text.replace(/<[^>]+>/g, '').length).toBeLessThanOrEqual(HINT_MAX);
           b = setCode(p, b, h.socket, h.code)!;
           expect(b).not.toBeNull();
         }

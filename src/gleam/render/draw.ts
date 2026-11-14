@@ -146,20 +146,11 @@ export function drawBoard(ctx: CanvasRenderingContext2D, v: View, p: Puzzle, st:
       if (L.inw[h] & (1 << b)) seg(paths[b], c, d, (d + 2) & 3);
     }
   }
-  const esc = [new Path2D(), new Path2D(), new Path2D()];
-  for (const e of L.escapes) {
-    const c = e >> 2;
-    const d = e & 3;
-    const m = L.half[e];
-    const dx = d === 1 ? 1 : d === 3 ? -1 : 0;
-    const dy = d === 2 ? 1 : d === 0 ? -1 : 0;
-    for (let b = 0; b < 3; b++)
-      if (m & (1 << b)) {
-        esc[b].moveTo(cx(c) + (dx * s) / 2, cy(c) + (dy * s) / 2);
-        esc[b].lineTo(cx(c) + dx * s * 0.85, cy(c) + dy * s * 0.85);
-      }
-  }
   ctx.save();
+  // Light that leaves the board stops at its edge (glow and round caps included).
+  ctx.beginPath();
+  ctx.rect(x0, y0, s * n, s * n);
+  ctx.clip();
   ctx.globalCompositeOperation = 'lighter';
   ctx.lineCap = 'round';
   const pulse = 0.9 + 0.1 * Math.sin(st.time * 2.4);
@@ -173,8 +164,6 @@ export function drawBoard(ctx: CanvasRenderingContext2D, v: View, p: Puzzle, st:
       ctx.lineWidth = w;
       ctx.strokeStyle = rgba(b, a);
       ctx.stroke(paths[b]);
-      ctx.strokeStyle = rgba(b, a * 0.35);
-      ctx.stroke(esc[b]);
     }
   // Photons: one per half cell, moving with the light.
   if (st.photons) {
@@ -247,13 +236,37 @@ export function drawBoard(ctx: CanvasRenderingContext2D, v: View, p: Puzzle, st:
   if (st.hint) {
     const a = 0.55 + 0.45 * Math.sin(st.time * 5);
     const c = p.sockets[st.hint.socket];
-    ctx.strokeStyle = st.hint.bad ? `rgba(255,90,110,${a})` : `rgba(255,214,120,${a})`;
-    ctx.lineWidth = 3;
-    ctx.setLineDash([6, 4]);
-    ctx.beginPath();
-    ctx.arc(cx(c), cy(c), s * 0.46, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    if (st.hint.bad) {
+      // A wrong piece: a solid red ring and a red ✕ badge (the dashed red ring means "in the dark").
+      ctx.strokeStyle = '#ff4d6d';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cx(c), cy(c), s * 0.46, 0, Math.PI * 2);
+      ctx.stroke();
+      const bx = cx(c) + s * 0.33;
+      const by = cy(c) - s * 0.33;
+      const r = Math.max(8, s * 0.17);
+      ctx.fillStyle = '#ff4d6d';
+      ctx.beginPath();
+      ctx.arc(bx, by, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(bx - r * 0.45, by - r * 0.45);
+      ctx.lineTo(bx + r * 0.45, by + r * 0.45);
+      ctx.moveTo(bx + r * 0.45, by - r * 0.45);
+      ctx.lineTo(bx - r * 0.45, by + r * 0.45);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = `rgba(255,214,120,${a})`;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.arc(cx(c), cy(c), s * 0.46, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
     ctx.lineWidth = 2;
     ctx.strokeStyle = `rgba(255,214,120,${a * 0.7})`;
     for (const x of st.hint.cells) {
