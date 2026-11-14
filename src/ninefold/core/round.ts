@@ -1,10 +1,11 @@
 // A round of Ninefold: a seed and the shots taken. Shots are stored as
 // "angle.power" in thousandths, so a saved round replays exactly.
 
+import { mixSeed } from '../../shared/rng';
 import { HOLES, makeCourse, type Hole } from './course';
 import { simulate, type Shot, type ShotResult } from './physics';
 
-export const RULES_VERSION = 7;
+export const RULES_VERSION = 8;
 /** The hole clock wraps every 10 minutes (ticks are 1/240 s). */
 export const TICK_WRAP = 240 * 600;
 /** Strokes after which the ball is picked up (penalties count). */
@@ -21,6 +22,25 @@ export interface Round {
   over: boolean;
   /** Holes where the ball was picked up after MAX_STROKES. */
   pickedUp: boolean[];
+}
+
+/** How many candidate courses the daily picks from. */
+export const DAILY_PICK = 8;
+/** How hard a course is against its par: par rounded below the fitted estimate, plus windmills and ponds in the way. */
+export const courseBite = (holes: Hole[]) =>
+  holes.reduce((a, h) => a + h.rawPar - h.par + 0.15 * h.mills.length + 0.1 * h.zones.filter((z) => z.kind === 'water').length, 0);
+/** The daily course: of DAILY_PICK courses grown from the day's seed, the one with the most bite (rules v8: dailies ran soft). */
+export function dailyCourseSeed(daySeed: number): number {
+  let best = daySeed, top = -Infinity;
+  for (let k = 0; k < DAILY_PICK; k++) {
+    const s = k ? mixSeed(daySeed, k) : daySeed;
+    const bite = courseBite(makeCourse(s));
+    if (bite > top) {
+      top = bite;
+      best = s;
+    }
+  }
+  return best;
 }
 
 export function newRound(seed: number): Round {

@@ -296,10 +296,10 @@ export const GAMES: GameCard[] = [
     pitch: 'Nine holes grown fresh from a seed: rails to bank off, sand, ponds, slopes and bumpers. Pull back, let go, and try to beat par.',
     accent: '#9be15d',
     best: () => {
-      const p = ninefold.load<{ rounds?: number; best?: number | null; aces?: number } | null>('profile', null);
+      const p = ninefold.load<{ rounds?: number; best?: number | null; aces?: number; under?: number } | null>('profile', null);
       if (!p?.rounds || p.best == null) return null;
       const d = p.best;
-      return `Best ${d === 0 ? 'E' : d > 0 ? `+${d}` : `−${-d}`}${p.aces ? ` · ${p.aces} ace${p.aces === 1 ? '' : 's'}` : ''}`;
+      return `Best ${d === 0 ? 'E' : d > 0 ? `+${d}` : `−${-d}`}${p.under ? ` · ${p.under} under par` : ''}${p.aces ? ` · ${p.aces} ace${p.aces === 1 ? '' : 's'}` : ''}`;
     },
     thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#0c1613"/>
       <path d="M14 70V36h24V8h24v28H38v34z" fill="#2f8a50" stroke="#b8875a" stroke-width="3" stroke-linejoin="round"/>

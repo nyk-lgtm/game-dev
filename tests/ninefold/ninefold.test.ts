@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BALL_R, CELL, COLS, HOLES, MAX_STROKES, encodeShot, makeCourse, newRound, play, replay, simulate, toPar } from '../../src/ninefold/core';
+import { BALL_R, CELL, COLS, DAILY_PICK, HOLES, MAX_STROKES, courseBite, dailyCourseSeed, encodeShot, makeCourse, newRound, play, replay, rollShare, simulate, toPar } from '../../src/ninefold/core';
+import { mixSeed } from '../../src/shared/rng';
 import { bestShot, distanceField } from '../../scripts/ninefold/bot';
 
 describe('courses', () => {
@@ -27,6 +28,42 @@ describe('courses', () => {
         const f = distanceField(h);
         expect(Number.isFinite(f[Math.floor(h.tee.y) * COLS * CELL + Math.floor(h.tee.x)])).toBe(true);
       }
+  });
+});
+
+describe('shapes and the daily', () => {
+  it('some holes open into a green or split round a divider rail (rules v8)', () => {
+    const shapes = new Map<string, number>();
+    for (let seed = 1; seed <= 40; seed++)
+      for (const h of makeCourse(seed)) {
+        shapes.set(h.shape, (shapes.get(h.shape) ?? 0) + 1);
+        if (h.shape === 'split') {
+          expect(h.rails.length).toBe(1);
+          // The divider is a real rail for the ball too.
+          expect(h.walls.some((w) => w.ax === h.rails[0].ax && w.ay === h.rails[0].ay && w.bx === h.rails[0].bx)).toBe(true);
+        } else expect(h.rails.length).toBe(0);
+        if (h.n < 2) expect(h.shape).toBe('corridor');
+      }
+    expect(shapes.get('green')! / 360).toBeGreaterThan(0.1);
+    expect(shapes.get('split')! / 360).toBeGreaterThan(0.08);
+  });
+  it('the daily course is the toughest of its candidates, and stays put', () => {
+    for (const day of [11, 12, 13]) {
+      const s = dailyCourseSeed(day);
+      expect(dailyCourseSeed(day)).toBe(s);
+      const bites = [...Array(DAILY_PICK).keys()].map((k) => courseBite(makeCourse(k ? mixSeed(day, k) : day)));
+      expect(courseBite(makeCourse(s))).toBe(Math.max(...bites));
+    }
+  });
+  it('a shot says what it met (for tips), and the roll readout matches the roll', () => {
+    const c = makeCourse(9);
+    for (const h of c) {
+      const r = simulate(h, h.tee, { angle: -Math.PI / 2, power: 0.6 });
+      expect(r.met.includes('sand')).toBe(r.sand.length > 0);
+      for (const hit of r.hits) expect(r.met).toContain(hit.kind);
+    }
+    expect(rollShare(1)).toBe(1);
+    expect(rollShare(0.2)).toBeCloseTo(0.2 ** 1.25);
   });
 });
 

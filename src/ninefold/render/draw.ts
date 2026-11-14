@@ -29,9 +29,12 @@ export function fitView(hole: Hole, w: number, h: number): View {
 export interface Aim {
   angle: number;
   power: number;
-  /** The ball's real path up to its first knock (x,y pairs), and whether it comes to rest there. */
+  /** The ball's real path up to its first knock (x,y pairs). */
   path?: number[];
-  stops?: boolean;
+  /** How the preview ends: the ball stops (ring), knocks something (✕), or rolls on past the preview (fading tail). */
+  end?: 'stop' | 'knock' | 'more';
+  /** Expected roll on open grass, 0..1 of a full putt (colours the line). */
+  roll?: number;
 }
 
 export interface Scene {
@@ -90,27 +93,6 @@ export function draw(g: CanvasRenderingContext2D, w: number, h: number, v: View,
     g.fillStyle = '#34965a';
     for (let k = 0; k < CELL; k += 8) g.fillRect(x, y + k, CELL, 4);
   });
-  // Angled corners: timber wedges.
-  for (const [kx, ky, ax, ay, bx, by] of hole.wedges) {
-    g.fillStyle = '#b8875a';
-    g.beginPath();
-    g.moveTo(kx, ky);
-    g.lineTo(ax, ay);
-    g.lineTo(bx, by);
-    g.closePath();
-    g.fill();
-    g.strokeStyle = '#5a3c22';
-    g.lineWidth = 0.8;
-    g.beginPath();
-    g.moveTo(ax, ay);
-    g.lineTo(bx, by);
-    g.stroke();
-  }
-  // Inner lip of the rails.
-  g.strokeStyle = 'rgba(0, 0, 0, 0.3)';
-  g.lineWidth = 0.7;
-  wallPath(g, hole);
-  g.stroke();
   // Tee mat.
   g.fillStyle = '#226b3c';
   roundRect(g, hole.tee.x - 4, hole.tee.y - 2.5, 8, 5, 1);
@@ -168,6 +150,42 @@ export function draw(g: CanvasRenderingContext2D, w: number, h: number, v: View,
       g.restore();
     }
   }
+  // Wedges and the rails' lip go over sand and ponds, never under them.
+  // Angled corners: timber wedges.
+  for (const [kx, ky, ax, ay, bx, by] of hole.wedges) {
+    g.fillStyle = '#b8875a';
+    g.beginPath();
+    g.moveTo(kx, ky);
+    g.lineTo(ax, ay);
+    g.lineTo(bx, by);
+    g.closePath();
+    g.fill();
+    g.strokeStyle = '#5a3c22';
+    g.lineWidth = 0.8;
+    g.beginPath();
+    g.moveTo(ax, ay);
+    g.lineTo(bx, by);
+    g.stroke();
+  }
+  // Inner lip of the rails.
+  g.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+  g.lineWidth = 0.7;
+  wallPath(g, hole);
+  g.stroke();
+  // Free-standing rails (a split route's divider), drawn whole on top of the fairway.
+  if (hole.rails.length) {
+    g.lineCap = 'round';
+    for (const [col, lw] of [['#5a3c22', 2.4], ['#b8875a', 1.6]] as const) {
+      g.strokeStyle = col;
+      g.lineWidth = lw;
+      g.beginPath();
+      for (const r of hole.rails) {
+        g.moveTo(r.ax, r.ay);
+        g.lineTo(r.bx, r.by);
+      }
+      g.stroke();
+    }
+  }
   // Cup.
   g.fillStyle = '#0a0d0b';
   g.beginPath();
@@ -203,16 +221,46 @@ export function draw(g: CanvasRenderingContext2D, w: number, h: number, v: View,
       g.fill();
     }
   });
-  // Windmills: a bar on a hub, turning on the hole clock; a faint ring shows how far it reaches.
+  // Windmills: a bar on a hub, turning on the hole clock. Always drawn readable: the reach ring, a fan behind each end
+  // of the bar (which way and how fast it sweeps), and two notches on the ring along the lane that light up while
+  // the bar lies along it (the way through is open).
   for (const m of hole.mills) {
     const a = millAngle(m, s.millTick);
-    g.strokeStyle = 'rgba(255, 240, 210, 0.12)';
+    const reach = m.arm + 0.7;
+    let off = (((a - m.lane) % Math.PI) + Math.PI) % Math.PI;
+    off = Math.min(off, Math.PI - off);
+    const open = off < 0.32;
+    g.fillStyle = 'rgba(10, 20, 16, 0.25)';
+    g.beginPath();
+    g.arc(m.x, m.y, reach, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = 'rgba(255, 240, 210, 0.28)';
     g.lineWidth = 0.4;
     g.setLineDash([0.8, 1.2]);
-    g.beginPath();
-    g.arc(m.x, m.y, m.arm + 0.7, 0, Math.PI * 2);
     g.stroke();
     g.setLineDash([]);
+    const sweep = Math.min(1.1, Math.abs(m.w) * 0.8) * Math.sign(m.w);
+    for (let k = 0; k < 2; k++) {
+      const aa = a + k * Math.PI;
+      const fan = g.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.arm);
+      fan.addColorStop(0, 'rgba(255, 240, 210, 0.04)');
+      fan.addColorStop(1, 'rgba(255, 240, 210, 0.4)');
+      g.fillStyle = fan;
+      g.beginPath();
+      g.moveTo(m.x, m.y);
+      g.arc(m.x, m.y, m.arm, aa - sweep, aa, sweep < 0);
+      g.closePath();
+      g.fill();
+    }
+    g.lineWidth = 0.9;
+    g.lineCap = 'round';
+    g.strokeStyle = open ? 'rgba(155, 225, 93, 0.95)' : 'rgba(255, 240, 210, 0.4)';
+    for (let k = 0; k < 2; k++) {
+      const la = m.lane + k * Math.PI;
+      g.beginPath();
+      g.arc(m.x, m.y, reach + 0.6, la - 0.3, la + 0.3);
+      g.stroke();
+    }
     g.lineCap = 'round';
     g.strokeStyle = 'rgba(0,0,0,0.35)';
     g.lineWidth = 1.6;
@@ -252,21 +300,40 @@ export function draw(g: CanvasRenderingContext2D, w: number, h: number, v: View,
   // Aim: the ball's real path (slopes and sand included) up to its first knock, a ring where it stops.
   if (s.aim && s.ball) {
     const { angle, power } = s.aim;
-    const hue = 120 - 120 * power;
+    const roll = s.aim.roll ?? power;
+    const hue = 120 - 120 * roll;
     const ux = Math.cos(angle), uy = Math.sin(angle);
-    const col = `hsla(${hue}, 90%, 62%, 0.95)`;
-    const path = s.aim.path ?? [s.ball.x, s.ball.y, s.ball.x + ux * MAX_ROLL * power, s.ball.y + uy * MAX_ROLL * power];
-    g.strokeStyle = col;
-    g.fillStyle = col;
+    const col = (a: number) => `hsla(${hue}, 90%, 62%, ${a})`;
+    const path = s.aim.path ?? [s.ball.x, s.ball.y, s.ball.x + ux * MAX_ROLL * roll, s.ball.y + uy * MAX_ROLL * roll];
+    const end = s.aim.end ?? 'stop';
+    const n = path.length / 2;
+    // A preview that runs out (nothing hit, still rolling) fades away over its last frames: no marker at the end.
+    const tail = end === 'more' ? Math.min(14, Math.floor(n / 2)) : 0;
+    const solid = n - tail;
+    g.strokeStyle = col(0.95);
+    g.fillStyle = col(0.95);
     g.lineWidth = 0.7;
     g.setLineDash([1.4, 1.4]);
     g.beginPath();
-    for (let i = 0; i < path.length; i += 2) {
+    for (let i = 0; i < solid; i++) {
       // Start just clear of the ball.
       if (i === 0) g.moveTo(path[0] + ux * 2.5, path[1] + uy * 2.5);
-      else g.lineTo(path[i], path[i + 1]);
+      else g.lineTo(path[i * 2], path[i * 2 + 1]);
     }
     g.stroke();
+    if (tail > 0) {
+      const i0 = solid - 1;
+      const x0 = path[i0 * 2], y0 = path[i0 * 2 + 1], x1 = path[(n - 1) * 2], y1 = path[(n - 1) * 2 + 1];
+      const fade = g.createLinearGradient(x0, y0, x1, y1);
+      fade.addColorStop(0, col(0.95));
+      fade.addColorStop(1, col(0));
+      g.strokeStyle = fade;
+      g.beginPath();
+      g.moveTo(x0, y0);
+      for (let i = solid; i < n; i++) g.lineTo(path[i * 2], path[i * 2 + 1]);
+      g.stroke();
+      g.strokeStyle = col(0.95);
+    }
     g.setLineDash([]);
     // Arrowhead near the ball shows the direction.
     const hx = s.ball.x + ux * 7, hy = s.ball.y + uy * 7;
@@ -278,13 +345,13 @@ export function draw(g: CanvasRenderingContext2D, w: number, h: number, v: View,
     const ex = path[path.length - 2], ey = path[path.length - 1];
     g.lineWidth = 0.6;
     g.beginPath();
-    if (s.aim.stops !== false) g.arc(ex, ey, BALL_R + 0.6, 0, Math.PI * 2);
-    else {
-      // It knocks something here and carries on: a small spark.
+    if (end === 'stop') g.arc(ex, ey, BALL_R + 0.6, 0, Math.PI * 2);
+    else if (end === 'knock') {
+      // A real knock (rail, post, bumper or windmill) here: a ✕.
       for (let k = 0; k < 4; k++) {
         const a = (k * Math.PI) / 2 + Math.PI / 4;
-        g.moveTo(ex + Math.cos(a) * 0.8, ey + Math.sin(a) * 0.8);
-        g.lineTo(ex + Math.cos(a) * 2, ey + Math.sin(a) * 2);
+        g.moveTo(ex + Math.cos(a) * 0.5, ey + Math.sin(a) * 0.5);
+        g.lineTo(ex + Math.cos(a) * 2.2, ey + Math.sin(a) * 2.2);
       }
     }
     g.stroke();

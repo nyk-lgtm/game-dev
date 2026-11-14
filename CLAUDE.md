@@ -223,13 +223,28 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   `LASTLIGHT2 v…`). Profile: night 1 at the top level, night 2 under `n2`. Never change night 1's ids or
   RULES_VERSION. `npx vite-node scripts/lastlight/walk.ts <night> <ids>` prints a run. tests/lastlight has each
   night's best route — update it when a story changes.
-- Ninefold (src/ninefold/core): `makeHole(seed, n)` grows a corridor of 16-unit cells on a 6×9 grid (a
-  self-avoiding walk, never touching itself, plus side pockets), walls = the cells' outer edges, obstacles in
-  route cells (never tee/cup). `simulate` is a fixed 240 Hz step; shots are saved as `angle.power` in
-  thousandths, so `replay(seed, a)` is exact; power is a share of MAX_ROLL on open grass. Par is a formula
-  fitted to the bot (length, obstacles on the route, turns); `NOISE=0.06 balance.ts 8` median ≈ −2. Tools in
-  scripts/ninefold: `show.ts <seed>` (ASCII), `balance.ts n` (search bot, NOISE=0.04 wobble), `trace.ts`,
-  `botround.ts <seed>` (actions for `?seed=&a=`).
+- Ninefold (src/ninefold/core, rules v8): `makeHole(seed, n)` grows a corridor of 16-unit cells on a 6×9 grid (a
+  self-avoiding walk in a 4-column band, never touching itself, plus side pockets), walls = the cells' outer edges,
+  obstacles in route cells (never tee/cup). Shapes (`hole.shape`, from hole 3/4): ~1/4 `green` (the last 2-3 cells get
+  twins beside them, cup out in the open), ~1/6 `split` (three straight cells get twins and a divider rail down the
+  middle one, `hole.rails`, also in `walls`; sand in one lane 60%); twins may only touch route cells next to them (no
+  shortcuts). Windmills turn 0.7-1.1 rad/s (v7: 1.1-1.7, a ~0.3 s window), `Mill.lane` = the run's direction; the page
+  always draws the reach ring, a fan behind each bar end (sweep direction) and lane notches that glow green while the
+  bar lies along the lane. `simulate` is a fixed 240 Hz step; shots are saved as `angle.power[.tick]` in thousandths,
+  so `replay(seed, a)` is exact; roll on open grass = `rollShare(power)` (p^1.25) × MAX_ROLL, and the aim readout shows
+  that share, not the pull. `ShotResult.met` lists what the ball met (sand/slope/water/wall/post/bumper/mill), so tips
+  after a shot only cover what it touched (first-time tips at a hole's start may introduce what's on the hole). Preview:
+  ≤ `PREVIEW_FRAMES` (45) or the first knock, never a sink: ✕ = a real knock, ring = it stops, fading tail = the
+  preview ran out. Resting the finger 0.3 s turns on fine aim (aim follows the finger at 1/4, `FINE_*` in game.ts).
+  Par = round(0.31·len + 0.16·obstacles on the route + 0.1·turns + 0.15 green − 0.15 split + 0.25), 2-5, refit by
+  `fit.ts`: `NOISE=0.06 balance.ts 30` mean ≈ −3 (median −2…−4; old par let it go ~−5 on v8 holes), green/split play
+  ~0.3 easier against par than corridors. Daily: `dailyCourseSeed(daySeed)` picks the most biting of `DAILY_PICK` (8)
+  courses (`courseBite`: par rounded below its estimate, mills, ponds): `DAILY=1 balance.ts 30` mean ≈ −0.7. Daily card
+  shows only daily stats (`dailyStats`: streak, daily aces, dailies under par) and copies a spoiler-free result (a
+  square per hole vs par); the main profile counts rounds, best, `under` (rounds under par) and non-daily aces. Tools in
+  scripts/ninefold: `show.ts <seed>` (ASCII + shapes), `shapes.ts N` (shape counts per hole), `balance.ts n` (search
+  bot, NOISE=0.04 wobble, DAILY=1, SEED=), `fit.ts N base > rows.json` / `fit.ts solve *.json` (par refit), `trace.ts`,
+  `botround.ts <seed> [holes]` (actions for `?seed=&a=`, optionally stopping after some holes).
 - Summit (src/summit/core): 8 floors; each deal is a hand-drawn layout (layouts.ts: rows as strings in
   half-card steps, ≤ 8 cards across; a card is covered by the next row's cards at x±1) from a seeded 52-card
   deck, plus a draw pile. A card plays if uncovered and one rank from the waste (A-K wraps). Draws are a run-wide

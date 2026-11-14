@@ -623,6 +623,17 @@ playtests with fixes shipped. Open threads, in order:
         1.5·CUP_R; windmill arm 4.2 → 5.0 (no wall lane); power curve p^1.25; bogey punctuation; daily plays count.
   - [x] Aim preview runs the real physics (as the putt will be saved, windmill clock included) and draws
         the path to the first knock (a spark there) or a ring where the ball stops; slopes and sand show.
+  - [x] Fourth blind playtest (−1, E with an ace, daily −5: par fair to generous, daily soft) and fixes (rules v8):
+        ✕ only for a real knock, a fading tail where the preview runs out (help matches); tips after a shot only for
+        what it met (`ShotResult.met`); windmills 0.7-1.1 rad/s with an always-on sweep fan and lane notches that glow
+        green while the way is open (preview limit kept); readout = roll share (`rollShare`), not pull; fine aim after
+        a 0.3 s rest (1/4 speed, no jumps); wedges/rails' lip drawn over sand; hole shapes `green` (~1/4 from hole 3)
+        and `split` (~1/6 from hole 4, divider rail); par refit (`fit.ts`, +0.25 a hole: bot ~−3 vs ~−5 on the old
+        formula); daily = toughest of 8 candidate courses (`dailyCourseSeed`, bot ~−0.7); daily card shows only daily
+        stats (streak, daily aces, dailies under par) + "Copy my result" (squares per hole); rounds under par counted
+        (card and hub). Learned: slower mills alone took ~1 stroke a round off the bot.
+  - [ ] Next: fifth playtest if wanted. Watch: does the daily feel tougher but fair; is the windmill notch readable
+        on a phone; does fine aim kick in by accident on slow pulls.
 - [ ] **Hexhold** (hex maze tower defense). Milestones:
   - [x] Core (src/hexhold/core): 9x11 hex board, flow-field pathing (never sealed), 30
         seeded waves with themes, 6 towers each gifting its neighbors, 8 enemies (flyers,

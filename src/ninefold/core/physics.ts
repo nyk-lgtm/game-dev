@@ -23,6 +23,11 @@ export function speedFor(d: number): number {
   }
   return (lo + hi) / 2;
 }
+/**
+ * How far a putt of `power` rolls on open grass, as a share of MAX_ROLL: a gentle curve at the low end, so short
+ * putts are easier to judge (full pull still rolls MAX_ROLL). The page's readout shows this, not the pull.
+ */
+export const rollShare = (power: number) => Math.max(0, Math.min(1, power)) ** 1.25;
 /** Half the thickness of a windmill arm. */
 export const MILL_HALF = 0.7;
 /** A windmill's angle at a tick of the hole's clock (240 ticks a second; a shot starts at its own tick). */
@@ -46,22 +51,29 @@ export interface ShotResult {
   /** x,y pairs every 4 steps (60 per second). */
   frames: number[];
   /** Frame index and speed of each hard knock (walls, posts). */
-  hits: { f: number; v: number; bumper: boolean }[];
+  hits: { f: number; v: number; bumper: boolean; kind: HitKind }[];
   /** Frame index where the ball entered sand, if it did. */
   sand: number[];
+  /** What the ball met on its way (each kind once, in order), for the page's tips. */
+  met: Met[];
 }
+export type HitKind = 'wall' | 'post' | 'bumper' | 'mill';
+export type Met = HitKind | 'sand' | 'slope' | 'water';
 
 const inZone = (z: Zone, x: number, y: number) => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h;
 
 export function simulate(hole: Hole, from: { x: number; y: number }, shot: Shot): ShotResult {
   let x = from.x, y = from.y;
   const tick0 = shot.tick ?? 0;
-  // A gentle curve at the low end, so short putts are easier to judge (full pull still rolls MAX_ROLL).
-  const speed0 = speedFor(Math.max(0, Math.min(1, shot.power)) ** 1.25 * MAX_ROLL);
+  const speed0 = speedFor(rollShare(shot.power) * MAX_ROLL);
   let vx = Math.cos(shot.angle) * speed0, vy = Math.sin(shot.angle) * speed0;
   const frames: number[] = [x, y];
   const hits: ShotResult['hits'] = [];
   const sand: number[] = [];
+  const met: Met[] = [];
+  const meet = (k: Met) => {
+    if (!met.includes(k)) met.push(k);
+  };
   let slow = 0;
   let wasSand = false;
   for (let i = 1; i <= MAX_STEPS; i++) {
@@ -74,15 +86,20 @@ export function simulate(hole: Hole, from: { x: number; y: number }, shot: Shot)
       if (!inZone(z, x, y)) continue;
       if (z.kind === 'sand') onSand = true;
       else if (z.kind === 'slope') {
+        meet('slope');
         ax += z.dx * SLOPE;
         ay += z.dy * SLOPE;
       } else {
         frames.push(x, y);
-        return { outcome: 'water', x, y, frames, hits, sand };
+        meet('water');
+        return { outcome: 'water', x, y, frames, hits, sand, met };
       }
     }
     if (onSand) fr += 70 + 1.3 * sp;
-    if (onSand && !wasSand) sand.push(frames.length / 2);
+    if (onSand && !wasSand) {
+      sand.push(frames.length / 2);
+      meet('sand');
+    }
     wasSand = onSand;
     // The cup pulls a slow ball in a little.
     const cdx = hole.cup.x - x, cdy = hole.cup.y - y;
@@ -107,7 +124,10 @@ export function simulate(hole: Hole, from: { x: number; y: number }, shot: Shot)
       const qx = s.ax + ex * t, qy = s.ay + ey * t;
       // Rail ends (the corners poking into the course) are rounded off a little, so grazing shots slip by.
       const r = bounce(qx, qy, 0.78, t <= 0 || t >= 1 ? 0.9 : BALL_R);
-      if (r) hits.push({ f: frames.length / 2, v: r, bumper: false });
+      if (r) {
+        hits.push({ f: frames.length / 2, v: r, bumper: false, kind: 'wall' });
+        meet('wall');
+      }
     }
     for (const p of hole.posts) {
       const dx = x - p.x, dy = y - p.y;
@@ -128,7 +148,9 @@ export function simulate(hole: Hole, from: { x: number; y: number }, shot: Shot)
           vx *= want / s2;
           vy *= want / s2;
         }
-        if (-vn > 15) hits.push({ f: frames.length / 2, v: -vn, bumper: p.bumper });
+        const kind = p.bumper ? 'bumper' : 'post';
+        meet(kind);
+        if (-vn > 15) hits.push({ f: frames.length / 2, v: -vn, bumper: p.bumper, kind });
       }
     }
     // Windmills: four turning arms and a hub; a blade carries the ball with it.
@@ -155,14 +177,15 @@ export function simulate(hole: Hole, from: { x: number; y: number }, shot: Shot)
           const rx = x - m.x, ry = y - m.y, rd = Math.hypot(rx, ry) || 1;
           vx += (rx / rd) * 12;
           vy += (ry / rd) * 12;
-          if (-vn > 15) hits.push({ f: frames.length / 2, v: -vn, bumper: false });
+          meet('mill');
+          if (-vn > 15) hits.push({ f: frames.length / 2, v: -vn, bumper: false, kind: 'mill' });
         }
       }
     }
     sp = Math.hypot(vx, vy);
     if (Math.hypot(hole.cup.x - x, hole.cup.y - y) < CUP_R && sp < SINK_SPEED) {
       frames.push(hole.cup.x, hole.cup.y);
-      return { outcome: 'sunk', x: hole.cup.x, y: hole.cup.y, frames, hits, sand };
+      return { outcome: 'sunk', x: hole.cup.x, y: hole.cup.y, frames, hits, sand, met };
     }
     if (i % 4 === 0) frames.push(x, y);
     slow = sp < 1.5 ? slow + 1 : 0;
@@ -173,7 +196,7 @@ export function simulate(hole: Hole, from: { x: number; y: number }, shot: Shot)
     if (!swept && ((sp < 1.5 && !tilted) || slow > 30)) break;
   }
   frames.push(x, y);
-  return { outcome: 'rest', x, y, frames, hits, sand };
+  return { outcome: 'rest', x, y, frames, hits, sand, met };
 
   function bounce(qx: number, qy: number, e: number, r: number): number {
     const dx = x - qx, dy = y - qy;
