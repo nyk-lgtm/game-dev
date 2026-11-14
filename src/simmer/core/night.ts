@@ -21,8 +21,8 @@ export interface NightCtx {
   cool?: boolean;
   /** Tonight's request: guests of kind `sp` ask for `dish`. */
   req?: { sp: number; dish: number };
-  /** A rival stall opens across the lane tonight. */
-  rival?: boolean;
+  /** A rival stall opens across the lane tonight, selling these dishes. */
+  rival?: number[];
 }
 
 export interface MenuItem {
@@ -63,7 +63,7 @@ export function worthOf(dish: number, sp: number, ctx: NightCtx): Worth {
   if (ctx.festival && d.tags.includes('sweet')) parts.push({ label: 'festival treat', x: TUNE.festSweet });
   if (ctx.cool && d.tags.includes('cold')) parts.push({ label: 'chilled in the cool box', x: TUNE.coolCold });
   if (isRequest(ctx, dish, sp)) parts.push({ label: 'they asked for it', x: TUNE.reqWorth });
-  if (ctx.rival) parts.push({ label: 'a rival stall to compare with', x: TUNE.rivalWorth });
+  if (ctx.rival?.includes(dish)) parts.push({ label: 'the rival stall sells it too', x: TUNE.rivalWorth });
   let w = d.base;
   for (const p of parts) w *= p.x;
   return { w: Math.round(w), parts };

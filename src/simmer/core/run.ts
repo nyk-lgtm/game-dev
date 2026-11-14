@@ -21,7 +21,7 @@ import {
 } from './data';
 import { T_FEST, T_MARKET, T_REQ, T_RIVAL, T_WEATHER, makeCrowd, rngFor, simulate, speciesWeights, streetMean, type MenuItem, type NightCtx, type NightResult, type Why } from './night';
 
-export const RULES_VERSION = 5;
+export const RULES_VERSION = 6;
 
 export interface Batch {
   ing: number;
@@ -59,6 +59,8 @@ export interface Ledger {
   tips: number;
   /** Tips (included in revenue) from guests served the dish they asked for. */
   reqTips: number;
+  /** A neighbour's top-up after this night (coins includes it). */
+  gift?: number;
   left: Partial<Record<Why, number>>;
   sold: number[];
   coins: number;
@@ -131,7 +133,7 @@ export function makeFestivals(seed: number): number[] {
 
 export function ctxOf(r: Run, d = r.day): NightCtx {
   const ctx: NightCtx = { weather: r.weather[Math.min(d, r.weather.length - 1)], festival: r.festivals.includes(d), payday: isPayday(d), cool: r.ups[UP.cool] > 0 };
-  if (d === r.rival) ctx.rival = true;
+  if (d === r.rival) ctx.rival = rivalDishes(r.seed);
   if (d === r.day) ctx.req = requestOf(r, ctx);
   return ctx;
 }
@@ -140,6 +142,14 @@ export function ctxOf(r: Run, d = r.day): NightCtx {
  * Tonight's request (from night `TUNE.reqFrom` on): a kind expected tonight, picked by its
  * share of the crowd, asks for one of the dishes it loves (known or not). Seeded per night.
  */
+/** What the rival stall sells: one of the starting dishes and one other, seeded. */
+export function rivalDishes(seed: number): number[] {
+  const rng = rngFor(seed, T_RIVAL, 1);
+  const start = DISHES.map((d, i) => (d.learn === 0 ? i : -1)).filter((i) => i >= 0);
+  const rest = DISHES.map((d, i) => (d.learn > 0 ? i : -1)).filter((i) => i >= 0);
+  return [rng.pick(start), rng.pick(rest)];
+}
+
 /** The guests who come for tonight's asked-for dish. */
 export const askersOf = (ctx: NightCtx): { sp: number; n: number } | undefined => (ctx.req ? { sp: ctx.req.sp, n: TUNE.reqGuests } : undefined);
 
@@ -155,15 +165,31 @@ export function makeRival(seed: number, festivals: number[]): number {
 export function requestOf(r: Run, ctx: NightCtx): { sp: number; dish: number } | undefined {
   if (r.day < TUNE.reqFrom) return undefined;
   const rng = rngFor(r.seed, T_REQ, r.day);
-  const wts = speciesWeights(r.rep, ctx.weather);
-  let x = rng.next() * wts.reduce((a, b) => a + b, 0);
-  let sp = 0;
-  for (let i = 0; i < wts.length; i++) if ((x -= wts[i]) < 0 && wts[i] > 0) {
-    sp = i;
+  // Earlier requests: the same kind or dish never asks twice running, and kinds and dishes
+  // asked before weigh less (halved for each time), so the season spreads them out.
+  const past = r.ledgers.map((l) => l.ctx.req).filter((q): q is { sp: number; dish: number } => !!q);
+  const last = past[past.length - 1];
+  const times = (f: (q: { sp: number; dish: number }) => boolean) => past.filter(f).length;
+  const wts = speciesWeights(r.rep, ctx.weather).map((w, i) => (last && i === last.sp ? 0 : w * 0.5 ** times((q) => q.sp === i)));
+  const tot = wts.reduce((a, b) => a + b, 0);
+  let x = rng.next() * tot;
+  let sp = last?.sp ?? 0;
+  if (tot > 0)
+    for (let i = 0; i < wts.length; i++) if ((x -= wts[i]) < 0 && wts[i] > 0) {
+      sp = i;
+      break;
+    }
+  const loved = DISHES.map((d, i) => (d.tags.includes(SPECIES[sp].loves) ? i : -1)).filter((i) => i >= 0);
+  const fresh = loved.filter((i) => !last || i !== last.dish);
+  const pool = fresh.length ? fresh : loved;
+  const dw = pool.map((i) => 0.4 ** times((q) => q.dish === i));
+  let y = rng.next() * dw.reduce((a, b) => a + b, 0);
+  let dish = pool[0];
+  for (let k = 0; k < pool.length; k++) if ((y -= dw[k]) < 0) {
+    dish = pool[k];
     break;
   }
-  const loved = DISHES.map((d, i) => (d.tags.includes(SPECIES[sp].loves) ? i : -1)).filter((i) => i >= 0);
-  return { sp, dish: rng.pick(loved) };
+  return { sp, dish };
 }
 
 export type PriceMood = 'cheap' | 'usual' | 'dear';
@@ -402,6 +428,10 @@ function openStall(r: Run, plan: { helper: boolean; menu: MenuItem[] }): void {
     r.coins += gift;
     r.gifts += gift;
     r.giftFor = r.day;
+    // The ledger shows it, and its coins line includes it.
+    const l = r.ledgers[r.ledgers.length - 1];
+    l.gift = gift;
+    l.coins = r.coins;
   }
 }
 

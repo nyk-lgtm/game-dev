@@ -174,9 +174,9 @@ export const TUNE = {
   upMul: 1.8,
   /** Guests of the asking kind who come just for the dish they asked for. */
   reqGuests: 3,
-  /** A rival stall's night: passers-by × and worth × (they compare). */
+  /** A rival stall's night: passers-by ×, and worth × for the dishes it sells too (they compare). */
   rivalCrowd: 0.8,
-  rivalWorth: 0.9,
+  rivalWorth: 0.75,
   /** In the morning a nearly broke stall is topped up to this many coins by a neighbour. */
   safety: 30,
   /** Score = coins + repPts × renown. */

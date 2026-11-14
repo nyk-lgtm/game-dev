@@ -195,7 +195,15 @@ export function upgradePayback(r: Run, k: number, menu: MenuItem[]): { perNight:
 }
 
 /** The page warns about the queue when typical evenings let down at least this many guests. */
-export const QUEUE_WARN = 1;
+export const QUEUE_WARN = 2;
+
+/**
+ * Whether the open-warning card should speak up about the queue: the expected let-downs
+ * matter (≥ QUEUE_WARN), or a helper clearly pays for itself. Otherwise the menu's queue
+ * line says it quietly.
+ */
+export const queueWarns = (h: HelperPayback, helper: boolean): boolean =>
+  (helper ? h.after : h.before) >= QUEUE_WARN || (!helper && h.value >= h.wage + 10);
 
 /** Units of each ingredient "Fill to forecast" aims to have: expected orders × 1.1, rounded up. */
 export function fillNeed(r: Run, menu: MenuItem[], stoves = stovesOf(r)): number[] {

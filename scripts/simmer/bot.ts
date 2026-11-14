@@ -29,7 +29,7 @@ import {
   type MenuItem,
   type Run,
   REP_MAX,
-  QUEUE_WARN,
+  queueWarns,
   helperPayback,
   learnCost,
   askPrice,
@@ -344,7 +344,7 @@ export function planDay(r: Run, s: Strat): string[] {
     const menu = planMenu(r, s, f, stovesOf(r), lam).menu;
     const cost = costOf(r, needFor(r, s, menu, f, false));
     const h = helperPayback(r, menu);
-    helper = (h.before >= QUEUE_WARN || h.range[1] >= 2) && h.value > h.wage && r.coins >= wageOf(r) + Math.min(cost, r.coins);
+    helper = queueWarns(h, false) && h.value > h.wage && r.coins >= wageOf(r) + Math.min(cost, r.coins);
   }
   else if (s.helper === 'busy' && r.coins >= wageOf(r) + stockBudget()) {
     const h = helperPayback(r, planMenu(r, s, f, stovesOf(r), lam).menu);

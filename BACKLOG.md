@@ -263,8 +263,17 @@ playtests with fixes shipped. Open threads, in order:
         help says a long wait cancels a request's delight; kind sheets give a likely range. Stars 1500/3400/5000. Bots (100
         seasons, two seed sets): naive ~2070 1★, lazy ~3520 (2★ ~64%), middle ~4440 (3★ ~10%), careful ~5080 (3★ ~58%),
         buyall ~4540 (3★ ~22%), clever ~5330 (3★ ~74%).
-  - [ ] Next: fifth blind playtest. Watch: do the dearer recipes feel worth it when they fit? Does the rival night read?
-        Is the 30¢ top-up enough to recover from a bad spree?
+  - [x] Fifth blind playtest (seed 777: careful 5,478 ★★★, buy-everything 5,093 ★★★, lazy 4,105 ★★; careful is best now)
+        and fixes (rules v6): no second-stove advice once you own one; toasts sized properly (shared .toast CSS was
+        winning: `body .toast`); the neighbour's top-up has a ledger line and Coins now includes it; a recipe learned with a
+        free menu line goes on the menu; the rival stall sells two seeded dishes (yours of those ×0.75 worth, so keep off
+        them), is drawn in the evening scene and gets a ledger line; requests never repeat the kind or dish two nights
+        running and earlier asks weigh less (≤ 5 per kind a season in tests); the open card only speaks up for ≥ 2
+        expected let-downs or a helper that clearly pays (`queueWarns`), otherwise the menu's queue line. Bots (100
+        seasons, two seed sets): lazy ~3500 (2★ ~64%), middle ~4430, careful ~4900-5050 (3★ 45-58%), buyall ~4520
+        (3★ ~15%), clever ~5230.
+  - [ ] Next: sixth blind playtest. Watch: does the rival night now change what people put on the menu? Is the open card
+        quiet enough? Careful vs buy-everything is ~450 points: enough?
 
 - [ ] **Loomsong** (original rhythm game with procedurally generated music). Milestones:
   - [x] Core (src/loomsong/core, rules v1): seeded songs (key, mode, 90-140 BPM, verse/chorus progressions, a form

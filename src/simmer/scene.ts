@@ -636,6 +636,43 @@ export class Scene {
     }
   }
 
+  /** The rival's little stall across the lane (left edge, half off the canvas), with what it sells. */
+  private drawRival(c: C2D, dishes: number[]): void {
+    const cy = this.counterY;
+    const x0 = -18, w = Math.max(64, this.w * 0.2), top = cy - 70;
+    c.fillStyle = '#2e2a3a';
+    c.fillRect(x0 + 4, top + 16, w - 8, 64);
+    for (let i = 0; i < 5; i++) {
+      c.fillStyle = i % 2 ? '#dfe8f2' : '#3f6fa8';
+      const sx = x0 + (i * w) / 5;
+      c.fillRect(sx, top, w / 5 + 0.5, 15);
+      c.beginPath();
+      c.arc(sx + w / 10, top + 15, w / 10, 0, Math.PI);
+      c.fill();
+    }
+    c.fillStyle = '#4b3a2c';
+    c.fillRect(x0, cy + 4, w, 12);
+    // Their keeper: a grey cat in a blue cap.
+    c.fillStyle = '#8d8f9c';
+    circ(c, x0 + w / 2 + 6, cy - 8, 8);
+    tri(c, [x0 + w / 2 - 1, cy - 13], [x0 + w / 2 + 1, cy - 22], [x0 + w / 2 + 5, cy - 15]);
+    tri(c, [x0 + w / 2 + 8, cy - 15], [x0 + w / 2 + 12, cy - 22], [x0 + w / 2 + 13, cy - 12]);
+    c.fillStyle = '#3f6fa8';
+    c.beginPath();
+    c.ellipse(x0 + w / 2 + 6, cy - 15, 8, 3, 0, Math.PI, 0);
+    c.fill();
+    c.fillStyle = '#1b1420';
+    circ(c, x0 + w / 2 + 3.5, cy - 8, 1.1);
+    circ(c, x0 + w / 2 + 8.5, cy - 8, 1.1);
+    c.font = '12px system-ui, sans-serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    dishes.forEach((d, i) => c.fillText(DISHES[d].icon, x0 + 22 + i * 16, cy + 10));
+    c.fillStyle = '#dfe8f2';
+    c.font = '800 9px system-ui, sans-serif';
+    c.fillText('RIVAL', x0 + w / 2 + 6, top - 6);
+  }
+
   private drawLanterns(c: C2D): void {
     const w = this.w;
     const fest = this.ctx.festival;
@@ -717,6 +754,7 @@ export class Scene {
     c.drawImage(this.bg, 0, 0);
     c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.drawLanterns(c);
+    if (this.ctx.rival) this.drawRival(c, this.ctx.rival);
     this.drawStall(c);
     // Critters, back to front.
     const vis = this.mobs.filter((m) => !m.gone && this.t >= m.v.g.at - LEAD).sort((a, b) => a.y - b.y);

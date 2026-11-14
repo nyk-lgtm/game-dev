@@ -199,6 +199,8 @@ describe('simmer core', () => {
     act(r, 'o2x40');
     expect(r.coins).toBe(TUNE.safety);
     expect(r.gifts).toBeGreaterThan(0);
+    expect(r.ledgers[0].gift).toBe(r.gifts);
+    expect(r.ledgers[0].coins).toBe(r.coins);
   });
 
   it('the forecast adds up and counts friends exactly', () => {
@@ -266,6 +268,29 @@ describe('simmer core', () => {
     const n = simulate([guest(q.sp, 99)], menu, ctx, 1, INGS.map(() => 9));
     expect(n.visits[0]).toMatchObject({ pick: 0, mood: 'delighted', tip: TUNE.reqTip, paid: 1 + TUNE.reqTip });
     expect(worthOf(q.dish, q.sp, ctx).parts.some((p) => p.x === TUNE.reqWorth)).toBe(true);
+  });
+
+  it('requests never repeat the kind or the dish two nights running, and spread over kinds', () => {
+    for (const seed of [777, 31, 2024]) {
+      const r = playSeason(newRun(seed), STRATS.lazy);
+      const reqs = r.ledgers.map((l) => l.ctx.req).filter((q) => q) as { sp: number; dish: number }[];
+      expect(reqs.length).toBe(TUNE.days - TUNE.reqFrom);
+      for (let i = 1; i < reqs.length; i++) {
+        expect(reqs[i].sp).not.toBe(reqs[i - 1].sp);
+        expect(reqs[i].dish).not.toBe(reqs[i - 1].dish);
+      }
+      const most = Math.max(...SPECIES.map((_, sp) => reqs.filter((q) => q.sp === sp).length));
+      expect(most).toBeLessThanOrEqual(5);
+    }
+  });
+
+  it('a rival night sells two dishes; yours of those are worth less', () => {
+    const r = newRun(5);
+    r.day = r.rival;
+    const ctx = ctxOf(r);
+    expect(ctx.rival).toHaveLength(2);
+    const d = ctx.rival![0];
+    expect(worthOf(d, 1, ctx).parts.some((p) => p.x === TUNE.rivalWorth)).toBe(true);
   });
 
   it('stock is shared between dishes in proportion to their orders', () => {

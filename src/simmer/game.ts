@@ -43,6 +43,7 @@ import {
   upCost,
   worthOf,
   QUEUE_WARN,
+  queueWarns,
   helperPayback,
   wageOf,
   learnCost,
@@ -83,6 +84,11 @@ const clockOf = (min: number) => {
 const sprite = (sp: number, size = 28) => `<img class="sprite" src="${spriteURL(sp, 40)}" width="${size}" height="${size}" alt="${SPECIES[sp].name}">`;
 const tagsOf = (d: number) => DISHES[d].tags.map((t) => TAG_WORD[t]).join(' · ');
 const usesOf = (d: number) => `<span class="nw">${DISHES[d].uses.map((u) => INGS[u].icon).join('')}</span>`;
+/** Passers-by a rival night kept away: the street crowd without it minus with it (expected). */
+const forecastLost = (l: Ledger): number => {
+  const street = l.guests - l.friends - (l.ctx.req ? TUNE.reqGuests : 0);
+  return Math.max(0, street / TUNE.rivalCrowd - street);
+};
 /** "2" or "1–3": a likely range of guests. */
 const spanOf = ([a, b]: number[]) => (a === b ? `${a}` : `${a}–${b}`);
 /** A likely range for a count expected to average n (most nights fall inside). */
@@ -106,7 +112,7 @@ function weatherNote(ctx: NightCtx): string {
   if (wx.crowd !== 1) bits.push(`${wx.crowd < 1 ? 'fewer' : 'more'} passers-by (×${wx.crowd})`);
   if (ctx.festival) bits.push(`festival: crowd ×${TUNE.festival}, purses ×${TUNE.festPurse}, sweets ×${TUNE.festSweet}`);
   if (ctx.payday) bits.push(`payday: purses ×${TUNE.payday}`);
-  if (ctx.rival) bits.push(`rival stall: passers-by ×${TUNE.rivalCrowd}, every dish worth ×${TUNE.rivalWorth} (they compare)`);
+  if (ctx.rival) bits.push(`a rival stall sells ${ctx.rival.map((d) => DISHES[d].icon).join('')}: yours of those worth ×${TUNE.rivalWorth}, passers-by ×${TUNE.rivalCrowd}`);
   return bits.join(' · ') || 'nothing special';
 }
 
@@ -640,6 +646,16 @@ export class Game {
     act(this.r, a);
     this.sfx.coin();
     this.save();
+    // A recipe learned while the menu has a free line goes straight on it.
+    if (a[0] === 'l') {
+      const dish = Number(a.slice(1));
+      const d = this.draft;
+      if (d.menu.length < menuSize(this.r) && !d.menu.some((m) => m.dish === dish)) {
+        const q = ctxOf(this.r).req;
+        d.menu.push({ dish, price: q && q.dish === dish ? askPrice(ctxOf(this.r)) : DISHES[dish].base });
+        if (d.filled) this.fill(true);
+      }
+    }
     this.fixDraft();
     this.saveDraft();
     this.renderMorning();
@@ -656,8 +672,7 @@ export class Game {
     d.menu.forEach((m, i) => DISHES[m.dish].uses.forEach((u) => (need[u] += dem.orders[i])));
     const short = INGS.map((g, u) => (need[u] > after[u] + 1.5 ? g.icon : '')).join('');
     const q = helperPayback(r, d.menu);
-    const queued = d.helper ? q.after : q.before;
-    const busy = queued >= QUEUE_WARN || (d.helper ? q.rangeAfter[1] : q.range[1]) >= 2;
+    const busy = queueWarns(q, d.helper);
     const pays = !d.helper && q.value > q.wage;
     const loss = d.menu.filter((m) => m.price < dishCost(r, m.dish));
     const warn: string[] = [];
@@ -668,7 +683,7 @@ export class Game {
           d.helper
             ? ''
             : ` A helper (${q.wage}¢) would make that ${spanOf(q.rangeAfter)}: ~${Math.round(q.saved)} saved, worth ~${Math.round(q.value)}¢ (their orders and renown)${pays ? '' : ', less than the wage'}.`
-        }${q.after >= QUEUE_WARN ? ' One helper isn’t enough tonight; a second stove (🛠️ Upgrades) cooks alongside you every night.' : ''}</p>`,
+        }${q.after >= QUEUE_WARN ? ` One helper isn’t enough tonight${r.ups[UP.stove] ? '' : '; a second stove (🛠️ Upgrades) cooks alongside you every night'}.` : ''}</p>`,
       );
     if (loss.length) warn.push(`<p><b>Below cost:</b> ${loss.map((m) => `${DISHES[m.dish].icon} ${m.price}¢ costs ${dishCost(r, m.dish)}¢`).join(', ')} to make, so each one sold loses coins.</p>`);
     if (warn.length) {
@@ -864,7 +879,7 @@ export class Game {
   private showLedger(): void {
     const r = this.r;
     const l = this.lastLedger()!;
-    const net = l.revenue - l.bought - l.shop - l.wage + l.tips;
+    const net = l.revenue - l.bought - l.shop - l.wage + l.tips + (l.gift ?? 0);
     const lefts = (Object.entries(l.left) as [Why, number][]).map(([w, n]) => `<span>${WHY_ICON[w]} ${n} ${WHY_SHORT[w]}${['soldout', 'slow', 'closed'].includes(w) ? ' <b class="bad">let down</b>' : ''}</span>`).join('');
     const sold = l.menu.map((m, i) => `<span>${DISHES[m.dish].icon} ${l.sold[i]} × ${m.price}¢</span>`).join('');
     const waste = l.wasted.map((n, u) => (n ? `${n} ${INGS[u].icon}` : '')).filter(Boolean).join(', ');
@@ -875,10 +890,11 @@ export class Game {
       ...(l.shop ? [['Recipes & upgrades', `−${l.shop}¢`]] : []),
       ...(l.wage ? [['Helper', `−${l.wage}¢`]] : []),
       ...(l.tips ? [['Regulars’ tips (full renown)', `+${l.tips}¢`]] : []),
+      ...(l.gift ? [['A neighbour’s top-up', `+${l.gift}¢`]] : []),
     ]
       .map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`)
       .join('');
-    const card = `<h2>Night ${l.day + 1} ledger<span class="sub">${WEATHER[l.ctx.weather].icon} ${WEATHER[l.ctx.weather].name}${l.ctx.festival ? ' · 🏮 festival' : ''}${l.ctx.payday ? ' · 💰 payday' : ''}</span></h2>
+    const card = `<h2>Night ${l.day + 1} ledger<span class="sub">${WEATHER[l.ctx.weather].icon} ${WEATHER[l.ctx.weather].name}${l.ctx.festival ? ' · 🏮 festival' : ''}${l.ctx.payday ? ' · 💰 payday' : ''}${l.ctx.rival ? ' · ⚔️ rival stall' : ''}</span></h2>
       <table class="ledger">${rows}<tr class="sum"><td>Today</td><td>${net >= 0 ? '+' : '−'}${Math.abs(net)}¢</td></tr><tr><td>Coins now</td><td><b>${fmt(l.coins)}¢</b></td></tr></table>
       <div class="chips">${sold}</div>
       <p><b>${l.served}</b> of ${l.guests} guests served${l.friends ? ` (${plural(l.friends, 'friend')} came)` : ''}. ${lefts ? `Walked off:` : 'Nobody walked off.'}</p>${lefts ? `<div class="chips">${lefts}</div>` : ''}
@@ -889,6 +905,9 @@ export class Game {
       }.${l.overflow ? ` Renown is full (${REP_MAX}): the ${plural(l.overflow, 'heart')} beyond it came back as ${l.tips}¢ in regulars’ tips (${TUNE.fullTip}¢ each).` : ''}${
         l.reqTips ? ` Tips from the dish guests asked for: ${l.reqTips}¢ (in the takings).` : ''
       } ${l.delighted && !r.over ? `${plural(Math.min(l.delighted, TUNE.friendCap), 'friend')} will come tomorrow.` : ''}</p>
+      ${l.ctx.rival ? `<p>⚔️ The rival stall across the lane sold ${l.ctx.rival.map((d) => DISHES[d].icon).join(' ')}: about ${Math.round(forecastLost(l))} passers-by went there instead, and guests valued your ${l.ctx.rival.map((d) => DISHES[d].icon).join('')} at ×${TUNE.rivalWorth}.${
+        l.menu.some((m) => l.ctx.rival!.includes(m.dish)) ? '' : ' You kept off their dishes: nice.'
+      }</p>` : ''}
       ${waste ? `<p class="warn">Thrown out: ${waste} (${l.wasteCost}¢ worth).</p>` : '<p>Nothing went to waste.</p>'}`;
     showCard(
       card,
