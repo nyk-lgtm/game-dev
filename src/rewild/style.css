@@ -110,3 +110,18 @@ body.busy #handRow { pointer-events: none; opacity: 0.6; }
 .card .stars { font-size: 30px; letter-spacing: 6px; color: var(--gold); text-align: center; }
 .card .stars .off { color: var(--line); }
 .card h3 { margin: 6px 0 0; font-size: 15px; }
+
+/* Very narrow phones (~320 px): the hand cards overran the End season / New hand buttons and the
+   year ran into the score. */
+@media (max-width: 340px) {
+  body #hud { gap: 6px; padding: 8px; }
+  #hud .stat, #hud .icon-btn { flex: none; }
+  #when { font-size: 14px; }
+  .chip { padding: 0 8px; }
+  #goalsBtn { min-width: 44px; padding: 0 6px; }
+  .card-sp { font-size: 10.5px; }
+  #handRow { gap: 6px; padding: 8px 8px 10px; }
+  #handBtns { width: 76px; }
+  #hand { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .card-sp canvas { width: 40px; height: 40px; }
+}

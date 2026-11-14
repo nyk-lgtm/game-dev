@@ -10,6 +10,7 @@ body {
 }
 #hud { gap: 10px; }
 #hud .spacer { flex: 1; }
+#hud .icon-btn { flex: none; }
 #clock { font-variant-numeric: tabular-nums; min-width: 52px; }
 #clock.pen { color: var(--gold); }
 #lit { font-variant-numeric: tabular-nums; white-space: nowrap; }
