@@ -951,7 +951,14 @@ blind playtests with fixes shipped (Simmer 5, Trestle 5, Delve 4). Open threads,
   view.ts (rows per segment, text frame). Headless 4× throttle 59.7 fps.
   Follow-ups: v3 best under `best3`, v2's shown as "Old best (v2 clock)"; drawn climbs eased (`HILL_CAP`, `easeY`) so the
   road never rises above the horizon (`view.ts climb 20`: 0 of 37k frames, was 1703, worst 11 rows).
-  Next: owner playtest of the new camera (hills look steeper with the long lens).
+- [x] **Nightline v3 blind playtest fixes** (rules v4; vision bot, 15-25% of the time on grass: 0/6 finished, out of time
+  by stage 3-4; traffic readable 1.5-2 s out, biomes distinct, steering good): checkpoints +9 s (51 + 2·stage), hard
+  road +4 (was +2): new `sloppy` bot (crashy + ~20% grass) 0% → 44-62% left / 42-51% right, clean and crashy 100%
+  (~55-66 s left); bests per version (`best4`, old v3/v2 listed); Neon City towers/billboards capped at 1.25× and left
+  out when they'd hide the road or a car beyond; distant ground fills the band under the horizon on crests; kerb
+  chevrons + steady "BEND" warning for medium bends (≥ 1.5); one fork-sign pair, ≤ 0.7×, kept on screen; sprites clipped
+  above the pedals. 4× throttle 60 fps headless.
+  Next: owner playtest; if experienced players find v4 slack, trim `TUNE.bonus` (each point ≈ 4 s a race).
 
 ## Ideas (unscheduled)
 - Unspoken: more story templates so the village tale varies; (done: 🔊 speaks a word with the phone's

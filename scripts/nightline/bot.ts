@@ -8,12 +8,16 @@ export interface Skill {
   look: number;
   /** Share of cars never noticed (seeded per car). */
   miss: number;
+  /** Chance per 2-second window of drifting onto the grass for a moment (a first-timer). */
+  wander?: number;
 }
 
 export const SKILLS: Record<string, Skill> = {
   clean: { look: 45, miss: 0 },
   // Sees cars only ~0.4 s out and overlooks one in eight: ~15-20 crashes a race.
   crashy: { look: 18, miss: 0.08 },
+  // Crashy, and drifts onto the grass now and then: ~20% of the time off the road, like the v3 blind tester.
+  sloppy: { look: 18, miss: 0.08, wander: 0.5 },
 };
 
 const SPOTS = [-0.78, -0.55, -0.3, 0, 0.3, 0.55, 0.78];
@@ -56,6 +60,12 @@ export function autopilot(r: Race, forkSide = 0, skill: Skill = SKILLS.clean): I
   }
   last.set(r, best);
   let target = best;
+  if (skill.wander) {
+    // A drift: in some 2-second windows, the first second aims off the road on one side.
+    const win = Math.floor(r.time / 2);
+    const h = mixSeed(r.seed ^ 0x5a5a, win);
+    if ((h % 1000) / 1000 < skill.wander && r.time - win * 2 < 1) target = h & 1024 ? 1.4 : -1.4;
+  }
   const stage = r.stages[r.stage];
   if (stage && stage.end - p.z / SEG_LEN < 40) target = forkSide ? 0.6 : -0.6;
   const steer = Math.max(-1, Math.min(1, (target - p.x) * 4));
@@ -74,6 +84,8 @@ export interface Drive {
   splits: number[];
   props: number;
   rears: number;
+  /** Share of the race spent off the road. */
+  grass: number;
 }
 
 export function drive(seed: number, forkSide = 0, skill: Skill = SKILLS.clean): Drive {
@@ -81,8 +93,12 @@ export function drive(seed: number, forkSide = 0, skill: Skill = SKILLS.clean): 
   const splits: number[] = [];
   let props = 0;
   let rears = 0;
+  let off = 0;
+  let steps = 0;
   while (r.status === 'racing' && r.time < 900) {
     step(r, autopilot(r, forkSide, skill));
+    steps++;
+    if (Math.abs(r.player.x) > 1) off++;
     for (const e of r.fx) {
       if (e.type === 'checkpoint') splits.push(r.clock - e.bonus);
       if (e.type === 'crash') e.hard ? props++ : rears++;
@@ -90,5 +106,5 @@ export function drive(seed: number, forkSide = 0, skill: Skill = SKILLS.clean): 
     r.fx.length = 0;
   }
   if (r.status === 'finished') splits.push(r.clock);
-  return { race: r, splits, props, rears };
+  return { race: r, splits, props, rears, grass: off / Math.max(1, steps) };
 }

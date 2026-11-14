@@ -5,7 +5,7 @@ import { reducedFx } from '../shared/settings';
 
 import { blitArt, clearGrid, put, text, type Art, type Grid } from '../shared/ascii';
 import { FORK_SIGN, PLAYER_BOOST, PLAYER_CAR, PROPS, SKYLINES, TRAFFIC } from './art';
-import { MAX_SPEED, ROAD_HALF_COLS, SEG_LEN, STAGES, segmentAt, type BiomeId, type Race } from './core';
+import { BEND_CURVE, MAX_SPEED, ROAD_HALF_COLS, SEG_LEN, SHARP_CURVE, STAGES, segmentAt, type BiomeId, type Race } from './core';
 
 /** Road half-width in world units (lateral positions in the core are in these half-widths). */
 export const ROAD_W = 2000;
@@ -22,6 +22,13 @@ export const KICK_CLOSE = 0.15;
 export const DRAW_DIST = 170;
 /** Drawn climbs level off below this share of the camera height (see `easeY` in drawRace). */
 export const HILL_CAP = 0.8;
+/** Roadside objects never grow past this scale of their art (v3 let towers reach 3x and fill the screen). */
+const PROP_MAX_SCALE = 1.25;
+/** Fork signs at most this scale (21 columns: two fit side by side on screen with the road between). */
+const FORK_MAX_SCALE = 0.7;
+/** Chevron colours on the rumble strips of a bend (BEND_CURVE+) and a sharp one (SHARP_CURVE+). */
+const BEND_COLOR = '#ffd166';
+const SHARP_COLOR = '#ff2a6d';
 /** Segments before a fork where the road is split by a painted divider with arrows. */
 export const FORK_LEAD = 70;
 /** Colors for the gentler (left) and harder (right) branch, shared with the HUD. */
@@ -252,6 +259,8 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
   let maxy = v.rows * v.ch;
   /** Highest row the road reached (for view.ts). */
   let roadTop = v.rows;
+  /** Palette of the farthest road drawn (for the land beyond it). */
+  let lastPal = pal;
   const clips: number[] = [];
   /** Project a road-center point; `curveX` is the accumulated curve offset (world units). */
   // Climbs are eased for drawing only: a rise above the car's ground saturates below HILL_CAP of the
@@ -288,6 +297,9 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
     const forkPaint = hasFork && toEnd > 0 && toEnd <= FORK_LEAD;
     const arrows = forkPaint && Math.floor(seg.index / 4) % 3 === 0;
     const goal = !hasFork && toEnd >= -3 && toEnd < 1;
+    const bend = Math.abs(seg.curve) > BEND_CURVE;
+    const sharp = Math.abs(seg.curve) > SHARP_CURVE;
+    lastPal = sp;
     const rTop = Math.max(0, Math.ceil(p2.y / v.ch));
     roadTop = Math.min(roadTop, rTop);
     const rBot = Math.min(v.rows - 1, Math.floor(Math.min(p1.y, maxy) / v.ch));
@@ -308,7 +320,11 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
           else if (arrows && au > 0.4 && au < 0.7) [chx, col] = u < 0 ? ['<', EASY_COLOR] : ['>', HARD_COLOR];
           else if (lane) [chx, col] = ['|', sp.lane];
           else [chx, col] = [band ? '=' : '-', sp.road[band]];
-        } else if (au <= 1.13) [chx, col] = ['#', sp.rumble[band]];
+        } else if (au <= 1.13) {
+          // On a bend the rumble strips turn into chevrons pointing the way it goes: yellow, red if sharp.
+          if (bend && !band) [chx, col] = [seg.curve > 0 ? '>' : '<', sharp ? SHARP_COLOR : BEND_COLOR];
+          else [chx, col] = ['#', sp.rumble[band]];
+        }
         else {
           // Sparse ground texture so the solid road reads clearly.
           const hsh = hash(c * 17 + seg.index * 29 + rr * 3);
@@ -321,23 +337,71 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
     maxy = p2.y;
   }
 
+  // ---- the land beyond the road ----
+  // Past a crest or round a big bend the road ends below the horizon; fill the rows between with
+  // distant ground so no bare black band opens under the sky (v3's blind test saw up to ~150 px).
+  for (let rr = Math.max(0, v.horizon); rr * v.ch + v.ch / 2 < maxy && rr < v.rows; rr++)
+    for (let c = 0; c < v.cols; c++) {
+      const hsh = hash(c * 13 + rr * 101 + 7);
+      if (hsh > 0.3) continue;
+      put(g, rr, c, lastPal.groundCh[hsh < 0.15 ? 0 : 1], lastPal.ground[1]);
+    }
+
   // ---- sprites, far to near ----
+  // Nothing is drawn below the car's baseline: that's where the NITRO bar and pedals sit.
+  const hudRow = carBottomRow(v);
+  // Where each car and each stretch of road ahead lands, so a roadside object that would hide them can be left out.
+  const spots: { n: number; row: number; c0: number; c1: number }[] = [];
+  for (let n = 0; n < DRAW_DIST; n++) {
+    const pr = proj[n];
+    if (!pr || pr.y >= clips[n]) continue;
+    spots.push({ n, row: pr.y / v.ch, c0: (pr.x - pr.w * 0.7) / v.cw, c1: (pr.x + pr.w * 0.7) / v.cw });
+  }
+  for (const car of r.cars) {
+    const cn = Math.floor(car.z / SEG_LEN) - base.index;
+    const pr = proj[cn];
+    if (!pr || car.z <= camZ) continue;
+    const cx = (pr.x + pr.w * car.x) / v.cw;
+    const half = (pr.w * 0.18) / v.cw + 1;
+    spots.push({ n: cn, row: pr.y / v.ch, c0: cx - half, c1: cx + half });
+  }
+  const playerSeg = Math.floor(p.z / SEG_LEN) - base.index;
+  // Only the nearest pair of fork signs ahead is drawn: two pairs side by side hid the road before the fork.
+  let forkSigns = -1;
+  for (let n = Math.max(0, playerSeg); n < DRAW_DIST && forkSigns < 0; n++) if (r.segments[base.index + n]?.props.some((q) => q.kind === 'fork')) forkSigns = n;
   for (let n = DRAW_DIST - 1; n >= 0; n--) {
     const seg = r.segments[base.index + n];
     const pr = proj[n];
     if (!seg || !pr) continue;
-    const clipRow = Math.floor(clips[n] / v.ch) + 1;
+    const clipRow = Math.min(hudRow, Math.floor(clips[n] / v.ch) + 1);
     const sp = PALETTES[seg.biome];
     for (const prop of seg.props) {
+      const fork = prop.kind === 'fork';
+      if (fork && n !== forkSigns) continue;
       const art: Art = prop.kind === 'fork' ? FORK_SIGN : PROPS[prop.kind];
-      const heightHw = prop.kind === 'tower' ? 3.2 : prop.kind === 'palm' || prop.kind === 'pine' || prop.kind === 'snowpine' ? 2.2 : prop.kind === 'lamp' ? 1.8 : prop.kind === 'fork' ? 1.3 : prop.kind === 'billboard' ? 1.6 : 1;
+      const heightHw = prop.kind === 'tower' ? 3.2 : prop.kind === 'palm' || prop.kind === 'pine' || prop.kind === 'snowpine' ? 2.2 : prop.kind === 'lamp' ? 1.8 : fork ? 1.3 : prop.kind === 'billboard' ? 1.6 : 1;
       const rowsH = (pr.w * heightHw * 0.5) / v.ch;
       if (rowsH < 1.2) continue;
-      const colX = (pr.x + pr.w * prop.offset) / v.cw;
-      const color = prop.kind === 'fork' ? '#ffffff' : sp.prop;
-      blitArt(g, art, rowsH, pr.y / v.ch, colX, color, { clipRow, solid: true, maxScale: 3 });
+      const maxScale = fork ? FORK_MAX_SCALE : PROP_MAX_SCALE;
+      const k = Math.min(rowsH / art.rows.length, maxScale);
+      const oR = Math.round(art.rows.length * k);
+      const oC = Math.round(art.rows[0].length * k);
+      let colX = (pr.x + pr.w * prop.offset) / v.cw;
+      // Fork signs stay whole on screen (v3 cut the right one to "SUNRISE C").
+      if (fork) colX = Math.max(oC / 2, Math.min(v.cols - oC / 2, colX));
+      // Leave out a roadside object (not a sign, not one beside the car, where it can be hit) that would hide
+      // the road ahead or a car beyond it: on the inside of a bend, Neon City's towers filled the screen.
+      else if (n > playerSeg + 3 && oR >= 4) {
+        const top = pr.y / v.ch - oR;
+        const c0 = colX - oC / 2;
+        const c1 = colX + oC / 2;
+        const hides = spots.some((sp2) => sp2.n > n + 2 && sp2.row > top && sp2.row < pr.y / v.ch && Math.min(c1, sp2.c1) - Math.max(c0, sp2.c0) > 1.5);
+        if (hides) continue;
+      }
+      const color = fork ? '#ffffff' : sp.prop;
+      blitArt(g, art, rowsH, pr.y / v.ch, colX, color, { clipRow, solid: true, maxScale });
       if (prop.text && rowsH > 4) {
-        const scale = Math.min(rowsH / art.rows.length, 3);
+        const scale = k;
         const mid = Math.round(pr.y / v.ch - (art.rows.length * scale) / 2);
         const label = prop.text.slice(0, Math.max(1, Math.floor(art.rows[0].length * scale) - 2));
         if (mid < clipRow) text(g, mid, Math.round(colX - label.length / 2), label, prop.kind === 'fork' ? '#ffd166' : '#ff2a6d');

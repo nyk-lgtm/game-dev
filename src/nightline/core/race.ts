@@ -7,9 +7,10 @@ import type { Input, Race, Segment, Stage } from './types';
 
 /**
  * Bump when the same seed and inputs would race differently (v2: roadside hits bounce you back instead of
- * stopping you; v3: one crash per rear-end, hit widths per car kind, tighter clock, seeded biomes that never repeat).
+ * stopping you; v3: one crash per rear-end, hit widths per car kind, tighter clock, seeded biomes that never repeat;
+ * v4: +9 s a checkpoint, +4 on the hard road).
  */
-export const RULES_VERSION = 3;
+export const RULES_VERSION = 4;
 export const DT = 1 / 60;
 /** Top speed: 40 segments a second (shown as ~300 km/h). */
 export const MAX_SPEED = SEG_LEN * 40;
@@ -22,9 +23,11 @@ export const CENTRIFUGAL = 0.32;
 /**
  * The clock: seconds at the start, and added at each checkpoint (`bonus` + `step` x stage, plus `hard` on
  * the hard road). v2 gave 70 + 48..54 (-2 hard): the bot finished with ~45 s, humans with 20 crashes
- * still had plenty. v3: 62 + 44..50 (+2 on the twistier hard road). Mutable so balance probes can try numbers.
+ * still had plenty. v3: 62 + 44..50 (+2 on the twistier hard road): a first-timer-like bot (~20% of the time on
+ * the grass) and the v3 blind tester never finished. v4: 62 + 53..59, +4 hard (that bot finishes about half).
+ * Mutable so balance probes can try numbers.
  */
-export const TUNE = { start: 62, bonus: 42, step: 2, hard: 2 };
+export const TUNE = { start: 62, bonus: 51, step: 2, hard: 4 };
 /** Seconds added at the checkpoint into stage `level` (1..4). */
 export function stageBonus(level: number, hard: boolean): number {
   return TUNE.bonus + level * TUNE.step + (hard ? TUNE.hard : 0);
@@ -35,6 +38,8 @@ export const REAR_KEEP = 0.85;
 export const FORK_SPLIT = 0.2;
 /** A curve this strong can't be held at top speed without braking (full steer cancels 1 / CENTRIFUGAL). */
 export const SHARP_CURVE = 3.2;
+/** A bend this strong takes over half your steering at top speed: chevrons on the kerbs and a lighter warning. */
+export const BEND_CURVE = 1.5;
 export const NITRO_MAX = 4;
 export const CAR_COUNT = 16;
 /** Score multiplier gained per harder (right-hand) branch. */

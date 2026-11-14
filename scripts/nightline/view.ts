@@ -68,6 +68,7 @@ if (process.argv[4] === 'dump') {
 if (process.argv[4] === 'climb') {
   const seeds = Number(process.argv[5] ?? 20);
   let worst = { above: -Infinity, seed: 0, side: 0, t: 0 };
+  let deep = { gap: 0, seed: 0, side: 0, t: 0, biome: '' };
   let frames = 0;
   let aboveFrames = 0;
   const g = makeGrid(cols, rows);
@@ -86,7 +87,9 @@ if (process.argv[4] === 'climb') {
         frames++;
         if (above > 0) aboveFrames++;
         if (above > worst.above) worst = { above, seed, side, t: r.time };
+        // How far below the horizon the road ends (filled with distant ground since v4; was a black band).
+        if (-above > deep.gap) deep = { gap: -above, seed, side, t: r.time, biome: r.stages[r.stage].biome };
       }
     }
-  console.log(`\nclimb: ${frames} frames, road above the horizon in ${aboveFrames}; worst ${worst.above} rows above at seed ${worst.seed} side ${worst.side} t=${worst.t.toFixed(2)} (dump: view.ts ${W} ${H} dump ${worst.seed} ${worst.t.toFixed(2)} ${worst.side})`);
+  console.log(`\nclimb: ${frames} frames, road above the horizon in ${aboveFrames}; worst ${worst.above} rows above at seed ${worst.seed} side ${worst.side} t=${worst.t.toFixed(2)} (dump: view.ts ${W} ${H} dump ${worst.seed} ${worst.t.toFixed(2)} ${worst.side}); road ends deepest ${deep.gap} rows below it at seed ${deep.seed} side ${deep.side} t=${deep.t.toFixed(2)} (${deep.biome})`);
 }

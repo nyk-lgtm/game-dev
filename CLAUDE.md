@@ -61,11 +61,12 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     by kind with the killers there, each floor's monster mix, `DEATHS=1` how each death went, `PLUS=1` Descent+ (~10%).
     `scripts/delve/wardenprobe.ts 100` splits Warden fights (v8: ~63% won, ~56 turns, ~5.5 waves a fight of which the bot
     dodges all but ~0.2 (there is always a dodge cell), melee ~148 over ~11 hits, minions ~32: humans will eat more waves). Per-floor caps `FLOOR_CAP`/`floorCap` in gen.ts: a capped kind's first depth holds
-    one (wraiths and cultists, both new at depth 5)); Nightline: `npx vite-node scripts/nightline/balance.ts 100 [clean,crashy]`
-    (rules v3, 100 seeds × 2 seed sets, always-left / always-right: clean bot (~10-13 crashes) finishes 99-100% /
-    91-93% with ~30 / ~19 s left; crashy (sees cars 0.45 s out, misses 8%: ~18 crashes) 89-96% / 77-86%, ~22 / ~14 s;
-    a crash costs ~1.2 s; humans run ~20 s slower than the crashy bot, so 15-20 crashes is at risk. Clock `TUNE` in
-    race.ts: 62 s + 42 + 2·stage a checkpoint, +2 on the hard road (it's twistier); `TUNE=start:60` tries numbers).
+    one (wraiths and cultists, both new at depth 5)); Nightline: `npx vite-node scripts/nightline/balance.ts 100 [clean,crashy,sloppy]`
+    (rules v4, 100 seeds × 2 seed sets (SEED=1/5000), always-left / always-right: clean (~10-13 crashes) 100% / 100%,
+    ~66 / ~62 s left; crashy (sees cars 0.45 s out, misses 8%: ~18 crashes) 100% / 100%, ~57 / ~55 s; sloppy = crashy
+    + drifts onto the grass (~20% of the time, like v3's blind vision-bot tester, which finished 0/6) 44-62% / 42-51%
+    with ~10 s left. A crash costs ~1.2 s. Clock `TUNE` in race.ts: 62 s + 51 + 2·stage a checkpoint, +4 on the hard
+    road (v3: 42 / +2, sloppy 0%); `TUNE=bonus:48` tries numbers; target sloppy ~half, clean comfortable).
     Projection (render.ts): the road's half-width at the car is `ROAD_HALF_COLS` (80) text columns (~2.5 screens;
     v2 3.7) and cars beside you are drawn 1:1 there, so `CAR_HIT_W` (per traffic kind) is the art's silhouette
     contact / 80 (tests/nightline/art.test.ts recomputes it; change the art or ROAD_HALF_COLS → re-measure);
@@ -74,7 +75,12 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     `scripts/nightline/view.ts [w h] [dump seed secs side | climb seeds]` prints rows per segment (v3 vs v2), a text
     frame, or how high the road gets against the horizon (`climb`: never above; drawn climbs saturate below
     `HILL_CAP` 0.8 of the camera height via `easeY`, render only; without it ~5% of frames poked up to 11 rows into
-    the sky). Bests per clock: v3 under `best3`, v2's `best` shown as "Old best (v2 clock)" (title, hub card).
+    the sky); the rows between the horizon and a road that ends below it get distant ground (v3 left a black band).
+    Roadside objects cap at 1.25× their art and are left out when they'd hide the road ahead or a car beyond (not
+    within 3 segments of the car, where they can be hit); only the nearest fork-sign pair is drawn, ≤ 0.7×, kept on
+    screen; no sprite draws below the car's baseline (the pedals). Bends past `BEND_CURVE` (1.5) get kerb chevrons
+    (yellow; red past SHARP_CURVE) and a steady "BEND LEFT/RIGHT" ~1.5 s out. Bests per clock: `best<RULES_VERSION>`
+    (best4 now; title lists "Old best (v3 clock)" from `best3`, "(v2 clock)" from `best`; the hub card falls back).
   - Glyphwright: `npx vite-node scripts/glyph/balance.ts 200 smart` (rules v5: smart bot ~70% wins (200 seeds), losses
     spread over waves 10-15 (Lich ~40% of them); `favor` (100): bolt 67, orb 63, beam 61, nova 60, rain 54%. `favor` pushes
     the bot toward a caster, so it always trails smart: GROWTH.hp 0.72 gives smart 61% but favor 38-57%).
@@ -196,7 +202,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   replay links, `plus=1` in reports): foes ×`PLUS_HP` HP, +`PLUS_ATK` damage. The page asks before descending stairs.
 - ASCII games (Delve, Nightline) draw into a character `Grid` (src/shared/ascii.ts) painted
   with batched `fillText` runs; art lives in each game's `art.ts`.
-- Nightline routes (rules v3): six biomes (`BIOMES`, Ember Valley new), stage 1 from `firstBiome(seed)`, each fork
+- Nightline routes (rules v3+): six biomes (`BIOMES`, Ember Valley new), stage 1 from `firstBiome(seed)`, each fork
   `forkPair(seed, driven, route)` = two biomes not driven yet (`r.next`, [gentle, hard]), so no run repeats one (with
   five biomes no fork tree can: proven by search) and even the last fork offers two endings; an ending = the biome
   you finish in (store `endings`; v2's positional `goals` migrate). A rear-end leaves you at `REAR_KEEP` × the car's

@@ -7,7 +7,7 @@ import { MONO, cellWidth, makeGrid, paintGrid, type Grid } from '../shared/ascii
 import { makeStore } from '../shared/storage';
 import { Sfx } from '../afterglow/audio';
 import { LOGO } from './art';
-import { BIOMES, BIOME_NAMES, DT, FORK_SPLIT, MAX_SPEED, NEAR_MISS_POINTS, NITRO_MAX, RISK_STEP, RULES_VERSION, SEG_LEN, SHARP_CURVE, STAGES, newRace, randomSeed, stageProgress, step, type BiomeId, type Input, type Race } from './core';
+import { BEND_CURVE, BIOMES, BIOME_NAMES, DT, FORK_SPLIT, MAX_SPEED, NEAR_MISS_POINTS, NITRO_MAX, RISK_STEP, RULES_VERSION, SEG_LEN, SHARP_CURVE, STAGES, newRace, randomSeed, stageProgress, step, type BiomeId, type Input, type Race } from './core';
 import { Engine } from './engine';
 import { FORK_LEAD, HORIZON, advanceSky, carBottomRow, drawRace, type SkyState, type View } from './render';
 
@@ -18,11 +18,14 @@ const UNITS_PER_M = 100;
 
 const store = makeStore('nightline.');
 /**
- * Best scores per clock: v3's tighter clock (the time left is worth 1000 a second) put v2 bests ~23k out of
- * reach, so v3 keeps its own under 'best3' and the old 'best' shows as "Old best (v2 clock)".
+ * Best scores per clock (the time left is worth 1000 a second, so every clock change moves scores): the
+ * current rules keep theirs under `best<version>`; older ones show as "Old best (vN clock)". v2 used 'best'.
  */
-const BEST_KEY = 'best3';
-const OLD_BEST_KEY = 'best';
+const BEST_KEY = `best${RULES_VERSION}`;
+const OLD_BESTS: [string, string][] = [
+  ['best3', 'v3'],
+  ['best', 'v2'],
+];
 /** Steering: this many px of drag is full lock (70 was twitchy on a phone)... */
 const LOCK_PX = 120;
 /** ...but near a screen edge the short side reaches full lock at the edge (never in less than this). */
@@ -199,12 +202,12 @@ export class Game {
     $('hud').hidden = true;
     this.sfx.stopMusic();
     const best = store.load<number>(BEST_KEY, 0);
-    const oldBest = store.load<number>(OLD_BEST_KEY, 0);
+    const olds = OLD_BESTS.map(([k, v]) => [store.load<number>(k, 0), v] as const).filter(([b]) => b > 0);
     const endings = loadEndings();
     const daily = loadDaily(store);
     const goalList = BIOMES.map((b) => `<span style="color:${endings.includes(b) ? '#ffd166' : '#4a3a6a'}">${endings.includes(b) ? '[x]' : '[ ]'} finish in ${BIOME_NAMES[b]}</span>`).join('<br>');
     showCard(
-      `<pre>${LOGO.join('\n')}</pre><p>Five stages through six lands, never the same one twice. One clock. Pick your road at every fork: right is harder, but every hard road raises your score multiplier.</p>${best || oldBest ? `<p class="meta">${best ? `Best score ${best.toLocaleString()}` : 'No best on the new clock yet'}${oldBest ? `<br>Old best (v2 clock) ${oldBest.toLocaleString()}` : ''}</p>` : ''}<p class="meta" style="text-align:left;display:inline-block;margin:0 auto">Endings found ${endings.length}/${BIOMES.length}<br>${goalList}</p>`,
+      `<pre>${LOGO.join('\n')}</pre><p>Five stages through six lands, never the same one twice. One clock. Pick your road at every fork: right is harder, but every hard road raises your score multiplier.</p>${best || olds.length ? `<p class="meta">${best ? `Best score ${best.toLocaleString()}` : 'No best on this clock yet'}${olds.map(([b, v]) => `<br>Old best (${v} clock) ${b.toLocaleString()}`).join('')}</p>` : ''}<p class="meta" style="text-align:left;display:inline-block;margin:0 auto">Endings found ${endings.length}/${BIOMES.length}<br>${goalList}</p>`,
       [
         { label: 'Drive', primary: true, onClick: () => this.start() },
         { label: `Daily route · ${daily ? daily.label : 'not driven'}`, onClick: () => this.start(todayKey()) },
@@ -246,11 +249,11 @@ export class Game {
       `<h2>How to drive</h2><ul>
       <li><b>Drag</b> left or right anywhere to steer (or turn on <b>tilt</b> on the title screen).</li>
       <li>You accelerate on your own. Hold <b>BOOST</b> to burn nitro; hold <b>BRAKE</b> to slow for tight turns.</li>
-      <li>Curves push you outward. The grass slows you down; hitting a roadside object costs most of your speed and bounces you back toward the road.</li>
+      <li>Curves push you outward. Chevrons on the kerbs mark a bend (yellow; red when it's sharp enough to brake for), with a warning above the road. The grass slows you down; hitting a roadside object costs most of your speed and bounces you back toward the road.</li>
       <li>Passing cars refills nitro; a <b>close</b> pass (just beside them) scores extra and refills more. Ramming one drops you below its speed: each crash costs about a second, and the clock is tight.</li>
       <li>Reach each checkpoint before the clock runs out to earn more time. When time runs low, the distance to the checkpoint shows under the clock (cyan: you can still make it at top speed).</li>
       <li>Far-off cars show as small tail lights; a red <b>V</b> marks one in your lane.</li>
-      <li>At the end of each stage the road forks (an orange divider and arrows mark it): stay <b>left</b> or in the <b>middle</b> for the gentler route; only <b>far right</b> (well right of the divider) takes the harder one. Each hard road adds x${RISK_STEP} to your score multiplier; it twists more (its checkpoint gives 2 s extra, not enough to make up for it).</li>
+      <li>At the end of each stage the road forks (an orange divider and arrows mark it): stay <b>left</b> or in the <b>middle</b> for the gentler route; only <b>far right</b> (well right of the divider) takes the harder one. Each hard road adds x${RISK_STEP} to your score multiplier; it twists more (its checkpoint gives 4 s extra, not quite enough to make up for it).</li>
       <li>Each race starts in a different land and never drives one twice; your forks decide which land the last stage (your <b>ending</b>) is in. Can you finish in all six?</li></ul>`,
       [{ label: 'Back', primary: true, onClick: () => this.title() }],
       false,
@@ -499,11 +502,24 @@ export class Game {
           break;
         }
       }
+      // A lighter, steady warning for a bend that takes over half your steering (most v3 off-roads were
+      // on these, unannounced), about 1.5 s out, while you're not already in one.
+      if (!warn && Math.abs(cur) < BEND_CURVE) {
+        const soon = Math.ceil((Math.max(p.speed, MAX_SPEED * 0.5) * 1.5) / SEG_LEN);
+        for (let k = 4; k <= soon; k++) {
+          const c = r.segments[here + k]?.curve ?? 0;
+          if (Math.abs(c) > BEND_CURVE) {
+            warn = c < 0 ? '◀ BEND LEFT' : 'BEND RIGHT ▶';
+            break;
+          }
+        }
+      }
     }
     if (this.hudCache.get('warn') !== warn) {
       this.hudCache.set('warn', warn);
       $('curveWarn').textContent = warn;
       $('curveWarn').hidden = !warn;
+      $('curveWarn').classList.toggle('soft', warn.startsWith('◀ BEND') || warn.startsWith('BEND'));
     }
     // Time running low: how far to the checkpoint (cyan while it's still reachable at top speed).
     let cp = '';

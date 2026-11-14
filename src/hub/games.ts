@@ -439,10 +439,10 @@ export const GAMES: GameCard[] = [
     pitch: 'An OutRun-style night drive drawn in text. Beat the clock, pick your road at every fork.',
     accent: '#ff2a6d',
     best: () => {
-      // v3 (tighter clock) keeps its own best; the v2 one is shown only until there is one.
-      const b = nightline.load<number>('best3', 0);
-      const old = nightline.load<number>('best', 0);
-      return b ? `Best score: ${b.toLocaleString()}` : old ? `Old best (v2 clock): ${old.toLocaleString()}` : null;
+      // Each clock (rules version) keeps its own best (best4 now); an older one shows only until there is one.
+      const b = nightline.load<number>('best4', 0);
+      const old = ([['best3', 'v3'], ['best', 'v2']] as const).map(([k, v]) => [nightline.load<number>(k, 0), v] as const).find(([x]) => x > 0);
+      return b ? `Best score: ${b.toLocaleString()}` : old ? `Old best (${old[1]} clock): ${old[0].toLocaleString()}` : null;
     },
     thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#05010f"/><rect width="76" height="34" fill="#1a0533"/>
       <g font-family="monospace" font-weight="700" font-size="8"><text x="4" y="30" fill="#7a3cff">|#|_|##|_|#|</text>
