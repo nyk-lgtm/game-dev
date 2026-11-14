@@ -679,7 +679,20 @@ playtests with fixes shipped. Open threads, in order:
         vs the default bot 16/64. So the lesson for coasting players is "keep building", not a missing sink. Side
         finding: max-first-then-expand beats the bot's build-wide plan (~45% vs ~25% wins); if humans find it, waves
         26-30 may need more teeth, so watch playtests before touching numbers.
-  - [ ] Next ideas: owner feedback; maybe a late-game hint when gold sits unspent (> ~500 with open cells).
+  - [x] Fourth blind playtest (lost on 26, 23, 24 (two portals), daily on 20: Colossus + 8 Splitter runners) and fixes
+        (rules v6, 2026-11-14): a reload no longer replays the run's banners/sounds/buzzes ("Wave 2 held" after a reload);
+        busy wave previews scroll inside their own box (fade at the bottom) above Send, chips are smaller; the tower panel
+        has its own "Send wave N ▶", so building never hides Send; Mortar shells hit burrowers under towers (help,
+        Burrower text and every burrower wave's preview say so); the preview warns a wave ahead of each Colossus to get a
+        Longbow or Siege, and the Colossus text says why (armor 7); first Colossus 80% → 70% hp; start gold 210 → 230,
+        waves 3-7 budget a touch lower; results list what got through per wave (Splitter runners apart); Bolt no longer
+        says "Hits flyers" twice; selected hex has a warm wash and glowing rim, taps snap to the nearest hex up to 1.3
+        hexes past the board's edge (the board is height-bound at ~25 px hexes on a Pixel 7: 11.5 hex rows in ~510 px, so
+        it can't grow without shrinking the panel). Bot: median 27 (unchanged), wins 7 → 8/32; lives lost waves 4-7
+        41 → 34, 8-10 30 → 21; wave 10 (the Colossus) 18 lives in 3 runs → 10 in 2. Found, not fixed: a Mortar beside a Bolt aims at
+        flyers but its burst ignores them (the fix lifts the bot to median 30 / 13 wins: needs its own tuning).
+  - [ ] Next ideas: owner feedback; maybe a late-game hint when gold sits unspent (> ~500 with open cells); the
+        Mortar-beside-Bolt flyer quirk with a balance pass.
 - [x] **Blind playtests** for Rewild, Glyphwright, Telegraph, and their bug/UX fixes (shipped).
 - [ ] **Design follow-ups from those playtests** (balance; need care, not quick fixes):
   - [x] Glyphwright gold sink (rules v2): **Empower** raises a rune a tier for gold (4×/10× its
@@ -873,6 +886,7 @@ playtests with fixes shipped. Open threads, in order:
 - Grove: owner wants it kept as is (no smaller board).
 
 ## Done (recent)
+- Hexhold fourth blind playtest fixes (rules v6): see the Hexhold milestones above.
 - Grove UI fixes (rules v2 unchanged, replays unchanged; owner: keep Grove as it is): #info is a fixed 60 px box
   (`#tray #info`), so the board no longer shifts ~9 px when the Place button and one-line preview replace the two-line
   idle help; a full board says what to do ("Board full: swap in your Bolt from the stash", stash pulses yellow, a tap

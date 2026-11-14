@@ -29,7 +29,7 @@ export interface View {
 }
 
 export function layout(w: number, h: number): View {
-  return { L: fitHexes(HEXES, w, h, 6), w, h };
+  return { L: fitHexes(HEXES, w, h, 3), w, h };
 }
 
 export const sx = (v: View, i: number) => POS[i].x * v.L.size + v.L.ox;
@@ -406,10 +406,17 @@ export function drawBoard(g: CanvasRenderingContext2D, v: View, s: State, o: Dra
       g.lineWidth = 1.5;
       g.stroke();
     }
+    // The picked hex: a warm wash and a glowing brass rim, so it reads at a glance among ~38 px hexes.
     hexPath(g, x, y, size * 0.96);
+    g.fillStyle = 'rgba(255, 226, 150, 0.2)';
+    g.fill();
+    g.save();
+    g.shadowColor = 'rgba(255, 215, 122, 0.9)';
+    g.shadowBlur = reducedFx() ? 0 : 6 + 3 * Math.sin(o.time * 4);
     g.strokeStyle = '#ffe9b0';
-    g.lineWidth = 2.5;
+    g.lineWidth = 3.5;
     g.stroke();
+    g.restore();
   }
 
   // Towers.

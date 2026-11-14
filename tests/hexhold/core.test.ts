@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ADJ, CORE, ENEMIES, HP_GROWTH, LATE_FROM, LATE_GROWTH, LATE_WAVES, N, PORTAL, START_GOLD, TWIN_GOLD, TWIN_PORTALS, buried, portalsOf, TOWERS, WAVES, act, buildError, decode, encode, flowField, makeMap, newGame, replay, step, towerStats, wavePlan,
+  ADJ, CORE, ENEMIES, FIRST_BOSS, cellDistance, HP_GROWTH, LATE_FROM, LATE_GROWTH, LATE_WAVES, N, PORTAL, START_GOLD, TWIN_GOLD, TWIN_PORTALS, buried, portalsOf, TOWERS, WAVES, act, buildError, decode, encode, flowField, makeMap, newGame, replay, step, towerStats, wavePlan,
   type State,
 } from '../../src/hexhold/core';
 import { runGame } from '../../scripts/hexhold/bot';
@@ -96,7 +96,8 @@ describe('waves', () => {
       return s.enemies.find((e) => e.id === 'boss')!.maxHp;
     };
     const growth = (w: number) => Math.pow(1 + HP_GROWTH, w - 1) * (1 + Math.min(LATE_WAVES, Math.max(0, w - LATE_FROM)) * LATE_GROWTH);
-    expect(hpOf(10)).toBeCloseTo(ENEMIES.boss.hp * growth(10) * 0.8);
+    expect(FIRST_BOSS).toBeLessThan(1);
+    expect(hpOf(10)).toBeCloseTo(ENEMIES.boss.hp * growth(10) * FIRST_BOSS);
     expect(hpOf(20)).toBeCloseTo(ENEMIES.boss.hp * growth(20));
   });
 
@@ -120,6 +121,22 @@ describe('waves', () => {
     }
     expect(held!.lost).toBe(20 - s.lives);
     expect(held!.lost).toBeGreaterThan(0);
+  });
+
+  it('the results know what got through on which wave (Splitter runners apart)', () => {
+    const s = newGame(7);
+    let guard = 0;
+    while (s.status === 'playing' && guard++ < 200000) {
+      if (!s.active) act(s, { t: 'wave' });
+      step(s);
+    }
+    const leaks = s.stats.leaks;
+    expect(leaks.reduce((a, l) => a + l.lives, 0)).toBe(s.stats.leaked);
+    for (const l of leaks) {
+      expect(l.lives).toBe(l.n * ENEMIES[l.id].leak);
+      if (l.split) expect(l.id).toBe('runner');
+    }
+    expect(leaks.some((l) => l.wave === 1)).toBe(true);
   });
 
   it('an undefended core loses lives and the game ends', () => {
@@ -236,6 +253,29 @@ describe('two portals and burrowers', () => {
     }
     expect(wasBuried).toBe(true);
     expect(ENEMIES.digger.dig).toBe(true);
+  });
+
+  it('Mortar shells reach a burrower under a tower; other towers cannot', () => {
+    for (const id of ['mortar', 'bolt', 'tesla'] as const) {
+      const s = newGame(4);
+      s.wave = 15;
+      s.active = true;
+      s.queue.push({ id: 'digger', at: s.tick + 1, cell: PORTAL });
+      step(s);
+      const e = s.enemies.find((x) => x.id === 'digger')!;
+      // Hold it still halfway into a cell with a beacon on it (a tower that never shoots).
+      const under = e.next;
+      e.t = 0.6;
+      e.stun = 1;
+      s.towers[under] = { cell: under, id: 'beacon', level: 1, cd: 0, spent: 0, hits: 0, spec: -1, dealt: 0 };
+      const at = open(s).find((c) => cellDistance(c, under) === 2)!;
+      s.towers[at] = { cell: at, id, level: 1, cd: 0, spent: 0, hits: 0, spec: -1, dealt: 0 };
+      expect(buried(s, e)).toBe(true);
+      const hp = e.hp;
+      step(s);
+      if (id === 'mortar') expect(e.hp).toBeLessThan(hp);
+      else expect(e.hp).toBe(hp);
+    }
   });
 
   it('a wave has only a few burrowers', () => {

@@ -39,8 +39,20 @@ body #panel {
 #panel .text b { color: var(--text); }
 #panel .gift { color: var(--accent); }
 #panel .warn { color: var(--bad); font-weight: 700; }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.chip { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); font-size: 13px; font-weight: 600; }
+/* The wave preview's chips and notes scroll inside this box; the Send button below never covers them. */
+#panel .body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; overscroll-behavior: contain; }
+#panel .body.more { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent); }
+#panel .ahead { color: #ffd6a0; }
+#panel .ahead b { color: var(--accent); }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip { display: flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line); font-size: 12.5px; font-weight: 600; }
+/* Send from the tower panel: outlined, so it doesn't read as the panel's main (upgrade) button. */
+#panel button.send { min-height: 44px; border-color: var(--accent); color: var(--accent); font-weight: 800; }
+.card .leaks { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted); }
+.card .leaks p { margin-bottom: 2px; }
+.card .leak { display: flex; gap: 8px; align-items: baseline; }
+.card .leak b { flex: none; width: 58px; color: var(--text); }
+.card .leak em { flex: none; width: 34px; font-style: normal; font-weight: 800; color: var(--bad); }
 .chip i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .palette { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
 .palette button {

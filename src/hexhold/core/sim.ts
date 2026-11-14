@@ -32,6 +32,8 @@ import {
 } from './content';
 
 export const TICK = 1 / 30;
+/** Health of the first Colossus (wave 10) against later ones. */
+export const FIRST_BOSS = 0.7;
 
 export interface Tower {
   cell: number;
@@ -68,6 +70,8 @@ export interface Enemy {
   /** Healing queued for the next tick (strongest mender in reach). */
   healed: number;
   alive: boolean;
+  /** A runner that burst out of a Splitter. */
+  split?: boolean;
 }
 
 export type Fx =
@@ -111,7 +115,18 @@ export interface State {
   /** Damage dealt per tower kind, kills, leaks. */
   /** Damage per tower kind (Frost is credited with the extra its chill lets neighbors deal), kills,
    *  leaks, and enemy-seconds spent chilled by Frost. */
-  stats: { dealt: Partial<Record<TowerId, number>>; kills: number; leaked: number; chilled: number };
+  stats: { dealt: Partial<Record<TowerId, number>>; kills: number; leaked: number; chilled: number; leaks: Leak[] };
+}
+
+/** One kind of enemy that reached the core on one wave (for the results card). */
+export interface Leak {
+  wave: number;
+  id: EnemyId;
+  /** Runners that came out of Splitters are counted apart. */
+  split?: boolean;
+  /** How many got through, and the lives they cost. */
+  n: number;
+  lives: number;
 }
 
 export function newGame(seed: number): State {
@@ -136,7 +151,7 @@ export function newGame(seed: number): State {
     tick: 0,
     status: 'playing',
     fx: [],
-    stats: { dealt: {}, kills: 0, leaked: 0, chilled: 0 },
+    stats: { dealt: {}, kills: 0, leaked: 0, chilled: 0, leaks: [] },
   };
 }
 
@@ -147,8 +162,8 @@ const GAP: Record<EnemyId, number> = { runner: 0.5, grunt: 0.75, swarm: 0.22, br
 export const WAVE_COST: Record<EnemyId, number> = { runner: 3, grunt: 4, swarm: 1.2, brute: 14, flyer: 7, healer: 9, splitter: 14, digger: 11, boss: 80 };
 const COST = WAVE_COST;
 
-/** Budget scale for the first waves. */
-const EARLY = [0.7, 0.8, 0.9, 0.95];
+/** Budget scale for the first waves (rules v6: waves 3-7 a touch softer for first-timers). */
+const EARLY = [0.7, 0.8, 0.85, 0.88, 0.9, 0.92, 0.95];
 /** No kind (but runners and grunts) may take more than this share of a wave's budget, so themes
  *  stay mixes instead of 30 Brutes or 300 Mites in a row. */
 export const THEME_SHARE = 0.45;
@@ -233,13 +248,13 @@ export function distFor(s: State, id: EnemyId): number[] {
   return def.fly ? FLY_DIST : def.dig ? s.dig : s.field.dist;
 }
 
-/** A burrower under a tower can't be hit. */
+/** A burrower under a tower can't be hit (except by Mortar shells). */
 export function buried(s: State, e: Enemy): boolean {
   return !!ENEMIES[e.id].dig && !!s.towers[e.t < 0.5 ? e.cell : e.next];
 }
 
-/** Whether a tower (air = can hit flyers) can hit this enemy at all. */
-const hittable = (s: State, e: Enemy, air: boolean) => e.alive && (air || !ENEMIES[e.id].fly) && !buried(s, e);
+/** Whether a tower (air = can hit flyers; deep = Mortar shells, which reach burrowers under towers) can hit this enemy. */
+const hittable = (s: State, e: Enemy, air: boolean, deep = false) => e.alive && (air || !ENEMIES[e.id].fly) && (deep || !buried(s, e));
 
 function neighbors(s: State, cell: number): Tower[] {
   const out: Tower[] = [];
@@ -333,7 +348,7 @@ function kill(s: State, e: Enemy) {
   s.gold += def.bounty;
   s.stats.kills++;
   s.fx.push({ type: 'die', x: e.x, y: e.y, id: e.id, gold: def.bounty });
-  if (def.split) for (let k = 0; k < def.split; k++) spawn(s, 'runner', e.cell, Math.max(0, e.t - k * 0.15), 0.8);
+  if (def.split) for (let k = 0; k < def.split; k++) spawn(s, 'runner', e.cell, Math.max(0, e.t - k * 0.15), 0.8).split = true;
 }
 
 function fire(s: State, t: Tower) {
@@ -341,7 +356,9 @@ function fire(s: State, t: Tower) {
   if (def.id === 'beacon') return;
   const st = towerStats(s, t);
   const { x, y } = POS[t.cell];
-  const targets = s.enemies.filter((e) => hittable(s, e, st.air) && inRange(e, x, y, st.range));
+  // Mortar shells shake the ground: they reach burrowers even under towers.
+  const deep = def.id === 'mortar';
+  const targets = s.enemies.filter((e) => hittable(s, e, st.air, deep) && inRange(e, x, y, st.range));
 
   // Auras act every tick.
   if (def.rate === 0) {
@@ -374,7 +391,8 @@ function fire(s: State, t: Tower) {
     s.fx.push({ type: 'burst', x: target.x, y: target.y, r });
     const tx = target.x;
     const ty = target.y;
-    for (const e of s.enemies) if (hittable(s, e, false) && inRange(e, tx, ty, r)) hit(e, st.dmg);
+    // A Bolt next door lets it aim at flyers, so its burst hits them too (rules v6; before, it only hit walkers by them).
+    for (const e of s.enemies) if (hittable(s, e, false, true) && inRange(e, tx, ty, r)) hit(e, st.dmg);
   } else if (def.id === 'tesla') {
     const pts = [target.x, target.y];
     const seen = new Set([target.uid]);
@@ -498,8 +516,8 @@ export function step(s: State): void {
   // Arrivals.
   while (s.queue.length && s.queue[0].at <= s.tick) {
     const q = s.queue.shift()!;
-    // The first Colossus (wave 10) is a little smaller: a warning, not a wall.
-    spawn(s, q.id, q.cell, 0, q.id === 'boss' && s.wave <= 10 ? 0.8 : 1);
+    // The first Colossus (wave 10) is smaller: a warning, not a wall.
+    spawn(s, q.id, q.cell, 0, q.id === 'boss' && s.wave <= 10 ? FIRST_BOSS : 1);
   }
 
   // Towers.
@@ -547,6 +565,10 @@ export function step(s: State): void {
         s.stats.leaked += def.leak;
         s.waveLost += def.leak;
         s.fx.push({ type: 'leak', lives: def.leak });
+        const split = !!e.split;
+        const known = s.stats.leaks.find((l) => l.wave === s.wave && l.id === e.id && !!l.split === split);
+        if (known) (known.n++, (known.lives += def.leak));
+        else s.stats.leaks.push({ wave: s.wave, id: e.id, n: 1, lives: def.leak, ...(split ? { split } : {}) });
         break;
       }
       const n = nextCell(distFor(s, e.id), e.cell);
