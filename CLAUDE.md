@@ -55,11 +55,13 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     cell with an unseen non-rock neighbour a step could reach); the page stops it for any monster in sight or a newly seen
     exit. Taps snap to a monster/chest/person within 1.5 tiles unless on something or one step away. Daily: `?daily`.
   - Afterglow: `npx vite-node scripts/afterglow/balance.ts` (bot survival per character).
-  - Delve: `npx vite-node scripts/delve/balance.ts 100` (descent bot, rules v6: ~58% wins (56% over 400 seeds), d10 reached
-    ~84%, deaths mostly at the Warden (450 HP), then depth 5 ~6%, depth 6 ~3%; it also prints damage per depth by kind with the
-    killers there, each floor's monster mix, and `DEATHS=1` how each death went (burst, potions left, foes in sight).
-    Per-floor caps `FLOOR_CAP`/`floorCap` in gen.ts: a capped kind's first depth holds one, so wraiths and cultists,
-    both new at depth 5, come one of each; floor damage d4 ~50, d5 ~108, d6-8 ~120); Nightline: `npx vite-node scripts/nightline/balance.ts 100 [clean,crashy]`
+  - Delve: `npx vite-node scripts/delve/balance.ts 100` (descent bot: rests to the regen cap, dodges the Warden's wave;
+    rules v7, 400 seeds: 58% wins, d10 reached ~84%, deaths d2-4 ~1.5%, d5-9 ~6%, the Warden ~34%; floor damage d2-3 ~17,
+    d4 ~43, d5 ~109, d6-8 ~120, d10 ~216; potions on arrival d5 6, d7 5, d10 6). It also prints damage per depth by kind
+    with the killers there, each floor's monster mix, `DEATHS=1` how each death went, `PLUS=1` Descent+ (~17% wins).
+    `scripts/delve/wardenprobe.ts 100` splits Warden fights (v7: ~60% won, ~50 turns, 5 waves a fight, ~2.2 landed for
+    ~55, melee ~118, minions ~36). Per-floor caps `FLOOR_CAP`/`floorCap` in gen.ts: a capped kind's first depth holds
+    one (wraiths and cultists, both new at depth 5)); Nightline: `npx vite-node scripts/nightline/balance.ts 100 [clean,crashy]`
     (rules v3, 100 seeds × 2 seed sets, always-left / always-right: clean bot (~10-13 crashes) finishes 99-100% /
     91-93% with ~30 / ~19 s left; crashy (sees cars 0.45 s out, misses 8%: ~18 crashes) 89-96% / 77-86%, ~22 / ~14 s;
     a crash costs ~1.2 s; humans run ~20 s slower than the crashy bot, so 15-20 crashes is at risk. Clock `TUNE` in
