@@ -122,14 +122,6 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     stop 4-5); risky/greedy ~0%; deaths mostly food (~65%), then oil, spread over stops 4-10; ~2 callbacks faced a run).
     `TUNE=startF:6,legFoodHills:1` tries numbers (careful: legFood hills/pass 2 → ~55%, 1 → ~85%: the touchiest knob),
     `W=reserve:0.7` bot weights; `trace.ts <seed> [policy]` prints a journey stop by stop and its `?seed=&a=`.
-  - Trestle: `npx vite-node scripts/trestle/probe.ts 200` (rules v3, live generation, 200 levels of seed-picked types over d
-    0..1: first layout proven 78% (crossings ~86%, lanterns ~54%), always within ≤ 15 layouts; par/budget median 0.74; gen
-    median ~370 ms, p90 ~0.9 s, max ~1.8 s on a laptop (in the page's worker); one test run ~2.6 ms). `pool.ts 60 18` rebuilds
-    the picked trail (src/trestle/core/pool.ts, ~3.5 min): it prints difficulty per level (v3: thirds 0.26 → 0.51 → 0.75,
-    biggest rise between neighbours 0.08, biggest drop 0.04, every type 4-8 times). `par.ts 45` re-surveys 4× harder (v3:
-    beats live par on 5/45, p90 1.8%, max 7%); `wind.ts 18 2` adds wind to calm levels (v3: the calm par build fails in 15/18,
-    windy par +8% median); `trail.ts 1 40` lists the trail; `why.ts`, `bumps.ts [cart]` (a heavy cart down a kinked road keeps
-    planks ≤ 0.3; the V and hill stall: no climbing), `tutorials.ts` (each tutorial's `ref` peak < 0.85, surveyor ≤ par).
   - Tidings: `npx vite-node scripts/tidings/balance.ts 400 [careful,casual,random,safe,risky,greedy,crowd,miser]` (rules v2:
     careful (plans every order of this stop's cards, choices, provisions and partings, gambles by their shown odds, then the
     road, valuing stock against the cheapest remaining leg costs on the map) arrives ~74-75% (seed sets 1000/5000), ★★★ ~19%
