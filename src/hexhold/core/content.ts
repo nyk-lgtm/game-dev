@@ -23,7 +23,7 @@ export interface TowerDef {
 
 export const TOWERS: Record<TowerId, TowerDef> = {
   bolt: { id: 'bolt', name: 'Bolt', cost: 50, range: 2.6, rate: 0.75, dmg: 11, air: true, color: '#7ad7ff',
-    text: 'Fast shots at one enemy.', aura: 'Neighbors can hit flyers too.' },
+    text: 'Fast shots at one enemy.', aura: 'Neighbors can hit flyers too (Mortar shells still only burst on the ground).' },
   mortar: { id: 'mortar', name: 'Mortar', cost: 90, range: 3.6, rate: 2.0, dmg: 30, air: false, color: '#ffb35c',
     text: 'Slow shells that burst on a group, and reach Burrowers even under towers.', aura: 'Neighbors reach half a cell further.' },
   frost: { id: 'frost', name: 'Frost', cost: 70, range: 1.8, rate: 0, dmg: 2, air: true, color: '#b9e6ff',
@@ -139,11 +139,12 @@ export const START_GOLD = 230;
 /** Extra starting gold on two-portal maps. */
 export const TWIN_GOLD = 60;
 export const START_LIVES = 20;
-/** Extra health per wave from wave 11 to 24: steady pressure through the middle game,
- *  then only the compounding growth, so waves 25-30 don't spike. */
-export const LATE_GROWTH = 0.1;
+/** Extra health per wave from wave 12 to 27 (rules v7: 16 waves at 10.25%, was 13 at 10%, to make up for
+ *  Mortars no longer wasting shells on flyers): steady pressure through the middle game, then only the
+ *  compounding growth for the last waves. */
+export const LATE_GROWTH = 0.1025;
 export const LATE_FROM = 11;
-export const LATE_WAVES = 13;
+export const LATE_WAVES = 16;
 /** Most a wave's end bonus pays as interest on gold you keep (5% of it). */
 export const INTEREST_CAP = 15;
 /** Enemy health grows this much per wave (compounding). */

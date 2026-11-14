@@ -665,7 +665,8 @@ export class Game {
       p.appendChild(row);
     } else p.appendChild(this.titleRow(`${name}<span>${t.id === 'beacon' ? '' : `${Math.round(t.dealt).toLocaleString()} dealt`}</span>`));
     const gifts = ADJ[t.cell].map((j) => s.towers[j]).filter((x): x is NonNullable<typeof x> => !!x);
-    const got = [...new Set(gifts.map(giftShort))];
+    // A Bolt's gift doesn't reach Mortar shells (they only burst on the ground).
+    const got = [...new Set(gifts.filter((g) => !(t.id === 'mortar' && g.id === 'bolt')).map(giftShort))];
     // A beacon's line already says what it gives.
     const gives = t.id === 'beacon' ? '' : `<br><span class="gift">Gives neighbors: ${def.aura}</span>`;
     const idle = this.idleTowers().includes(t.cell) ? '<br><span class="warn">⚠ Out of reach: no path passes within its range, so it can’t hit anything here.</span>' : '';
@@ -838,7 +839,7 @@ export class Game {
 
   showTowers(): void {
     showCard(
-      `<h2>Towers</h2><p>At level 3 each tower can specialize into one of two forms.</p>${TOWER_IDS.map((id) => `<p><b style="color:${TOWERS[id].color}">${TOWERS[id].name}</b> · ${TOWERS[id].cost} gold<br>${TOWERS[id].text} ${TOWERS[id].air ? (/flyers/i.test(TOWERS[id].text) ? '' : 'Hits flyers.') : TOWERS[id].range ? 'Ground only (a Bolt next to it lets it hit flyers).' : ''}<br><i>Neighbors: ${TOWERS[id].aura}</i><br>Becomes <b>${SPECS[id][0].name}</b> or <b>${SPECS[id][1].name}</b>.</p>`).join('')}`,
+      `<h2>Towers</h2><p>At level 3 each tower can specialize into one of two forms.</p>${TOWER_IDS.map((id) => `<p><b style="color:${TOWERS[id].color}">${TOWERS[id].name}</b> · ${TOWERS[id].cost} gold<br>${TOWERS[id].text} ${TOWERS[id].air ? (/flyers/i.test(TOWERS[id].text) ? '' : 'Hits flyers.') : TOWERS[id].range ? (id === 'mortar' ? 'Ground only, even beside a Bolt.' : 'Ground only (a Bolt next to it lets it hit flyers).') : ''}<br><i>Neighbors: ${TOWERS[id].aura}</i><br>Becomes <b>${SPECS[id][0].name}</b> or <b>${SPECS[id][1].name}</b>.</p>`).join('')}`,
       [{ label: 'Close', primary: true, onClick: closeOverlay }],
     );
   }

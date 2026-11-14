@@ -304,7 +304,8 @@ export function towerStats(s: State, t: Tower): TowerStats {
   return {
     dmg,
     range: range * CELL,
-    air: def.air || has('bolt'),
+    // Mortar shells only burst on the ground: a Bolt next door can't make them hit flyers (rules v7).
+    air: def.air || (has('bolt') && t.id !== 'mortar'),
     shatter: has('frost'),
     ignite: has('flame') || !!sp?.napalm,
     stun: has('tesla'),
@@ -391,7 +392,6 @@ function fire(s: State, t: Tower) {
     s.fx.push({ type: 'burst', x: target.x, y: target.y, r });
     const tx = target.x;
     const ty = target.y;
-    // A Bolt next door lets it aim at flyers, so its burst hits them too (rules v6; before, it only hit walkers by them).
     for (const e of s.enemies) if (hittable(s, e, false, true) && inRange(e, tx, ty, r)) hit(e, st.dmg);
   } else if (def.id === 'tesla') {
     const pts = [target.x, target.y];

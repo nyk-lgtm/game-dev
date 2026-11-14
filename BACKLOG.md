@@ -702,8 +702,11 @@ playtests with fixes shipped. Open threads, in order:
         it can't grow without shrinking the panel). Bot: median 27 (unchanged), wins 7 → 8/32; lives lost waves 4-7
         41 → 34, 8-10 30 → 21; wave 10 (the Colossus) 18 lives in 3 runs → 10 in 2. Found, not fixed: a Mortar beside a Bolt aims at
         flyers but its burst ignores them (the fix lifts the bot to median 30 / 13 wins: needs its own tuning).
-  - [ ] Next ideas: owner feedback; maybe a late-game hint when gold sits unspent (> ~500 with open cells); the
-        Mortar-beside-Bolt flyer quirk with a balance pass.
+  - [x] Mortar-beside-Bolt quirk fixed (rules v7): Mortars never aim at flyers (their burst couldn't hurt them), so
+        a Bolt's gift skips them (panel, Towers card and Bolt aura say so). Bot went to median 28 / 12 wins; late hp
+        growth now 16 waves at 10.25% (was 13 at 10%): median 27, 7/32 (probe 4-7/8-10 lives 30/19 unchanged, 15-20 /
+        21-25 / 26-30: 70/144/293). LATE_GROWTH 0.115 alone gave 26 / 10 wins, LATE_WAVES 17 28 / 4.
+  - [ ] Next ideas: owner feedback; maybe a late-game hint when gold sits unspent (> ~500 with open cells).
 - [x] **Blind playtests** for Rewild, Glyphwright, Telegraph, and their bug/UX fixes (shipped).
 - [ ] **Design follow-ups from those playtests** (balance; need care, not quick fixes):
   - [x] Glyphwright gold sink (rules v2): **Empower** raises a rune a tier for gold (4×/10× its

@@ -138,10 +138,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     go out in 12 px strips, each only shifted and snapped to device pixels (`blitSwayed`); scaled or 'lighter' draws of the
     beat band and mist cost ~9 fps, so both are built at device size and blitted 1:1; the unlit beat chips and the plant
     shadows are baked (landscape layer / sprites); at most 3 glows a plant. Ablate with `__game.scene.<method> = () => {}`.
-  - Hexhold: `npx vite-node scripts/hexhold/balance.ts 32` (heuristic bot, rules v6: median wave ~27, ~8/32 wins);
+  - Hexhold: `npx vite-node scripts/hexhold/balance.ts 32` (heuristic bot, rules v7: median wave ~27, ~7/32 wins);
     `scripts/hexhold/probe.ts 32` lists each loss with its wave and map shape (one or two portals) and the
-    lives lost per band of waves (the difficulty curve: v6 is gentle to wave 10 (1-3/4-7/8-10: 0/34/21), steady
-    pressure from 15 on, no spike at 27-30), lives lost wave by wave for 1-12, plus gold banked per band, open cells and upgrade gold left, and gold unspent at the end
+    lives lost per band of waves (the difficulty curve: v7 is gentle to wave 10 (1-3/4-7/8-10: 0/30/19), steady
+    pressure from 15 on (15-20/21-25/26-30: 70/144/293)), lives lost wave by wave for 1-12, plus gold banked per band, open cells and upgrade gold left, and gold unspent at the end
     (`CAP=14` stops building at 14 towers, `EXPAND=1` builds again once they're all maxed: hoarding check, no sink
     needed: the bot banks ~16 gold, a capped maze 1-3k but spending it on new towers wins 1 → 29/64);
     `scripts/hexhold/waves.ts` shows wave sizes and the biggest pile of one kind; `upto.ts <seed> <wave>` gives a bot
@@ -206,9 +206,9 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   flow field (src/hexhold/core/board.ts) rebuilt on every build/sell; `buildError` forbids sealing any portal. Flyers use `FLY_DIST`, burrowers
   `s.dig` (the tower-less field); `distFor` picks. ~1/3 of maps have two portals (`s.portals`). A burrower under a
   tower (`buried`) can only be hit by Mortar shells (rules v6: `hittable(…, deep)`), so a maze covering its whole line
-  doesn't shield it. Known quirk, left as is: a Mortar beside a Bolt aims at flyers but its burst only hurts walkers
-  (fixing it lifts the bot from median 27 / 7 wins to 30 / 13 of 32, so it needs its own tuning pass). Rules v6 also:
-  start gold 230, waves 1-7 budget ×0.7/0.8/0.85/0.88/0.9/0.92/0.95, first Colossus `FIRST_BOSS` 0.7 hp. `stats.leaks`
+  doesn't shield it. Mortars are ground-only even beside a Bolt (rules v7: `towerStats` gives them no `air`; before,
+  they aimed at flyers their burst couldn't hurt). That lifted the bot to median 28 / 12 wins, so late hp growth runs
+  16 waves at 10.25% (`LATE_WAVES`/`LATE_GROWTH`, was 13 at 10%) for 27 / 7. Since v6: start gold 230, waves 1-7 budget ×0.7/0.8/0.85/0.88/0.9/0.92/0.95, first Colossus `FIRST_BOSS` 0.7 hp. `stats.leaks`
   ({wave, id, n, lives, split}: Splitter runners apart) feeds the results card's "What got through". The page drops
   `s.fx` after rebuilding a run (start/reload/link), so only live play makes banners, sounds and buzzes.
 - Triad (src/triad/core/puzzle.ts): `generate(seed, radius)` fills a random answer, adds givens until

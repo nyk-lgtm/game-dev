@@ -58,7 +58,7 @@ describe('building', () => {
 });
 
 describe('neighbors', () => {
-  it('a beacon next door adds 20% damage; a bolt next door lets a mortar hit flyers', () => {
+  it('a beacon next door adds 20% damage; a bolt next door lets a flame hit flyers, never a mortar', () => {
     const s = newGame(6);
     s.gold = 1e9;
     const cell = open(s).find((c) => ADJ[c].filter((j) => s.ground[j] === 'open').length >= 2 && s.ground[c] === 'open')!;
@@ -71,7 +71,13 @@ describe('neighbors', () => {
     expect(towerStats(s, m).dmg).toBeCloseTo(plain.dmg * 1.2);
     if (b !== undefined && !buildError(s, b, 'bolt')) {
       act(s, { t: 'build', cell: b, tower: 'bolt' });
-      expect(towerStats(s, m).air).toBe(true);
+      // Mortar shells only burst on the ground, so it never aims at a flyer (rules v7).
+      expect(towerStats(s, m).air).toBe(false);
+      const f = ADJ[b].find((j) => j !== cell && !buildError(s, j, 'flame'));
+      if (f !== undefined) {
+        act(s, { t: 'build', cell: f, tower: 'flame' });
+        expect(towerStats(s, s.towers[f]!).air).toBe(true);
+      }
     }
   });
 });
