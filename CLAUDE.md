@@ -115,13 +115,6 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     (0.28 → 0.07 → 0.35 at 14-16), otherwise neighbour steps ≤ ~0.1. `trail.ts 1 80` lists the trail with difficulty (past
     the pool v4 runs ~0.69-0.96). `par.ts 45` re-surveys 4× harder; `wind.ts 18 2` adds wind to calm levels (v3: the calm
     par build fails in 15/18); `why.ts`, `bumps.ts [cart]`, `tutorials.ts` (each tutorial's `ref` peak < 0.85, surveyor ≤ par).
-  - Tidings: `npx vite-node scripts/tidings/balance.ts 400 [careful,casual,random,safe,risky,greedy,crowd,miser]` (rules v1:
-    careful (plans every order of this stop's cards and choices, gambles by their shown odds, then the road, valuing stock
-    against the cheapest remaining leg costs on the map) arrives ~55% (51-56% over seed sets 1000/5000/9000), ★★★ ~14% of
-    arrivals; casual (one choice at a time, 25% whim) ~11%; random 0%; safe (never gambles, smallest loss) 0% (starves by
-    stop 4-5); risky/greedy ~0%; deaths mostly food (~65%), then oil, spread over stops 4-10; ~2 callbacks faced a run).
-    `TUNE=startF:6,legFoodHills:1` tries numbers (careful: legFood hills/pass 2 → ~55%, 1 → ~85%: the touchiest knob),
-    `W=reserve:0.7` bot weights; `trace.ts <seed> [policy]` prints a journey stop by stop and its `?seed=&a=`.
   - Tidings: `npx vite-node scripts/tidings/balance.ts 400 [careful,casual,random,safe,risky,greedy,crowd,miser]` (rules v3:
     careful (plans every order of this stop's cards, choices, provisions and partings, gambles by their shown odds, then the
     road, valuing stock against the cheapest remaining leg costs on the map) arrives ~79% (seed sets 1000/5000), ★★★ ~23%
