@@ -34,7 +34,7 @@ export const MONSTERS: Record<MonsterKind, MonsterDef> = {
   wraith: { name: 'Wraith', hp: 32, atk: 15, def: 3, xp: 18, slow: 0, range: 0, erratic: 0, ghost: true, depths: [5, 10], weight: 1.5, blurb: 'Drifts through walls.' },
   mage: { name: 'Cultist', hp: 26, atk: 16, def: 2, xp: 20, slow: 0, range: 6, erratic: 0, ghost: false, depths: [5, 10], weight: 1.5, blurb: 'Hurls fire from afar.' },
   golem: { name: 'Stone golem', hp: 80, atk: 20, def: 5, xp: 30, slow: 1, range: 0, erratic: 0, ghost: false, depths: [6, 10], weight: 1.5, blurb: 'Slow as stone, hits like a landslide.' },
-  warden: { name: 'The Warden', hp: 460, atk: 24, def: 5, xp: 0, slow: 0, range: 0, erratic: 0, ghost: false, depths: [99, 99], weight: 0, blurb: 'Keeper of the deep. Calls the dead.' },
+  warden: { name: 'The Warden', hp: 520, atk: 26, def: 5, xp: 0, slow: 0, range: 0, erratic: 0, ghost: false, depths: [99, 99], weight: 0, blurb: 'Keeper of the deep. Calls the dead.' },
 };
 
 export const WEAPONS = ['Dagger', 'Sword', 'Axe', 'Warblade', 'Runeblade'];
@@ -78,12 +78,12 @@ export const WARDEN: {
 } = {
   chargeEvery: 4,
   chargeLate: 3,
-  meleeLate: 21,
+  meleeLate: 23,
   reach: 5,
   blast: 34,
   rest: 1,
-  summonAt: [0.66, 0.33],
-  summon: ['ghoul', 'skeleton', 'skeleton'],
+  summonAt: [0.75, 0.5, 0.25],
+  summon: ['ghoul', 'ghoul', 'skeleton'],
 };
 
 /** Descent+: foes have this much more HP and hit this much harder. */
@@ -113,7 +113,7 @@ export const THEFT_PER_DEPTH = 12;
 export const XP_TABLE = [0, 15, 55, 120, 210, 360, 560, 900, 1300, 1800, 2400, 3100];
 
 /** Depths where a merchant waits at the foot of the stairs. */
-export const SHOP_DEPTHS = [4, 7];
+export const SHOP_DEPTHS = [4, 7, 9];
 /** Max HP a vigor draught adds. */
 export const VIGOR_HP = 6;
 export const GEAR_PRICE = [0, 60, 110, 170, 240];

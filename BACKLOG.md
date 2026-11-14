@@ -1056,6 +1056,16 @@ blind playtests with fixes shipped (Simmer 5, Trestle 5, Delve 4). Open threads,
   wisps 20% → 22% (bot: 276 → 248 turns, Spirit Tree 49/60 → 30/60); help says wisps never merge and
   what traps pay; brighter labels; empty stash is dashed and says so. Still long for one sitting —
   owner said keep the board as is (no smaller board).
+- Delve v8 blind playtest (2 runs won, 5/5 Warden fights won: too gentle) and fixes (rules v9): a skeleton stepping into
+  your only dodge cell after the Warden charged trapped you (seed 2537543396) → `makeRoom` re-checks after the enemy turn
+  and crumbles a blocking add (or lets the charge go when stone is the problem), and boxing adds no longer stop the waves
+  (that was the second-half potion slugfest: postponed waves = melee every turn); "spent" now says it won't move or strike
+  next turn (step in and strike); Frost is refused (no cost) and greyed when it wouldn't hold the Warden; D4 holds at most
+  one ghoul (floor damage d4 ~43 → ~25); a merchant at depth 9 and no "(you have as good)" gear (Whetstone/Ward instead) as
+  a gold sink; "1 ether", POTION 12 fits, cultists "spent, catching its breath" instead of "gathers flame". The fixes alone
+  took the bot to 76% (8+ waves a fight, all dodged = free turns), so the Warden got teeth: 520 HP, melee 26/23, a third
+  summon (75/50/25%) of 2 ghouls + a skeleton. Bot (400): 59.0% wins, Warden ends 33.75% of runs; wardenprobe 58% of
+  fights won, ~69 turns, 8.8 waves, minions ~65. Watch: fight length (~69 turns, but most are dodge/strike beats).
 - Delve Warden blind playtest (v7: telegraph and REST worked; the fight didn't) and fixes (rules v8): Frost held the Warden
   every cast (5 in a row, no wave ever) → it holds one action once between waves and never mid-charge (text says so; the
   menu warns "it would shrug off the hold"); "spent, strike now" is logged on the turn the wave resolves (it came a turn

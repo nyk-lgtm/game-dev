@@ -279,6 +279,11 @@ export class Game {
       toast(`Nothing to hit within ${BOLT_RANGE} cells ahead (no MP spent)`);
       return;
     }
+    const aim = boltTarget(this.state).m;
+    if (a.type === 'cast' && a.spell === 'frost' && aim && !frostHolds(aim)) {
+      toast(aim.charge ? "It's drawing in the cold: Frost won't hold it now (no MP spent)" : "Frost holds the Warden only once between waves (no MP spent)");
+      return;
+    }
     if (a.type === 'cast' && a.spell === 'blink' && !blinkReach(this.state)) {
       toast('No room to blink ahead (no MP spent)');
       return;
@@ -460,8 +465,8 @@ export class Game {
       if (id === 'blink') return hop ? ` Lands ${hop} cell${hop > 1 ? 's' : ''} ahead.` : ' Blocked: no room ahead.';
       if (!bolt(id)) return '';
       if (!target.m) return ' Nothing in reach.';
-      const shrug = id === 'frost' && !frostHolds(target.m) ? ' (it would shrug off the hold)' : '';
-      return ` Target: ${MONSTERS[target.m.kind].name}, ${target.dist} ahead${shrug}.`;
+      if (id === 'frost' && !frostHolds(target.m)) return target.m.charge ? " Won't hold the Warden while it draws in the cold." : ' Already used on the Warden since its last wave.';
+      return ` Target: ${MONSTERS[target.m.kind].name}, ${target.dist} ahead.`;
     };
     const opts = known.map((id) => ({
       label: `${SPELLS[id].name} (${SPELLS[id].cost} MP) - ${SPELLS[id].desc}${note(id)}`,
@@ -473,7 +478,7 @@ export class Game {
     showCard(`<h2>Spells</h2><p>MP ${p.mp}/${p.maxMp}. New spells come with levels. Bolts reach ${BOLT_RANGE} cells ahead and cost nothing when there is nothing to hit.</p>`, [...opts, { label: 'Cancel', onClick: closeOverlay }]);
     document.querySelectorAll<HTMLButtonElement>('#overlay .card button').forEach((b, i) => {
       const id = known[i];
-      if (id) b.disabled = !isLegal(this.state, { type: 'cast', spell: id }) || (bolt(id) && !target.m) || (id === 'blink' && !hop);
+      if (id) b.disabled = !isLegal(this.state, { type: 'cast', spell: id }) || (bolt(id) && !target.m) || (id === 'frost' && !!target.m && !frostHolds(target.m)) || (id === 'blink' && !hop);
     });
   }
 
@@ -512,7 +517,7 @@ export class Game {
       <li>Bumping a door opens it without stepping through, so you can look before you go in. Descending the stairs restores a little HP.</li>
       <li>Walk into a monster (or press <b>HIT</b>) to attack. The bar at the top of the view shows the foe in front of you.</li>
       <li>Red arrows at the edges of the view warn of foes beside or behind you: turn to face them. Monsters only strike from straight beside you, and lose a turn when they first notice you.</li>
-      <li>A <b style="color:#ffb347">?</b> on a door means you hear something behind it. Cultists gather flame for a turn after each firebolt: step out of line. Sleeping foes show <b style="color:#8fb8ff">zZ</b>.</li>
+      <li>A <b style="color:#ffb347">?</b> on a door means you hear something behind it. Cultists are spent for a turn after each firebolt: close in or step out of line. Sleeping foes show <b style="color:#8fb8ff">zZ</b>.</li>
       <li><b>CAST</b> spells with MP (it slowly comes back): Firebolt from the start, Frost at level 3, Mend at 5, Blink at 7. Bolts reach ${BOLT_RANGE} cells.</li>
       <li>With nothing awake in sight, wounds slowly close, up to half your health. <b>WAIT</b> turns into <b>REST</b> then: it waits until you're healed and your MP is full, or something shows up.</li>
       <li>The Warden draws in the cold before each wave, which rolls down its row and column: step out of line, or behind a pillar. After a wave it is spent for a turn.</li>
@@ -577,7 +582,7 @@ export class Game {
       },
     }));
     showCard(
-      `<h2>The merchant</h2><p>"Coin for comfort, delver." You have <b>${p.gold}</b> gold.</p><p class="meta">ATK ${attackOf(s)} · DEF ${defenceOf(s)} · HP ${p.hp}/${p.maxHp} · ${p.potions} potions · ${p.ethers} ethers</p>`,
+      `<h2>The merchant</h2><p>"Coin for comfort, delver." You have <b>${p.gold}</b> gold.</p><p class="meta">ATK ${attackOf(s)} · DEF ${defenceOf(s)} · HP ${p.hp}/${p.maxHp} · ${p.potions} potion${p.potions === 1 ? '' : 's'} · ${p.ethers} ether${p.ethers === 1 ? '' : 's'}</p>`,
       [...opts, { label: 'Move on', primary: true, onClick: () => (this.act({ type: 'leave' }, true), closeOverlay()) }],
       false,
     );
@@ -641,6 +646,9 @@ export class Game {
     $('depth').textContent = `D${s.depth}`;
     $('potCount').textContent = String(p.potions);
     $('ethCount').textContent = String(p.ethers);
+    // Two-digit counts get a narrower label so the button never wraps.
+    document.querySelector('#pad [data-a=potion]')!.classList.toggle('tight', p.potions > 9);
+    document.querySelector('#pad [data-a=ether]')!.classList.toggle('tight', p.ethers > 9);
     $('scrollCount').textContent = p.scrolls ? ` ?${p.scrolls}` : '';
     $('hpFill').parentElement!.classList.toggle('low', p.hp < p.maxHp * 0.3);
     // The Warden's wave is coming and you're in its line: the whole view pulses.

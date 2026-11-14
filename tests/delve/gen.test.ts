@@ -102,7 +102,10 @@ describe('floor generation', () => {
     }
     expect(both).toBeGreaterThan(SEEDS.length / 2);
     expect(floorCap('wraith', 6)).toBe(2);
-    expect(floorCap('ghoul', 4)).toBe(Infinity);
+    expect(floorCap('ghoul', 4)).toBe(1);
+    expect(floorCap('ghoul', 5)).toBe(99);
+    expect(floorCap('skeleton', 2)).toBe(Infinity);
+    for (const seed of SEEDS) expect(generateFloor(seed, 4).monsters.filter((m) => m.kind === 'ghoul').length).toBeLessThanOrEqual(1);
   });
 
   it('archers and cultists never wait in a clear straight line to where you arrive', () => {

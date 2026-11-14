@@ -178,7 +178,7 @@ export interface BotMemory {
 
 /** At a merchant: gear upgrades first, then vigor, potions, the rest; then leave. */
 function shopAction(s: GameState): Action {
-  const order = ['weapon', 'armor', 'vigor', 'potion', 'map', 'ether'];
+  const order = ['weapon', 'armor', 'vigor', 'whetstone', 'ward', 'potion', 'map', 'ether'];
   const slots = s.shop!.map((o, i) => ({ o, i })).sort((a, b) => order.indexOf(a.o.kind) - order.indexOf(b.o.kind));
   for (const { o, i } of slots) if (canBuy(s, o)) return { type: 'buy', slot: i };
   return { type: 'leave' };

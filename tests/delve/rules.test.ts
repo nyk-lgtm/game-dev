@@ -384,15 +384,18 @@ describe('spells', () => {
     expect(mon(r.state, 'warden').stun).toBe(0); // held for its one action, then free
     expect(mon(r.state, 'warden').chilled).toBe(true);
     expect(frostHolds(mon(r.state, 'warden'))).toBe(false);
-    // A second Frost before its wave only hurts it.
-    r = act(r.state, cast('frost'));
-    expect(r.state.log.some((l) => /shrugs off the frost/.test(l))).toBe(true);
-    // Mid-charge, Frost never holds it: the wave always comes.
+    // A second Frost before its wave is refused: no MP, no turn.
+    const again = act(r.state, cast('frost'));
+    expect(again.state.player.mp).toBe(r.state.player.mp);
+    expect(again.state.turn).toBe(r.state.turn);
+    expect(again.state.log.at(-1)).toMatch(/won't hold it\. \(No MP spent\.\)/);
+    // Mid-charge, Frost is refused too: the wave always comes.
     const c = structuredClone(s);
     mon(c, 'warden').charge = 1;
     expect(frostHolds(mon(c, 'warden'))).toBe(false);
     const rc = act(c, cast('frost'));
-    expect(rc.events.some((e) => e.type === 'shot' && e.by === 'warden')).toBe(true);
+    expect(rc.state.turn).toBe(c.turn);
+    expect(rc.state.log.at(-1)).toMatch(/drawing in the cold/);
   });
 
   it('Mend restores half your health (capped) and is illegal at full health', () => {
@@ -578,7 +581,7 @@ describe('monsters', () => {
     expect(r.events.some((e) => e.type === 'hurt' || e.type === 'shot')).toBe(false);
   });
 
-  it('cultists gather flame for a turn after each firebolt', () => {
+  it('cultists are spent for a turn after each firebolt', () => {
     let s = setup(['@...m'], { dir: E });
     s.player.hp = s.player.maxHp = 9999;
     let last = -9;
@@ -591,7 +594,7 @@ describe('monsters', () => {
       s = r.state;
     }
     expect(last).toBeGreaterThan(0);
-    expect(s.log).toContain('The cultist gathers flame.');
+    expect(s.log).toContain('The cultist is spent, catching its breath. No firebolt this turn.');
   });
 
   it('a blocked hunter takes another equally short step (no idling on a diagonal)', () => {
@@ -770,7 +773,7 @@ describe('floors and the Warden', () => {
       expect(r.events.some((e) => e.type === 'shot' && e.by === 'warden')).toBe(true);
       const hurt = r.events.filter((e) => e.type === 'hurt' && e.by === 'warden');
       // "Spent" is said on the turn the wave resolves, so your free turn is the next one.
-      expect(r.state.log.at(-1)).toMatch(/spent\. Strike now/);
+      expect(r.state.log.at(-1)).toMatch(/spent: it won't move or strike next turn/);
       if (dodge) {
         expect(hurt).toEqual([]);
         expect(r.state.player.hp).toBe(hp);
@@ -828,6 +831,34 @@ describe('floors and the Warden', () => {
     }
   });
 
+  it('a skeleton stepping into your last dodge cell after the Warden charges crumbles: you always have a way out', () => {
+    // You at the bottom of the Warden's column; the only cell out of line is to your right, and a skeleton is
+    // about to step into it in the same enemy turn that the Warden draws in the cold.
+    const st = setup(['###W###', '###.###', '###@.s#', '#######'], { dir: N });
+    st.player.hp = st.player.maxHp = 9999;
+    const w = tough(mon(st, 'warden'), 5000);
+    w.tick = WARDEN.chargeEvery - 1;
+    expect(dodgeCells(st, w)).toHaveLength(1);
+    const r = act(st, 'wait');
+    expect(r.events).toContainEqual({ type: 'charge' });
+    expect(dodgeCells(r.state, mon(r.state, 'warden')).length).toBeGreaterThan(0);
+    expect(r.state.log.some((l) => /crumbles to dust/.test(l))).toBe(true);
+    // And the step out of line dodges the wave.
+    const d = act(r.state, 'strafeR');
+    expect(d.events.filter((e) => e.type === 'hurt' && e.by === 'warden')).toEqual([]);
+  });
+
+  it('the dead boxing you in never stop the waves: the Warden crumbles one to make room', () => {
+    const st = setup(['###W###', '###.###', '##s@s##', '###.###'], { dir: N });
+    st.player.hp = st.player.maxHp = 9999;
+    for (const m of st.monsters) if (m.kind === 'skeleton') m.stun = 99;
+    const w = tough(mon(st, 'warden'), 5000);
+    w.tick = WARDEN.chargeEvery - 1;
+    const r = act(st, 'wait');
+    expect(r.events).toContainEqual({ type: 'charge' });
+    expect(r.state.monsters.filter((m) => m.kind === 'skeleton')).toHaveLength(1);
+  });
+
   it('below half its health the Warden swings softer and waves come more often', () => {
     const w = { hp: 100, maxHp: 400 } as Monster;
     expect(wardenLate(w)).toBe(true);
@@ -847,7 +878,7 @@ describe('floors and the Warden', () => {
     expect(r.state.monsters.filter((m) => m.kind !== 'warden').map((m) => m.kind)).toEqual(WARDEN.summon);
     expect(r.state.monsters.every((m) => m.awake)).toBe(true);
     expect(mon(r.state, 'warden').phase).toBe(1);
-    expect(r.state.log.at(-1)).toMatch(/spent: strike now/);
+    expect(r.state.log.at(-1)).toMatch(/spent: it won't move or strike next turn/);
     r = act(r.state, 'wait');
     // Not again until the next threshold.
     st = r.state;
@@ -936,6 +967,28 @@ describe('the merchant', () => {
     expect(s.player.maxHp).toBe(state.player.maxHp + VIGOR_HP);
     const poor = arrive(0).state;
     for (let i = 0; i < 4; i++) expect(isLegal(poor, { type: 'buy', slot: i })).toBe(false);
+  });
+
+  it('never offers gear you have as good: the other kind, else a whetstone or ward charm', () => {
+    const { state } = arrive();
+    const geared = structuredClone(state);
+    geared.player.weapon = geared.player.armor = 4;
+    const offers = stock(geared);
+    expect(offers.some((o) => o.kind === 'weapon' || o.kind === 'armor')).toBe(false);
+    const i = offers.findIndex((o) => o.kind === 'whetstone' || o.kind === 'ward');
+    expect(i).toBeGreaterThanOrEqual(0);
+    geared.shop = offers;
+    geared.player.gold = 5000;
+    const b = act(geared, { type: 'buy', slot: i }).state;
+    const o = offers[i];
+    if (o.kind === 'whetstone') expect(b.player.baseAtk).toBe(geared.player.baseAtk + 1);
+    else expect(b.player.baseDef).toBe(geared.player.baseDef + 1);
+    // One kind owned: the other kind is offered.
+    const half = structuredClone(state);
+    half.player.weapon = 4;
+    const g = stock(half).find((x) => ['weapon', 'armor', 'whetstone', 'ward'].includes(x.kind))!;
+    expect(g.kind === 'armor' || half.player.armor >= g.value).toBe(true);
+    expect(SHOP_DEPTHS).toContain(9);
   });
 
   it('gear is sold only as an upgrade', () => {

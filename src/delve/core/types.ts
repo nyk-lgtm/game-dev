@@ -61,7 +61,7 @@ export interface Item {
 export type SpellId = 'fire' | 'frost' | 'blink' | 'heal';
 
 /** What a merchant sells between floors. */
-export type OfferKind = 'potion' | 'ether' | 'map' | 'weapon' | 'armor' | 'vigor';
+export type OfferKind = 'potion' | 'ether' | 'map' | 'weapon' | 'armor' | 'vigor' | 'whetstone' | 'ward';
 
 export interface Offer {
   kind: OfferKind;

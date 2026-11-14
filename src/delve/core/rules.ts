@@ -196,6 +196,13 @@ export function applyAction(prev: GameState, a: Action): StepResult {
     s.turn++;
     if (s.turn % MP_REGEN_EVERY === 0 && p.mp < p.maxMp) p.mp++;
     monsterTurn(s, ev);
+    // A wave is coming and you're in its line: the dead that moved after the Warden charged must leave you a way out.
+    const w = s.monsters.find((m) => m.kind === 'warden' && m.hp > 0 && m.charge);
+    if (w && s.status === 'playing' && inWave(s, w) && !makeRoom(s, w)) {
+      w.charge = 0;
+      w.tick = (w.tick ?? 1) - 1;
+      say(s, 'The Warden lets the cold go.');
+    }
     s.monsters = s.monsters.filter((m) => m.hp > 0);
     // Out of danger, wounds slowly close (up to half your health; potions and Mend do the rest).
     if (s.status === 'playing' && s.turn % REGEN_EVERY === 0 && p.hp < regenCap(s) && !foesInSight(s).length) p.hp++;
@@ -474,11 +481,20 @@ export function stock(s: GameState): Offer[] {
   const d = s.depth;
   const rng = new Rng(mixSeed(s.seed, 777 + d));
   const tier = Math.min(4, Math.floor(d / 2.5) + 1);
-  const gear = rng.next() < 0.5 ? 'weapon' : 'armor';
+  const pick = rng.next() < 0.5 ? 'weapon' : 'armor';
+  const other = pick === 'weapon' ? 'armor' : 'weapon';
+  const owned = (k: 'weapon' | 'armor') => (k === 'weapon' ? s.player.weapon : s.player.armor);
+  // Never gear you already have as good: the other kind, else a whetstone or a ward charm (a permanent +1).
+  const gear: Offer =
+    tier > owned(pick)
+      ? { kind: pick, value: tier, price: GEAR_PRICE[tier] + 15 * d, sold: false }
+      : tier > owned(other)
+        ? { kind: other, value: tier, price: GEAR_PRICE[tier] + 15 * d, sold: false }
+        : { kind: pick === 'weapon' ? 'whetstone' : 'ward', value: 1, price: 120 + 15 * d, sold: false };
   return [
     { kind: 'potion', value: 0, price: 40 + 8 * d, sold: false },
     rng.next() < 0.5 ? { kind: 'ether', value: 0, price: 30 + 5 * d, sold: false } : { kind: 'map', value: 0, price: 15 + 3 * d, sold: false },
-    { kind: gear, value: tier, price: GEAR_PRICE[tier] + 15 * d, sold: false },
+    gear,
     { kind: 'vigor', value: VIGOR_HP, price: 90 + 15 * d, sold: false },
   ];
 }
@@ -497,6 +513,10 @@ export function offerName(o: Offer): string {
       return ARMORS[o.value];
     case 'vigor':
       return `Vigor draught (+${o.value} max HP)`;
+    case 'whetstone':
+      return `Whetstone (+${o.value} attack, for good)`;
+    case 'ward':
+      return `Ward charm (+${o.value} defence, for good)`;
   }
 }
 
@@ -531,6 +551,12 @@ function buy(s: GameState, o: Offer, ev: GameEvent[]): void {
       p.maxHp += o.value;
       p.hp += o.value;
       break;
+    case 'whetstone':
+      p.baseAtk += o.value;
+      break;
+    case 'ward':
+      p.baseDef += o.value;
+      break;
   }
   say(s, `You buy ${offerName(o).replace(/ \(.*\)$/, '')} for ${o.price} gold.`);
   ev.push({ type: 'buy', kind: o.kind });
@@ -562,6 +588,12 @@ function cast(s: GameState, spell: SpellId, ev: GameEvent[]): boolean {
     ev.push({ type: 'bump', what: 'air' });
     return false;
   }
+  const target = boltTarget(s).m;
+  if (spell === 'frost' && target && !frostHolds(target)) {
+    sayOnce(s, `${target.charge ? 'The Warden is drawing in the cold' : 'The Warden has shaken off frost since its last wave'}: Frost won't hold it. (No MP spent.)`);
+    ev.push({ type: 'bump', what: 'air' });
+    return false;
+  }
   if (spell === 'blink' && !blinkReach(s)) {
     sayOnce(s, 'No room to blink ahead. (No MP spent.)');
     ev.push({ type: 'bump', what: 'air' });
@@ -589,11 +621,11 @@ function cast(s: GameState, spell: SpellId, ev: GameEvent[]): boolean {
   if (!m) return true;
   if (spell === 'fire') damage(s, m, fireDamage(p.level), ev, 'Fire engulfs it!');
   else {
-    // The Warden is held one action, once between waves, never mid-charge (else Frost chains lock it).
-    const holds = frostHolds(m);
-    if (holds) m.stun = m.kind === 'warden' ? 1 : 3;
-    if (holds && m.kind === 'warden') m.chilled = true;
-    damage(s, m, 3 + p.level, ev, holds ? 'Frost locks it in place!' : 'The Warden shrugs off the frost!');
+    // The Warden is held one action, once between waves, never mid-charge (else Frost chains lock it); a cast
+    // that wouldn't hold it is refused above.
+    m.stun = m.kind === 'warden' ? 1 : 3;
+    if (m.kind === 'warden') m.chilled = true;
+    damage(s, m, 3 + p.level, ev, 'Frost locks it in place!');
   }
   return true;
 }
@@ -642,8 +674,8 @@ function monsterTurn(s: GameState, ev: GameEvent[]): void {
     // Ranged: shoot along a clear straight line.
     const inLine = def.range && (m.x === p.x || m.y === p.y) && d <= def.range && los(s, m.x, m.y, p.x, p.y) && !monsterBetween(s, m);
     if (inLine && !charged) {
-      // A cultist gathers flame for a turn after each firebolt: a tell to step out of line.
-      say(s, `${the(m.kind, true)} gathers flame.`);
+      // A cultist is spent for a turn after each firebolt: the moment to close in or step out of line.
+      say(s, `${the(m.kind, true)} is spent, catching its breath. No firebolt this turn.`);
       continue;
     }
     if (inLine && roll(s) < 0.7) {
@@ -726,6 +758,25 @@ export function dodgeCells(s: GameState, m: Monster): { x: number; y: number }[]
   return out;
 }
 
+/**
+ * Make sure you have a cell to dodge the wave into: if the Warden's dead fill them all, it draws the cold out of
+ * one (it crumbles). False only when stone leaves you no way out.
+ */
+function makeRoom(s: GameState, m: Monster): boolean {
+  if (dodgeCells(s, m).length) return true;
+  const p = s.player;
+  for (let k = 0; k < 4; k++) {
+    const x = p.x + DX[k];
+    const y = p.y + DY[k];
+    const o = monsterAt(s, x, y);
+    if (!o || o.kind === 'warden' || solid(tileAt(s, x, y)) || inWaveAt(s, m, x, y)) continue;
+    o.hp = 0;
+    say(s, `The Warden draws the cold out of ${the(o.kind)}: it crumbles to dust.`);
+    return true;
+  }
+  return false;
+}
+
 /** Is the Warden in its second half (softer blows, waves more often)? */
 export const wardenLate = (m: Monster) => m.hp <= m.maxHp / 2;
 
@@ -742,7 +793,7 @@ function wardenTurn(s: GameState, m: Monster, d: number, ev: GameEvent[]): boole
     ev.push({ type: 'shot', by: 'warden' });
     if (inWave(s, m)) hurtBy(s, m, WARDEN.blast, ev, 'A wave of grave-cold');
     else say(s, 'The wave of grave-cold rolls past you.');
-    if (s.status === 'playing') say(s, 'The Warden sags, spent. Strike now, or heal.');
+    if (s.status === 'playing') say(s, "The Warden sags, spent: it won't move or strike next turn. Step in and strike, or heal.");
     return true;
   }
   const p = s.player;
@@ -767,7 +818,7 @@ function wardenTurn(s: GameState, m: Monster, d: number, ev: GameEvent[]): boole
       const hp = foeHp(s, kind);
       s.monsters.push({ id: s.nextId++, kind, x: at.x, y: at.y, hp, maxHp: hp, wait: 1, awake: true, stun: 0 });
     });
-    say(s, 'The Warden calls the dead! It sags, spent: strike now, or heal.');
+    say(s, "The Warden calls the dead! It sags, spent: it won't move or strike next turn.");
     ev.push({ type: 'summon' });
     return true;
   }
@@ -776,13 +827,13 @@ function wardenTurn(s: GameState, m: Monster, d: number, ev: GameEvent[]): boole
   m.tick = (m.tick ?? 0) + 1;
   const every = wardenLate(m) ? WARDEN.chargeLate : WARDEN.chargeEvery;
   if (m.tick % every === 0 && d <= WARDEN.reach + 2 && los(s, m.x, m.y, p.x, p.y)) {
-    if (dodgeCells(s, m).length) {
+    if (makeRoom(s, m)) {
       m.charge = 1;
       say(s, 'The Warden draws in the cold. Get out of its row and column!');
       ev.push({ type: 'charge' });
       return true;
     }
-    m.tick--; // try again on its next action
+    m.tick--; // walled in by stone: try again on its next action
   }
   if (d === 1) {
     hurt(s, m, wardenLate(m) ? WARDEN.meleeLate : MONSTERS.warden.atk, ev);

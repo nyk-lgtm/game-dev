@@ -47,7 +47,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 #pad button.act { color: #ffd9a0; background: #1c130a; border-color: #6b4a1f; }
 #pad button:active { background: #2a1d0e; }
 #pad button:disabled, #pad button.dim { opacity: 0.4; }
-#pad button.wide { grid-column: span 1; }
+#pad button.wide { grid-column: span 1; white-space: nowrap; padding: 0 2px; }
+#pad button.tight { letter-spacing: 0; font-size: 12px; }
 #overlay { position: fixed; inset: 0; z-index: 10; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; padding: 16px; }
 #overlay[hidden] { display: none; }
 .card { width: 100%; max-width: 420px; max-height: 100%; overflow-y: auto; border: 1px solid #3a342a; background: #070604; padding: 18px; display: flex; flex-direction: column; gap: 10px; }

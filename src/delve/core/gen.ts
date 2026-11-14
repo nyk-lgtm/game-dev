@@ -7,8 +7,8 @@ import type { Item, ItemKind, Level, Monster, MonsterKind, Tile } from './types'
 
 export const SIZE = 33;
 /** At most this many of a kind on one floor. */
-const FLOOR_CAP: Partial<Record<MonsterKind, number>> = { golem: 1, wraith: 2, mage: 2 };
-/** On a capped kind's first depth only one shows up, so wraiths and cultists (both new at depth 5) ease in. */
+const FLOOR_CAP: Partial<Record<MonsterKind, number>> = { golem: 1, wraith: 2, mage: 2, ghoul: 99 };
+/** On a capped kind's first depth only one shows up, so ghouls (depth 4), wraiths and cultists (depth 5) ease in. */
 export function floorCap(kind: MonsterKind, depth: number): number {
   const cap = FLOOR_CAP[kind];
   if (cap === undefined) return Infinity;
