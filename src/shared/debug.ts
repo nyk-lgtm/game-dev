@@ -1,18 +1,15 @@
 // On-device debugging shared by every game: errors are shown on screen (there
 // are no devtools on a phone), plus clipboard and toast helpers.
 import { applySettings } from './settings';
+import { noteRecent } from './recent';
 
 export const BUILD = `${__BUILD_ID__} · ${__BUILD_TIME__} UTC`;
 
 export function installErrorOverlay(): void {
   applySettings();
-  // Remember which game was played last, for the hub's Continue button.
-  try {
-    const game = location.pathname.split('/').filter(Boolean).pop();
-    if (game && !game.includes('.')) localStorage.setItem('hub.last', game);
-  } catch {
-    // storage blocked: no Continue button
-  }
+  // Remember which games were played last, for the hub's Continue button and Recently played row.
+  const game = location.pathname.split('/').filter(Boolean).pop();
+  if (game && !game.includes('.')) noteRecent(game);
   const box = document.getElementById('errors')!;
   const show = (msg: string) => {
     const el = document.createElement('div');
