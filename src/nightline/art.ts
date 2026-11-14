@@ -10,45 +10,51 @@ export interface Art {
 
 const TAIL = '#ff3355';
 const LAMP = '#ffcf6b';
+/** Right-pad rows to one width (for art written without trailing spaces). */
+const pad = (w: number, rows: string[]): string[] => rows.map((r) => r.padEnd(w));
 
-/** The player's car from behind (32 cols). `@` = tail lights, `oo` = exhausts. */
+/**
+ * The player's car from behind (26 cols; v2's was 32, half the screen). `@` = tail
+ * lights, `oo` = exhausts. Its silhouette sets CAR_HIT_W in the race core
+ * (tests/nightline/art.test.ts checks them against each other).
+ */
 export const PLAYER_CAR: { straight: Art; left: Art; right: Art } = {
   straight: {
     rows: [
-      '        .--------------.        ',
-      '       /::::::::::::::::\\       ',
-      '  ____/::::::::::::::::::\\____  ',
-      ' /____________________________\\ ',
-      ' |@@@@@|================|@@@@@| ',
-      ' |-----|____[ NL84 ]____|-----| ',
-      '  \\_____oo____________oo_____/  ',
-      ' [####]                  [####] ',
+      '       .----------.       ',
+      '      /::::::::::::\\      ',
+      '  ___/::::::::::::::\\___  ',
+      ' /______________________\\ ',
+      ' |@@@@|============|@@@@| ',
+      ' |----|__[ NL84 ]__|----| ',
+      '  \\_____oo______oo_____/  ',
+      ' [###]              [###] ',
     ],
     accents: { '@': TAIL },
   },
   left: {
     rows: [
-      '      .--------------.-.        ',
-      '     /::::::::::::::::\\;\\       ',
-      ' ___/::::::::::::::::::\\;\\___   ',
-      '/____________________________\\-.',
-      '|@@@@@|================|@@@@@|@|',
-      '|-----|____[ NL84 ]____|-----|_|',
-      ' \\_____oo____________oo_____/_/ ',
-      '[####]                  [######]',
+      '      .----------.-.      ',
+      '     /::::::::::::\\;\\     ',
+      ' ___/::::::::::::::\\;\\__  ',
+      '/______________________\\-.',
+      '|@@@@|============|@@@@|@|',
+      '|----|__[ NL84 ]__|----|_|',
+      ' \\_____oo______oo_____/_/ ',
+      '[###]              [#####]',
     ],
     accents: { '@': TAIL },
   },
   right: {
     rows: [
-      '        .-.--------------.      ',
-      '       /;/::::::::::::::::\\     ',
-      '   ___/;/::::::::::::::::::\\___ ',
-      '.-/____________________________\\',
-      '|@|@@@@@|================|@@@@@|',
-      '|_|-----|____[ NL84 ]____|-----|',
-      ' \\_\\_____oo____________oo_____/ ',
-      '[######]                  [####]',
+      '      .-.----------.      ',
+      '     /;/::::::::::::\\     ',
+      '  __/;/::::::::::::::\\___ ',
+      '.-/______________________\\',
+      '|@|@@@@|============|@@@@|',
+      '|_|----|__[ NL84 ]__|----|',
+      ' \\_\\_____oo______oo_____/ ',
+      '[#####]              [###]',
     ],
     accents: { '@': TAIL },
   },
@@ -57,14 +63,14 @@ export const PLAYER_CAR: { straight: Art; left: Art; right: Art } = {
 /** Straight view with exhaust flames (`*` orange, `+` yellow). */
 export const PLAYER_BOOST: Art = {
   rows: [
-    '        .--------------.        ',
-    '       /::::::::::::::::\\       ',
-    '  ____/::::::::::::::::::\\____  ',
-    ' /____________________________\\ ',
-    ' |@@@@@|================|@@@@@| ',
-    ' |-----|____[ NL84 ]____|-----| ',
-    '  \\____*oo*__________*oo*____/  ',
-    ' [####]*++*          *++*[####] ',
+    '       .----------.       ',
+    '      /::::::::::::\\      ',
+    '  ___/::::::::::::::\\___  ',
+    ' /______________________\\ ',
+    ' |@@@@|============|@@@@| ',
+    ' |----|__[ NL84 ]__|----| ',
+    '  \\____*oo*____*oo*____/  ',
+    ' [###] *++*    *++* [###] ',
   ],
   accents: { '@': TAIL, '*': '#ff8a1e', '+': '#ffe14d' },
 };
@@ -126,7 +132,7 @@ export const TRAFFIC: Art[] = [
 ];
 
 /** Roadside props; each stands on its last row. The lamp has an arm and light on both sides so it works on either roadside. */
-export const PROPS: Record<'palm' | 'pine' | 'snowpine' | 'lamp' | 'tower' | 'billboard' | 'sign' | 'rock' | 'cactus' | 'buoy', Art> = {
+export const PROPS: Record<'palm' | 'pine' | 'snowpine' | 'lamp' | 'tower' | 'billboard' | 'sign' | 'rock' | 'cactus' | 'buoy' | 'deadtree' | 'vent', Art> = {
   palm: {
     rows: [
       '          _.--._    _.--._         ',
@@ -298,6 +304,33 @@ export const PROPS: Record<'palm' | 'pine' | 'snowpine' | 'lamp' | 'tower' | 'bi
     ],
     accents: { '*': '#fff1a8' },
   },
+  deadtree: {
+    rows: pad(15, [
+      ' \\    |     /',
+      '  \\   |    / _/',
+      '_  \\  |   /_/',
+      ' \\_ \\ |  //',
+      '   \\_\\| //',
+      '      \\|/',
+      '       |',
+      '       |',
+      '       |',
+      '      _|_',
+    ]),
+  },
+  /** A lava vent: `*` glows orange, `#` yellow. */
+  vent: {
+    rows: pad(16, [
+      '      (  )',
+      '    (    )',
+      '     ( )  ()',
+      '       ()',
+      '    __/**\\__',
+      ' __/.:*##*:.\\__',
+      '/__.:..**..:.__\\',
+    ]),
+    accents: { '*': '#ff6a1a', '#': '#ffd166' },
+  },
 };
 
 /** Overhead fork sign; the blank inner rows (the middle one gets the text) are left as spaces. */
@@ -315,7 +348,7 @@ export const FORK_SIGN: Art = {
 };
 
 /** Background skylines, 64 cols, tiling horizontally; the last row sits on the horizon. */
-export const SKYLINES: Record<'city' | 'desert' | 'forest' | 'snow' | 'coast', Art> = {
+export const SKYLINES: Record<'city' | 'desert' | 'forest' | 'snow' | 'coast' | 'ember', Art> = {
   city: {
     rows: [
       '                  ___            *                              ',
@@ -377,6 +410,18 @@ export const SKYLINES: Record<'city' | 'desert' | 'forest' | 'snow' | 'coast', A
       '   .. . . .    . .. .   .~~~~\'-~_| |_~\'~~~~~\'-______.-\'. .  .. .',
     ],
     accents: { '*': '#fff1a8' },
+  },
+  ember: {
+    rows: pad(64, [
+      '                         *',
+      '                        /*\\',
+      '                       /:*:\\                    _',
+      '           _          /.:.:.\\                 _/ \\_',
+      '   _     _/ \\_     __/ .:  :.\\__            _/ .:. \\_      _',
+      ' _/ \\___/ .:. \\___/ .:   .:  .: \\_   ___  _/ .:   .: \\____/ \\_',
+      '/.:  .: .:  .:  .:  .:  .:  .:  .: \\_/.: \\/ .:  .:  .:  .:  .:\\_',
+    ]),
+    accents: { '*': '#ff6a1a' },
   },
 };
 

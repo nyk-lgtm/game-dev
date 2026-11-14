@@ -1,8 +1,8 @@
 // Nightline: a pseudo-3D arcade racer rendered in ASCII.
 
-export type BiomeId = 'city' | 'desert' | 'forest' | 'snow' | 'coast';
+export type BiomeId = 'city' | 'desert' | 'forest' | 'snow' | 'coast' | 'ember';
 
-export type PropKind = 'palm' | 'pine' | 'lamp' | 'sign' | 'rock' | 'cactus' | 'tower' | 'snowpine' | 'billboard' | 'buoy' | 'fork';
+export type PropKind = 'palm' | 'pine' | 'lamp' | 'sign' | 'rock' | 'cactus' | 'tower' | 'snowpine' | 'billboard' | 'buoy' | 'deadtree' | 'vent' | 'fork';
 
 export interface Prop {
   kind: PropKind;
@@ -67,6 +67,8 @@ export interface Race {
   stage: number;
   /** Choice made at each fork so far: 0 left, 1 right. */
   route: number[];
+  /** Where the fork at the end of this stage leads: [left (gentle), right (hard)]; null on the last stage. */
+  next: [BiomeId, BiomeId] | null;
   player: Player;
   cars: Car[];
   nextCarId: number;

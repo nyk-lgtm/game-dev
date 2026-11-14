@@ -11,15 +11,31 @@ export const STAGE_SEGS = 1150;
 /** A neutral stretch after each fork, longer than the draw distance, so the next stage can be built once the player picks a side. */
 export const RUNOUT = 260;
 
-/** Which biome each fork leads to: TREE[stage][position]; left keeps the position, right adds one. */
-export const TREE: BiomeId[][] = [
-  ['city'],
-  ['desert', 'forest'],
-  ['coast', 'snow', 'desert'],
-  ['forest', 'desert', 'coast', 'snow'],
-  // Five different goals; no branch ever leads into the biome you just drove.
-  ['coast', 'snow', 'forest', 'desert', 'city'],
-];
+/** Every biome; a run drives five of the six, never one twice. */
+export const BIOMES: BiomeId[] = ['city', 'desert', 'forest', 'snow', 'coast', 'ember'];
+
+/** A route as one number (a leading 1, then a bit per fork: 0 left, 1 right), for seeding. */
+export function routeCode(route: readonly number[]): number {
+  return route.reduce((a, b) => a * 2 + b, 1);
+}
+
+/** Stage 1's biome, from the seed (v2 always opened in Neon City). */
+export function firstBiome(seed: number): BiomeId {
+  return BIOMES[new Rng(mixSeed(seed, 0x51a6e)).int(0, BIOMES.length - 1)];
+}
+
+/**
+ * Where the fork after the stages driven so far leads: two biomes not driven
+ * yet, [left (gentle), right (hard)], seeded by the route. Six biomes and five
+ * stages, so even the last fork offers two different endings and no run repeats
+ * a biome (v2's fixed tree drove Coast or Dust twice on some routes; with five
+ * biomes no tree of forks can avoid that).
+ */
+export function forkPair(seed: number, driven: readonly BiomeId[], route: readonly number[]): [BiomeId, BiomeId] {
+  const fresh = BIOMES.filter((b) => !driven.includes(b));
+  new Rng(mixSeed(seed, 0xf0c + routeCode(route))).shuffle(fresh);
+  return [fresh[0], fresh[1]];
+}
 
 export const BIOME_NAMES: Record<BiomeId, string> = {
   city: 'Neon City',
@@ -27,6 +43,7 @@ export const BIOME_NAMES: Record<BiomeId, string> = {
   forest: 'Pine Pass',
   snow: 'Frost Ridge',
   coast: 'Sunrise Coast',
+  ember: 'Ember Valley',
 };
 
 const PROPS: Record<BiomeId, PropKind[]> = {
@@ -35,6 +52,7 @@ const PROPS: Record<BiomeId, PropKind[]> = {
   forest: ['pine', 'pine', 'rock', 'pine'],
   snow: ['snowpine', 'rock', 'snowpine', 'snowpine'],
   coast: ['palm', 'palm', 'buoy', 'palm'],
+  ember: ['deadtree', 'rock', 'vent', 'deadtree'],
 };
 
 const easeIn = (a: number, b: number, t: number) => a + (b - a) * t * t;
@@ -79,7 +97,7 @@ export function buildStage(b: TrackBuilder, seed: number, level: number, biome: 
     const len = rng.int(25, 70);
     const dir = rng.next() < 0.5 ? -1 : 1;
     const curve = dir * (2 + rng.next() * 4) * intensity;
-    const hill = (rng.next() - 0.45) * 40 * (biome === 'city' ? 0.3 : biome === 'snow' || biome === 'forest' ? 1.2 : 0.7);
+    const hill = (rng.next() - 0.45) * 40 * (biome === 'city' ? 0.3 : biome === 'snow' || biome === 'forest' ? 1.2 : biome === 'ember' ? 0.9 : 0.7);
     if (r < 0.25) b.section(len, len, len, 0, hill, biome);
     else if (r < 0.7) b.section(len, len, len, curve, hill * 0.5, biome);
     else if (r < 0.85) {
@@ -105,13 +123,12 @@ export function buildStage(b: TrackBuilder, seed: number, level: number, biome: 
   return { start, end };
 }
 
-/** The fork and run-out after a stage; signs announce both destinations. */
-export function buildFork(b: TrackBuilder, level: number, pos: number, biome: BiomeId): number {
+/** The fork and run-out after a stage; signs announce both destinations (`next`; null after the last stage). */
+export function buildFork(b: TrackBuilder, biome: BiomeId, next: [BiomeId, BiomeId] | null): number {
   const forkAt = b.segments.length;
   b.section(20, RUNOUT - 40, 20, 0, 0, biome);
-  if (level + 1 < STAGES) {
-    const left = TREE[level + 1][pos];
-    const right = TREE[level + 1][pos + 1];
+  if (next) {
+    const [left, right] = next;
     for (const off of [40, 25]) {
       b.segments[forkAt - off].props.push({ kind: 'fork', offset: -1.4, text: `< ${BIOME_NAMES[left].toUpperCase()}` });
       b.segments[forkAt - off].props.push({ kind: 'fork', offset: 1.4, text: `${BIOME_NAMES[right].toUpperCase()} >` });

@@ -5,12 +5,23 @@ import { reducedFx } from '../shared/settings';
 
 import { blitArt, clearGrid, put, text, type Art, type Grid } from '../shared/ascii';
 import { FORK_SIGN, PLAYER_BOOST, PLAYER_CAR, PROPS, SKYLINES, TRAFFIC } from './art';
-import { MAX_SPEED, SEG_LEN, STAGES, segmentAt, type BiomeId, type Race } from './core';
+import { MAX_SPEED, ROAD_HALF_COLS, SEG_LEN, STAGES, segmentAt, type BiomeId, type Race } from './core';
 
+/** Road half-width in world units (lateral positions in the core are in these half-widths). */
 export const ROAD_W = 2000;
-export const CAM_HEIGHT = 1000;
-export const CAM_DEPTH = 1 / Math.tan((100 / 2) * (Math.PI / 180));
+/**
+ * How far the camera trails the car (world units) at a standstill; it closes
+ * in by up to KICK_CLOSE at speed for a sense of rush. v2 sat ~380 behind
+ * (a 100-110 degree view): the next 10 segments filled 60% of the screen and
+ * segments 10-170 got ~8 rows. From ~2900 back, with the road at the car
+ * ROAD_HALF_COLS wide, segment 40 (one second at top speed) lands ~12 rows
+ * below the horizon on a Pixel 7 and a car there is ~2 rows tall.
+ */
+export const CAM_DIST = 3200;
+export const KICK_CLOSE = 0.15;
 export const DRAW_DIST = 170;
+/** Drawn climbs level off below this share of the camera height (see `easeY` in drawRace). */
+export const HILL_CAP = 0.8;
 /** Segments before a fork where the road is split by a painted divider with arrows. */
 export const FORK_LEAD = 70;
 /** Colors for the gentler (left) and harder (right) branch, shared with the HUD. */
@@ -23,8 +34,6 @@ export const TRAFFIC_COLORS = ['#7fd1ff', '#ffd166', '#b8ff6b', '#ff9ef0'];
 const TAIL_LIGHT = '#ff3355';
 /** Horizon row as a share of the screen's rows (was 0.42: the road now gets more of the screen). */
 export const HORIZON = 0.32;
-/** The horizon share the camera's road width at the car was tuned (and CAR_HIT_W measured) for. */
-const REF_HORIZON = 0.42;
 
 interface Palette {
   skyTop: string;
@@ -46,6 +55,7 @@ export const PALETTES: Record<BiomeId, Palette> = {
   forest: { skyTop: '#06121a', skyBot: '#2f5d50', ground: ['#2f7a3a', '#246030'], groundCh: [',', '"'], road: ['#5a5f58', '#4a4f48'], rumble: ['#ffffff', '#ff4646'], lane: '#f2f2c0', skyline: '#14382e', prop: '#3fae5a', sun: null, stars: true },
   snow: { skyTop: '#0c1430', skyBot: '#7f9fd8', ground: ['#dfe8f5', '#b8c8e0'], groundCh: ['*', '.'], road: ['#5c6478', '#4c5366'], rumble: ['#ff4d6d', '#ffffff'], lane: '#ffe66d', skyline: '#9fb6e0', prop: '#cfe0ff', sun: null, stars: true },
   coast: { skyTop: '#2b1055', skyBot: '#ff9a8b', ground: ['#e0c27a', '#cfae62'], groundCh: [',', '.'], road: ['#6b5f6f', '#5a4f5e'], rumble: ['#ff6f91', '#fff5e1'], lane: '#ffffff', skyline: '#4a3a6a', prop: '#55c27a', sun: ['#ffe29a', '#ff6f91'], stars: false },
+  ember: { skyTop: '#0e0204', skyBot: '#6e1a0c', ground: ['#7a4a3a', '#5e382c'], groundCh: ['.', '`'], road: ['#4e4446', '#3e3638'], rumble: ['#ff7a1a', '#ffe0b0'], lane: '#ffb347', skyline: '#3a1210', prop: '#b08a78', sun: null, stars: true },
 };
 
 const hash = (n: number) => {
@@ -78,9 +88,9 @@ export function advanceSky(sky: SkyState, r: Race): void {
   sky.kick = (sky.kick ?? 0) + (target - (sky.kick ?? 0)) * 0.04;
 }
 
-/** Camera depth (inverse field of view): a little wider at speed for a sense of rush. */
-export function camDepth(sky: SkyState): number {
-  return CAM_DEPTH * (1 - 0.22 * (sky.kick ?? 0));
+/** Road half-width at the player's car, in pixels (ROAD_HALF_COLS columns: cars beside you are drawn 1:1). */
+export function roadAtCar(v: View): number {
+  return ROAD_HALF_COLS * v.cw;
 }
 
 /** Screen row the player's car stands on: above the on-screen BRAKE/BOOST buttons. */
@@ -94,13 +104,27 @@ function belowPx(v: View, horizonRow: number): number {
 }
 
 /**
- * Camera height for this view. The horizon sits higher than it used to, and
- * the camera rises in proportion, so the road at the car is exactly as wide
- * as before (CAR_HIT_W still matches the sprites) while the far road, its
- * curves and traffic, spreads over more rows.
+ * Camera height for this view: flat road at the car's z projects onto the car
+ * sprite's bottom row exactly `roadAtCar` pixels wide (each side), whatever the
+ * horizon and screen height, so CAR_HIT_W keeps matching the sprites.
  */
 export function camHeight(v: View): number {
-  return (CAM_HEIGHT * belowPx(v, v.horizon)) / belowPx(v, Math.round(v.rows * REF_HORIZON));
+  return (ROAD_W * belowPx(v, v.horizon)) / roadAtCar(v);
+}
+
+/** How far the camera trails the car now (world units): a little closer at speed. */
+export function camDist(sky: SkyState): number {
+  return CAM_DIST * (1 - KICK_CLOSE * (sky.kick ?? 0));
+}
+
+/**
+ * Camera depth (inverse field of view) that puts the camera `dist` behind the
+ * car while the car's z still projects onto its bottom row: a long lens
+ * (~35 degrees across) from high up, where v2 used a 100-degree view from close.
+ */
+export function camDepth(v: View, dist = CAM_DIST): number {
+  const halfW = (v.cols * v.cw) / 2;
+  return (dist * roadAtCar(v)) / (ROAD_W * halfW);
 }
 
 /**
@@ -108,7 +132,7 @@ export function camHeight(v: View): number {
  * projects exactly onto the car sprite's bottom row. The race core treats
  * `player.z` as the car's position, so crashes line up with what's drawn.
  */
-export function playerDepth(v: View, depth = CAM_DEPTH): number {
+export function playerDepth(v: View, depth = camDepth(v)): number {
   const halfW = (v.cols * v.cw) / 2;
   return (depth * camHeight(v) * halfW) / belowPx(v, v.horizon);
 }
@@ -124,7 +148,7 @@ const LANE_MARK_W = 0.42;
  * A distant car: `.--.` over `@==@` (tail lights at the ends), one row `@=@`
  * when narrow. Returns its top row.
  */
-function farCar(g: Grid, bottom: number, centerCol: number, widthCols: number, color: string, clipRow: number): number {
+export function farCar(g: Grid, bottom: number, centerCol: number, widthCols: number, color: string, clipRow: number): number {
   const w = Math.max(3, Math.min(8, Math.round(widthCols)));
   const c0 = Math.round(centerCol - w / 2);
   const row = bottom - 1;
@@ -143,11 +167,11 @@ function groundY(r: Race, z: number): number {
   return prevY + (seg.y - prevY) * t;
 }
 
-export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number): { skyGradient: [string, string]; horizonRow: number } {
+export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number): { skyGradient: [string, string]; horizonRow: number; roadTop: number } {
   clearGrid(g);
   const p = r.player;
   // The camera trails the car; clamp at the start line (there's no road behind it).
-  const D = camDepth(sky);
+  const D = camDepth(v, camDist(sky));
   const camZ = Math.max(0, p.z - playerDepth(v, D));
   const base = segmentAt(r, camZ);
   const pal = PALETTES[segmentAt(r, p.z).biome];
@@ -158,6 +182,7 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
   const camY = groundY(r, p.z) + camHeight(v);
   const camX = p.x * ROAD_W;
   const horizonPx = v.horizon * v.ch;
+  const roadW = roadAtCar(v);
 
   // ---- sky: stars, sun, skyline ----
   if (pal.stars)
@@ -201,16 +226,45 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
   const segX: number[] = [];
   const segDx: number[] = [];
   const segY0: number[] = [];
-  let x = 0;
-  let dx = -(base.curve * basePct);
+  {
+    let x = 0;
+    let dx = -(base.curve * basePct);
+    for (let n = 0; n < DRAW_DIST; n++) {
+      const seg = r.segments[base.index + n];
+      if (!seg) break;
+      segX[n] = x;
+      segDx[n] = dx;
+      x += dx;
+      dx += seg.curve;
+    }
+    // Re-centre the curve offsets on the car (the camera looks along the road where the car is): with
+    // the camera this far back, offsets summed from its own segment would leave the car off the road's
+    // centre line in a curve while the race core puts it at p.x.
+    const pn = Math.min(segX.length - 1, Math.floor(p.z / SEG_LEN) - base.index);
+    const pt = (p.z - (base.index + pn) * SEG_LEN) / SEG_LEN;
+    const xp = segX[pn] + segDx[pn] * pt;
+    const slope = segDx[pn];
+    for (let n = 0; n < segX.length; n++) {
+      segX[n] -= xp + slope * (n - pn - pt);
+      segDx[n] -= slope;
+    }
+  }
   let maxy = v.rows * v.ch;
+  /** Highest row the road reached (for view.ts). */
+  let roadTop = v.rows;
   const clips: number[] = [];
   /** Project a road-center point; `curveX` is the accumulated curve offset (world units). */
+  // Climbs are eased for drawing only: a rise above the car's ground saturates below HILL_CAP of the
+  // camera height, so with the long lens the far road never climbs past the horizon into the sky
+  // (it did in ~5% of frames, up to 11 rows); small rises are unchanged, falls are untouched.
+  const g0 = camY - camHeight(v);
+  const lift = HILL_CAP * camHeight(v);
+  const easeY = (wy: number) => (wy > g0 ? g0 + lift * Math.tanh((wy - g0) / lift) : wy);
   const project = (curveX: number, wy: number, wz: number) => {
     const scale = D / Math.max(1, wz - camZ);
     return {
       x: halfW + scale * (curveX - camX) * halfW,
-      y: horizonPx - scale * (wy - camY) * halfW,
+      y: horizonPx - scale * (easeY(wy) - camY) * halfW,
       w: scale * ROAD_W * halfW,
       scale,
     };
@@ -221,13 +275,9 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
     const seg = r.segments[base.index + n];
     if (!seg) break;
     const prevY = r.segments[seg.index - 1]?.y ?? seg.y;
-    const p1 = project(x, prevY, seg.z);
-    const p2 = project(x + dx, seg.y, seg.z + SEG_LEN);
-    segX[n] = x;
-    segDx[n] = dx;
+    const p1 = project(segX[n], prevY, seg.z);
+    const p2 = project(segX[n] + segDx[n], seg.y, seg.z + SEG_LEN);
     segY0[n] = prevY;
-    x += dx;
-    dx += seg.curve;
     proj[n] = p1;
     clips[n] = maxy;
     if (seg.z + SEG_LEN - camZ <= D || p2.y >= p1.y || p2.y >= maxy) continue;
@@ -239,6 +289,7 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
     const arrows = forkPaint && Math.floor(seg.index / 4) % 3 === 0;
     const goal = !hasFork && toEnd >= -3 && toEnd < 1;
     const rTop = Math.max(0, Math.ceil(p2.y / v.ch));
+    roadTop = Math.min(roadTop, rTop);
     const rBot = Math.min(v.rows - 1, Math.floor(Math.min(p1.y, maxy) / v.ch));
     for (let rr = rTop; rr <= rBot; rr++) {
       const yy = rr * v.ch + v.ch / 2;
@@ -298,17 +349,20 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
       // Place the car at its exact z inside the segment so near traffic doesn't hop.
       const t = (car.z - seg.z) / SEG_LEN;
       const pc = project(segX[n] + segDx[n] * t, segY0[n] + (seg.y - segY0[n]) * t, car.z);
-      const rowsH = (pc.w * 0.62) / v.ch;
+      // Drawn to scale against the road: 1:1 where the road is as wide as at the player's car.
+      const art = TRAFFIC[car.kind % TRAFFIC.length];
+      const k = pc.w / roadW;
+      const rowsH = art.rows.length * k;
       const colX = (pc.x + pc.w * car.x) / v.cw;
       const color = TRAFFIC_COLORS[car.kind % TRAFFIC_COLORS.length];
       const bottom = Math.round(pc.y / v.ch);
       let top: number;
       if (rowsH < FAR_ROWS) {
-        // Far away the shrunken art is mush (and vanished past ~100 segments): draw a
-        // compact, bright tail-light badge instead, at least 3 columns wide, out to the draw distance.
-        top = farCar(g, bottom, colX, (pc.w * 1.1) / v.cw, color, clipRow);
+        // Far away the shrunken art is mush: draw a compact, bright tail-light
+        // badge instead, at least 3 columns wide, out to the draw distance.
+        top = farCar(g, bottom, colX, art.rows[0].length * k, color, clipRow);
       } else {
-        blitArt(g, TRAFFIC[car.kind % TRAFFIC.length], rowsH, pc.y / v.ch, colX, color, { clipRow, solid: true, maxScale: 1 });
+        blitArt(g, art, rowsH, pc.y / v.ch, colX, color, { clipRow, solid: true, maxScale: 1 });
         top = bottom - Math.min(8, Math.round(rowsH));
       }
       // A car in your lane while it's still small gets a marker above it.
@@ -334,5 +388,5 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
     const c0 = left ? 0 : v.cols - 6;
     text(g, rr, c0, left ? '----  ' : '  ----', p.boosting ? '#ffffff' : '#8890b0');
   }
-  return { skyGradient: [pal.skyTop, pal.skyBot], horizonRow: v.horizon };
+  return { skyGradient: [pal.skyTop, pal.skyBot], horizonRow: v.horizon, roadTop };
 }

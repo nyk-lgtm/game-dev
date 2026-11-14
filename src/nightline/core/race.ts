@@ -2,11 +2,14 @@
 // Deterministic for a seed and input sequence.
 
 import { Rng, mixSeed } from '../../shared/rng';
-import { RUNOUT, SEG_LEN, STAGES, TREE, TrackBuilder, buildFork, buildStage } from './track';
+import { RUNOUT, SEG_LEN, STAGES, TrackBuilder, buildFork, buildStage, firstBiome, forkPair, routeCode } from './track';
 import type { Input, Race, Segment, Stage } from './types';
 
-/** Bump when the same seed and inputs would race differently (v2: roadside hits bounce you back instead of stopping you). */
-export const RULES_VERSION = 2;
+/**
+ * Bump when the same seed and inputs would race differently (v2: roadside hits bounce you back instead of
+ * stopping you; v3: one crash per rear-end, hit widths per car kind, tighter clock, seeded biomes that never repeat).
+ */
+export const RULES_VERSION = 3;
 export const DT = 1 / 60;
 /** Top speed: 40 segments a second (shown as ~300 km/h). */
 export const MAX_SPEED = SEG_LEN * 40;
@@ -16,7 +19,18 @@ export const BRAKE = MAX_SPEED * 1.2;
 export const COAST = MAX_SPEED / 5;
 export const OFFROAD_LIMIT = MAX_SPEED * 0.35;
 export const CENTRIFUGAL = 0.32;
-export const START_CLOCK = 70;
+/**
+ * The clock: seconds at the start, and added at each checkpoint (`bonus` + `step` x stage, plus `hard` on
+ * the hard road). v2 gave 70 + 48..54 (-2 hard): the bot finished with ~45 s, humans with 20 crashes
+ * still had plenty. v3: 62 + 44..50 (+2 on the twistier hard road). Mutable so balance probes can try numbers.
+ */
+export const TUNE = { start: 62, bonus: 42, step: 2, hard: 2 };
+/** Seconds added at the checkpoint into stage `level` (1..4). */
+export function stageBonus(level: number, hard: boolean): number {
+  return TUNE.bonus + level * TUNE.step + (hard ? TUNE.hard : 0);
+}
+/** A rear-end leaves you at this share of the car's speed. */
+export const REAR_KEEP = 0.85;
 /** At a fork you take the hard (right) road only past this far right; the middle takes the gentle one. */
 export const FORK_SPLIT = 0.2;
 /** A curve this strong can't be held at top speed without braking (full steer cancels 1 / CENTRIFUGAL). */
@@ -26,14 +40,23 @@ export const CAR_COUNT = 16;
 /** Score multiplier gained per harder (right-hand) branch. */
 export const RISK_STEP = 0.25;
 /**
- * Rear-end contact: lateral distance between car centers (in road
- * half-widths) at which the player's sprite and a traffic sprite overlap on
- * screen. Measured from the art on a Pixel 7 (player car drawn 1:1):
- * ~0.27-0.32 (hatchback..sports car) at zero gap.
+ * The renderer's contract: the road's half-width at the player's car is this
+ * many text columns, and both the player's car and traffic beside it are drawn
+ * 1:1 there. (v2 drew it 3.7 screens wide; now ~2.5, 64 columns to a screen.)
  */
-export const CAR_HIT_W = 0.32;
-/** An overtake this close sideways (but clean) is a near miss: bonus points and nitro. */
-export const NEAR_MISS_W = CAR_HIT_W + 0.18;
+export const ROAD_HALF_COLS = 80;
+/**
+ * Rear-end contact per traffic kind (sedan, van, sports car, hatchback):
+ * lateral distance between car centers, in road half-widths, at which the
+ * player's sprite and that car's overlap on screen. The art's silhouettes
+ * touch at 24 / 24 / 26 / 22 columns apart (tests/nightline/art.test.ts
+ * recomputes them from art.ts), over ROAD_HALF_COLS.
+ */
+export const CAR_HIT_W: readonly number[] = [0.3, 0.3, 0.325, 0.275];
+/** An overtake this much wider than contact (but clean) is a near miss: bonus points and nitro. */
+export const NEAR_MISS_PAD = 0.18;
+export const hitW = (kind: number): number => CAR_HIT_W[kind % CAR_HIT_W.length];
+export const nearMissW = (kind: number): number => hitW(kind) + NEAR_MISS_PAD;
 export const NEAR_MISS_POINTS = 150;
 /** Traffic appears at least this many segments ahead, beyond the renderer's draw distance (170), so cars never pop in. */
 export const SPAWN_MIN = 175;
@@ -52,16 +75,19 @@ export function segmentAt(r: Race, z: number): Segment {
 
 export function newRace(seed: number): Race {
   const b = new TrackBuilder([]);
-  const first = buildStage(b, seed, 0, TREE[0][0], false);
-  buildFork(b, 0, 0, TREE[0][0]);
+  const biome = firstBiome(seed);
+  const next = forkPair(seed, [biome], []);
+  const first = buildStage(b, mixSeed(seed, routeCode([])), 0, biome, false);
+  buildFork(b, biome, next);
   const r: Race = {
     seed,
     time: 0,
-    clock: START_CLOCK,
+    clock: TUNE.start,
     segments: b.segments,
-    stages: [{ biome: TREE[0][0], start: first.start, end: first.end, bonus: 0 }],
+    stages: [{ biome, start: first.start, end: first.end, bonus: 0 }],
     stage: 0,
     route: [],
+    next,
     player: { x: 0, z: 0, speed: 0, nitro: 2, boosting: false, stun: 0, steer: 0, push: 0 },
     cars: [],
     nextCarId: 1,
@@ -171,9 +197,10 @@ export function step(r: Race, input: Input): void {
     if (near > 0 && near < SEG_LEN * 20 && Math.abs(c.x - p.x) < 0.5) c.x += Math.sign(c.x - p.x || 1) * dt * 0.15;
     c.x = Math.max(-0.85, Math.min(0.85, c.x - cseg.curve * 0.0005));
     const gap = c.z - p.z;
-    if (gap > -SEG_LEN * 0.4 && gap < SEG_LEN * 0.6 && Math.abs(c.x - p.x) < CAR_HIT_W && p.speed > c.speed) {
-      // Rear-end: you lose your speed and get nudged aside.
-      p.speed = Math.max(c.speed * 0.85, p.speed * 0.5);
+    if (gap > -SEG_LEN * 0.4 && gap < SEG_LEN * 0.6 && Math.abs(c.x - p.x) < hitW(c.kind) && p.speed > c.speed) {
+      // Rear-end: you drop below the car's speed (so the next frame can't count it again,
+      // as v2's half-speed did at top speed into a slow car) and get nudged aside.
+      p.speed = c.speed * REAR_KEEP;
       p.x += p.x > c.x ? 0.18 : -0.18;
       p.stun = 0.25;
       r.crashes++;
@@ -181,7 +208,7 @@ export function step(r: Race, input: Input): void {
     }
     // Overtakes: ahead of you before this step, behind you after it.
     if (cz0 > before && c.z <= p.z) {
-      const close = Math.abs(c.x - p.x) < NEAR_MISS_W;
+      const close = Math.abs(c.x - p.x) < nearMissW(c.kind);
       r.passed++;
       r.score += (100 + (close ? NEAR_MISS_POINTS : 0)) * r.mult;
       p.nitro = Math.min(NITRO_MAX, p.nitro + (close ? 0.6 : 0.35));
@@ -205,14 +232,14 @@ export function step(r: Race, input: Input): void {
     }
     // Which side of the road were you on at the fork?
     const side = p.x > FORK_SPLIT ? 1 : 0;
+    const biome = r.next![side];
     r.route.push(side);
-    const pos = r.route.reduce((a, b) => a + b, 0);
     const level = r.stage + 1;
-    const biome = TREE[level][pos];
     const b = new TrackBuilder(r.segments);
-    const built = buildStage(b, r.seed + pos * 31, level, biome, side === 1);
-    buildFork(b, level, pos, biome);
-    const bonus = 46 + level * 2 - (side === 1 ? 2 : 0);
+    const built = buildStage(b, mixSeed(r.seed, routeCode(r.route)), level, biome, side === 1);
+    r.next = level + 1 < STAGES ? forkPair(r.seed, [...r.stages.map((s) => s.biome), biome], r.route) : null;
+    buildFork(b, biome, r.next);
+    const bonus = stageBonus(level, side === 1);
     r.stages.push({ biome, start: built.start, end: built.end, bonus });
     r.stage = level;
     r.clock += bonus;
