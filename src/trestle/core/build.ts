@@ -49,6 +49,32 @@ export const lenOf = (a: number, b: number): number => {
 export const memberCost = (m: Member): number => Math.round(lenOf(m.a, m.b) * MATS[m.mat].cost);
 export const costOf = (ms: readonly Member[]): number => ms.reduce((s, m) => s + memberCost(m), 0);
 
+/**
+ * Pieces with a free end: a member whose end peg holds nothing else (not an
+ * anchor, not a lantern ring), and in turn anything left hanging by removing
+ * those. They carry no load, so the test run leaves them out entirely (they
+ * would otherwise only add weight to a peg, which the solver could use).
+ */
+export function looseOf(l: Level, ms: readonly Member[], rings: readonly number[] = []): Uint8Array {
+  const out = new Uint8Array(ms.length);
+  const fixed = new Set([...l.anchors, ...rings]);
+  const deg = new Map<number, number>();
+  for (const m of ms) for (const p of [m.a, m.b]) deg.set(p, (deg.get(p) ?? 0) + 1);
+  for (let changed = true; changed; ) {
+    changed = false;
+    ms.forEach((m, k) => {
+      if (out[k]) return;
+      if ((!fixed.has(m.a) && deg.get(m.a) === 1) || (!fixed.has(m.b) && deg.get(m.b) === 1)) {
+        out[k] = 1;
+        deg.set(m.a, deg.get(m.a)! - 1);
+        deg.set(m.b, deg.get(m.b)! - 1);
+        changed = true;
+      }
+    });
+  }
+  return out;
+}
+
 /** Every point with a peg: anchors plus member ends. */
 export function pegs(l: Level, ms: readonly Member[]): Set<number> {
   const s = new Set(l.anchors);

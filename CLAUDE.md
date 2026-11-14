@@ -107,14 +107,14 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     `show.ts <seed> [size]` prints a puzzle, its light and the model's eliminations; `hints.ts <seed> [size]` the hint
     texts in order (`hints.ts longest 150`: the longest; #info is 76 px = 4 lines at 360 px and must hold them); `stress.ts 200` checks the model never rules out an answer piece from part-filled boards and
     hints always finish.
-  - Trestle: `npx vite-node scripts/trestle/probe.ts 200` (rules v3, live generation, 200 levels of seed-picked types over d
-    0..1: first layout proven 78% (crossings ~86%, lanterns ~54%), always within ≤ 15 layouts; par/budget median 0.74; gen
-    median ~370 ms, p90 ~0.9 s, max ~1.8 s on a laptop (in the page's worker); one test run ~2.6 ms). `pool.ts 60 18` rebuilds
-    the picked trail (src/trestle/core/pool.ts, ~3.5 min): it prints difficulty per level (v3: thirds 0.26 → 0.51 → 0.75,
-    biggest rise between neighbours 0.08, biggest drop 0.04, every type 4-8 times). `par.ts 45` re-surveys 4× harder (v3:
-    beats live par on 5/45, p90 1.8%, max 7%); `wind.ts 18 2` adds wind to calm levels (v3: the calm par build fails in 15/18,
-    windy par +8% median); `trail.ts 1 40` lists the trail; `why.ts`, `bumps.ts [cart]` (a heavy cart down a kinked road keeps
-    planks ≤ 0.3; the V and hill stall: no climbing), `tutorials.ts` (each tutorial's `ref` peak < 0.85, surveyor ≤ par).
+  - Trestle: `npx vite-node scripts/trestle/probe.ts 120` (rules v4, live generation of seed-picked types over d 0..1: first
+    layout proven 78% (crossings ~91%, lanterns ~42%), always within ≤ 15 layouts; par/budget median 0.75; gen median ~0.5 s,
+    p90 ~1.4 s, max ~2.3 s on a laptop incl. a 300-step polish (the page's worker; live trail levels make two candidates,
+    dailies two); one test run ~3 ms). `pool.ts 60 18` rebuilds the picked trail (src/trestle/core/pool.ts, ~10 min with
+    the polish): v4 difficulty thirds 0.27 → 0.54 → 0.83, every type by level 16 (gap lantern at 14), one early sawtooth
+    (0.28 → 0.07 → 0.35 at 14-16), otherwise neighbour steps ≤ ~0.1. `trail.ts 1 80` lists the trail with difficulty (past
+    the pool v4 runs ~0.69-0.96). `par.ts 45` re-surveys 4× harder; `wind.ts 18 2` adds wind to calm levels (v3: the calm
+    par build fails in 15/18); `why.ts`, `bumps.ts [cart]`, `tutorials.ts` (each tutorial's `ref` peak < 0.85, surveyor ≤ par).
   - Tidings: `npx vite-node scripts/tidings/balance.ts 400 [careful,casual,random,safe,risky,greedy,crowd,miser]` (rules v1:
     careful (plans every order of this stop's cards and choices, gambles by their shown odds, then the road, valuing stock
     against the cheapest remaining leg costs on the map) arrives ~55% (51-56% over seed sets 1000/5000/9000), ★★★ ~14% of
@@ -425,7 +425,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   planks and rock tops), twig, twine (pulls only); reach 2.3 / 2.3 / 4.5 (shown ≤2.2 / ≤4.5), strength 80 / 60 / 45 (shown on
   the tray); cost = round(length × cost/unit). A build = actions (`P|T|R|D` + two 2-char base-36 points, `U`, `C`, `G` = a
   test run); members through a peg split there. sim.ts: XPBD at 480 Hz, 2 iterations, rigid distance constraints (ropes
-  one-sided), force = λ/h² smoothed ~140 ms (`SMOOTH`), snap past strength (`firstBreak`/`firstBreakAt`). Carts: two light
+  one-sided), force = λ/h² smoothed ~140 ms (`SMOOTH`), snap past strength (`firstBreak`/`firstBreakAt`). Pieces with a
+  free end (`looseOf`: an end peg that holds nothing else, not an anchor or ring, pruned repeatedly) are left out of
+  runs entirely (rules v4: a stub's peg mass and wind catch had let it rescue a failing build; the v3 par builds used the
+  trick), drawn faded, counted in the cost line and ignored by `wobbly`. Carts: two light
   wheels (12% each) on plank segments and rock, a body on damped XPBD springs (~3 Hz), a motor along the contact tangent to
   `CART_SPEED` with `CART_ACC` 3.6 < g·sin 26.6°, so the beetle can't climb a 2-across-1-up plank: roads must be level or go
   down (that rules out dips/humps, which held as plank chains and arches and beat every truss; generated tilts only go down).
@@ -434,23 +437,32 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   (both road alignments), braced bands over/under the road, roads on struts/hooks (with or without small triangles),
   cantilever rails and cord/strut Vs to each ring (several rings: best shapes per ring merged); keeps those that pass with
   nothing snapping, strips the cheapest few in several orders, swaps pulling twigs for twine, merges lone road pegs, local
-  search, all within `cap` test runs. gen.ts: level types (`LEVEL_TYPES`: plain, hooks, arch = pegs only low on the faces
+  search, all within `cap` test runs. Lantern shapes also include Warren arms and cable-stayed arms (a strut rail with cords
+  from every anchor above), and a second ring hung off the first ring's arm. `polish(l, ms, iters, seed)` is a seeded local
+  search (remove one or two pieces, maybe swap twig/twine, add a piece between pegs or a new peg braced to two; keep when
+  it still passes and costs no more, early steps may cost up to 14 more); live levels polish `LIVE_POLISH` (300) steps,
+  the pool 3 × 5000. gen.ts: level types (`LEVEL_TYPES`: plain, hooks, arch = pegs only low on the faces
   and nothing above, boat = a lane under the road kept clear, convoy, island, spire; lanterns: wall brackets with one or two
-  rings, gap = a lantern over the middle of a gap), `layout(seed, d, t, type)`, wind from d 0.25, logs/floors as twists;
+  rings, gap = a lantern over the middle of a gap: from span 3 with the ring level with the banks early on), islands 2-3
+  wide, off centre, sometimes a step low, `layout(seed, d, t, type)`, wind from d 0.25, logs/floors as twists;
   `priceLevel` rejects lanterns straight under an anchor and builds of < 3 parts, sets par, parParts, budget = ceil(par ×
   (1.4 − 0.25d) / 10) × 10, `ref`, `diff` = `difficulty(ease, parts)` (0.65 × shapes that failed + 0.35 × parts).
   The trail (trail.ts): 6 tutorials (par = the obvious lesson build, `ref`), then `POOL` (pool.ts, generated by
   `scripts/trestle/pool.ts`: candidates of every type over d 0..1 re-surveyed at effort 4 for tight par, picked to rising
-  difficulty targets in a type rotation, then ordered easiest-first with no type repeated within two levels; unique
-  `trailName`s), then live levels at d 1 in `ROTATION`. Regenerate the pool after any physics/gen change (bump
-  RULES_VERSION). Dailies (`seedLevel(..., daily)`) use their own name words (`dailyName`). Stars (`starsFor`): ★ within
+  difficulty targets in a type rotation (playtest bias: arch +0.12, island −0.05; near-twins kept apart), then ordered
+  easiest-first with no type repeated within two levels and every type within the first dozen, then each par build polished;
+  unique `trailName`s), then live levels in `ROTATION`: three candidates at d 0.75 / 0.9 / 1, the one nearest
+  `liveTarget(k)` (from the pool's last difficulty, +0.004 a level, ≤ 0.95). Regenerate the pool after any physics/gen change (bump
+  RULES_VERSION). Dailies (`seedLevel(..., daily)`): the nearer of two candidates to `DAILY_TARGET` 0.5, named with
+  their own words for their kind (`dailyName`). Stars (`starsFor`): ★ within
   budget, ★★ cost ≤ par, ★★★ also parts ≤ parParts. diagnose.ts: `joined` (road bank to bank through planks and rock tops,
   rings tied to rock, loose pieces), `wobbly` (rigidity-matrix null space), `explain` in order: own weight (first snap
   < 0.3 s) → wobbly (counts the ringed pegs; names what then snapped) → too weak (names the first piece) → not joined →
-  off the road / uphill / sag. Page: generated levels come from a module worker (gen.worker.ts) with a "Surveying…" card,
+  off the road / uphill (`uphill`: the climbing planks, which glow) / sag. Page: generated levels come from a module worker (gen.worker.ts) with a "Surveying…" card,
   the next trail level prefetched on idle, cached (`g<n>`, `gd<day>`); builds per level (`b<n>`); a failed run's note, the
   first-snapped piece's glow and ringed pegs per level (`f<n>`/`fd<day>`, while the build is unchanged). Drag from a peg
-  (nearest grid point within reach; past reach a dashed circle + "max length", the 2× loupe looks at the landing point),
+  (nearest grid point within reach; past reach a dashed circle + "max length" and the piece may only end on an existing
+  peg or ring within 25° of the drag line, else nothing: never a silent free end; the 2× loupe looks at the landing point),
   tap a piece's middle to pick it (✕ Remove), again to remove; ⤢ zooms to the box around every anchor, peg and ring (never
   cutting one off), pinch zooms and pans. `buzz()` respects the vibration setting. `?lv=n&a=` / `?seed=&d=&a=` replay a
   build (not saved); reports `TRESTLE v… lv=…|seed=… d=… a=…`.

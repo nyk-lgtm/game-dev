@@ -12,7 +12,7 @@
 // Pure and deterministic: only + − × ÷ and Math.sqrt (correctly rounded
 // everywhere), fixed step, members solved in list order.
 
-import { MATS, pegs, type Member } from './build';
+import { MATS, looseOf, pegs, type Member } from './build';
 import { WATER, px, py, ringsOf, type Level } from './level';
 
 export const HZ = 480;
@@ -97,6 +97,8 @@ export class Sim {
   peak: Float64Array;
   minF: Float64Array;
   broken: Uint8Array;
+  /** Pieces with a free end, left out of the run (also marked broken, never counted as breaks). */
+  readonly loose: Uint8Array;
   /** Step at which each member snapped (−1 intact). */
   brokeAt: Int32Array;
   breaks = 0;
@@ -128,10 +130,12 @@ export class Sim {
   constructor(level: Level, members: readonly Member[]) {
     this.level = level;
     this.members = [...members];
-    const used = new Set<number>();
-    for (const m of members) used.add(m.a).add(m.b);
     const g = level.goal;
     const rings = ringsOf(level);
+    // Pieces with a free end are left out of the run (no weight, no wind, no help).
+    this.loose = looseOf(level, members, rings);
+    const used = new Set<number>();
+    members.forEach((m, k) => !this.loose[k] && used.add(m.a).add(m.b));
     for (const r of rings) used.add(r);
     this.pegIds = [...pegs(level, members)].filter((p) => used.has(p)).sort((a, b) => a - b);
     const idx = new Map(this.pegIds.map((p, i) => [p, i]));
@@ -167,6 +171,12 @@ export class Sim {
     this.broken = new Uint8Array(M);
     this.brokeAt = new Int32Array(M).fill(-1);
     members.forEach((m, k) => {
+      if (this.loose[k]) {
+        this.ma[k] = idx.get(m.a) ?? -1;
+        this.mb[k] = idx.get(m.b) ?? -1;
+        this.broken[k] = 1;
+        return;
+      }
       const a = idx.get(m.a)!;
       const b = idx.get(m.b)!;
       this.ma[k] = a;
@@ -522,8 +532,9 @@ export class Sim {
         if (this.y[c[2]] > g.startY + 2.5 || this.y[c[2]] > WATER) return this.decide('fell');
       }
       if (over) return this.decide('crossed');
+      // Stuck: the rearmost cart has got no further for 1.5 s (rolling to and fro in a dip counts).
       const [cx] = this.cartMid();
-      if (Math.abs(cx - this.lastCx) < 0.05) {
+      if (cx < this.lastCx + 0.05) {
         if (++this.still > HZ * 1.5) return this.decide('stalled');
       } else ((this.still = 0), (this.lastCx = cx));
       if (this.steps >= this.maxSteps) return this.decide('stalled');

@@ -8,10 +8,11 @@
 
 import { writeFileSync } from 'node:fs';
 import { mixSeed } from '../../src/shared/rng';
-import { LEVEL_TYPES, costOf, difficulty, isLantern, makeLevel, replayBuild, survey, toActions, trailName, WON, runSim, type Level, type LevelType } from '../../src/trestle/core';
+import { LEVEL_TYPES, costOf, difficulty, isLantern, makeLevel, polish, replayBuild, survey, toActions, trailName, WON, runSim, type Level, type LevelType } from '../../src/trestle/core';
 
 const SLOTS = Number(process.argv[2] ?? 60);
 const PER = Number(process.argv[3] ?? 14);
+const POLISH = Number(process.env.POLISH ?? 5000);
 const ROT: LevelType[] = ['plain', 'wall', 'hooks', 'arch', 'gap', 'boat', 'spire', 'convoy', 'island'];
 
 interface Cand {
@@ -40,6 +41,9 @@ LEVEL_TYPES.forEach((type, ti) => {
         l = { ...l, par: cost, parParts: b.length, ref: a, budget: Math.ceil((cost * (1.4 - 0.25 * d)) / 10) * 10, diff: difficulty(s.ease, b.length) };
       }
     }
+    // Playtests found arches harder, islands easier and gap lanterns gentler than the solver's measure says.
+    const bias = type === 'arch' ? 0.12 : type === 'island' ? -0.05 : type === 'gap' ? -0.15 : 0;
+    l = { ...l, diff: Math.max(0, Math.min(1, Math.round(((l.diff ?? 0) + bias) * 1000) / 1000)) };
     cands.push({ l, d, type });
   }
   console.error(`${type}: ${cands.filter((c) => c.type === type).length} candidates (${((performance.now() - t0) / 1000).toFixed(0)} s)`);
@@ -58,7 +62,9 @@ for (let i = 0; i < SLOTS; i++) {
   let bs = Infinity;
   for (const c of cands) {
     if (used.has(c)) continue;
-    const score = Math.abs((c.l.diff ?? 0) - target) + 0.25 * Math.abs(c.d - f) + (c.type === type ? 0 : 0.2);
+    // Near-twins of a level already picked (same type, parts and about the same par) are kept apart.
+    const twin = picked.some((p) => p.type === c.type && p.l.parParts === c.l.parParts && Math.abs(p.l.par - c.l.par) <= 8);
+    const score = Math.abs((c.l.diff ?? 0) - target) + 0.25 * Math.abs(c.d - f) + (c.type === type ? 0 : 0.2) + (twin ? 0.5 : 0);
     if (score < bs) (bs = score), (best = c);
   }
   used.add(best!);
@@ -71,11 +77,30 @@ const left = [...picked];
 while (left.length) {
   const recent = order.slice(-2).map((c) => c.type);
   const sorted = left.map((c, i) => ({ c, i })).sort((a, b) => (a.c.l.diff ?? 0) - (b.c.l.diff ?? 0));
-  const pick = sorted.find(({ c }) => !recent.includes(c.type)) ?? sorted[0];
+  // Every type shows up within the first dozen levels: past the 4th slot, a type not seen yet comes next if
+  // its easiest level is no more than 0.25 above the easiest left.
+  const seen = new Set(order.map((c) => c.type));
+  const fresh = order.length >= 4 && order.length < 12 ? sorted.find(({ c }) => !seen.has(c.type) && !recent.includes(c.type) && (c.l.diff ?? 0) <= (sorted[0].c.l.diff ?? 0) + 0.25) : undefined;
+  const pick = fresh ?? sorted.find(({ c }) => !recent.includes(c.type)) ?? sorted[0];
   order.push(pick.c);
   left.splice(pick.i, 1);
 }
-const levels = order.map((c, i) => ({ ...c.l, id: `p${i + 1}`, name: trailName(i, isLantern(c.type)) }));
+// Last, a long polish of each picked level's par build (local search from three seeds), so par is near
+// what a clever player finds (playtests beat the surveyor's wall-lantern par by a third).
+const levels = order.map((c, i) => {
+  let l = c.l;
+  const start = replayBuild(l, l.ref!).members;
+  const best = [11, 12, 13].map((sd) => polish(l, start, POLISH, sd)).sort((a, b) => costOf(a) - costOf(b) || a.length - b.length)[0];
+  if (costOf(best) < l.par || (costOf(best) === l.par && best.length < l.parParts)) {
+    const a = toActions(l, best);
+    const b = replayBuild(l, a).members;
+    if (b.length === best.length && WON.has(runSim(l, b).outcome)) {
+      const cost = costOf(b);
+      l = { ...l, par: cost, parParts: b.length, ref: a, budget: Math.ceil((cost * (1.4 - 0.25 * c.d)) / 10) * 10 };
+    }
+  }
+  return { ...l, id: `p${i + 1}`, name: trailName(i, isLantern(c.type)) };
+});
 let jump = 0;
 let drop = 0;
 const lines = levels.map((l, i) => {

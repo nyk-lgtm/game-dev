@@ -2,7 +2,7 @@
 // branches with hooks), the build (planks, twigs, twine, pegs), the beetle's
 // cart, the lantern and its ring, stress colours during a run, splinters.
 
-import { COLS, MATS, ROWS, RING_TOL, WATER, buildable, px, py, type Level, type Member, type Sim } from '../core';
+import { COLS, MATS, ROWS, RING_TOL, WATER, buildable, looseOf, px, py, ringsOf, type Level, type Member, type Sim } from '../core';
 
 export interface View {
   /** Pixels per grid unit and the screen position of grid point (0, 0). */
@@ -579,11 +579,29 @@ export function drawScene(ctx: CanvasRenderingContext2D, v: View, sc: Scene): vo
     return toScreen(v, sim.x[i], sim.y[i]);
   };
   const order = sc.members.map((_, i) => i).sort((a, b) => sc.members[b].mat - sc.members[a].mat);
+  const loose = sim ? sim.loose : looseOf(l, sc.members, ringsOf(l));
   for (const i of order) {
     const m = sc.members[i];
+    const w = Math.max(m.mat === 2 ? 1.6 : 2.5, MAT_W[m.mat] * v.s);
+    if (loose[i]) {
+      // A piece with a free end does nothing: faded, riding along with whichever end is held.
+      let [ax, ay] = toScreen(v, px(m.a), py(m.a));
+      let [bx, by] = toScreen(v, px(m.b), py(m.b));
+      if (sim) {
+        const held = sim.ma[i] >= 0 ? sim.ma[i] : sim.mb[i];
+        if (held >= 0) {
+          const [hx, hy] = toScreen(v, sim.x[held], sim.y[held]);
+          const [ox, oy] = sim.ma[i] >= 0 ? [ax, ay] : [bx, by];
+          (ax += hx - ox), (ay += hy - oy), (bx += hx - ox), (by += hy - oy);
+        }
+      }
+      ctx.globalAlpha = 0.4;
+      stroke(ctx, ax, ay, bx, by, w, MAT_COL[m.mat], MAT_EDGE[m.mat], m.mat);
+      ctx.globalAlpha = 1;
+      continue;
+    }
     const [ax, ay] = pos(m.a, sim ? sim.ma[i] : -1);
     const [bx, by] = pos(m.b, sim ? sim.mb[i] : -1);
-    const w = Math.max(m.mat === 2 ? 1.6 : 2.5, MAT_W[m.mat] * v.s);
     if (sim && sim.broken[i]) {
       // Snapped: a stub on each end.
       for (const [x0, y0, x1, y1] of [[ax, ay, bx, by], [bx, by, ax, ay]]) {

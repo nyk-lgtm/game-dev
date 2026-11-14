@@ -30,7 +30,7 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 5. Grove: owner said keep it as is (board and balance); only bugs/clarity. Afterglow: leave alone unless asked.
 6. New games are welcome when the queue is quiet (recent additions: Ninefold, Summit, Quarry, Sungrazer, Kitbag,
    Brink, Loomsong, Simmer, Gleam, Lull, Trestle). Ideas: a co-op-free social/daily puzzle. (The creative/sandbox toy is Lull.)
-   Trestle (new physics builder): second playtest fixes done (rules v3: picked trail, level types, wind that matters); third blind playtest next.
+   Trestle (new physics builder): third playtest fixes done (rules v4: free ends left out, polished par, smoother pool); fourth blind playtest next.
 7. Simmer: second blind playtest (see its item below). Gleam (new light puzzle): first blind playtest. Lull: first playtest fixes shipped;
    second blind playtest and a real-phone sound check next.
    Brink, Loomsong, Simmer). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle.
@@ -99,7 +99,25 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         picked pool (`pool.ts`): 9 types × 18 candidates re-surveyed at effort 4, difficulty = 0.65 × textbook shapes that
         failed + 0.35 × parts, chosen to rising targets in a type rotation, ordered easiest-first with no type twice within
         two levels: thirds 0.26 → 0.51 → 0.75, neighbour steps ≤ 0.08. 20 tests.
-  - [ ] Next: third blind playtest. Watch: does difficulty (shapes that fail) match how hard people find levels? Is
+  - [x] Third blind playtest (v3 live: 7-11 ★★★ first try, arches 12/19/27 only ★, islands 15/18 near-identical 4-part
+        freebies, wall-lantern par loose (L20 77/8 vs 93/15, L23 92/8 vs 125/18), 24-30 tight and good, live levels past
+        the pool 0.30-0.96) and fixes (rules v4): a stub with a free end rescued a failing build (L24: plank 9-10 "pushed
+        past 80" held once a loose twig stuck up from (9,7); the v3 par builds leaned on the same trick): its peg mass and
+        wind catch at the joint changed the solve, so pieces with a free end (`looseOf`, pruned repeatedly) are now left out
+        of runs, drawn faded and counted in the cost line, and `wobbly` ignores them; lantern shapes add Warren arms,
+        cable-stayed arms and a second ring hung off the first ring's arm, and `polish` (seeded local search: drop pieces,
+        swap twig/twine, add a piece or a braced new peg) tightens par (pool 3 × 5000 steps; on v3's L20 two-ring wall it found
+        61 / 7 where the tester had 77 / 8 and v3 par was 93 / 15; v3's L23 only 111 / 16 vs the tester's 92 / 8); gap tip "from one bank or both" and gentle gaps early (span 3, the ring level
+        with the banks); islands 2-3 wide, off centre, sometimes a step low; pool bias arch +0.12 / island −0.05 / gap
+        −0.15, near-twins kept apart, every type by level 16 (gap at 14); live levels past the pool pick the nearer of two
+        candidates to a rising target, without islands/spires (0.69-0.96 over 67-80); dailies pick the nearer of two to
+        difficulty 0.5 and name words match the kind ("Lantern" left the daily words); past-reach drags end only on an
+        existing peg or ring in line (else "Too far", nothing placed); a cart stuck uphill lights the climbing plank (and
+        stalls are judged by progress, so rolling to and fro in a dip counts); plural "The lanterns hold!"; help in short
+        sections with a row per material. 22 tests.
+  - [ ] Next: fourth blind playtest. Watch: are polished pars beatable at all (★★★ rate)? Is the early sawtooth (14 gap
+        0.28 → 15 hooks 0.07 → 16 arch 0.35) noticeable? Is the Moss-Hook-style two-ring wall still loose (its par stayed
+        ~111-126 while the tester found 92)? Old watch items: does difficulty (shapes that fail) match how hard people find levels? Is
         "no climbing" clear (the stuck message says so)? Do boat lanes and arches feel fair? Is the late pool (diff ~0.9,
         par ~190) a wall? Old v2 watch items: is ★★★ now a real target (par from the stronger surveyor) without being
         impossible on some levels? Do wind and twin lanterns read clearly? Is two-finger pan at the fitted view missed
