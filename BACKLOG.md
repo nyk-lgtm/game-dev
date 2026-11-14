@@ -21,15 +21,15 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 24 games are live. Every game except Grove (owner: keep as is) and Afterglow (leave alone) has now had at least three
 blind playtests with fixes shipped (Simmer 5, Trestle 5, Delve 4). Open threads, in order:
 1. Owner feedback first: anything the owner reports beats this list.
-2. Real-phone checks only the owner can do: Loomsong sound/timing, Lull sound mix, Sungrazer smoothness, Nightline v3
-   long-lens look, Trestle level generation time past L66.
-3. In flight: Glyphwright third-pass fixes (harder waves 6-14, fairer Lich, ascension tiers).
-4. Watch items: Delve's Warden is the main wall (~33% of runs end there; levers: wave damage, cadence, HP); Tidings careful
-   bot ~78% (TUNE=startC:3 if humans find it easy); Lantern's King is near-certain for a full-clear player; Unspoken
-   normal-play riddles can't change without a new world version (the daily got harder ones instead).
-5. Grove: only bugs/clarity. Afterglow: only bugs.
-6. Next ideas: fourth passes where third passes changed a lot (Nightline v3 projection, Delve v8 Warden, Glyphwright),
-   or a new game if the owner wants more (prefer depth over sprawl at 24 games).
+2. Real-phone checks only the owner can do: Loomsong sound/timing, Lull sound mix, Sungrazer smoothness, Trestle level
+   generation time past L66 (several seconds when not prefetched).
+3. In flight: Trestle v4 fourth playtest, Simmer v5 fifth playtest.
+4. Known watch items: Glyphwright v4 (third playtest, 2026-11-14): smart bot 63%, but Nova lags (favor 47% vs 70-85%);
+   Tidings careful bot ~79% (TUNE=startC:3 → 73/18 if humans find it easy); Trestle wall-lantern par still loose on
+   some levels; Hexhold "max first, then expand" (~45% bot wins) may need teeth at waves 26-30 if players find it.
+5. Grove: owner said keep it as is (board and balance); only bugs/clarity. Afterglow: leave alone unless asked.
+6. A 320×568 audit pass (2026-11-14) fixed Rewild/Ninefold/Gleam layouts; Summit's cards are 43 px wide on 8-wide rows (kept).
+7. New games when the queue is quiet; prefer depth and polish over sprawl now that there are 24.
 
 ## Now
 - [ ] **Tidings** (original narrative roguelite: carry the winter post from Tarrow Bridge over the hills and the Teeth to
@@ -743,9 +743,21 @@ blind playtests with fixes shipped (Simmer 5, Trestle 5, Delve 4). Open threads,
     bolts; Novas never hit flyers, by design). Whole looms (looms.ts 3/2 12,14): the best loom with one Nova leaks 0
     like every caster's; only all-Nova looms leak (72: Drakes 57, Wisps 15). At 2/2 waves 12,14,15 one Nova + two
     bolts leaks Drakes 3 (as the best loom), its gap is the Lich. smart+nova wins 91%. Rules unchanged.
-  - [ ] Owner decision: Glyphwright is much easier than the 37% figure said. If it should be harder, the refit bot's
-    only wall is the Lich (BUDGET.square 0.5 → 71%, 0.6 → 67%; perWave 7 → 82%): look at late HP growth or the Lich.
-    Also re-run sweep.ts (economy knobs were tuned with the old model). Does Bolt feel dominant late (owner)?
+  - [x] Glyphwright third blind playtest (rules v4, 2026-11-14; runs: lost at the Lich from 20 HP, won 10 HP, won
+    20 HP, daily lost at the Lich; waves 1-14 trivial, gold piled past 50). Merges never lose power (Haste II was 0.68
+    vs 0.5625 for two Haste I: now 0.75^t; Storm 2t arcs, Split ×1.35^t, Pierce ×1.1^t); Split on Beam fires spare
+    beams on the target's column (Fire Beam 24 → 33 crowd, 12 → 14 on one foe; was 17 / ~8) and only widens a Nova;
+    merge prompt shows each row's dps before → after and asks when a row drops, ★ only on merges that don't lower dps;
+    Buy goes to the bench (toast the first 3 times); Empower clears the selection; rows show `1 foe` dps; Lich trial in
+    the wave preview from wave 11 and on the Foes card; bosses leak by the share left (Lich 20 → as little as 1);
+    GROWTH.hp 0.22 → 0.52; Ascension (+10% foe HP a level, unlocked by wins) and a result share line. Bot (200 seeds):
+    100% (v4 mods at old HP) → 63%, median wave won; deaths 9:1 10:4 11:8 12:18 13:8 14:6 15:29 (v3 refit: all 17 at
+    15); HP lost ~1-2 a wave from 9 (0 before). Waves 6-8 still cost the bot ~0.1 (it spends everything; a hoarder
+    will feel them). Lich trial vs real wave 15 (80 bot runs): trial under 80% almost never leaks the Lich, ≥ 85% often.
+  - [ ] Next: Nova lags in v4 (favor 47% vs bolt 85, orb 83, rain 71, beam 70; nova-primary runs win 8/51, Drakes at
+    waves 9-12). More Nova damage makes the bot lean on it and lose (nova.dmg 36 → favor 32%); a wider ring helps
+    (nova.area 0.4 → favor 59%, smart 76%, so retune GROWTH with it). Re-run sweep.ts (economy knobs predate v4).
+    Watch: does Ascension pull players back after a win; do humans now spend their gold by wave 6-8?
   - [x] Telegraph: depths 2-3 get +2 enemy budget (depth 1 stays the tutorial; rules v4). Greedy bot
     median depth 8 → 7 (back on target), more of its runs end on depth 3. A bomb someone stands on
     is now drawn under them (a lit ring) with a "💣 n" fuse tag below, not a badge on top.

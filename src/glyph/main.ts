@@ -1,6 +1,6 @@
 import { installErrorOverlay } from '../shared/debug';
 import { wantsDaily } from '../shared/daily';
-import { RULES_VERSION, randomSeed } from './core';
+import { RULES_VERSION } from './core';
 import { Game, store } from './game';
 
 installErrorOverlay();
@@ -8,16 +8,16 @@ installErrorOverlay();
 const game = new Game();
 document.getElementById('menuBtn')!.onclick = () => game.showMenu();
 
-// ?seed=123&a=... replays a bug report exactly (without touching the saved run).
+// ?seed=123&asc=2&a=... replays a bug report exactly (without touching the saved run).
 const p = new URLSearchParams(location.search);
-const saved = store.load<{ v: number; seed: number; a: string } | null>('run', null);
+const saved = store.load<{ v: number; seed: number; a: string; asc?: number } | null>('run', null);
 if (p.has('seed') && Number.isFinite(Number(p.get('seed')))) {
   const a = p.get('a') ?? '';
-  game.start(Number(p.get('seed')), a === '-' ? '' : a, true);
+  game.start(Number(p.get('seed')), a === '-' ? '' : a, true, null, Number(p.get('asc') ?? 0));
   history.replaceState(null, '', location.pathname);
 } else if (wantsDaily()) game.playDaily();
-else if (saved && saved.v === RULES_VERSION) game.start(saved.seed, saved.a);
-else game.start(randomSeed());
+else if (saved && saved.v === RULES_VERSION) game.start(saved.seed, saved.a, false, null, saved.asc);
+else game.newRun();
 
 if (!store.load('seenHelp', false)) game.showHelp();
 

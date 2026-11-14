@@ -176,12 +176,11 @@ describe('mergeAll', () => {
     s.loom[1][0] = R('orb', 2);
     s.bench = [R('orb', 2), R('orb'), R('orb'), null, null, null];
     shopOf(s, R('orb'));
-    // The bought orb auto-places into the empty row 0, the first slot scanned,
-    // so both merges land there.
+    // The bought orb goes to the bench; the first merge lands on the bench,
+    // the second in row 1 (the loom is scanned first).
     const made = buy(s, 0)!;
     expect(made).toEqual([R('orb', 2), R('orb', 3)]);
-    expect(s.loom[0][0]).toEqual(R('orb', 3));
-    expect(s.loom[1][0]).toBeNull();
+    expect(s.loom[1][0]).toEqual(R('orb', 3));
     expect([...s.loom.flat(), ...s.bench].filter(Boolean)).toEqual([R('orb', 3)]);
     s.bench = [R('orb', 3), R('orb', 3), null, null, null, null];
     expect(mergeAll(s)).toEqual([]);
@@ -228,12 +227,21 @@ describe('buy', () => {
     expect(s.gold).toBe(1);
   });
 
-  it('auto-places casters in the first empty row and modifiers after a caster', () => {
+  it('puts a bought rune on the bench (rules v4), then a fitting loom slot once the bench is full', () => {
     const s = blank();
-    shopOf(s, R('fire'), R('beam'), R('frost'), R('rain'), R('storm'));
-    // A modifier with no caster anywhere goes to the bench.
+    shopOf(s, R('fire'), R('beam'));
     buy(s, 0);
-    expect(s.bench[0]).toEqual(R('fire'));
+    buy(s, 1);
+    expect(s.bench.slice(0, 2)).toEqual([R('fire'), R('beam')]);
+    expect(s.loom.flat().filter(Boolean)).toEqual([]);
+  });
+
+  it('with a full bench, auto-places casters in the first empty row and modifiers after a caster', () => {
+    const s = blank();
+    s.bench = [R('gild'), R('leech'), R('echo'), R('pierce'), R('gild', 2), R('leech', 2)];
+    shopOf(s, R('fire'), R('beam'), R('frost'), R('rain'), R('storm'));
+    // A modifier with no caster anywhere has nowhere to go.
+    expect(buy(s, 0)).toBeNull();
     buy(s, 1);
     expect(s.loom[0][0]).toEqual(R('beam'));
     buy(s, 2);
@@ -250,6 +258,7 @@ describe('buy', () => {
     const s = blank();
     s.loom[0] = [R('bolt'), R('heavy'), R('heavy', 2), R('haste')];
     s.loom[2][0] = R('nova');
+    s.bench = [R('gild'), R('leech'), R('echo'), R('pierce'), R('gild', 2), R('leech', 2)];
     shopOf(s, R('split'));
     buy(s, 0);
     expect(s.loom[1][1]).toBeNull();
@@ -262,13 +271,13 @@ describe('buy', () => {
     shopOf(s, R('fire'), R('heavy'), R('orb'));
     buy(s, 0, { area: 'loom', row: 0, col: 3 });
     expect(s.loom[0][3]).toEqual(R('fire'));
-    // Occupied: falls back to auto-place.
+    // Occupied: falls back to auto-place (the bench).
     buy(s, 1, { area: 'loom', row: 0, col: 3 });
-    expect(s.loom[0][1]).toEqual(R('heavy'));
-    // A caster can't go in a modifier slot: auto-placed into an empty row.
+    expect(s.bench[0]).toEqual(R('heavy'));
+    // A caster can't go in a modifier slot.
     buy(s, 2, { area: 'loom', row: 0, col: 2 });
     expect(s.loom[0][2]).toBeNull();
-    expect(s.loom[1][0]).toEqual(R('orb'));
+    expect(s.bench[1]).toEqual(R('orb'));
   });
 
   it('falls back to the bench, and with a full bench only allows a completed trio', () => {

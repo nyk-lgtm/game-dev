@@ -2,8 +2,8 @@
 // resistances and flyers. Read-only helpers for the row preview and the spell
 // card; the battle itself uses the same `mitigate`.
 
-import { ENEMIES, enemyHp, isBoss, mitigate, waveQueue } from './battle';
-import type { EnemyKind, Spell } from './types';
+import { ENEMIES, WAVES, enemyHp, isBoss, mitigate, newBattle, stepBattle, waveQueue } from './battle';
+import type { Enemy, EnemyKind, GameState, Spell } from './types';
 
 export interface FoeMatch {
   kind: EnemyKind;
@@ -30,10 +30,10 @@ export interface WaveFoe {
 }
 
 /** The foes of a wave, grouped by kind, biggest total HP first. */
-export function waveFoes(seed: number, wave: number): WaveFoe[] {
+export function waveFoes(seed: number, wave: number, asc = 0): WaveFoe[] {
   const m = new Map<EnemyKind, number>();
   for (const [, k] of waveQueue(seed, wave)) m.set(k, (m.get(k) ?? 0) + 1);
-  return [...m.entries()].map(([kind, count]) => ({ kind, count, hp: enemyHp(kind, wave) })).sort((a, b) => b.hp * b.count - a.hp * a.count);
+  return [...m.entries()].map(([kind, count]) => ({ kind, count, hp: enemyHp(kind, wave, asc) })).sort((a, b) => b.hp * b.count - a.hp * a.count);
 }
 
 /** Novas only reach foes on the ground. */
@@ -82,4 +82,33 @@ export function warnings(sp: Spell, foes: WaveFoe[]): Warning[] {
     else if (sp.burn > 0 && !m.burns) out.push({ level: 1, text: `${name} can't burn`, kind: m.kind });
   }
   return out.sort((a, b) => b.level - a.level);
+}
+
+export interface LichTrial {
+  /** The Lich fell before reaching the tower. */
+  killed: boolean;
+  /** How far down the lane it got (0..1; 1 = it reached the tower). */
+  progress: number;
+  /** Share of its HP and shield left when it reached the tower (0 if killed). */
+  left: number;
+}
+
+/**
+ * A trial run of the loom against the final boss alone (it still raises its
+ * imps, which soak shots aimed at the front foe), on a copy of the state. An
+ * estimate for the wave preview: the real wave 15 brings other foes too.
+ */
+export function lichTrial(s: GameState): LichTrial {
+  const t: GameState = { ...s, wave: WAVES, hp: 1e6, maxHp: 1e6, loom: s.loom.map((r) => r.map((x) => x && { ...x })), bench: [], shop: [], battle: null };
+  const b = newBattle(t);
+  b.queue = [[0.5, 'lich', 0.5]];
+  const full = enemyHp('lich', WAVES, s.asc) + ENEMIES.lich.shield;
+  let lich: Enemy | undefined;
+  for (let n = 0; n < 60 * 120 && !b.over; n++) {
+    stepBattle(t, b);
+    lich ??= b.enemies.find((e) => e.kind === 'lich');
+    if (lich && !lich.alive) break;
+  }
+  if (!lich || b.leakedBy.lich) return { killed: false, progress: 1, left: lich ? Math.max(0, lich.hp + lich.shield) / full : 1 };
+  return { killed: true, progress: Math.min(1, lich.y), left: 0 };
 }
