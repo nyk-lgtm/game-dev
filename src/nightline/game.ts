@@ -17,6 +17,12 @@ const CP_WARN_SECS = 15;
 const UNITS_PER_M = 100;
 
 const store = makeStore('nightline.');
+/**
+ * Best scores per clock: v3's tighter clock (the time left is worth 1000 a second) put v2 bests ~23k out of
+ * reach, so v3 keeps its own under 'best3' and the old 'best' shows as "Old best (v2 clock)".
+ */
+const BEST_KEY = 'best3';
+const OLD_BEST_KEY = 'best';
 /** Steering: this many px of drag is full lock (70 was twitchy on a phone)... */
 const LOCK_PX = 120;
 /** ...but near a screen edge the short side reaches full lock at the edge (never in less than this). */
@@ -192,12 +198,13 @@ export class Game {
     this.day = null;
     $('hud').hidden = true;
     this.sfx.stopMusic();
-    const best = store.load<number>('best', 0);
+    const best = store.load<number>(BEST_KEY, 0);
+    const oldBest = store.load<number>(OLD_BEST_KEY, 0);
     const endings = loadEndings();
     const daily = loadDaily(store);
     const goalList = BIOMES.map((b) => `<span style="color:${endings.includes(b) ? '#ffd166' : '#4a3a6a'}">${endings.includes(b) ? '[x]' : '[ ]'} finish in ${BIOME_NAMES[b]}</span>`).join('<br>');
     showCard(
-      `<pre>${LOGO.join('\n')}</pre><p>Five stages through six lands, never the same one twice. One clock. Pick your road at every fork: right is harder, but every hard road raises your score multiplier.</p>${best ? `<p class="meta">Best score ${best.toLocaleString()}</p>` : ''}<p class="meta" style="text-align:left;display:inline-block;margin:0 auto">Endings found ${endings.length}/${BIOMES.length}<br>${goalList}</p>`,
+      `<pre>${LOGO.join('\n')}</pre><p>Five stages through six lands, never the same one twice. One clock. Pick your road at every fork: right is harder, but every hard road raises your score multiplier.</p>${best || oldBest ? `<p class="meta">${best ? `Best score ${best.toLocaleString()}` : 'No best on the new clock yet'}${oldBest ? `<br>Old best (v2 clock) ${oldBest.toLocaleString()}` : ''}</p>` : ''}<p class="meta" style="text-align:left;display:inline-block;margin:0 auto">Endings found ${endings.length}/${BIOMES.length}<br>${goalList}</p>`,
       [
         { label: 'Drive', primary: true, onClick: () => this.start() },
         { label: `Daily route · ${daily ? daily.label : 'not driven'}`, onClick: () => this.start(todayKey()) },
@@ -306,8 +313,8 @@ export class Game {
     if (won) this.sfx.victory();
     else this.sfx.defeat();
     const score = Math.round(r.score);
-    const best = store.load<number>('best', 0);
-    if (score > best) store.save('best', score);
+    const best = store.load<number>(BEST_KEY, 0);
+    if (score > best) store.save(BEST_KEY, score);
     // Which ending (the land you finished in) this was.
     let goalLine = '';
     if (won) {

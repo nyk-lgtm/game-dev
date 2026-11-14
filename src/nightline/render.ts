@@ -20,6 +20,8 @@ export const ROAD_W = 2000;
 export const CAM_DIST = 3200;
 export const KICK_CLOSE = 0.15;
 export const DRAW_DIST = 170;
+/** Drawn climbs level off below this share of the camera height (see `easeY` in drawRace). */
+export const HILL_CAP = 0.8;
 /** Segments before a fork where the road is split by a painted divider with arrows. */
 export const FORK_LEAD = 70;
 /** Colors for the gentler (left) and harder (right) branch, shared with the HUD. */
@@ -165,7 +167,7 @@ function groundY(r: Race, z: number): number {
   return prevY + (seg.y - prevY) * t;
 }
 
-export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number): { skyGradient: [string, string]; horizonRow: number } {
+export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number): { skyGradient: [string, string]; horizonRow: number; roadTop: number } {
   clearGrid(g);
   const p = r.player;
   // The camera trails the car; clamp at the start line (there's no road behind it).
@@ -248,13 +250,21 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
     }
   }
   let maxy = v.rows * v.ch;
+  /** Highest row the road reached (for view.ts). */
+  let roadTop = v.rows;
   const clips: number[] = [];
   /** Project a road-center point; `curveX` is the accumulated curve offset (world units). */
+  // Climbs are eased for drawing only: a rise above the car's ground saturates below HILL_CAP of the
+  // camera height, so with the long lens the far road never climbs past the horizon into the sky
+  // (it did in ~5% of frames, up to 11 rows); small rises are unchanged, falls are untouched.
+  const g0 = camY - camHeight(v);
+  const lift = HILL_CAP * camHeight(v);
+  const easeY = (wy: number) => (wy > g0 ? g0 + lift * Math.tanh((wy - g0) / lift) : wy);
   const project = (curveX: number, wy: number, wz: number) => {
     const scale = D / Math.max(1, wz - camZ);
     return {
       x: halfW + scale * (curveX - camX) * halfW,
-      y: horizonPx - scale * (wy - camY) * halfW,
+      y: horizonPx - scale * (easeY(wy) - camY) * halfW,
       w: scale * ROAD_W * halfW,
       scale,
     };
@@ -279,6 +289,7 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
     const arrows = forkPaint && Math.floor(seg.index / 4) % 3 === 0;
     const goal = !hasFork && toEnd >= -3 && toEnd < 1;
     const rTop = Math.max(0, Math.ceil(p2.y / v.ch));
+    roadTop = Math.min(roadTop, rTop);
     const rBot = Math.min(v.rows - 1, Math.floor(Math.min(p1.y, maxy) / v.ch));
     for (let rr = rTop; rr <= rBot; rr++) {
       const yy = rr * v.ch + v.ch / 2;
@@ -377,5 +388,5 @@ export function drawRace(g: Grid, r: Race, v: View, sky: SkyState, time: number)
     const c0 = left ? 0 : v.cols - 6;
     text(g, rr, c0, left ? '----  ' : '  ----', p.boosting ? '#ffffff' : '#8890b0');
   }
-  return { skyGradient: [pal.skyTop, pal.skyBot], horizonRow: v.horizon };
+  return { skyGradient: [pal.skyTop, pal.skyBot], horizonRow: v.horizon, roadTop };
 }

@@ -47,9 +47,10 @@ console.log(`\nroad half-width at the car: ${ROAD_HALF_COLS} cols (${(roadAtCar(
 if (process.argv[4] === 'dump') {
   const r = newRace(Number(process.argv[5] ?? 1));
   const secs = Number(process.argv[6] ?? 20);
+  const side = Number(process.argv[7] ?? 0);
   const s2: SkyState = { offset: 0 };
   while (r.time < secs && r.status === 'racing') {
-    step(r, autopilot(r));
+    step(r, autopilot(r, side));
     advanceSky(s2, r);
     r.fx.length = 0;
   }
@@ -60,4 +61,32 @@ if (process.argv[4] === 'dump') {
     for (let c = 0; c < cols; c++) line += g.ch[rr * cols + c];
     console.log(line);
   }
+}
+
+// `climb [seeds]`: drive the bot on each seed (both fork sides), draw a frame every 0.25 s and report the
+// highest the road ever reaches against the horizon (it should never rise above it), with where.
+if (process.argv[4] === 'climb') {
+  const seeds = Number(process.argv[5] ?? 20);
+  let worst = { above: -Infinity, seed: 0, side: 0, t: 0 };
+  let frames = 0;
+  let aboveFrames = 0;
+  const g = makeGrid(cols, rows);
+  for (let seed = 1; seed <= seeds; seed++)
+    for (const side of [0, 1]) {
+      const r = newRace(seed);
+      const s2: SkyState = { offset: 0 };
+      let n = 0;
+      while (r.status === 'racing' && r.time < 400) {
+        step(r, autopilot(r, side));
+        advanceSky(s2, r);
+        r.fx.length = 0;
+        if (++n % 15) continue;
+        const { roadTop } = drawRace(g, r, v, s2, r.time);
+        const above = v.horizon - roadTop;
+        frames++;
+        if (above > 0) aboveFrames++;
+        if (above > worst.above) worst = { above, seed, side, t: r.time };
+      }
+    }
+  console.log(`\nclimb: ${frames} frames, road above the horizon in ${aboveFrames}; worst ${worst.above} rows above at seed ${worst.seed} side ${worst.side} t=${worst.t.toFixed(2)} (dump: view.ts ${W} ${H} dump ${worst.seed} ${worst.t.toFixed(2)} ${worst.side})`);
 }

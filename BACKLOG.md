@@ -922,7 +922,9 @@ playtests with fixes shipped. Open threads, in order:
   (6) six biomes (Ember Valley), seeded first stage, forks pick two undriven biomes (no repeats; a 5-biome tree can't),
   endings = finish biome (6), v2 goals migrated. New balance.ts (clean/crashy skills, splits, biome counts) and
   view.ts (rows per segment, text frame). Headless 4× throttle 59.7 fps.
-  Next: owner playtest of the new camera (hills look steeper with the long lens; far road above the horizon on climbs).
+  Follow-ups: v3 best under `best3`, v2's shown as "Old best (v2 clock)"; drawn climbs eased (`HILL_CAP`, `easeY`) so the
+  road never rises above the horizon (`view.ts climb 20`: 0 of 37k frames, was 1703, worst 11 rows).
+  Next: owner playtest of the new camera (hills look steeper with the long lens).
 
 ## Ideas (unscheduled)
 - Unspoken: more story templates so the village tale varies; (done: 🔊 speaks a word with the phone's

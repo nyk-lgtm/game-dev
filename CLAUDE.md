@@ -69,7 +69,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     contact / 80 (tests/nightline/art.test.ts recomputes it; change the art or ROAD_HALF_COLS → re-measure);
     `camHeight`/`camDepth` derive from that plus `CAM_DIST` (camera ~2900 behind at speed, a ~32° long lens; v2 a
     100° view from ~380): segment 40 (1 s) lands ~12 rows below the horizon with cars ~2 rows tall.
-    `scripts/nightline/view.ts [w h] [dump seed secs]` prints rows per segment (v3 vs v2) and a text frame.
+    `scripts/nightline/view.ts [w h] [dump seed secs side | climb seeds]` prints rows per segment (v3 vs v2), a text
+    frame, or how high the road gets against the horizon (`climb`: never above; drawn climbs saturate below
+    `HILL_CAP` 0.8 of the camera height via `easeY`, render only; without it ~5% of frames poked up to 11 rows into
+    the sky). Bests per clock: v3 under `best3`, v2's `best` shown as "Old best (v2 clock)" (title, hub card).
   - Glyphwright: `npx vite-node scripts/glyph/balance.ts 100 smart,favor` (rules v3, bot model refit 2026-11-13: smart bot
     ~83% wins (85% on 200 seeds), every loss at the Lich; favor runs 71-91%, Nova 91%. The old model's ~37% came from
     the bot stacking Novas/Fire with nothing for Drakes; the game didn't change). `favor` pushes it toward each caster.
