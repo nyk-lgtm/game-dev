@@ -55,11 +55,13 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     cell with an unseen non-rock neighbour a step could reach); the page stops it for any monster in sight or a newly seen
     exit. Taps snap to a monster/chest/person within 1.5 tiles unless on something or one step away. Daily: `?daily`.
   - Afterglow: `npx vite-node scripts/afterglow/balance.ts` (bot survival per character).
-  - Delve: `npx vite-node scripts/delve/balance.ts 100` (descent bot, rules v6: ~58% wins (56% over 400 seeds), d10 reached
-    ~84%, deaths mostly at the Warden (450 HP), then depth 5 ~6%, depth 6 ~3%; it also prints damage per depth by kind with the
-    killers there, each floor's monster mix, and `DEATHS=1` how each death went (burst, potions left, foes in sight).
-    Per-floor caps `FLOOR_CAP`/`floorCap` in gen.ts: a capped kind's first depth holds one, so wraiths and cultists,
-    both new at depth 5, come one of each; floor damage d4 ~50, d5 ~108, d6-8 ~120); Nightline: `npx vite-node scripts/nightline/balance.ts`
+  - Delve: `npx vite-node scripts/delve/balance.ts 100` (descent bot: rests to the regen cap, dodges the Warden's wave;
+    rules v7, 400 seeds: 58% wins, d10 reached ~84%, deaths d2-4 ~1.5%, d5-9 ~6%, the Warden ~34%; floor damage d2-3 ~17,
+    d4 ~43, d5 ~109, d6-8 ~120, d10 ~216; potions on arrival d5 6, d7 5, d10 6). It also prints damage per depth by kind
+    with the killers there, each floor's monster mix, `DEATHS=1` how each death went, `PLUS=1` Descent+ (~17% wins).
+    `scripts/delve/wardenprobe.ts 100` splits Warden fights (v7: ~60% won, ~50 turns, 5 waves a fight, ~2.2 landed for
+    ~55, melee ~118, minions ~36). Per-floor caps `FLOOR_CAP`/`floorCap` in gen.ts: a capped kind's first depth holds
+    one (wraiths and cultists, both new at depth 5)); Nightline: `npx vite-node scripts/nightline/balance.ts`
     (rules v2: bot finishes ~40/40 always-left, ~38/40 always-right; it dodges with perfect information, so
     human-facing fixes are about seeing traffic and curves sooner). Nightline's camera height follows the
     horizon (`camHeight` in render.ts) so the road at the car stays as wide as CAR_HIT_W was measured for.
@@ -163,10 +165,19 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     `fire.ts 64 1 [random]` (per lightning summer: burns, the idle burn plan, whether the bot plays differently than in a
     drought, and the score vs the same game with lightning turned into drought; v7 greedy: ~1.6 lightning summers a game,
     something burns in ~44/101, mean −7; random −34).
-- Delve rules v5 (src/delve/core/rules.ts): a sleeping monster spends the turn it notices you; cultists rest a turn
-  (`cd`) after each firebolt; blocked hunters try another equally short step; `use` (HIT) hits ahead, then a front
-  corner (`cornerFoe`), opens/shuts doors (never with a foe beside you or in the doorway), else "You swing at nothing"
-  (no turn); `doorNoises` drives the "?" on doors; scrolls of seeing are carried (`player.scrolls`, action `read`, code `v`).
+- Delve rules v7 (src/delve/core/rules.ts): a sleeping monster spends the turn it notices you (so sleepers are mostly seen
+  far off: zZ in the view, dim letters on the maps out to VIEW_RANGE 12); cultists rest a turn (`cd`) after each firebolt;
+  blocked hunters try another equally short step; `use` (HIT) hits straight ahead only (corner hits were removed: corner foes
+  can't strike back), opens/shuts doors (never with a foe beside you or in the doorway), else "You swing at nothing" (no
+  turn); `doorNoises` drives the "?" on doors; scrolls of seeing are carried (`player.scrolls`, action `read`, code `v`).
+  Regen: 1 HP every `REGEN_EVERY` (4) turns with no awake foe in sight (`foesInSight`), up to `regenCap` = half max HP;
+  `canRest` turns the page's WAIT into REST (waits until healed/MP full or a foe shows; many `w`s in the run). Fire/Frost
+  reach `BOLT_RANGE` (8); with nothing in reach the cast is refused (no MP, no turn; `boltTarget`). The Warden (`WARDEN` in
+  content.ts, `wardenTurn`): every 4th ordinary action near you it draws in the cold (`charge`, event `charge`), next action
+  its wave hits its row/column within 5 unless a wall/pillar is between (`inWaveAt`; always lands, armour counts), then it is
+  spent a turn (`cd`); at 66%/33% HP it summons a ghoul + 2 skeletons and is spent. Potions are leaner: kill drops 18% (10%
+  from depth 5) × 40% potion, floor items 8%. Descent+ (`newGame(seed, true)`, `s.plus`, unlocked by a win; `&plus=1` on
+  replay links, `plus=1` in reports): foes ×`PLUS_HP` HP, +`PLUS_ATK` damage. The page asks before descending stairs.
 - ASCII games (Delve, Nightline) draw into a character `Grid` (src/shared/ascii.ts) painted
   with batched `fillText` runs; art lives in each game's `art.ts`.
 - Daily challenges (src/shared/daily.ts): `<game>/?daily` plays today's seed (`dailySeed(game, day)`,

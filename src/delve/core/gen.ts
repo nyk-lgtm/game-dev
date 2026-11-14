@@ -2,7 +2,7 @@
 // mouths, pillars in big rooms, stairs in the room farthest from the start.
 
 import { Rng, mixSeed } from '../../shared/rng';
-import { MAX_DEPTH, MONSTERS } from './content';
+import { ITEM_POTION, MAX_DEPTH, MONSTERS } from './content';
 import type { Item, ItemKind, Level, Monster, MonsterKind, Tile } from './types';
 
 export const SIZE = 33;
@@ -205,9 +205,9 @@ export function generateFloor(seed: number, depth: number): Floor {
     const r = rng.next();
     let kind: ItemKind;
     let value = 0;
-    if (r < 0.12) kind = 'potion';
-    else if (r < 0.22) kind = 'ether';
-    else if (r < 0.28) kind = 'map';
+    if (r < ITEM_POTION) kind = 'potion';
+    else if (r < 0.18) kind = 'ether';
+    else if (r < 0.24) kind = 'map';
     else if (r < 0.62) {
       kind = 'gold';
       value = rng.int(4, 9) * depth;

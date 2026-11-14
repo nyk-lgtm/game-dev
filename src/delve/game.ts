@@ -9,10 +9,13 @@ import { makeStore } from '../shared/storage';
 import { DEATH_ART, LOGO, MONSTER_ART, ITEM_ART, VICTORY_ART } from './art';
 import {
   ARMORS,
+  BOLT_RANGE,
   DX,
   DY,
   MAX_DEPTH,
   MONSTERS,
+  PLUS_ATK,
+  PLUS_HP,
   RULES_VERSION,
   SHOP_DEPTHS,
   SIGHT,
@@ -22,18 +25,24 @@ import {
   XP_TABLE,
   applyAction,
   attackOf,
+  boltTarget,
   canBuy,
-  cornerFoe,
+  canRest,
   defenceOf,
   doorNoises,
   encodeAction,
+  foesInSight,
   idx,
+  inWave,
+  inWaveAt,
+  inside,
   isLegal,
   los,
   newGame,
   offerName,
   opaqueTile,
   randomSeed,
+  regenCap,
   replay,
   runScore,
   tileAt,
@@ -65,10 +74,15 @@ const MONSTER_LOOK: Record<MonsterKind, { hue: number; sat: number; scale: numbe
 const ITEM_HUE: Record<string, [number, number]> = { potion: [0, 70], ether: [215, 70], gold: [48, 90], weapon: [200, 15], armor: [200, 15], map: [40, 45] };
 /** Map glyph and color per item kind. */
 // Red is only for foes on the maps.
-const ITEM_GLYPH: Record<string, [string, string]> = { potion: ['!', '#7fe08a'], ether: ['!', '#5ab4ff'], gold: ['$', '#ffd36b'], weapon: [')', '#c9d4e0'], armor: ['[', '#c9d4e0'], map: ['?', '#e8d7a8'] };
+const ITEM_GLYPH: Record<string, [string, string]> = { potion: ['!', '#7fe08a'], ether: ['~', '#5ab4ff'], gold: ['$', '#ffd36b'], weapon: [')', '#c9d4e0'], armor: ['[', '#c9d4e0'], map: ['?', '#e8d7a8'] };
 
 /** Minimap letters, one per monster kind. */
 const MAP_GLYPH: Record<MonsterKind, string> = { rat: 'r', bat: 'b', slime: 'j', thief: 't', skeleton: 's', archer: 'a', ghoul: 'g', wraith: 'W', mage: 'c', golem: 'G', warden: 'X' };
+
+/** How far the 3D view shows a foe (sleeping ones are marked on the maps this far). */
+const VIEW_RANGE = 12;
+/** What Descent+ changes, for its buttons. */
+const PLUS_TEXT = `foes +${Math.round((PLUS_HP - 1) * 100)}% HP, +${PLUS_ATK} damage`;
 
 const angleOf = (dir: number) => ((dir - 1) * Math.PI) / 2;
 /** The spell menu's fixed slots: each spell keeps its place, new ones are added below. */
@@ -82,6 +96,8 @@ interface SavedRun {
   day?: string | null;
   /** Depth reached, for the title screen (saves replaying the run to show it). */
   depth?: number;
+  /** Descent+ (harder foes). */
+  plus?: boolean;
 }
 
 /** Floating text over the view (damage numbers and the like). */
@@ -139,19 +155,20 @@ export class Game {
   // ---------- lifecycle ----------
 
   /** Start (or restore) a run. With `replayLink`, the run is a bug-report replay and is never saved. */
-  start(seed: number, actions = '', replayLink = false, day: string | null = null): void {
+  start(seed: number, actions = '', replayLink = false, day: string | null = null, plus = false): void {
     let s: GameState;
     let note = replayLink ? 'Replay: progress here is not saved' : '';
+    if (day) plus = false;
     try {
-      s = replay(seed, actions);
+      s = replay(seed, actions, plus);
     } catch (err) {
       note = `${replayLink ? 'Replay' : 'Saved run'} failed (${err instanceof Error ? err.message : String(err)}); seed ${seed} from the start`;
       actions = '';
-      s = newGame(seed);
+      s = newGame(seed, plus);
     }
     if (note) toast(note);
     this.replaying = replayLink;
-    this.run = { seed, actions, v: RULES_VERSION, day };
+    this.run = { seed, actions, v: RULES_VERSION, day, ...(plus ? { plus } : {}) };
     this.dailyResult = null;
     this.popups = [];
     this.lastFoe = null;
@@ -189,7 +206,7 @@ export class Game {
     const s = this.state;
     const score = runScore(s);
     if (this.replaying) return { score, newBest: false };
-    if (s.status === 'won') store.save('wins', store.load<number>('wins', 0) + 1);
+    if (s.status === 'won') store.save(s.plus ? 'winsPlus' : 'wins', store.load<number>(s.plus ? 'winsPlus' : 'wins', 0) + 1);
     const best = store.load<number>('bestScore', 0);
     if (score > best) store.save('bestScore', score);
     if (this.run.day) this.dailyResult = recordDaily(store, score, `${score} · ${s.status === 'won' ? 'won' : `depth ${s.depth}`}`, this.run.day);
@@ -210,6 +227,7 @@ export class Game {
         const a = b.dataset.a!;
         if (a === 'magic') this.showSpells();
         else if (a === 'map') this.showMap();
+        else if (a === 'wait') this.waitOrRest();
         else this.act({ type: a } as Action);
       });
     }
@@ -235,7 +253,8 @@ export class Game {
         ' ': 'use', enter: 'use', '.': 'wait', p: 'potion', r: 'read',
       };
       const t = map[e.key.toLowerCase()];
-      if (t) this.act({ type: t } as Action);
+      if (t === 'wait') this.waitOrRest();
+      else if (t) this.act({ type: t } as Action);
       if (e.key.toLowerCase() === 'm' && $('overlay').hidden && this.state) this.showMap();
       if (e.key.toLowerCase() === 'f') this.act({ type: 'cast', spell: 'fire' });
     });
@@ -253,11 +272,71 @@ export class Game {
       else if (a.type === 'read') toast(this.state.player.scrolls ? 'This floor is already mapped' : 'No scrolls of seeing');
       return;
     }
+    // A bolt with nothing in reach costs nothing: say so here rather than record a no-op.
+    if (a.type === 'cast' && (a.spell === 'fire' || a.spell === 'frost') && !boltTarget(this.state).m) {
+      toast(`Nothing to hit within ${BOLT_RANGE} cells ahead (no MP spent)`);
+      return;
+    }
     const before = this.state;
     const { state, events } = applyAction(before, a);
+    // The stairs: ask before going down (there is no way back up), unless told not to.
+    if (!fromCard && events.some((e) => e.type === 'descend') && !store.load<boolean>('noDescendAsk', false)) {
+      const go = () => (closeOverlay(), this.commit(a, state, events));
+      showCard(
+        `<h2>Stairs down</h2><p>Go down to depth ${state.depth}? There is no way back up. You catch your breath on the stairs (+15% HP).</p>`,
+        [
+          { label: `Descend to depth ${state.depth}`, primary: true, onClick: go },
+          { label: 'Not yet', onClick: closeOverlay },
+          { label: 'Descend, and stop asking', onClick: () => (store.save('noDescendAsk', true), go()) },
+        ],
+      );
+      return;
+    }
+    this.commit(a, state, events);
+  }
+
+  private commit(a: Action, state: GameState, events: GameEvent[]): void {
     this.run.actions += encodeAction(a);
     this.state = state;
     this.react(events);
+    this.persist();
+    this.refresh();
+    this.dirty = true;
+  }
+
+  /** WAIT, or (with nothing awake in sight and something to gain) REST: wait turn after turn. */
+  private waitOrRest(): void {
+    if (!this.state || !$('overlay').hidden) return;
+    if (this.anim || !canRest(this.state)) return this.act({ type: 'wait' });
+    let s = this.state;
+    const p0 = { hp: s.player.hp, mp: s.player.mp };
+    const seen = new Set(s.monsters.filter((m) => this.inSight(m, s)).map((m) => m.id));
+    let turns = 0;
+    let why = '';
+    let hurtEvents: GameEvent[] = [];
+    while (canRest(s) && turns < 400) {
+      const r = applyAction(s, { type: 'wait' });
+      s = r.state;
+      turns++;
+      this.run.actions += 'w';
+      const hurt = r.events.find((e): e is Extract<GameEvent, { type: 'hurt' }> => e.type === 'hurt');
+      if (hurt) {
+        why = `${MONSTERS[hurt.by].name} attacks!`;
+        hurtEvents = r.events;
+        break;
+      }
+      const foe = foesInSight(s)[0] ?? s.monsters.find((m) => !seen.has(m.id) && this.inSight(m, s));
+      if (foe) {
+        why = `${MONSTERS[foe.kind].name} ${foe.awake ? 'appears' : 'comes into view'}!`;
+        break;
+      }
+    }
+    this.state = s;
+    if (hurtEvents.length) this.react(hurtEvents);
+    const p = s.player;
+    const gain = [p.hp > p0.hp ? `+${p.hp - p0.hp} HP` : '', p.mp > p0.mp ? `+${p.mp - p0.mp} MP` : ''].filter(Boolean).join(', ');
+    const capped = !why && p.hp >= regenCap(s) && p.hp < p.maxHp ? ' Rest heals to half; potions and Mend do the rest.' : '';
+    toast(why ? `Rest broken after ${turns} turns${gain ? ` (${gain})` : ''}: ${why}` : `Rested ${turns} turns${gain ? `: ${gain}` : ''}.${capped}`);
     this.persist();
     this.refresh();
     this.dirty = true;
@@ -331,6 +410,12 @@ export class Game {
           if (e.spell === 'heal') break;
           this.bolt = { t: 0, color: e.spell === 'fire' ? '#ff8a3d' : e.spell === 'frost' ? '#7fe3ff' : '#c9a6ff' };
           break;
+        case 'charge':
+          navigator.vibrate?.([20, 40, 20]);
+          break;
+        case 'summon':
+          toast('The Warden calls the dead!');
+          break;
         case 'levelUp':
           toast(`Level ${e.level}!`);
           navigator.vibrate?.(20);
@@ -353,17 +438,19 @@ export class Game {
   private showSpells(): void {
     const p = this.state.player;
     const known = SPELL_ORDER.filter((id) => p.spells.includes(id));
+    const target = boltTarget(this.state);
+    const bolt = (id: SpellId) => id === 'fire' || id === 'frost';
     const opts = known.map((id) => ({
-      label: `${SPELLS[id].name} (${SPELLS[id].cost} MP) - ${SPELLS[id].desc}`,
+      label: `${SPELLS[id].name} (${SPELLS[id].cost} MP) - ${SPELLS[id].desc}${bolt(id) ? (target.m ? ` Target: ${MONSTERS[target.m.kind].name}, ${target.dist} ahead.` : ' Nothing in reach.') : ''}`,
       onClick: () => {
         closeOverlay();
         this.act({ type: 'cast', spell: id });
       },
     }));
-    showCard(`<h2>Spells</h2><p>MP ${p.mp}/${p.maxMp}. New spells come with levels.</p>`, [...opts, { label: 'Cancel', onClick: closeOverlay }]);
+    showCard(`<h2>Spells</h2><p>MP ${p.mp}/${p.maxMp}. New spells come with levels. Bolts reach ${BOLT_RANGE} cells ahead and cost nothing when there is nothing to hit.</p>`, [...opts, { label: 'Cancel', onClick: closeOverlay }]);
     document.querySelectorAll<HTMLButtonElement>('#overlay .card button').forEach((b, i) => {
       const id = known[i];
-      if (id) b.disabled = !isLegal(this.state, { type: 'cast', spell: id });
+      if (id) b.disabled = !isLegal(this.state, { type: 'cast', spell: id }) || (bolt(id) && !target.m);
     });
   }
 
@@ -372,17 +459,20 @@ export class Game {
     const best = store.load<number>('best', 0);
     const bestScore = store.load<number>('bestScore', 0);
     const wins = store.load<number>('wins', 0);
+    const winsPlus = store.load<number>('winsPlus', 0);
     const saved = store.load<SavedRun | null>('run', null);
     const canResume = saved && saved.v === RULES_VERSION;
     const daily = loadDaily(store);
     const dailyRun = store.load<SavedRun | null>('dailyRun', null);
     const dailyOn = dailyRun && dailyRun.day === todayKey() && dailyRun.v === RULES_VERSION;
-    const records = [best ? `Deepest: ${best}` : '', bestScore ? `Best score: ${bestScore}` : '', wins ? `Wins: ${wins}` : ''].filter(Boolean).join(' · ');
+    const records = [best ? `Deepest: ${best}` : '', bestScore ? `Best score: ${bestScore}` : '', wins ? `Wins: ${wins}` : '', winsPlus ? `Descent+ wins: ${winsPlus}` : ''].filter(Boolean).join(' · ');
     showCard(
       `<pre>${LOGO.join('\n')}</pre><p style="text-align:center">Ten floors down, the Warden waits.</p>${records ? `<p class="meta">${records}</p>` : ''}`,
       [
-        ...(canResume ? [{ label: saved!.depth ? `Continue (depth ${saved!.depth})` : 'Continue', primary: true, onClick: () => (closeOverlay(), this.start(saved!.seed, saved!.actions)) }] : []),
+        ...(canResume ? [{ label: `Continue${saved!.plus ? ' Descent+' : ''}${saved!.depth ? ` (depth ${saved!.depth})` : ''}`, primary: true, onClick: () => (closeOverlay(), this.start(saved!.seed, saved!.actions, false, null, !!saved!.plus)) }] : []),
         { label: 'New descent', primary: !canResume, onClick: () => (closeOverlay(), this.start(randomSeed())) },
+        // A win unlocks Descent+: the same deep with tougher foes.
+        ...(wins || winsPlus ? [{ label: `New Descent+ (${PLUS_TEXT})`, onClick: () => (closeOverlay(), this.start(randomSeed(), '', false, null, true)) }] : []),
         { label: dailyOn ? `Continue daily descent (depth ${dailyRun!.depth ?? 1})` : `Daily descent · ${daily ? `best ${daily.label}` : 'not played'}`, onClick: () => this.playDaily() },
         { label: 'How to play', onClick: () => this.showHelp() },
         { label: 'All games', onClick: () => (location.href = '../') },
@@ -397,10 +487,12 @@ export class Game {
       <li><b>FWD / BACK / STEP</b> move one cell. <b>TURN</b> is free; everything else takes a turn.</li>
       <li>Or swipe on the view: up/down to step; swipe left/right to turn, as if dragging the view (swipe left to look right); tap to hit or open doors.</li>
       <li>Bumping a door opens it without stepping through, so you can look before you go in. Descending the stairs restores a little HP.</li>
-      <li>Walk into a monster (or press <b>HIT</b>) to attack. The bar at the top of the view shows the foe in front of you. HIT also reaches a foe in a front corner (marked HIT on the arrows).</li>
+      <li>Walk into a monster (or press <b>HIT</b>) to attack. The bar at the top of the view shows the foe in front of you.</li>
       <li>Red arrows at the edges of the view warn of foes beside or behind you: turn to face them. Monsters only strike from straight beside you, and lose a turn when they first notice you.</li>
-      <li>A <b style="color:#ffb347">?</b> on a door means you hear something behind it. Cultists gather flame for a turn after each firebolt: step out of line.</li>
-      <li><b>CAST</b> spells with MP (it slowly comes back): Firebolt from the start, Frost at level 3, Mend at 5, Blink at 7.</li>
+      <li>A <b style="color:#ffb347">?</b> on a door means you hear something behind it. Cultists gather flame for a turn after each firebolt: step out of line. Sleeping foes show <b style="color:#8fb8ff">zZ</b>.</li>
+      <li><b>CAST</b> spells with MP (it slowly comes back): Firebolt from the start, Frost at level 3, Mend at 5, Blink at 7. Bolts reach ${BOLT_RANGE} cells.</li>
+      <li>With nothing awake in sight, wounds slowly close, up to half your health. <b>WAIT</b> turns into <b>REST</b> then: it waits until you're healed and your MP is full, or something shows up.</li>
+      <li>The Warden draws in the cold before each wave, which rolls down its row and column: step out of line, or behind a pillar. After a wave it is spent for a turn.</li>
       <li>Monsters act only when you do. Archers and cultists shoot down straight corridors.</li>
       <li>Find the stairs (<b>&gt;</b>) on each floor. Floor 10 holds the Warden.</li>
       <li>Gather gold: a merchant waits on floors ${SHOP_DEPTHS.join(' and ')} with potions, gear and vigor.</li>
@@ -414,7 +506,7 @@ export class Game {
     const s = this.state;
     if (!s) return;
     showCard(
-      `<h2>Depth ${s.depth}${this.run.day ? ' · daily' : ''}</h2><p>Turn ${s.turn} · ${s.kills} kills · ${s.player.gold} gold · score ${runScore(s)}</p>`,
+      `<h2>Depth ${s.depth}${this.run.day ? ' · daily' : s.plus ? ' · Descent+' : ''}</h2><p>Turn ${s.turn} · ${s.kills} kills · ${s.player.gold} gold · score ${runScore(s)}</p>`,
       [
         { label: 'Resume', primary: true, onClick: closeOverlay },
         { label: 'How to play', onClick: () => this.showHelp(true) },
@@ -436,9 +528,10 @@ export class Game {
       `<pre>${(won ? VICTORY_ART : DEATH_ART).join('\n')}</pre><h2 style="text-align:center">${won ? 'The deep is quiet' : 'Lost in the dark'}</h2>
       <p style="text-align:center">${cause}</p>
       <p style="text-align:center">Score <b>${score}</b>${newBest ? ' · <b>new best!</b>' : ''}</p>
-      <p style="text-align:center">Level ${s.player.level} · ${s.kills} kills · ${s.player.gold} gold · ${s.turn} turns</p>${dailyLine}`,
+      <p style="text-align:center">Level ${s.player.level} · ${s.kills} kills · ${s.player.gold} gold · ${s.turn} turns${s.plus ? ' · Descent+' : ''}</p>${won && !s.plus && !this.replaying ? '<p style="text-align:center">Descent+ is open: the same deep with tougher foes.</p>' : ''}${dailyLine}`,
       [
-        { label: 'New descent', primary: true, onClick: () => (closeOverlay(), this.start(randomSeed())) },
+        { label: s.plus ? 'New Descent+' : 'New descent', primary: true, onClick: () => (closeOverlay(), this.start(randomSeed(), '', false, null, !!s.plus)) },
+        ...(won && !s.plus && !this.replaying ? [{ label: `Try Descent+ (${PLUS_TEXT})`, onClick: () => (closeOverlay(), this.start(randomSeed(), '', false, null, true)) }] : []),
         ...(day && !this.replaying ? [{ label: 'Retry today’s descent', onClick: () => (closeOverlay(), this.start(dailySeed('delve', day), '', false, day)) }] : []),
         { label: 'Title', onClick: () => this.showTitle() },
       ],
@@ -477,7 +570,7 @@ export class Game {
     const scrolls = s.player.scrolls;
     const canRead = isLegal(s, { type: 'read' });
     showCard(
-      `<h2>Depth ${s.depth}</h2><canvas id="fullMap" style="width:100%;aspect-ratio:1;display:block"></canvas><p class="meta"><b style="color:#5ee7ff">@</b> you (the notch shows your facing) · <b style="color:#ffb347">&gt;</b> stairs · + door (<b style="color:#ffb347">?</b> something behind it) · O pillar · <b style="color:#7fe08a">!</b> potion · <b style="color:#5ab4ff">!</b> ether · $ gold · ) [ gear · ? scroll · <b style="color:#ff4d4d">red letters</b>: foes in sight</p>`,
+      `<h2>Depth ${s.depth}</h2><canvas id="fullMap" style="width:100%;aspect-ratio:1;display:block"></canvas><p class="meta"><b style="color:#5ee7ff">@</b> you (the notch shows your facing) · <b style="color:#ffb347">&gt;</b> stairs · + door (<b style="color:#ffb347">?</b> something behind it) · O pillar · <b style="color:#7fe08a">!</b> potion · <b style="color:#5ab4ff">~</b> ether · $ gold · ) [ gear · ? scroll · <b style="color:#ff4d4d">red letters</b>: foes in sight (<b style="color:#b07a88">dim</b>: asleep)</p>`,
       [
         ...(scrolls ? [{ label: canRead ? `Read a scroll of seeing (${scrolls})` : `Scrolls of seeing: ${scrolls} (this floor is mapped)`, onClick: () => (closeOverlay(), this.act({ type: 'read' })) }] : []),
         { label: 'Close', primary: true, onClick: closeOverlay },
@@ -509,7 +602,7 @@ export class Game {
   }
 
   private async copyReport(): Promise<void> {
-    const text = `DELVE build=${__BUILD_ID__} rules=${RULES_VERSION} seed=${this.run.seed} a=${this.run.actions || '-'} ua="${navigator.userAgent}"`;
+    const text = `DELVE build=${__BUILD_ID__} rules=${RULES_VERSION} seed=${this.run.seed}${this.run.plus ? ' plus=1' : ''} a=${this.run.actions || '-'} ua="${navigator.userAgent}"`;
     toast((await copyText(text)) ? 'Bug report copied' : 'Copy failed');
   }
 
@@ -530,6 +623,10 @@ export class Game {
     document.querySelector('#pad [data-a=potion]')!.classList.toggle('dim', !isLegal(s, { type: 'potion' }));
     document.querySelector('#pad [data-a=ether]')!.classList.toggle('dim', !isLegal(s, { type: 'ether' }));
     document.querySelector('#pad [data-a=magic]')!.classList.toggle('dim', !s.player.spells.some((id) => isLegal(s, { type: 'cast', spell: id })));
+    const rest = canRest(s);
+    const waitBtn = document.querySelector<HTMLButtonElement>('#pad [data-a=wait]')!;
+    waitBtn.textContent = rest ? 'REST' : 'WAIT';
+    waitBtn.classList.toggle('rest', rest);
     this.refreshFoe();
     const next = XP_TABLE[p.level];
     $('stats').innerHTML = `LV <b>${p.level}</b> XP ${p.xp}${next ? '/' + next : ''} · ATK <b>${attackOf(s)}</b> DEF <b>${defenceOf(s)}</b><br>${WEAPONS[p.weapon]} · ${ARMORS[p.armor]} · <b>${p.gold}</b>g${p.scrolls ? ` · ${p.scrolls} scroll${p.scrolls > 1 ? 's' : ''}` : ''}`;
@@ -543,7 +640,7 @@ export class Game {
   private foe(): Monster | null {
     const s = this.state;
     const p = s.player;
-    for (let d = 1; d <= 7; d++) {
+    for (let d = 1; d <= VIEW_RANGE; d++) {
       const x = p.x + DX[p.dir] * d;
       const y = p.y + DY[p.dir] * d;
       const m = s.monsters.find((o) => o.hp > 0 && o.x === x && o.y === y);
@@ -557,18 +654,23 @@ export class Game {
   private foeKey = '';
   private refreshFoe(): void {
     const m = this.state.status === 'playing' ? this.foe() : null;
-    const key = m ? `${m.id}:${m.hp}:${m.awake}:${m.stun}` : '';
+    const key = m ? `${m.id}:${m.hp}:${m.awake}:${m.stun}:${m.charge ?? 0}:${m.cd ?? 0}:${this.state.player.x},${this.state.player.y}` : '';
     if (key === this.foeKey) return;
     this.foeKey = key;
     const el = $('foe');
     el.hidden = !m;
     if (!m) return;
     const def = MONSTERS[m.kind];
-    const tags = [!m.awake ? 'asleep' : '', m.stun > 0 ? `frozen ${m.stun}` : '', def.range ? 'ranged' : '', def.ghost ? 'walks through walls' : '', def.slow ? 'slow' : ''].filter(Boolean).join(' · ');
+    const tags = [m.stun > 0 ? `frozen ${m.stun}` : '', def.range ? 'ranged' : '', def.ghost ? 'walks through walls' : '', def.slow ? 'slow' : ''].filter(Boolean).join(' · ');
     $('foeName').textContent = def.name;
+    $('foeZ').hidden = m.awake;
     $('foeHp').textContent = `${Math.max(0, m.hp)}/${m.maxHp}`;
     $('foeFill').style.width = `${(100 * Math.max(0, m.hp)) / m.maxHp}%`;
-    $('foeNote').textContent = tags ? `${def.blurb} (${tags})` : def.blurb;
+    // The Warden's tells come first: they decide your next move.
+    const warn = m.charge ? (inWave(this.state, m) ? 'DRAWING IN THE COLD: get out of its row and column!' : 'Drawing in the cold: stay out of its row and column.') : m.cd ? 'Spent: strike now, or heal.' : '';
+    const note = $('foeNote');
+    note.textContent = warn || (tags ? `(${tags}) ${def.blurb}` : def.blurb);
+    note.classList.toggle('warn', !!warn);
   }
 
   // ---------- rendering ----------
@@ -655,7 +757,7 @@ export class Game {
     const out: Sprite[] = [];
     for (const m of s.monsters) {
       const look = MONSTER_LOOK[m.kind];
-      out.push({ x: m.x + 0.5, y: m.y + 0.5, art: MONSTER_ART[m.kind], scale: look.scale, hue: look.hue, sat: look.sat, lift: look.lift, flash: this.flash.has(m.id), frozen: m.stun > 0, foe: true });
+      out.push({ x: m.x + 0.5, y: m.y + 0.5, art: MONSTER_ART[m.kind], scale: look.scale, hue: look.hue, sat: look.sat, lift: look.lift, flash: this.flash.has(m.id), frozen: m.stun > 0, foe: true, asleep: !m.awake });
     }
     for (const it of s.items) {
       const [hue, sat] = ITEM_HUE[it.kind] ?? [0, 0];
@@ -676,6 +778,7 @@ export class Game {
     this.overlayHands(time);
     this.overlayThreats(time);
     this.overlayNoise(time);
+    this.overlayWave(time);
     this.overlayPopups();
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, this.vw, this.vh);
@@ -729,7 +832,6 @@ export class Game {
     let left = '';
     let right = '';
     let back = '';
-    const corner = cornerFoe(s);
     for (const m of s.monsters) {
       if (m.hp <= 0 || !m.awake) continue;
       const dx = m.x - p.x;
@@ -741,12 +843,8 @@ export class Game {
       const def = MONSTERS[m.kind];
       const aimed = def.range > 0 && (dx === 0 || dy === 0) && d <= def.range;
       if (d > 2 && !aimed) continue;
-      // A foe in a front corner can be struck with HIT: say so, so the arrow isn't a dead end.
-      const name = def.name.replace(/^(Giant|Cave|Bone|Stone|The) /, '').toUpperCase() + (corner?.id === m.id ? ' (HIT)' : '');
-      if (corner?.id === m.id) {
-        if (r < 0) left = name;
-        else right = name;
-      } else if (f > 0 || Math.abs(r) > Math.abs(f)) {
+      const name = def.name.replace(/^(Giant|Cave|Bone|Stone|The) /, '').toUpperCase();
+      if (f > 0 || Math.abs(r) > Math.abs(f)) {
         if (r < 0) left ||= name;
         else right ||= name;
       } else back ||= name;
@@ -794,6 +892,26 @@ export class Game {
     const col = Math.floor(time * 3) % 2 ? '#ffb347' : '#ffd9a0';
     const label = ' ? SOMETHING BEHIND ? ';
     const r = Math.floor(g.rows * 0.42);
+    const c = Math.floor((g.cols - label.length) / 2);
+    for (const rr of [r - 1, r, r + 1])
+      for (let i = 0; i < label.length; i++) {
+        const cc = c + i;
+        if (rr < 0 || rr >= g.rows || cc < 0 || cc >= g.cols) continue;
+        g.ch[rr * g.cols + cc] = rr === r ? label[i] : ' ';
+        g.color[rr * g.cols + cc] = col;
+      }
+  }
+
+  /** The Warden drawing in the cold with you in its line: a flashing banner. */
+  private overlayWave(time: number): void {
+    const s = this.state;
+    if (s.status !== 'playing') return;
+    const w = s.monsters.find((m) => m.kind === 'warden' && m.charge);
+    if (!w || !inWave(s, w)) return;
+    const g = this.grid;
+    const col = Math.floor(time * 5) % 2 ? '#7fe3ff' : '#ffffff';
+    const label = ' GET OUT OF ITS LINE! ';
+    const r = Math.floor(g.rows * 0.78);
     const c = Math.floor((g.cols - label.length) / 2);
     for (const rr of [r - 1, r, r + 1])
       for (let i = 0; i < label.length; i++) {
@@ -868,6 +986,13 @@ export class Game {
       ctx.fillStyle = '#ffb347';
       ctx.fillText('?', ...at(d.x, d.y));
     }
+    // The Warden's coming wave: its row and column, as far as it reaches.
+    const wave = s.status === 'playing' ? s.monsters.find((m) => m.kind === 'warden' && m.charge) : undefined;
+    if (wave) {
+      ctx.fillStyle = 'rgba(127,227,255,0.28)';
+      for (let y = y0; y < y0 + span; y++)
+        for (let x = x0; x < x0 + span; x++) if (inside(x, y) && !opaqueTile(s.level.tiles[idx(x, y)]) && inWaveAt(s, wave, x, y)) ctx.fillRect((x - x0) * cell, (y - y0) * cell, cell, cell);
+    }
     for (const it of s.items) {
       if (!within(it.x, it.y) || !s.level.seen[idx(it.x, it.y)]) continue;
       const [ch, col] = ITEM_GLYPH[it.kind] ?? ['*', '#ffd36b'];
@@ -875,10 +1000,11 @@ export class Game {
       ctx.fillText(ch, ...at(it.x, it.y));
     }
     for (const m of s.monsters) {
-      if (!within(m.x, m.y) || !m.awake) continue;
-      // Only what you can actually see on the full map; the minimap keeps the old "awake" rule.
-      if (whole && !this.inSight(m)) continue;
-      ctx.fillStyle = '#ff4d4d';
+      if (!within(m.x, m.y)) continue;
+      // Awake foes: only what you can actually see on the full map (the minimap keeps the old "awake" rule).
+      // Sleeping ones show, dim, while the view could show them (a sleeper nearer than SIGHT wakes on its next turn).
+      if (m.awake ? whole && !this.inSight(m) : !this.inSight(m, this.state, VIEW_RANGE)) continue;
+      ctx.fillStyle = m.awake ? '#ff4d4d' : '#b07a88';
       ctx.fillText(MAP_GLYPH[m.kind], ...at(m.x, m.y));
     }
     // You: a cyan "@" (never ">", which is the stairs) with a notch on the side you face.
@@ -902,10 +1028,10 @@ export class Game {
     ctx.fill();
   }
 
-  private inSight(m: Monster): boolean {
-    const p = this.state.player;
+  private inSight(m: Monster, s = this.state, range = SIGHT): boolean {
+    const p = s.player;
     const dx = m.x - p.x;
     const dy = m.y - p.y;
-    return dx * dx + dy * dy <= SIGHT * SIGHT + 2 && los(this.state, p.x, p.y, m.x, m.y);
+    return dx * dx + dy * dy <= range * range + 2 && los(s, p.x, p.y, m.x, m.y);
   }
 }

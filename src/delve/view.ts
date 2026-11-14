@@ -77,6 +77,8 @@ export interface Sprite {
   frozen?: boolean;
   /** Vertical lift relative to the floor, in wall heights (bats fly). */
   lift?: number;
+  /** Asleep: a "zZ" floats over it. */
+  asleep?: boolean;
   /** A monster: kept bright at a distance so it stands out from the dim walls. */
   foe?: boolean;
 }
@@ -278,6 +280,17 @@ export function castView(g: Grid, s: GameState, pose: Pose, aspect: number, flic
         const i = r * cols + c;
         g.ch[i] = ch;
         g.color[i] = !sp.flash && art.accents?.[ch] ? art.accents[ch] : base;
+      }
+    }
+    // A sleeping foe: "zZ" just above its head's right side.
+    if (sp.asleep) {
+      const r = Math.max(0, r0 - 1);
+      const c = Math.round(screenX + outC * 0.25);
+      for (let j = 0; j < 2; j++) {
+        const cc = c + j;
+        if (r >= rows || cc < 0 || cc >= cols || zbuf[cc] < ty) continue;
+        g.ch[r * cols + cc] = j ? 'Z' : 'z';
+        g.color[r * cols + cc] = '#8fb8ff';
       }
     }
   }

@@ -14,7 +14,11 @@ import {
   WEAPON_ATK,
   applyAction,
   canBuy,
+  canRest,
   encodeAction,
+  inWave,
+  inWaveAt,
+  regenCap,
   idx,
   inside,
   isLegal,
@@ -167,6 +171,8 @@ export interface BotMemory {
   /** A foe we've spotted and mean to fight (so it isn't forgotten behind a pillar). */
   target: number;
   targetSince: number;
+  /** Turns spent resting on this floor (not counted against the exploring budget). */
+  rested: number;
 }
 
 /** At a merchant: gear upgrades first, then vigor, potions, the rest; then leave. */
@@ -185,12 +191,35 @@ export function botAction(s: GameState, mem: BotMemory): Action {
   const vis = s.monsters.filter((m) => visible(s, m) && !m.loot);
   const awakeNear = vis.filter((m) => m.awake && Math.abs(m.x - p.x) + Math.abs(m.y - p.y) <= 6);
 
+  // The Warden's wave: step out of its row and column (it always lands).
+  const warden = s.monsters.find((m) => m.kind === 'warden' && m.hp > 0);
+  if (warden?.charge) {
+    if (inWave(s, warden)) {
+      for (const [type, turn] of [['strafeL', 3], ['strafeR', 1], ['back', 2], ['forward', 0]] as const) {
+        const k = (p.dir + turn) % 4;
+        const x = p.x + DX[k];
+        const y = p.y + DY[k];
+        if (!walkable(s, x, y) || s.level.tiles[idx(x, y)] === 'door' || s.monsters.some((m) => m.hp > 0 && m.x === x && m.y === y)) continue;
+        if (!inWaveAt(s, warden, x, y)) return { type };
+      }
+    } else {
+      // Out of the line: hold still (strike a foe beside you if facing one) until the wave has gone by.
+      const m = s.monsters.find((o) => o.hp > 0 && o.x === p.x + DX[p.dir] && o.y === p.y + DY[p.dir]);
+      return m ? { type: 'forward' } : { type: 'wait' };
+    }
+  }
   // Heal when hurt: Mend first (cheap), then potions.
-  if (p.hp < p.maxHp * LOW_HP || (p.hp < p.maxHp * 0.5 && awakeNear.some((m) => m.kind === 'warden' || m.kind === 'golem'))) {
+  const wardenSpent = !!warden?.cd && awakeNear.includes(warden);
+  if (p.hp < p.maxHp * LOW_HP || (p.hp < p.maxHp * (wardenSpent ? 0.65 : 0.5) && awakeNear.some((m) => m.kind === 'warden' || m.kind === 'golem'))) {
     if (can(s, 'heal')) return { type: 'cast', spell: 'heal' };
     if (isLegal(s, { type: 'potion' })) return { type: 'potion' };
   }
   if (!awakeNear.length && p.hp < p.maxHp * 0.6 && can(s, 'heal') && p.mp >= p.maxMp - 1) return { type: 'cast', spell: 'heal' };
+  // Nothing awake in sight and wounded: rest (wounds close up to half health).
+  if (canRest(s) && p.hp < regenCap(s)) {
+    mem.rested++;
+    return wait;
+  }
   // A scroll of seeing as soon as nothing threatens (the floor shows where the stairs are).
   if (!awakeNear.length && isLegal(s, { type: 'read' })) return { type: 'read' };
   if (p.mp <= 1 && p.ethers > 0 && awakeNear.some((m) => DANGEROUS.has(m.kind)) && isLegal(s, { type: 'ether' })) return { type: 'ether' };
@@ -280,7 +309,7 @@ export function botAction(s: GameState, mem: BotMemory): Action {
 
   const stairs = s.level.tiles.indexOf('stairs');
   const stairsKnown = stairs >= 0 && s.level.seen[stairs];
-  const onFloor = s.turn - mem.floorStart;
+  const onFloor = s.turn - mem.floorStart - mem.rested;
   const hurry = onFloor > FLOOR_BUDGET;
 
   if (!(hurry && stairsKnown)) {
@@ -321,23 +350,24 @@ export function botAction(s: GameState, mem: BotMemory): Action {
 }
 
 /** Play a run; `stopDepth` ends it early once the bot reaches that depth (for quick tests). */
-export function playDescent(seed: number, maxActions = 8000, stopDepth = Infinity): BotResult {
-  let s = newGame(seed);
+export function playDescent(seed: number, maxActions = 20000, stopDepth = Infinity, plus = false): BotResult {
+  let s = newGame(seed, plus);
   let actions = '';
   const floors: FloorStat[] = [];
   const snap = (): FloorStat => ({ depth: s.depth, level: s.player.level, weapon: s.player.weapon, armor: s.player.armor, hp: s.player.hp, maxHp: s.player.maxHp, potions: s.player.potions, xp: s.player.xp, turns: 0, hurt: {}, heals: 0 });
   floors.push(snap());
-  const mem: BotMemory = { floorStart: 0, waited: 0, target: -1, targetSince: 0 };
+  const mem: BotMemory = { floorStart: 0, waited: 0, target: -1, targetSince: 0, rested: 0 };
   let killer: MonsterKind | null = null;
   let idle = 0;
   const recent: { turn: number; dmg: number }[] = [];
   while (s.status === 'playing' && actions.length < maxActions && s.depth < stopDepth) {
+    const rested = mem.rested;
     const a = botAction(s, mem);
     const r = applyAction(s, a);
     const depth = s.depth;
     s = r.state;
     actions += encodeAction(a);
-    idle = a.type === 'wait' && !s.monsters.some((m) => m.awake && visible(s, m)) ? idle + 1 : 0;
+    idle = a.type === 'wait' && mem.rested === rested && !s.monsters.some((m) => m.awake && visible(s, m)) ? idle + 1 : 0;
     if (idle > 40) break; // stuck
     const f = floors[floors.length - 1];
     if (a.type === 'potion' || (a.type === 'cast' && a.spell === 'heal')) f.heals++;
@@ -350,6 +380,7 @@ export function playDescent(seed: number, maxActions = 8000, stopDepth = Infinit
     if (s.depth !== depth) {
       floors[floors.length - 1].turns = s.turn - mem.floorStart;
       mem.floorStart = s.turn;
+      mem.rested = 0;
       floors.push(snap());
     }
   }

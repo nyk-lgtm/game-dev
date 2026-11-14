@@ -983,6 +983,20 @@ playtests with fixes shipped. Open threads, in order:
   wisps 20% → 22% (bot: 276 → 248 turns, Spirit Tree 49/60 → 30/60); help says wisps never merge and
   what traps pay; brighter labels; empty stash is dashed and says so. Still long for one sitting —
   owner said keep the board as is (no smaller board).
+- Delve third blind playtest (died d2 to a skeleton; won at L9 with the Warden at 1 HP; died d3 to an archer after a d2
+  skeleton cost 3 potions; daily win at L8 with 0 potions) and fixes (rules v7): skeletons 22/7/2 → 18/6/1 (HP/atk/def);
+  natural regen (1 HP / 4 turns with no awake foe in sight, up to half HP) and WAIT → REST (rest until healed or a foe
+  shows); zZ over sleeping foes in the view, "zZ asleep" on the foe card, dim letters on the maps; the Warden has patterns
+  (a telegraphed wave down its row/column every 4th action that always lands unless you step out of line or behind a
+  pillar, a spent turn after it, summons of a ghoul + 2 skeletons at 66%/33%; melee 24, 420 HP, no more ranged chip every
+  turn), with a GET OUT OF ITS LINE banner, the wave drawn on the maps and the tell on its card; bolts show their 8-cell
+  reach and cost nothing with no target; HIT no longer reaches front corners (they can't hit back); leaner potions (kill
+  drops 40% potions, 10% drop chance from depth 5, floor items 8%); the stairs ask first; help's Back is a sticky footer;
+  ether is `~` on the maps; Descent+ (unlocked by a win: foes +10% HP, +1 damage). Bot (400 seeds) v6 → v7: wins 55.8%
+  → 58.0%; floor damage d2 27 → 16, d3 28 → 18; potions on arrival d7 6 → 5, d10 11 → 6; deaths d2-4 ~3% → ~1.5%,
+  d5-9 ~17% → ~6%, Warden 21% → 34% (the bot dodges every wave it has room for: ~2.2 of 5 still land, when skeletons
+  box it in). Watch: humans will eat more waves than the bot, so the Warden may now be the main wall for people; next
+  levers there are WARDEN.blast/chargeEvery or HP. Descent+ bot ~17% (+15%/+1 gave ~6%, +25%/+2 0%).
 - Delve depth 5 spike (rules v6). The probe now prints damage per depth by kind, killers per depth, each floor's monster
   mix and (`DEATHS=1`) how each death went. Finding (400 seeds): floor damage went d4 ~50 → d5 ~135 → d6-9 ~100-125, a step
   not a ramp: wraiths and cultists both debut at depth 5 (1.4 each, ~80 of the 135), and d5 killed 37 runs (d6 20) though

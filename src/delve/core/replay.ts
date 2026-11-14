@@ -3,7 +3,7 @@
 import { applyAction, newGame } from './rules';
 import type { Action, GameState, SpellId } from './types';
 
-export const RULES_VERSION = 6;
+export const RULES_VERSION = 7;
 
 const CODES: Record<string, Action> = {
   f: { type: 'forward' },
@@ -44,8 +44,8 @@ export function decodeAction(c: string): Action {
   return a;
 }
 
-export function replay(seed: number, actions: string): GameState {
-  let s = newGame(seed);
+export function replay(seed: number, actions: string, plus = false): GameState {
+  let s = newGame(seed, plus);
   for (const c of actions) s = applyAction(s, decodeAction(c)).state;
   return s;
 }

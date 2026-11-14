@@ -3,7 +3,7 @@
 // after which every awake monster acts.
 
 import { Rng, mixSeed } from '../../shared/rng';
-import { ARMORS, ARMOR_DEF, ETHER_MP, GEAR_PRICE, MAX_DEPTH, MONSTERS, POTION_HEAL, SHOP_DEPTHS, SPELLS, THEFT_PER_DEPTH, VIGOR_HP, WEAPONS, WEAPON_ATK, XP_TABLE, fireDamage } from './content';
+import { ARMORS, ARMOR_DEF, BOLT_RANGE, DROP_CHANCE, DROP_CHANCE_DEEP, ETHER_MP, GEAR_PRICE, LEAN_FROM, MAX_DEPTH, MONSTERS, PLUS_ATK, PLUS_HP, POTION_HEAL, POTION_SHARE, REGEN_CAP, REGEN_EVERY, SHOP_DEPTHS, SPELLS, THEFT_PER_DEPTH, VIGOR_HP, WARDEN, WEAPONS, WEAPON_ATK, XP_TABLE, fireDamage } from './content';
 import { SIZE, distances, generateFloor } from './gen';
 import { DX, DY, type Action, type Dir, type GameEvent, type GameState, type Monster, type MonsterKind, type Offer, type SpellId, type StepResult, type Tile } from './types';
 
@@ -67,6 +67,28 @@ function markSeen(s: GameState): void {
       if (!inside(x, y) || (x - p.x) ** 2 + (y - p.y) ** 2 > SIGHT * SIGHT + 2) continue;
       if (los(s, p.x, p.y, x, y)) s.level.seen[idx(x, y)] = true;
     }
+}
+
+/** Awake monsters you can see (they stop your wounds closing and break a rest). */
+export function foesInSight(s: GameState): Monster[] {
+  const p = s.player;
+  return s.monsters.filter((m) => m.hp > 0 && m.awake && (m.x - p.x) ** 2 + (m.y - p.y) ** 2 <= SIGHT * SIGHT + 2 && los(s, p.x, p.y, m.x, m.y));
+}
+
+/** Natural healing stops here (half your max HP, rounded up). */
+export function regenCap(s: GameState): number {
+  return Math.ceil(s.player.maxHp * REGEN_CAP);
+}
+
+/** Would resting (waiting turn after turn) do any good, safely? */
+export function canRest(s: GameState): boolean {
+  const p = s.player;
+  return s.status === 'playing' && !s.shop && (p.hp < regenCap(s) || p.mp < p.maxMp) && !foesInSight(s).length;
+}
+
+/** The foe a Firebolt or Frost cast now would strike (null: nothing within reach, so casting is refused). */
+export function boltTarget(s: GameState): { m: Monster | null; dist: number } {
+  return firstAhead(s, BOLT_RANGE);
 }
 
 export function isLegal(s: GameState, a: Action): boolean {
@@ -140,7 +162,7 @@ export function applyAction(prev: GameState, a: Action): StepResult {
       ev.push({ type: 'reveal' });
       break;
     case 'cast':
-      cast(s, a.spell, ev);
+      took = cast(s, a.spell, ev);
       break;
     case 'buy':
       buy(s, s.shop![a.slot], ev);
@@ -157,6 +179,8 @@ export function applyAction(prev: GameState, a: Action): StepResult {
     if (s.turn % MP_REGEN_EVERY === 0 && p.mp < p.maxMp) p.mp++;
     monsterTurn(s, ev);
     s.monsters = s.monsters.filter((m) => m.hp > 0);
+    // Out of danger, wounds slowly close (up to half your health; potions and Mend do the rest).
+    if (s.status === 'playing' && s.turn % REGEN_EVERY === 0 && p.hp < regenCap(s) && !foesInSight(s).length) p.hp++;
   }
   markSeen(s);
   return { state: s, events: ev };
@@ -242,22 +266,6 @@ export function doorNoises(s: GameState): { x: number; y: number }[] {
   return out;
 }
 
-/** The foe in a front corner (ahead-left / ahead-right) that HIT reaches, if nothing is straight ahead. */
-export function cornerFoe(s: GameState): Monster | null {
-  const p = s.player;
-  const fx = p.x + DX[p.dir];
-  const fy = p.y + DY[p.dir];
-  for (const turn of [3, 1]) {
-    const sd = (p.dir + turn) % 4;
-    const m = monsterAt(s, fx + DX[sd], fy + DY[sd]);
-    if (!m) continue;
-    // Not around a solid corner (a ghost inside a wall is fair game).
-    const open = !solid(tileAt(s, fx, fy)) || !solid(tileAt(s, p.x + DX[sd], p.y + DY[sd]));
-    if (open || MONSTERS[m.kind].ghost) return m;
-  }
-  return null;
-}
-
 /** The nearest live monster next to you (8 neighbours), for warnings. */
 function adjacentFoe(s: GameState, x: number, y: number): Monster | null {
   for (const m of s.monsters) if (m.hp > 0 && Math.max(Math.abs(m.x - x), Math.abs(m.y - y)) === 1) return m;
@@ -271,11 +279,6 @@ function use(s: GameState, ev: GameEvent[]): boolean {
   const m = monsterAt(s, nx, ny);
   if (m) {
     attack(s, m, ev);
-    return true;
-  }
-  const corner = cornerFoe(s);
-  if (corner) {
-    attack(s, corner, ev);
     return true;
   }
   if (tileAt(s, nx, ny) === 'door') {
@@ -342,8 +345,8 @@ function damage(s: GameState, m: Monster, dmg: number, ev: GameEvent[], prefix =
     say(s, `Your ${m.loot} gold spills across the floor.`);
   }
   // Monsters sometimes leave something behind.
-  else if (roll(s) < 0.18) {
-    const kind = roll(s) < 0.6 ? 'potion' : 'gold';
+  else if (roll(s) < (s.depth >= LEAN_FROM ? DROP_CHANCE_DEEP : DROP_CHANCE)) {
+    const kind = roll(s) < POTION_SHARE ? 'potion' : 'gold';
     s.items.push({ id: s.nextId++, kind, x: m.x, y: m.y, value: kind === 'gold' ? rollInt(s, 3, 8) * s.depth : 0 });
   }
   gainXp(s, def.xp, ev);
@@ -517,7 +520,7 @@ function buy(s: GameState, o: Offer, ev: GameEvent[]): void {
 
 /** A run's score: experience, depth reached, and a bonus for beating the Warden. */
 export function runScore(s: GameState): number {
-  return s.player.xp + s.depth * 100 + s.kills * 5 + (s.status === 'won' ? 2000 : 0);
+  return s.player.xp + s.depth * 100 + s.kills * 5 + (s.status === 'won' ? (s.plus ? 3000 : 2000) : 0);
 }
 
 /** The first monster in a straight line ahead, within range, before any wall. */
@@ -533,14 +536,20 @@ function firstAhead(s: GameState, range: number): { m: Monster | null; dist: num
   return { m: null, dist: range };
 }
 
-function cast(s: GameState, spell: SpellId, ev: GameEvent[]): void {
+/** Cast a spell; false (no MP spent, no turn) when a bolt has nothing within reach. */
+function cast(s: GameState, spell: SpellId, ev: GameEvent[]): boolean {
   const p = s.player;
+  if ((spell === 'fire' || spell === 'frost') && !boltTarget(s).m) {
+    sayOnce(s, `Nothing to hit within ${BOLT_RANGE} cells ahead. (No MP spent.)`);
+    ev.push({ type: 'bump', what: 'air' });
+    return false;
+  }
   p.mp -= SPELLS[spell].cost;
   if (spell === 'heal') {
     const heal = Math.min(p.maxHp - p.hp, Math.ceil(p.maxHp * 0.5));
     p.hp += heal;
     say(s, `Warm light knits your wounds. +${heal} HP.`);
-    return;
+    return true;
   }
   if (spell === 'blink') {
     let d = 0;
@@ -556,20 +565,18 @@ function cast(s: GameState, spell: SpellId, ev: GameEvent[]): void {
     ev.push({ type: 'bolt', spell, dist: d });
     if (d) pickup(s, ev);
     if (tileAt(s, p.x, p.y) === 'stairs') descend(s, ev);
-    return;
+    return true;
   }
-  const { m, dist } = firstAhead(s, 8);
+  const { m, dist } = boltTarget(s);
   ev.push({ type: 'bolt', spell, dist });
-  if (!m) {
-    say(s, 'The spell splashes against stone.');
-    return;
-  }
+  if (!m) return true;
   if (spell === 'fire') damage(s, m, fireDamage(p.level), ev, 'Fire engulfs it!');
   else {
     // The Warden shakes frost off after one turn (otherwise it could be frozen forever).
     m.stun = m.kind === 'warden' ? 1 : 3;
     damage(s, m, 3 + p.level, ev, 'Frost locks it in place!');
   }
+  return true;
 }
 
 // ---------- monsters ----------
@@ -595,18 +602,9 @@ function monsterTurn(s: GameState, ev: GameEvent[]): void {
       continue;
     }
     m.wait = def.slow;
+    if (m.kind === 'warden' && wardenTurn(s, m, d, ev)) continue;
     const charged = !m.cd;
     if (m.cd) m.cd--;
-
-    // Boss: every few turns, raise a skeleton.
-    if (m.kind === 'warden' && s.turn % 7 === 0 && s.monsters.filter((o) => o.hp > 0).length < 8) {
-      const spot = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([dx, dy]) => !solid(tileAt(s, m.x + dx, m.y + dy)) && !monsterAt(s, m.x + dx, m.y + dy) && (m.x + dx !== p.x || m.y + dy !== p.y));
-      if (spot) {
-        s.monsters.push({ id: s.nextId++, kind: 'skeleton', x: m.x + spot[0], y: m.y + spot[1], hp: MONSTERS.skeleton.hp, maxHp: MONSTERS.skeleton.hp, wait: 1, awake: true, stun: 0 });
-        say(s, 'The Warden raises the dead!');
-        continue;
-      }
-    }
 
     // A cutpurse with your gold runs for it.
     const fleeing = !!m.loot;
@@ -683,6 +681,65 @@ function monsterTurn(s: GameState, ev: GameEvent[]): void {
   }
 }
 
+/**
+ * Is the cell in the Warden's wave: same row or column, within reach, nothing solid between?
+ * (The wave rolls through its own skeletons.)
+ */
+export function inWaveAt(s: GameState, m: Monster, x: number, y: number): boolean {
+  const d = Math.abs(m.x - x) + Math.abs(m.y - y);
+  return (m.x === x || m.y === y) && d <= WARDEN.reach && los(s, m.x, m.y, x, y);
+}
+
+export function inWave(s: GameState, m: Monster): boolean {
+  return inWaveAt(s, m, s.player.x, s.player.y);
+}
+
+/** The Warden's patterns; true if it spent its action (else it walks toward you as usual). */
+function wardenTurn(s: GameState, m: Monster, d: number, ev: GameEvent[]): boolean {
+  if (m.cd) {
+    m.cd--;
+    say(s, 'The Warden sags, spent. Strike now, or heal.');
+    return true;
+  }
+  if (m.charge) {
+    m.charge = 0;
+    m.cd = WARDEN.rest;
+    ev.push({ type: 'shot', by: 'warden' });
+    if (inWave(s, m)) hurtBy(s, m, WARDEN.blast, ev, 'A wave of grave-cold');
+    else say(s, 'The wave of grave-cold rolls past you.');
+    return true;
+  }
+  const phase = m.phase ?? 0;
+  if (phase < WARDEN.summonAt.length && m.hp <= m.maxHp * WARDEN.summonAt[phase]) {
+    m.phase = phase + 1;
+    m.cd = 1;
+    const p = s.player;
+    let raised = 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+      const kind = WARDEN.summon[raised];
+      if (!kind) break;
+      const x = m.x + dx;
+      const y = m.y + dy;
+      if (solid(tileAt(s, x, y)) || monsterAt(s, x, y) || (x === p.x && y === p.y)) continue;
+      const hp = foeHp(s, kind);
+      s.monsters.push({ id: s.nextId++, kind, x, y, hp, maxHp: hp, wait: 1, awake: true, stun: 0 });
+      raised++;
+    }
+    say(s, 'The Warden calls the dead! Bones claw up around it.');
+    ev.push({ type: 'summon' });
+    return true;
+  }
+  // Its ordinary actions pace the wave (so it swings at you between waves).
+  m.tick = (m.tick ?? 0) + 1;
+  if (m.tick % WARDEN.chargeEvery === 0 && d <= WARDEN.reach + 2 && los(s, m.x, m.y, s.player.x, s.player.y)) {
+    m.charge = 1;
+    say(s, 'The Warden draws in the cold. Get out of its row and column!');
+    ev.push({ type: 'charge' });
+    return true;
+  }
+  return false;
+}
+
 /** Another monster standing on the straight line between m and the player (it would take the shot). */
 function monsterBetween(s: GameState, m: Monster): boolean {
   const p = s.player;
@@ -698,7 +755,12 @@ function hurt(s: GameState, m: Monster, atk: number, ev: GameEvent[], what = '')
     say(s, `${what || the(m.kind, true)} misses you.`);
     return false;
   }
-  const dmg = Math.max(1, atk - defenceOf(s) + rollInt(s, -1, 1));
+  return hurtBy(s, m, atk, ev, what);
+}
+
+/** A blow that lands (armor still counts). */
+function hurtBy(s: GameState, m: Monster, atk: number, ev: GameEvent[], what = ''): boolean {
+  const dmg = Math.max(1, atk + (s.plus ? PLUS_ATK : 0) - defenceOf(s) + rollInt(s, -1, 1));
   s.player.hp -= dmg;
   say(s, `${what || the(m.kind, true)} hits you for ${dmg}.`);
   ev.push({ type: 'hurt', dmg, by: m.kind });
@@ -720,7 +782,7 @@ function enterFloor(s: GameState, depth: number): void {
   s.level = f.level;
   s.player.x = f.start.x;
   s.player.y = f.start.y;
-  s.monsters = f.monsters.map((m) => ({ ...m, id: s.nextId++ }));
+  s.monsters = f.monsters.map((m) => ({ ...m, hp: foeHp(s, m.kind), maxHp: foeHp(s, m.kind), id: s.nextId++ }));
   s.items = f.items.map((i) => ({ ...i, id: s.nextId++ }));
   // Face the most open direction.
   let best: Dir = 0;
@@ -736,7 +798,12 @@ function enterFloor(s: GameState, depth: number): void {
   s.player.dir = best;
 }
 
-export function newGame(seed: number): GameState {
+/** A foe's full HP (more in Descent+). */
+export function foeHp(s: GameState, kind: MonsterKind): number {
+  return s.plus ? Math.round(MONSTERS[kind].hp * PLUS_HP) : MONSTERS[kind].hp;
+}
+
+export function newGame(seed: number, plus = false): GameState {
   const s: GameState = {
     seed,
     depth: 1,
@@ -753,6 +820,7 @@ export function newGame(seed: number): GameState {
     shop: null,
     killer: null,
   };
+  if (plus) s.plus = true;
   enterFloor(s, 1);
   markSeen(s);
   return s;
