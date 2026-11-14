@@ -27,6 +27,7 @@ import {
   recruitOf,
   regionOf,
   replay,
+  projectedScore,
   recallable,
   routeNeed,
   scoreOf,
@@ -341,6 +342,46 @@ describe('tidings runs', () => {
     expect(answers.length).toBe(2);
     for (const a of answers) expect(a.odds === undefined && !a.lose && !a.need).toBe(true);
     expect(JSON.stringify(answers[0].fx)).not.toBe(JSON.stringify(answers[1].fx));
+  });
+
+  it('remembers the hermit’s second answer later on the pass', () => {
+    const ans = CARD.hermit.choices.find((ch) => ch.set === 'hermit');
+    expect(ans).toBeTruthy();
+    expect(CARD.hermit2.when?.flag).toBe('hermit');
+  });
+
+  it('sends the ring thief in only some runs that carry the ring', () => {
+    let yes = 0;
+    for (let seed = 0; seed < 200; seed++) {
+      const r = newRun(seed);
+      r.stop = 5;
+      r.promises.ring = 'carry';
+      r.flags['p:ring'] = 0;
+      r.map[5][r.path[5] ?? 0] = { kind: 'town', name: 'x' };
+      r.path[5] = 0;
+      if (eligible(r, CARD.ringthief)) yes++;
+    }
+    expect(yes).toBeGreaterThan(60);
+    expect(yes).toBeLessThan(140);
+  });
+
+  it('leans away from recently seen cards, and replays exactly with the same recent list', () => {
+    const recent = CARDS.filter((c) => !c.cb).map((c) => c.id).slice(0, 40);
+    let differ = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      const a = newRun(seed), b = newRun(seed, recent);
+      if (a.hand.map((h) => h.id).join() !== b.hand.map((h) => h.id).join()) differ++;
+      expect(newRun(seed, recent).hand).toEqual(b.hand);
+    }
+    expect(differ).toBeGreaterThan(5);
+    const x = playRun(newRun(77, recent), careful());
+    expect(replay(77, x.actions, recent).end).toEqual(x.end);
+  });
+
+  it('projects the arrival score from the cheapest road left', () => {
+    const r = newRun(4);
+    expect(projectedScore(r)).toBeLessThan(scoreOf(r));
+    expect(projectedScore(r)).toBeGreaterThanOrEqual(0);
   });
 
   it('lets the ring’s wedding come as well as the journey’s own ending', () => {

@@ -10,6 +10,7 @@ import { makeStore } from '../shared/storage';
 import {
   CARD,
   CARDS,
+  CARD_INDEX,
   COMPANIONS,
   COMP_IDS,
   ENDING,
@@ -35,6 +36,9 @@ import {
   nodeOf,
   oddsOf,
   outcomeText,
+  projectedScore,
+  scoreOf,
+  starsOf,
   recruitOf,
   regionOf,
   replay,
@@ -61,8 +65,16 @@ interface Profile {
   cards: string[];
   endings: string[];
   comps: string[];
+  /** Cards dealt in the last few journeys (newest last), weighed down in the next one. */
+  recent: string[][];
 }
-const loadProfile = (): Profile => ({ runs: 0, arrivals: 0, best: 0, bestStars: 0, cards: [], endings: [], comps: [], ...store.load<Partial<Profile>>('profile', {}) });
+const loadProfile = (): Profile => ({ runs: 0, arrivals: 0, best: 0, bestStars: 0, cards: [], endings: [], comps: [], recent: [], ...store.load<Partial<Profile>>('profile', {}) });
+/** Journeys whose cards count as recent. */
+const RECENT_RUNS = 3;
+/** Recent cards as a short code (card indices in base 36) for saves and bug reports. */
+const packRecent = (ids: string[]) => ids.map((id) => CARD_INDEX[id].toString(36)).join('.');
+export const unpackRecent = (code: string | null | undefined) =>
+  (code ?? '').split('.').filter(Boolean).map((x) => CARDS[parseInt(x, 36)]?.id).filter((x): x is string => !!x);
 
 const MAX: Record<Res, () => number> = { f: () => TUNE.capF, o: () => TUNE.capO, c: () => TUNE.capC, h: () => TUNE.capH, t: () => TUNE.capT };
 const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n);
@@ -107,9 +119,10 @@ export class Game {
       if (el && !this.walking) this.openCard(Number(el.dataset.h));
     });
     $('band').addEventListener('click', (e) => {
-      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-comp],[data-prom],[data-dog]');
+      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-comp],[data-prom],[data-dog],[data-score]');
       if (!el) return;
-      if (el.dataset.comp) this.showComp(el.dataset.comp as CompId);
+      if (el.dataset.score) this.showScore();
+      else if (el.dataset.comp) this.showComp(el.dataset.comp as CompId);
       else if (el.dataset.prom) this.showPromise(el.dataset.prom);
       else this.showDog();
     });
@@ -134,12 +147,12 @@ export class Game {
    *  finished one is recorded in the journal exactly once, however often its end card is shown. */
   private began = 0;
 
-  start(seed: number, actions: string[] = [], daily: string | null = null, began = Date.now()): void {
+  start(seed: number, actions: string[] = [], daily: string | null = null, began = Date.now(), recent: string[] = []): void {
     closeOverlay();
     this.closeFocus(true);
     this.daily = daily;
     this.began = began;
-    this.r = replay(seed, actions);
+    this.r = replay(seed, actions, recent);
     this.save();
     this.learn();
     this.render(true);
@@ -148,19 +161,29 @@ export class Game {
 
   newGame(): void {
     leaveDaily();
-    this.start(randomSeed());
+    // A journey given up half-way still counts its cards as seen.
+    if (this.r && this.r.phase !== 'over') this.remember(this.r);
+    // The daily is the same road for everyone, so only ordinary journeys lean away from recent cards.
+    this.start(randomSeed(), [], null, Date.now(), [...new Set(loadProfile().recent.flat())]);
+  }
+
+  /** Files a journey's dealt cards as recent (the last RECENT_RUNS journeys). */
+  private remember(r: Run): void {
+    const p = loadProfile();
+    p.recent = [...p.recent, [...r.used]].slice(-RECENT_RUNS);
+    store.save('profile', p);
   }
 
   playDaily(): void {
     const day = todayKey();
-    const saved = store.load<{ v: number; seed: number; a: string; day: string; t?: number } | null>('dailyRun', null);
+    const saved = store.load<{ v: number; seed: number; a: string; day: string; t?: number; r?: string } | null>('dailyRun', null);
     const seed = dailySeed('tidings', day);
-    if (saved && saved.v === RULES_VERSION && saved.day === day && saved.seed === seed) this.start(seed, saved.a ? saved.a.split(',') : [], day, saved.t ?? 0);
+    if (saved && saved.v === RULES_VERSION && saved.day === day && saved.seed === seed) this.start(seed, saved.a ? saved.a.split(',') : [], day, saved.t ?? 0, unpackRecent(saved.r));
     else this.start(seed, [], day);
   }
 
   private save(): void {
-    const data = { v: RULES_VERSION, seed: this.r.seed, a: this.r.actions.join(','), t: this.began };
+    const data = { v: RULES_VERSION, seed: this.r.seed, a: this.r.actions.join(','), t: this.began, r: packRecent(this.r.recent) };
     if (this.daily) store.save('dailyRun', { ...data, day: this.daily });
     else store.save('run', data);
   }
@@ -240,7 +263,10 @@ export class Game {
       .map(([p]) => `<button class="chip prom" data-prom="${p}">${PROMISES[p].icon}</button>`)
       .join('');
     const empty = r.band.length ? '' : `<span class="alone">Your band: two carriers and a mule</span>`;
-    $('band').innerHTML = empty + band + dog + proms;
+    // Where the score is heading: what you'd arrive with on the cheapest roads, and its stars.
+    const proj = projectedScore(r);
+    const score = r.phase === 'over' ? '' : `<button class="chip score" data-score="1" aria-label="Score so far">≈${proj} <span class="st">${stars(starsOf(proj))}</span></button>`;
+    $('band').innerHTML = empty + band + dog + proms + score;
   }
 
   private renderHand(deal = false): void {
@@ -545,6 +571,8 @@ export class Game {
   }
 
   private recorded = '';
+  /** Endings this journey found for the first time (kept while its end card can be shown again). */
+  private fresh: string[] = [];
   showEnd(): void {
     const r = this.r;
     const e = r.end!;
@@ -554,9 +582,9 @@ export class Game {
     // run and the daily never records either twice.
     const key = `${this.daily ? `d${this.daily}` : 'r'}:${r.seed}:${this.began}:${r.actions.join(',')}`;
     const done = store.load<string[]>('recordedRuns', []);
-    let newEnding = false;
     if (this.recorded !== key && !done.includes(key)) {
       this.recorded = key;
+      this.fresh = [];
       store.save('recordedRuns', [...done, key].slice(-40));
       const p = loadProfile();
       p.runs++;
@@ -565,12 +593,14 @@ export class Game {
         p.best = Math.max(p.best, e.score);
         p.bestStars = Math.max(p.bestStars, e.stars);
       }
+      // Each ending is badged on its own: the main one and the wedding can be new or known separately.
       for (const id of [e.ending, ...(e.also ?? [])]) {
         if (!p.endings.includes(id)) {
           p.endings.push(id);
-          newEnding = true;
+          this.fresh.push(id);
         }
       }
+      if (!this.daily) p.recent = [...p.recent, [...r.used]].slice(-RECENT_RUNS);
       store.save('profile', p);
       if (this.daily) recordDaily(store, arrivedHome ? 100 + e.score : r.stop, arrivedHome ? `${stars(e.stars)} ${e.score}` : `stop ${r.stop} of ${LAST}`, this.daily);
     }
@@ -591,7 +621,9 @@ export class Game {
         <p class="meta2">Stars at ${STARS[1]} and ${STARS[2]}${nextStar ? ` · ${nextStar - e.score} more for the next` : ''}</p>${kept}
         ${r.band.length ? `<p class="meta2">With you: ${r.band.map((b) => `${COMPANIONS[b.id].icon} ${COMPANIONS[b.id].name}`).join(', ')}</p>` : ''}`;
       // Endings earned as well as the main one (the wedding).
-      body = (e.also ?? []).map((id) => `<div class="also"><b>${ENDING[id].icon} And: ${ENDING[id].title}</b><small>${ENDING[id].text}</small></div>`).join('') + body;
+      body = (e.also ?? [])
+        .map((id) => `<div class="also"><b>${ENDING[id].icon} And: ${ENDING[id].title}${this.isNew(key, id) ? '<span class="new">New ending</span>' : ''}</b><small>${ENDING[id].text}</small></div>`)
+        .join('') + body;
     } else {
       body = `<p class="meta2">Out of ${RES_INFO[e.cause!].short} at ${esc(nodeOf(r).name)}, ${stopLabel(r.stop).toLowerCase()}.</p>`;
     }
@@ -599,18 +631,22 @@ export class Game {
       .map((l) => `<li><span>${l.stop}</span> ${esc(telling(l).title)}: <i>${esc(CARD[l.id].choices[l.pick].t)}</i>${l.won === undefined ? '' : l.won ? ' 🎲✓' : ' 🎲✗'}</li>`)
       .join('');
     showCard(
-      `<div class="ending ${end.kind}"><div class="eicon">${end.icon}</div><h2>${end.title}${newEnding ? '<span class="new">New ending</span>' : ''}</h2>
+      `<div class="ending ${end.kind}"><div class="eicon">${end.icon}</div><h2>${end.title}${this.isNew(key, e.ending) ? '<span class="new">New ending</span>' : ''}</h2>
        <p class="etext">${end.text}</p><div class="endres">${res}</div>${body}
        <details class="recap"><summary>The journey, card by card</summary><ol>${recap}</ol></details>
        ${daily ? `<p class="meta2">Today’s best: ${daily.label} · ${plural(daily.plays, 'try', 'tries')}</p>` : `<p class="meta2">Journal: ${p.endings.length}/${ENDINGS.length} endings · ${p.cards.length}/${CARDS.length} events · ${p.arrivals}/${p.runs} reached Hollin</p>`}</div>`,
       [
         { label: 'A new journey', primary: true, onClick: () => this.newGame() },
-        { label: this.daily ? 'The daily again' : 'Same road again', onClick: () => this.start(this.r.seed, [], this.daily) },
+        { label: this.daily ? 'The daily again' : 'Same road again', onClick: () => this.start(this.r.seed, [], this.daily, Date.now(), this.r.recent) },
         { label: 'Journal', onClick: () => this.showJournal(() => this.showEnd()) },
         { label: 'All games', onClick: () => (location.href = '../') },
       ],
       false,
     );
+  }
+
+  private isNew(key: string, id: string): boolean {
+    return this.recorded === key && this.fresh.includes(id);
   }
 
   private back(): void {
@@ -684,6 +720,27 @@ export class Game {
        <p class="small">Every leg costs food: ${TUNE.legFood} in the lowlands, ${TUNE.legFoodHills} in the hills and the Teeth, and ${bandLine()}. Most places cost 1 🪔 to reach (the heights 2; villages, inns and rivers none)${TUNE.passOil ? `, and every leg on the Teeth burns ${TUNE.passOil} more` : ''}. The heights and rivers also cost ❤️, the forest 🤝.</p>
        <p class="small">❄ ${this.blizzardNote()}</p>
        <ul class="kinds">${kinds}</ul>`,
+      [{ label: 'Back', primary: true, onClick: () => this.back() }],
+    );
+  }
+
+  /** The score card: what counts, where this journey is heading, and how far the stars are. */
+  private showScore(): void {
+    const r = this.r;
+    const proj = projectedScore(r);
+    const carry = Object.values(r.promises).filter((p) => p === 'carry').length;
+    const next = STARS.find((x) => x > proj);
+    showCard(
+      `<h2>Score ≈ ${proj} <span class="st">${stars(starsOf(proj))}</span><span class="sub">If nothing else happened but the cheapest road to Hollin</span></h2>
+       <table class="score">
+         <tr><td>Food, oil, health, trust now</td><td>${r.res.f + r.res.o + r.res.h + r.res.t}</td></tr>
+         <tr><td>The cheapest road still to eat</td><td>−${scoreOf(r) - proj}</td></tr>
+         <tr><td>Coin ${r.res.c} ÷ 2</td><td>${Math.floor(r.res.c / 2)}</td></tr>
+         <tr><td>${plural(r.band.length, 'companion')} × ${TUNE.compPts}</td><td>${TUNE.compPts * r.band.length}</td></tr>
+         <tr><td>${plural(carry, 'promise')} carried × ${TUNE.promisePts}</td><td>${TUNE.promisePts * carry}</td></tr>
+         <tr class="sum"><td>At Hollin</td><td>≈ ${proj}</td></tr></table>
+       <p>Stars at ${STARS[1]} (★★) and ${STARS[2]} (★★★)${next ? `: ${next - proj} more for the next.` : '. You’re there; keep it.'}</p>
+       <p class="small">The surest way up: promises (+${TUNE.promisePts} each, kept to Hollin) and companions who arrive (+${TUNE.compPts} each). Stock counts one for one, coin half, and every pack has a limit, so don’t hoard past it.</p>`,
       [{ label: 'Back', primary: true, onClick: () => this.back() }],
     );
   }
@@ -815,7 +872,8 @@ export class Game {
   }
 
   private async copyReport(): Promise<void> {
-    toast((await copyText(`TIDINGS v${RULES_VERSION} seed=${this.r.seed} a=${this.r.actions.join(',')}`)) ? 'Bug report copied' : 'Copy failed');
+    const rec = this.r.recent.length ? ` r=${packRecent(this.r.recent)}` : '';
+    toast((await copyText(`TIDINGS v${RULES_VERSION} seed=${this.r.seed}${rec} a=${this.r.actions.join(',')}`)) ? 'Bug report copied' : 'Copy failed');
   }
 }
 

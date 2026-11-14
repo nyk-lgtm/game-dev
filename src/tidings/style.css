@@ -78,6 +78,8 @@ small { color: var(--muted); }
 }
 .chip.prom, .chip.dog { min-width: 44px; justify-content: center; font-size: 16px; }
 .chip.prom { border-color: #8a6a3a; }
+.chip.score { margin-left: auto; font-size: 13px; color: var(--accent); border-color: #6d5d45; }
+.chip.score .st, .card h2 .st { font-size: 11px; letter-spacing: 1px; color: var(--accent); }
 
 /* ---------------------------------------------------------------- the hand */
 #stage { overflow-y: auto; -webkit-overflow-scrolling: touch; }

@@ -32,7 +32,7 @@ export function rngFor(seed: number, ...parts: number[]): Rng {
   for (const p of parts) h = mixSeed(h, p >>> 0);
   return new Rng(h);
 }
-const T_MAP = 0x6d6170, T_DEAL = 0x64656c, T_GAMBLE = 0x67616d, T_VAR = 0x766172;
+const T_MAP = 0x6d6170, T_DEAL = 0x64656c, T_GAMBLE = 0x67616d, T_VAR = 0x766172, T_CHANCE = 0x636863;
 
 export interface Node {
   kind: Kind;
@@ -87,6 +87,8 @@ export interface Run {
   promises: Record<string, PromiseState>;
   /** Cards already dealt this run (repeatable ones may come back). */
   used: string[];
+  /** Cards from the player's last few journeys: dealt less often (`TUNE.freshW`). Part of the run, so replays need it. */
+  recent: string[];
   hand: HandCard[];
   faced: number;
   /** The stop provisions were last bought at (-1: never), and every stop they were bought at. */
@@ -146,6 +148,7 @@ export function eligible(r: Run, c: Card): boolean {
       const b = r.band.find((x) => x.id === w.comp);
       if (!b || s < b.at + gap) return false;
     }
+    if (w.chance !== undefined && rngFor(r.seed, T_CHANCE, CARD_INDEX[c.id]).next() >= w.chance) return false;
     if (w.promise) {
       if (r.promises[w.promise] !== 'carry') return false;
       const at = r.flags[`p:${w.promise}`] ?? 0;
@@ -175,7 +178,11 @@ function deal(r: Run): void {
   // could no longer be remembered (too late in the road) comes up less.
   const late = (c: Card) => c.choices.some((ch) => ch.set) && c.choices.every((ch) => !ch.set || !recallable(r, ch.set));
   const weight = (c: Card) =>
-    (c.repeat ? 1 : recruitOf(c) ? TUNE.recruitW : c.where ? 4 : 2) * (c.must ? 0.7 : 1) * (c.w ?? 1) * (late(c) ? TUNE.lateSetW : 1);
+    (c.repeat ? 1 : recruitOf(c) ? TUNE.recruitW : c.where ? 4 : 2) *
+    (c.must ? 0.7 : 1) *
+    (c.w ?? 1) *
+    (late(c) ? TUNE.lateSetW : 1) *
+    (r.recent.includes(c.id) ? TUNE.freshW : 1);
   while (hand.length < TUNE.hand) {
     const pool = rest.filter((c) => !hand.includes(c) && !(c.must && musts));
     if (!pool.length) break;
@@ -334,6 +341,18 @@ export function scoreOf(r: Run): number {
   const kept = Object.values(r.promises).filter((p) => p === 'carry' || p === 'kept').length;
   return r.res.f + r.res.o + r.res.h + r.res.t + Math.floor(r.res.c / 2) + TUNE.compPts * r.band.length + TUNE.promisePts * kept;
 }
+/** The score if nothing else happened but the cheapest road to Hollin (each resource's own cheapest legs). */
+export function projectedScore(r: Run): number {
+  if (r.phase === 'over') return r.end?.score ?? 0;
+  let drop = 0;
+  for (const k of LETHAL) {
+    let d = 0;
+    for (let row = r.stop + 1; row <= LAST; row++) d += Math.min(...r.map[row].map((_, i) => -(legCost(r, i, row)[k] ?? 0)));
+    drop += Math.min(d, r.res[k]);
+  }
+  return scoreOf(r) - drop;
+}
+
 export const starsOf = (score: number): number => (score >= STARS[2] ? 3 : score >= STARS[1] ? 2 : 1);
 
 function arrive(r: Run): void {
@@ -366,7 +385,7 @@ export const arrived = (r: Run): boolean => r.phase === 'over' && ENDING[r.end!.
 
 // ---------------------------------------------------------------- runs
 
-export function newRun(seed: number): Run {
+export function newRun(seed: number, recent: string[] = []): Run {
   const r: Run = {
     seed: seed >>> 0,
     map: makeMap(seed >>> 0),
@@ -379,6 +398,7 @@ export function newRun(seed: number): Run {
     flags: {},
     promises: {},
     used: [],
+    recent: [...recent],
     hand: [],
     faced: 0,
     bought: -1,
@@ -494,8 +514,8 @@ export function act(r: Run, a: string, force?: boolean): boolean {
   return true;
 }
 
-export function replay(seed: number, actions: string[]): Run {
-  const r = newRun(seed);
+export function replay(seed: number, actions: string[], recent: string[] = []): Run {
+  const r = newRun(seed, recent);
   for (const a of actions) if (!act(r, a)) break;
   return r;
 }

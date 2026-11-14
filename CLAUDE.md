@@ -116,12 +116,13 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     neighbour steps ≤ 0.15, hooks/spires 5 each spread out. `trail.ts 1 80` lists the trail with difficulty (past the pool
     ~0.69-0.96). `par.ts 45` re-surveys 4× harder; `wind.ts 18 2` adds wind to calm levels (v3: the calm par build fails in
     15/18); `why.ts`, `bumps.ts [cart]`, `tutorials.ts` (each tutorial's `ref` peak < 0.85, surveyor ≤ par).
-  - Tidings: `npx vite-node scripts/tidings/balance.ts 400 [careful,casual,random,safe,risky,greedy,crowd,miser]` (rules v3:
+  - Tidings: `npx vite-node scripts/tidings/balance.ts 400 [careful,casual,random,safe,risky,greedy,crowd,miser]` (rules v4:
     careful (plans every order of this stop's cards, choices, provisions and partings, gambles by their shown odds, then the
-    road, valuing stock against the cheapest remaining leg costs on the map) arrives ~79% (seed sets 1000/5000), ★★★ ~23%
-    of arrivals; casual (one action at a time, 25% whim that heeds the page's ☠ and "find N more" warnings) ~24%; random/safe/
-    risky/greedy 0-1%; careful deaths oil ~70%, food ~20%, mostly stops 8-10; casual oil and food alike; endings list
-    `+wedding` separately (~1/3 of careful arrivals). v2 was 74/21 (provisions now reset per region). The gap
+    road, valuing stock against the cheapest remaining leg costs on the map) arrives ~78-79% (seed sets 1000/5000), ★★★ ~27%
+    of arrivals (via ~0.75 promises kept and ~2 companions); casual (one action at a time, 25% whim that heeds the page's ☠
+    and "find N more" warnings) ~26%; random/safe/risky/greedy 0-1%; careful deaths oil ~55%, food ~40%, mostly stops 8-10;
+    endings list `+wedding` separately (~1/3 of careful arrivals). v3 was 79/24, v2 74/21. `variety.ts 1000 [ids]` prints
+    cards dealt per run and stop 10's hands (`RECENT=1` with the cross-run freshness). The gap
     careful − casual stays ~50 points whatever the knob (provisions add ~+15 to both, startO/startF/startH/startC/legFoodPass
     take from both); v1 was 55/11. `TUNE=startC:3` → 67/16, `legFoodPass:3` → ~-10/-6, `buyCost:99` (no provisions) ~-15.
     `W=reserve:0.7` bot weights; `trace.ts <seed> [policy]` prints a journey stop by stop and its `?seed=&a=`;
@@ -542,14 +543,23 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   `shortBy(r, k)` = per lethal resource, how much more the cheapest rest of the road needs beyond what you carry, + 1 (you
   must arrive with ≥ 1): the road buttons' "⚠ find 3 more 🍞, 1 more 🪔 to reach Hollin" and the dock line. A card whose
   `set` flags can no longer be `recallable` (no callback's stop + gap fits) deals at ×`TUNE.lateSetW` 0.3 and loses its
-  "✦ may be remembered" tag. `Card.w` scales a card's deal weight (Rain on the Downs 0.45, plus a Hail telling: ~15% of
-  runs). The Hermit (rules v3) takes either of two honest answers with different rewards (no riddle mechanic). The
+  "✦ may be remembered" tag. `Card.w` scales a card's deal weight (Rain 0.45 + a Hail telling; rules v4 trims the
+  everywhere-cards: Hand in the Pack 0.4, Post Horn 0.35, Wedding Letter/Roof 0.5, Birthday/Letters/Night Visitors 0.6,
+  …), so no card is dealt in more than ~80% of runs. `Run.recent` (newRun/replay's third argument) = cards dealt in the
+  player's last 3 ordinary journeys (`profile.recent`), dealt at ×`TUNE.freshW` 0.25; saved with the run (`r`, card indices
+  base 36) and in bug reports (`r=`, `?r=`); the daily uses none. `Cond.chance` = a seeded per-run roll (`T_CHANCE`): the
+  Ring Thief comes in half the runs that carry the ring. Stop 10 has Bells, the Sledge Party and the Frozen Tarn beside the
+  Switchback (0.6); companion stories have an alt telling each. The Moneylender's "can't pay" takes −3 🍞 −2 🪔 −1 🤝.
+  The Hermit (stops 4-7, shrine/forest/river/inn, w 1.2: ~75% of runs) takes a practical answer (+2 🪔 now) or the other
+  (+1 🤝, flag `hermit` → the Hermit's Word on the pass: soup worth +4). The
   Blizzard (⚑, stops 8-10, dealt in ~58-60% of runs that get there) is hinted, never promised: "❄ blizzard risk" on the
   strip, "may catch you … about half of crossings" on the route card/help, the Weatherwise Shepherd's "might be". Gambles roll
   `rngFor(seed, T_GAMBLE, stop, cardIndex)` against `oddsOf` (boosts, ≤ 95%); `act(r, a, force)` decides one for bots.
   Every card keeps a choice with no gate and no coin (test). Score at Hollin = f+o+h+t + ⌊c/2⌋ + 3/companion +
   5/promise kept. Endings by priority: thin (a resource ≤ 1), full (3 companions), beloved (trust ≥ 9), rich (coin ≥ 14),
-  alone, plain; the ring kept adds wedding alongside (`End.also`, shown as "And: …" on the end card, journaled too).
+  alone, plain; the ring kept adds wedding alongside (`End.also`, shown as "And: …" on the end card, journaled too; each
+  ending gets its own NEW badge). `projectedScore(r)` = score minus each resource's cheapest remaining legs: the band
+  row's "≈N ★★☆" chip (tap: breakdown, stars at 28/36, how to climb).
   The page records a finished journey once: key = mode (`r` / `d<day>`) + seed + `t` (when it began, saved with the run;
   0 for `?seed=` links) + actions, the last 40 kept in `recordedRuns`. The page is DOM: resource pills, a journey strip (SVG + emoji nodes, tap = route
   card with every leg's cost), hand rows (SVG landscape art per card from art.ts: sky by `sky`, ground by region, emoji

@@ -37,6 +37,8 @@ export interface Cond {
   promise?: string;
   /** Stops after the flag was set (or the companion joined) before this shows. Default 2. */
   gap?: number;
+  /** Only in this share of runs (a seeded roll per run and card). */
+  chance?: number;
 }
 export interface Card {
   id: string;
@@ -252,7 +254,7 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'weddingletter', title: 'The Wedding Letter', art: '💌💍', sky: 'dusk', at: [0, 4], where: ['inn', 'town'],
+    id: 'weddingletter', title: 'The Wedding Letter', art: '💌💍', sky: 'dusk', at: [0, 4], where: ['inn', 'town'], w: 0.5,
     text: `A girl presses a letter and a ring into your hands. “For Tomas, in Hollin. Tell him yes.”`,
     choices: [
       ch('Carry it, free of charge', 't+1', 'She cries, and so, a little, does the mule.', { promise: 'ring' }),
@@ -298,7 +300,7 @@ export const CARDS: Card[] = [
   },
   {
     id: 'lender', title: 'The Moneylender', art: '🧐💰', sky: 'dusk', at: [0, 3], where: ['town', 'inn'],
-    text: `A moneylender with very soft hands offers six coins now, against eight later. “I always find people,” he smiles.`,
+    text: `A moneylender with very soft hands offers six coins now, against eight later, “or the value of it, in kind.” He always finds people, he smiles.`,
     choices: [
       ch('Borrow the six', 'c+6', 'He writes your name very neatly in a very small book.', { set: 'debt' }),
       ch('Decline politely', '', 'He shrugs, and smiles at the next traveller instead.'),
@@ -359,7 +361,7 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'thatch', title: 'A Roof to Mend', art: '🏠🔨', sky: 'day', at: [0, 7], where: ['town', 'road'],
+    id: 'thatch', title: 'A Roof to Mend', art: '🏠🔨', sky: 'day', at: [0, 7], where: ['town', 'road'], w: 0.5,
     text: `An old couple’s roof has blown half off. They have no money, but they have a smokehouse.`,
     choices: [
       ch('Mend it before dark', 'h-1 f+3 t+1', 'Smoked ham, and a roof that will see out the winter.'),
@@ -436,7 +438,7 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'weather', title: 'The Weatherwise Shepherd', art: '👴🌨️', sky: 'dusk', at: [5, 7], where: ['wild', 'town', 'shrine', 'river', 'inn'],
+    id: 'weather', title: 'The Weatherwise Shepherd', art: '👴🌨️', sky: 'dusk', at: [5, 7], where: ['wild', 'town', 'shrine', 'river', 'inn'], w: 0.7,
     text: `An old shepherd squints up at the Teeth. “Might be a blizzard up there this week, might not. Keep bread and oil by, or the legs to push through one.”`,
     choices: [
       ch('Buy his spare oil', 'c-2 o+2', 'A stoppered jug that smells of sheep.'),
@@ -445,11 +447,11 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'hermit', title: 'The Hermit’s Riddle', art: '🧙❓', sky: 'dusk', at: U, where: ['shrine', 'wild'],
-    text: `A hermit offers a blessing for an answer: “What do you carry that grows heavier the further you go?” Any honest answer will do, he says.`,
+    id: 'hermit', title: 'The Hermit’s Riddle', art: '🧙❓', sky: 'dusk', at: U, where: ['shrine', 'wild', 'river', 'inn'], w: 1.2,
+    text: `A hermit asks: “What do you carry that grows heavier the further you go?” Practical answers get practical thanks, he says. Others, he remembers.`,
     choices: [
       ch('“The post sack.”', 'o+2', '“A practical soul.” He fills your lamps from his own jar.'),
-      ch('“The worry of the ones who wait.”', 't+2', 'He nods slowly, and blesses each of you by name.'),
+      ch('“The worry of the ones who wait.”', 't+1', 'He nods slowly. “I know people on the pass,” he says. “I’ll send word.”', { set: 'hermit' }),
       ch('Give him bread for the blessing', 'f-1 h+2', 'He blesses the bread, too, before he eats it.'),
       ch('Fen asks him for a song instead', 'h+1 t+1', 'The hermit has a lovely voice. Who knew.', { need: 'fen' }),
     ],
@@ -613,7 +615,7 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'cairn', title: 'The Cairn of Names', art: '🪨📜', sky: 'dusk', at: P, where: ['shrine', 'heights'],
+    id: 'cairn', title: 'The Cairn of Names', art: '🪨📜', sky: 'dusk', at: P, where: ['shrine', 'heights'], w: 0.6,
     text: `Every traveller who crossed the pass added a stone with their name scratched on it. There are thousands.`,
     choices: [
       ch('Add a stone for each of you', 't+1', 'The band takes a long time choosing stones.'),
@@ -670,7 +672,7 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'stars', title: 'A Sky Full of Stars', art: '🌌⭐', sky: 'night', at: P, where: ['heights', 'hut', 'shrine'],
+    id: 'stars', title: 'A Sky Full of Stars', art: '🌌⭐', sky: 'night', at: P, where: ['heights', 'hut', 'shrine'], w: 0.7,
     text: `The sky is so full of stars that the band forgets how cold it is.`,
     choices: [
       ch('Stay up and name them', 'h-1 t+2', 'Somebody names one after the mule.'),
@@ -697,7 +699,34 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'switchback', title: 'The Last Switchback', art: '🏘️🌄', sky: 'dawn', at: [10, 10],
+    id: 'bells', title: 'Bells Across the Snow', art: '🔔🏔️', sky: 'dawn', at: [10, 10],
+    text: `Far below, Hollin’s bells start up, one after another, as if they’ve spotted you.`,
+    choices: [
+      ch('Ring the mule’s bell back', 't+2', 'Every bell in the valley answers. Then the dogs.'),
+      ch('Stop and eat, now you can', 'f-1 h+2', 'Bread and cheese on a rock above the world.'),
+      ch('Hurry, before the light goes', 'o+1 h-1', 'You make the valley floor by dusk, lamps still half full.'),
+    ],
+  },
+  {
+    id: 'sledges', title: 'The Sledge Party', art: '🛷🧒', sky: 'day', at: [10, 10],
+    text: `Children from Hollin have dragged their sledges all the way up to meet the post. They want a race.`,
+    choices: [
+      gam('Race them down', 0.6, 't+2 h+1', 'You win by a nose, the mule by a whole mule.', 'h-2', 'A tree. Nobody saw it either.'),
+      ch('Let them win', 't+1', 'They cheer themselves hoarse.'),
+      ch('Give them the sweets from your pack', 'f-1 t+2', 'You are now the most popular post carrier in history.'),
+    ],
+  },
+  {
+    id: 'frozenlake', title: 'The Frozen Tarn', art: '🧊🏞️', sky: 'snow', at: [10, 10],
+    text: `A frozen tarn lies between you and the last slope. Walking round it takes the afternoon.`,
+    choices: [
+      gam('Walk across', 0.7, 'f+1 o+1', 'The ice sings under your boots but holds.', 'h-2 o-1', 'A boot goes through, and a lamp with it.', { boost: ['wren', 0.2] }),
+      ch('Go round', 'f-1', 'Long, flat, safe.'),
+      ch('Fish through a hole', 'o-1 f+2', 'Three silver fish and very cold fingers.'),
+    ],
+  },
+  {
+    id: 'switchback', title: 'The Last Switchback', art: '🏘️🌄', sky: 'dawn', at: [10, 10], w: 0.6,
     text: `Below you, under its smoke, lie the roofs of Hollin. Just one long slope left.`,
     choices: [
       gam('Race down', 0.7, 't+2', 'Whooping all the way, the mule in front.', 'h-2', 'Several falls. Snowy, undignified falls.'),
@@ -725,7 +754,7 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'monastery', title: 'The Snow Monastery', art: '⛪🕯️', sky: 'dusk', at: P, where: ['shrine', 'hut'],
+    id: 'monastery', title: 'The Snow Monastery', art: '⛪🕯️', sky: 'dusk', at: P, where: ['shrine', 'hut'], w: 0.7,
     text: `Monks live up here all winter. They offer soup, and ask only for news of the world.`,
     choices: [
       ch('Trade news for soup', 'f+2 t+1', 'They like the bits about the dance best.'),
@@ -778,7 +807,7 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'letters', title: 'Letters Home', art: '✉️🕯️', sky: 'night', at: [2, 10],
+    id: 'letters', title: 'Letters Home', art: '✉️🕯️', sky: 'night', at: [2, 10], w: 0.6,
     text: `By lamplight, the band asks if they might add letters of their own to the post.`,
     choices: [
       ch('Of course', 'o-1 t+2', 'Lamps lit late, and pens scratching.'),
@@ -787,7 +816,7 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'thief', title: 'A Hand in the Pack', art: '🫳🎒', sky: 'night', at: [1, 9], where: ['inn', 'town', 'hut'], must: true,
+    id: 'thief', title: 'A Hand in the Pack', art: '🫳🎒', sky: 'night', at: [1, 9], where: ['inn', 'town', 'hut'], must: true, w: 0.4,
     text: `In the night, someone is going through the packs by feel.`,
     choices: [
       gam('Grab them', 0.5, 'c+2', 'A boy, with your coin and somebody else’s. You keep the lot.', 'h-1 c-2', 'An elbow in the dark, and a lighter purse.', { boost: ['ysolde', 0.3] }),
@@ -796,7 +825,7 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'birthday', title: 'A Birthday on the Road', art: '🎂🎈', sky: 'dusk', at: [1, 10],
+    id: 'birthday', title: 'A Birthday on the Road', art: '🎂🎈', sky: 'dusk', at: [1, 10], w: 0.6,
     text: `One of the carriers mentions, very quietly, that it is her birthday.`,
     choices: [
       ch('A feast', 'f-2 t+2', 'Two days’ rations in one night. Worth it.'),
@@ -817,7 +846,7 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'posthorn', title: 'The Post Horn', art: '📯✉️', sky: 'day', at: [1, 10],
+    id: 'posthorn', title: 'The Post Horn', art: '📯✉️', sky: 'day', at: [1, 10], w: 0.35,
     text: `A rider coming the other way blows a post horn and waves a bundle: letters for your band, from home.`,
     choices: [
       ch('Stop and read them all', 'f-1 t+2', 'An hour of laughing and sniffing by the road.'),
@@ -835,7 +864,7 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'hedgehogs', title: 'Night Visitors', art: '🦔🎒', sky: 'night', at: [0, 9],
+    id: 'hedgehogs', title: 'Night Visitors', art: '🦔🎒', sky: 'night', at: [0, 9], w: 0.6,
     text: `A family of hedgehogs has moved into the food sack, and they are not leaving quietly.`,
     choices: [
       ch('Pick them out one by one', 'h-1', 'Prickles in every finger.'),
@@ -867,7 +896,7 @@ export const CARDS: Card[] = [
     choices: [
       ch('Pay him', 'c-8', 'He counts it twice, then leaves.', { clear: 'debt' }),
       ch('Pell talks him down', 'c-4', 'Somehow Pell leaves owing nothing, and having sold him a hat.', { need: 'pell', clear: 'debt' }),
-      ch('You can’t pay', 'h-1 t-2', 'He takes your best blanket and your band’s good mood.', { clear: 'debt' }),
+      ch('You can’t pay', 'f-3 o-2 t-1', 'He takes it in kind: your best food, two flasks of oil, and the band’s good mood.', { clear: 'debt' }),
     ],
   },
   {
@@ -919,7 +948,7 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'ringthief', title: 'The Ring Thief', art: '🫳💍', sky: 'dusk', at: [3, 9], where: ['town', 'inn', 'hut'], when: { promise: 'ring' }, cb: true, must: true,
+    id: 'ringthief', title: 'The Ring Thief', art: '🫳💍', sky: 'dusk', at: [3, 9], where: ['town', 'inn', 'hut'], when: { promise: 'ring', chance: 0.5 }, cb: true, must: true,
     text: `In the crowd, a hand slips into the post sack, and out again holding a ring.`,
     choices: [
       gam('After him!', 0.6, 't+1', 'Over a wall and through a hen house. You get it back.', 'h-1 t-1', 'Gone. And with him, Tomas’s yes.', { boost: ['ysolde', 0.25], breaks: 'ring' }),
@@ -955,8 +984,18 @@ export const CARDS: Card[] = [
 
   // ------------------------------------------------------------ companions' own stories
   {
+    id: 'hermit2', title: 'The Hermit’s Word', art: '🧙🍲', sky: 'night', at: [6, 10], when: { flag: 'hermit' }, cb: true,
+    text: `A pot of soup is waiting on the stove, and a note in a shaky hand: “For the ones who carry the worry. — H.”`,
+    choices: [
+      ch('Eat it hot', 'f+2 h+2', 'It is the best soup anyone has ever eaten. Nobody argues.'),
+      ch('Bottle it for the road', 'f+3 o+1', 'There is a flask of oil under the pot, too.'),
+      ch('Leave your own note of thanks', 't+3', 'The whole band signs it, the mule with a hoof.'),
+    ],
+  },
+  {
     id: 'wren2', title: 'Wren’s Goat Path', art: '🧗🐐', sky: 'day', at: [4, 10], where: ['heights', 'wild', 'shrine', 'hut'], when: { comp: 'wren' }, cb: true,
     text: `Wren points at a crack in the cliff. “Goats go up there. So can we, if nobody looks down.”`,
+    alts: [{ title: 'Wren’s Shortcut', text: `Wren has been up the ridge before breakfast. “There’s a ledge,” she says. “It’s nearly wide enough.”` }],
     choices: [
       ch('Follow Wren', 'h-1 f+2 o+2', 'Nobody looks down. A day saved.'),
       ch('Ask her to scout ahead instead', 't+1', 'She comes back with three warnings and a bird’s egg.'),
@@ -965,6 +1004,7 @@ export const CARDS: Card[] = [
   {
     id: 'tamsin2', title: 'Tamsin’s Tonic', art: '👵🧪', sky: 'night', at: [2, 10], when: { comp: 'tamsin' }, cb: true,
     text: `Tamsin has brewed something that smells like a wet dog. She swears it’s good for the cold.`,
+    alts: [{ title: 'Tamsin’s Pocket', text: `Tamsin turns out a pocket: roots, a dried frog, and a twist of something she says keeps a chest clear.` }],
     choices: [
       ch('Everyone takes a drop', 'h+2 t+1', 'Foul. It works.'),
       ch('Ask her to teach you the recipe', 'h+1 t+2', 'She’s thrilled. It has nineteen steps.'),
@@ -973,6 +1013,7 @@ export const CARDS: Card[] = [
   {
     id: 'pell2', title: 'Pell’s Deal', art: '🧔💰', sky: 'day', at: [2, 10], where: ['town', 'inn', 'hut', 'shrine'], when: { comp: 'pell' }, cb: true,
     text: `Pell has found a buyer for absolutely anything, including things you didn’t know you had.`,
+    alts: [{ title: 'Pell’s Bargain', text: `Pell has got talking to a carter, and the carter is already reaching for his purse.` }],
     choices: [
       ch('Sell spare oil', 'o-2 c+5', 'He sells it in pints, with a speech.'),
       ch('Sell spare food', 'f-2 c+5', 'Your oatcakes go for silver.'),
@@ -982,6 +1023,7 @@ export const CARDS: Card[] = [
   {
     id: 'bram2', title: 'Bram’s Clever Lamp', art: '👨‍🔧🫖', sky: 'night', at: [2, 10], when: { comp: 'bram' }, cb: true,
     text: `Bram has turned an old kettle into a lamp that burns half the oil.`,
+    alts: [{ title: 'Bram’s Tin Lantern', text: `Bram has been up all night with a candle stub and a tin can, and he looks very pleased with himself.` }],
     choices: [
       ch('Use it', 'o+3', 'It smells of tea and burns all night.'),
       ch('Sell it at the next stall', 'c+4', 'He’ll make another, he says. He’s already started.'),
@@ -990,6 +1032,7 @@ export const CARDS: Card[] = [
   {
     id: 'ysolde2', title: 'A Good Hunt', art: '🏹🦌', sky: 'dawn', at: [2, 10], when: { comp: 'ysolde' }, cb: true,
     text: `Ysolde comes back at dawn with a deer across her shoulders and no explanation.`,
+    alts: [{ title: 'Ysolde’s Snares', text: `Ysolde walks into camp with a brace of hares and the shy smile she keeps for good days.` }],
     choices: [
       ch('Feast tonight', 'f+3 t+1', 'Everyone sleeps full for once.'),
       ch('Smoke it for the road', 'o-1 f+4', 'All night over a smoky fire.'),
@@ -998,6 +1041,7 @@ export const CARDS: Card[] = [
   {
     id: 'fen2', title: 'Fen’s Song', art: '🎻📜', sky: 'dusk', at: [2, 10], when: { comp: 'fen' }, cb: true,
     text: `Fen has written a song about the journey. You’re in it. You come off quite well.`,
+    alts: [{ title: 'Fen’s Ballad', text: `Fen has a new verse for every stop you’ve made. The one about the mule is unkind, and true.` }],
     choices: [
       ch('Sing it together', 't+2', 'By the third verse even the mule joins in.'),
       ch('Sell it at the next inn', 'c+3', 'Three coins and a standing ovation.'),
@@ -1006,6 +1050,7 @@ export const CARDS: Card[] = [
   {
     id: 'corrie2', title: 'Corrie Reads the Sky', art: '🧭⛈️', sky: 'storm', at: [2, 10], when: { comp: 'corrie' }, cb: true,
     text: `Corrie sniffs the wind. “Storm by dark. There’s a cave a mile off the path.”`,
+    alts: [{ title: 'Corrie’s Warning', text: `Corrie stops dead and points at a smudge on the horizon. “Weather. There’s an overhang below the path.”` }],
     choices: [
       ch('Take the cave', 'h+2 t+1', 'Dry as a bone while the storm roars past.'),
       ch('Race the storm instead', 'f+1 o+1', 'Over the next rise before it breaks, and a day ahead.'),
@@ -1014,6 +1059,7 @@ export const CARDS: Card[] = [
   {
     id: 'hob2', title: 'Hob’s Shoulders', art: '💪🫏', sky: 'day', at: [2, 10], when: { comp: 'hob' }, cb: true,
     text: `Hob picks up the mule’s whole load, then very nearly the mule, and sets off.`,
+    alts: [{ title: 'Hob Takes the Load', text: `The mule is limping, so Hob takes its packs without a word, and then a carrier’s too.` }],
     choices: [
       ch('Let him', 'h+2', 'Everyone else walks light.'),
       ch('Ask him to talk instead', 't+2', 'He talks for a mile about his mother’s geese. Nobody has seen him so happy.'),

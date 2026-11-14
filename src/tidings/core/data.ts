@@ -1,7 +1,7 @@
 // Tidings: shared types, tunable numbers, the band you can recruit, places and endings.
 // Pure data; no DOM, no Math.random, no Date.
 
-export const RULES_VERSION = 3;
+export const RULES_VERSION = 4;
 
 /** Food, oil, coin, health, trust. Coin can run dry; the other four end the journey at 0. */
 export type Res = 'f' | 'o' | 'c' | 'h' | 't';
@@ -54,6 +54,8 @@ export const TUNE = {
   recruitW: 1.5,
   /** Deal weight of a card whose ✦ choices can no longer be remembered before Hollin. */
   lateSetW: 0.3,
+  /** Deal weight of a card you were dealt in your last few journeys (freshness across runs). */
+  freshW: 0.25,
   /** Most companions at once. */
   bandMax: 3,
   /** Cards dealt at each stop, and how many of them you face. */

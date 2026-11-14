@@ -61,7 +61,12 @@ playtests with fixes shipped. Open threads, in order:
         rewards, the wedding comes alongside the earned ending, late ✦ cards deal at ×0.3 and drop the ✦ tag when nothing
         can follow, Rain on the Downs ×0.45 plus a Hail telling (29% → 15% of runs), blizzard hints say "may"/"risk".
         Bots: careful ~79%, casual ~24% (`startC:3` → 73/18 if it should be harder).
-  - [ ] Next: third blind playtest if wanted. Watch: oil deaths on the Teeth, whether parting is used, endings variety.
+  - [x] Third blind playtest (v3: tense, not a stroll; 4/6 arrived, ★★★ never in sight). Fixes (rules v4): NEW badge per
+        ending, variety (static weights trimmed, cross-run freshness: last 3 journeys' cards ×0.25, recorded in the run
+        so replays stay exact; 3 new stop-10 cards; an alt telling for every companion story), Ring Thief in half the
+        ring runs, defaulting on the Moneylender costs −3 🍞 −2 🪔 −1 🤝, the Hermit shows up ~75% of runs and one answer
+        sets up a callback on the pass, a "≈ score ★★☆" chip with a breakdown card. Bots: careful ~78%, casual ~26%.
+  - [ ] Next: fourth blind playtest if wanted. Watch: is ★★★ now a visible goal, does the freshness feel like variety.
 - [ ] **Trestle** (original physics builder: planks, twigs and twine on a peg grid; carry the beetle's cart over a gap or
   hold a lantern at a ring; stars for matching the surveyor bot's cost and part count). Milestones:
   - [x] Core (src/trestle/core, rules v1): XPBD sim at 480 Hz (rigid members, one-sided twine, smoothed forces snap past
