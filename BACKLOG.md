@@ -17,19 +17,19 @@ at any time; their word beats this list.
 Ground rules: never break saves without bumping RULES_VERSION; never leave main red;
 keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 
-## Start here (summary, 2026-11-14)
-24 games are live (new 2026-11-13/14: Simmer, Gleam, Lull, Trestle, Tidings); every game has had at least two blind
-playtests with fixes shipped. Open threads, in order:
+## Start here (summary, 2026-11-14 midday)
+24 games are live. Every game except Grove (owner: keep as is) and Afterglow (leave alone) has now had at least three
+blind playtests with fixes shipped (Simmer 5, Trestle 5, Delve 4). Open threads, in order:
 1. Owner feedback first: anything the owner reports beats this list.
-2. Real-phone checks only the owner can do: Loomsong sound/timing, Lull sound mix, Sungrazer smoothness, Trestle level
-   generation time past L66 (several seconds when not prefetched).
-3. In flight: Trestle v4 fourth playtest, Simmer v5 fifth playtest.
-4. Known watch items: Glyphwright is easier than thought (refit bot wins ~83%; harden late waves/Lich only if the owner
-   asks); Tidings careful bot ~79% (TUNE=startC:3 → 73/18 if humans find it easy); Trestle wall-lantern par still loose on
-   some levels; Hexhold "max first, then expand" (~45% bot wins) may need teeth at waves 26-30 if players find it.
-5. Grove: owner said keep it as is (board and balance); only bugs/clarity. Afterglow: leave alone unless asked.
-6. A 320×568 audit pass (2026-11-14) fixed Rewild/Ninefold/Gleam layouts; Summit's cards are 43 px wide on 8-wide rows (kept).
-7. New games when the queue is quiet; prefer depth and polish over sprawl now that there are 24.
+2. Real-phone checks only the owner can do: Loomsong sound/timing, Lull sound mix, Sungrazer smoothness, Nightline v3
+   long-lens look, Trestle level generation time past L66.
+3. In flight: Glyphwright third-pass fixes (harder waves 6-14, fairer Lich, ascension tiers).
+4. Watch items: Delve's Warden is the main wall (~33% of runs end there; levers: wave damage, cadence, HP); Tidings careful
+   bot ~78% (TUNE=startC:3 if humans find it easy); Lantern's King is near-certain for a full-clear player; Unspoken
+   normal-play riddles can't change without a new world version (the daily got harder ones instead).
+5. Grove: only bugs/clarity. Afterglow: only bugs.
+6. Next ideas: fourth passes where third passes changed a lot (Nightline v3 projection, Delve v8 Warden, Glyphwright),
+   or a new game if the owner wants more (prefer depth over sprawl at 24 games).
 
 ## Now
 - [ ] **Tidings** (original narrative roguelite: carry the winter post from Tarrow Bridge over the hills and the Teeth to
