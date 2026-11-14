@@ -11,7 +11,7 @@ const p = new URLSearchParams(location.search);
 // Replays are never saved, so a link can't overwrite your run or records.
 if (p.has('seed') && p.get('seed') !== '' && Number.isFinite(Number(p.get('seed')))) {
   const a = p.get('a') ?? '';
-  game.start(Number(p.get('seed')), a === '-' ? '' : a, true);
+  game.start(Number(p.get('seed')), a === '-' ? '' : a, true, null, p.get('plus') === '1');
   history.replaceState(null, '', location.pathname);
 } else {
   if (p.has('seed')) {

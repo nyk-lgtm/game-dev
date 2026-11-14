@@ -6,15 +6,26 @@ import {
   SIZE,
   VIGOR_HP,
   MP_REGEN_EVERY,
+  PLUS_ATK,
+  PLUS_HP,
+  REGEN_CAP,
+  REGEN_EVERY,
   SIGHT,
+  WARDEN,
   SPELLS,
   XP_TABLE,
   NOISE_RANGE,
   applyAction,
   article,
   attackOf,
-  cornerFoe,
+  canRest,
   doorNoises,
+  foesInSight,
+  inWave,
+  inWaveAt,
+  newGame,
+  regenCap,
+  replay,
   isRevealed,
   defenceOf,
   fireDamage,
@@ -155,16 +166,14 @@ describe('movement', () => {
     }
   });
 
-  it('HIT strikes a foe in a front corner when nothing is straight ahead', () => {
+  it('HIT reaches only straight ahead: a foe in a front corner (which cannot strike you either) is out of reach', () => {
     const s = setup(['..g', '.@.'], { dir: N });
     tough(mon(s, 'ghoul'));
     const r = act(reroll(s, 0), 'use');
-    expect(r.state.turn).toBe(1);
-    expect(r.events.some((e) => e.type === 'hit' || e.type === 'miss')).toBe(true);
-    // Not around a solid corner.
-    const t = setup(['#g', '@#'], { dir: N });
-    expect(cornerFoe(t)).toBeNull();
-    // Something straight ahead comes first.
+    expect(r.state.turn).toBe(0);
+    expect(r.events.some((e) => e.type === 'hit' || e.type === 'miss')).toBe(false);
+    expect(r.state.log.at(-1)).toBe('You swing at nothing.');
+    // Something straight ahead is struck.
     const u = setup(['rg', '@.'], { dir: N });
     expect(act(reroll(u, 0), 'use').events.find((e) => e.type === 'hit' || e.type === 'miss')).toMatchObject({ target: mon(u, 'rat').id });
   });
@@ -438,6 +447,54 @@ describe('spells', () => {
   });
 });
 
+describe('rest and regeneration', () => {
+  it(`with no awake foe in sight you heal 1 HP every ${REGEN_EVERY} turns, up to ${REGEN_CAP * 100}% of max`, () => {
+    const s = setup(['@....'], { dir: E });
+    s.player.hp = 5;
+    let r = act(s, ...Array(REGEN_EVERY * 3).fill('wait'));
+    expect(r.state.player.hp).toBe(8);
+    expect(canRest(r.state)).toBe(true);
+    r = act(r.state, ...Array(REGEN_EVERY * 40).fill('wait'));
+    expect(r.state.player.hp).toBe(regenCap(r.state));
+    expect(regenCap(r.state)).toBe(Math.ceil(s.player.maxHp * REGEN_CAP));
+    // Healed and MP full: nothing to rest for.
+    r.state.player.mp = r.state.player.maxMp;
+    expect(canRest(r.state)).toBe(false);
+  });
+
+  it('an awake foe in sight stops the healing (and resting); a sleeping one does not', () => {
+    const awake = setup(['@....', '#####', '....g'], { dir: E });
+    awake.player.hp = 5;
+    awake.monsters[0].x = 5;
+    awake.monsters[0].y = 1;
+    awake.monsters[0].stun = 99;
+    expect(foesInSight(awake)).toHaveLength(1);
+    expect(canRest(awake)).toBe(false);
+    expect(act(awake, ...Array(REGEN_EVERY * 2).fill('wait')).state.player.hp).toBe(5);
+    const asleep = setup(['@...g'], { dir: E, awake: false });
+    asleep.player.hp = 5;
+    asleep.monsters[0].x = 30; // out of sight: it stays asleep
+    expect(canRest(asleep)).toBe(true);
+  });
+
+  it('a bolt with nothing in reach is refused: no MP, no turn', () => {
+    for (const spell of ['fire', 'frost'] as const) {
+      const s = setup(['@.........s'], { dir: E });
+      s.player.spells = ['fire', 'frost'];
+      s.player.mp = 10;
+      const r = act(s, cast(spell));
+      expect(r.state.player.mp).toBe(10);
+      expect(r.state.turn).toBe(0);
+      expect(r.state.log.at(-1)).toMatch(/Nothing to hit within 8 cells/);
+      // In reach (8 cells): it flies.
+      const t = setup(['@.......s'], { dir: E });
+      t.player.spells = ['fire', 'frost'];
+      t.player.mp = 10;
+      expect(act(t, cast(spell)).state.player.mp).toBe(10 - SPELLS[spell].cost);
+    }
+  });
+});
+
 describe('items', () => {
   it('walking onto items picks them up', () => {
     const s = setup(['@!?$'], { dir: E, itemValue: 25 });
@@ -675,23 +732,90 @@ describe('floors and the Warden', () => {
     expect(act(s, 'forward').state.player.hp).toBe(s.player.maxHp);
   });
 
-  it('the Warden raises skeletons every 7 turns', () => {
+  it('the Warden draws in the cold (a tell), then its wave rolls down its row and column; then it is spent', () => {
+    const run = (dodge: boolean) => {
+      let st = setup(['.......', '...W...', '.......', '.......', '...@...'], { dir: N });
+      st.player.hp = st.player.maxHp = 9999;
+      st.depth = 10;
+      tough(mon(st, 'warden'), 5000);
+      let r = act(st, 'wait');
+      for (let i = 0; i < 12 && !r.events.some((e) => e.type === 'charge'); i++) r = act(r.state, 'wait');
+      expect(r.events).toContainEqual({ type: 'charge' });
+      expect(mon(r.state, 'warden').charge).toBe(1);
+      expect(r.state.log.at(-1)).toMatch(/draws in the cold/);
+      expect(inWave(r.state, mon(r.state, 'warden'))).toBe(true);
+      const hp = r.state.player.hp;
+      r = act(r.state, dodge ? 'strafeR' : 'wait');
+      expect(r.events.some((e) => e.type === 'shot' && e.by === 'warden')).toBe(true);
+      const hurt = r.events.filter((e) => e.type === 'hurt' && e.by === 'warden');
+      if (dodge) {
+        expect(hurt).toEqual([]);
+        expect(r.state.player.hp).toBe(hp);
+        expect(r.state.log.at(-1)).toMatch(/rolls past you/);
+      } else {
+        // It always lands (armour still counts).
+        expect(hurt).toHaveLength(1);
+        const dmg = hp - r.state.player.hp;
+        expect(Math.abs(dmg - (WARDEN.blast - defenceOf(r.state)))).toBeLessThanOrEqual(1);
+      }
+      // Spent: its next action does nothing.
+      const h2 = r.state.player.hp;
+      r = act(r.state, 'wait');
+      expect(r.state.log.some((l) => /spent/.test(l))).toBe(true);
+      expect(r.state.player.hp).toBe(h2);
+    };
+    run(true);
+    run(false);
+  });
+
+  it('pillars and walls stop the wave; it reaches WARDEN.reach cells', () => {
+    const st = setup(['W.O...', '.....@', '#.....', '......'], { dir: N });
+    const w = mon(st, 'warden');
+    expect(inWaveAt(st, w, w.x + 1, w.y)).toBe(true);
+    expect(inWaveAt(st, w, w.x + 4, w.y)).toBe(false); // behind the pillar
+    expect(inWaveAt(st, w, w.x, w.y + 1)).toBe(true);
+    expect(inWaveAt(st, w, w.x, w.y + 3)).toBe(false); // past the wall
+    expect(inWaveAt(st, w, w.x + 1, w.y + 1)).toBe(false); // diagonal: safe
+    const open = setup(['W......'], { dir: N });
+    const w2 = mon(open, 'warden');
+    expect(inWaveAt(open, w2, w2.x + WARDEN.reach, w2.y)).toBe(true);
+    expect(inWaveAt(open, w2, w2.x + WARDEN.reach + 1, w2.y)).toBe(false);
+  });
+
+  it('at two thirds and one third of its health the Warden calls the dead, and is spent for a turn', () => {
     let st = setup(['.......', '...W...', '.......', '.......', '...@...'], { dir: N });
     st.player.hp = st.player.maxHp = 9999;
     st.depth = 10;
-    tough(mon(st, 'warden'));
-    let raised = 0;
-    for (let i = 0; i < 21; i++) {
-      const before = st.monsters.length;
-      st = act(st, 'wait').state;
-      if (st.monsters.length > before) {
-        raised++;
-        expect(st.turn % 7).toBe(0);
-        const sk = st.monsters[st.monsters.length - 1];
-        expect(sk).toMatchObject({ kind: 'skeleton', hp: MONSTERS.skeleton.hp, awake: true });
-      }
+    const w = mon(st, 'warden');
+    w.hp = Math.floor(w.maxHp * WARDEN.summonAt[0]);
+    let r = act(st, 'wait');
+    expect(r.events).toContainEqual({ type: 'summon' });
+    expect(r.state.monsters.filter((m) => m.kind !== 'warden').map((m) => m.kind)).toEqual(WARDEN.summon);
+    expect(r.state.monsters.every((m) => m.awake)).toBe(true);
+    expect(mon(r.state, 'warden').phase).toBe(1);
+    r = act(r.state, 'wait');
+    expect(r.state.log.some((l) => /spent/.test(l))).toBe(true);
+    // Not again until the next threshold.
+    st = r.state;
+    for (let i = 0; i < 6; i++) expect(act(st, 'wait').events).not.toContainEqual({ type: 'summon' });
+  });
+
+  it('Descent+: foes have PLUS_HP more health and hit PLUS_ATK harder', () => {
+    const a = newGame(7);
+    const b = newGame(7, true);
+    expect(b.plus).toBe(true);
+    expect(b.monsters.map((m) => m.hp)).toEqual(a.monsters.map((m) => Math.round(m.hp * PLUS_HP)));
+    expect(replay(7, '', true)).toEqual(b);
+    const base = setup(['@g'], { dir: E });
+    tough(mon(base, 'ghoul'));
+    base.player.hp = base.player.maxHp = 999;
+    const plus = structuredClone(base);
+    plus.plus = true;
+    for (let i = 0; i < 40; i++) {
+      const h1 = act(reroll(base, i), 'wait').state.player.hp;
+      const h2 = act(reroll(plus, i), 'wait').state.player.hp;
+      if (h1 < 999) expect(999 - h2).toBe(999 - h1 + PLUS_ATK);
     }
-    expect(raised).toBe(3);
   });
 
   it('killing the Warden wins', () => {

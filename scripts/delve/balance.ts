@@ -1,5 +1,5 @@
 // Balance probe: the descent bot plays N seeds.
-// Run: npx vite-node scripts/delve/balance.ts [runs] [firstSeed]
+// Run: npx vite-node scripts/delve/balance.ts [runs] [firstSeed]   (PLUS=1: Descent+; DEATHS=1: how each death went)
 import { ARMORS, MAX_DEPTH, WEAPONS, generateFloor } from '../../src/delve/core';
 import { playDescent } from './bot';
 
@@ -30,7 +30,7 @@ const killedAt = new Map<number, string[]>();
 const deathAt = new Map<number, string[]>();
 let won = 0;
 for (let seed = first; seed < first + runs; seed++) {
-  const r = playDescent(seed);
+  const r = playDescent(seed, undefined, undefined, !!process.env.PLUS);
   const s = r.state;
   maxDepth.push(s.depth);
   turns.push(s.turn);

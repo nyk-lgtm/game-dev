@@ -25,8 +25,14 @@ export interface Monster {
   stun: number;
   /** Gold a cutpurse has snatched from you (dropped when it dies). */
   loot?: number;
-  /** Turns until a caster may shoot again (cultists rest a turn after each firebolt). */
+  /** Turns until a caster may shoot again (cultists rest a turn after each firebolt; the Warden is spent). */
   cd?: number;
+  /** The Warden: drawing in the cold (its wave goes off on its next action). */
+  charge?: number;
+  /** The Warden: actions taken (paces the wave). */
+  tick?: number;
+  /** The Warden: summon phases used. */
+  phase?: number;
 }
 
 export type ItemKind =
@@ -110,6 +116,8 @@ export interface GameState {
   shop: Offer[] | null;
   /** What landed the killing blow. */
   killer: MonsterKind | null;
+  /** Descent+ (unlocked by a win): tougher foes. */
+  plus?: boolean;
 }
 
 export type Action =
@@ -143,6 +151,8 @@ export type GameEvent =
   | { type: 'descend'; depth: number }
   | { type: 'levelUp'; level: number }
   | { type: 'shot'; by: MonsterKind }
+  | { type: 'charge' }
+  | { type: 'summon' }
   | { type: 'stolen'; gold: number }
   | { type: 'buy'; kind: OfferKind }
   | { type: 'shop' }

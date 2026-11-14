@@ -26,6 +26,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 #foe .bar { height: 7px; margin-top: 3px; border-color: #3a1a12; }
 #foe .bar i { background: #c0392b; transition: width 0.15s; }
 #foeNote { margin-top: 3px; font-size: 10px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#foeNote.warn { color: #7fe3ff; font-weight: 700; white-space: normal; }
+#foeZ { font-style: normal; font-size: 11px; font-weight: 700; color: #8fb8ff; }
+#pad button.rest { color: #7fe08a; border-color: #2f5a35; }
 .bar.low i { animation: pulse 0.8s ease-in-out infinite alternate; }
 @keyframes pulse { to { background: #d23a3a; } }
 #deck { display: flex; gap: 8px; padding: 6px 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); min-height: 0; flex: 1; }
@@ -51,6 +54,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 .card button { min-height: 48px; background: #0d0b09; color: var(--text); border: 1px solid #3a342a; font: 800 15px var(--mono); }
 .card button.primary { color: #1b1206; background: var(--amber); border-color: var(--amber); }
 .card button:disabled { opacity: 0.35; }
+/* A long card's primary button rides a sticky footer (src/shared/cards.ts adds it), so Back is always in reach. */
+.card .stick { position: sticky; bottom: 0; z-index: 1; flex: none; display: flex; flex-direction: column; gap: 8px; padding-top: 8px; padding-bottom: 14px; background: inherit; }
+.card .more { position: sticky; bottom: -18px; flex: none; margin: -10px -18px -18px; padding: 24px 0 10px; text-align: center; font-size: 12px; color: var(--dim); background: linear-gradient(rgba(7,6,4,0), #070604 55%); pointer-events: none; transition: opacity 0.2s; }
+.card .stick .more { position: absolute; left: 0; right: 0; bottom: 100%; margin: 0; padding: 18px 0 4px; }
 .card ul { margin: 0; padding-left: 18px; color: var(--dim); }
 .card li { margin-bottom: 4px; }
 .card b { color: var(--text); }
