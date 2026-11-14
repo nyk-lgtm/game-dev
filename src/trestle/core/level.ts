@@ -2,7 +2,7 @@
 // anchor pegs and a goal: roll the beetle's cart across, or hold a lantern up
 // at a ring. Pure data; gen.ts makes them from a seed, tutorials.ts by hand.
 
-export const RULES_VERSION = 5;
+export const RULES_VERSION = 6;
 
 /** Grid size in points: x 0..COLS-1, y 0..ROWS-1 (y grows downward). */
 export const COLS = 13;
@@ -61,6 +61,8 @@ export interface Level {
   ref?: string;
   /** Wind push per unit of catch at full gust (+ blows to the right); absent = calm. */
   wind?: number;
+  /** A trick to teach on first visit (the first trail level whose answer needs it). */
+  trick?: 'relay' | 'fan' | 'tie';
   /** Generated levels: the layout type (see gen.ts) and a 0..1 difficulty from the surveyor. */
   type?: string;
   diff?: number;

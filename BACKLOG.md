@@ -137,7 +137,21 @@ playtests with fixes shipped. Open threads, in order:
         mid-plank warns it won't join; tips are only the twists (no #info overflow on any of the 66 levels at 360×740 or
         390×844); help fits 360×640 and 360×740, says a plank can be a strut, pieces join only at pegs, reach 2.2 fits a 2×1
         diagonal.
-  - [ ] Next: fifth blind playtest. Watch: does ★★★ now take thought from the middle of the trail on? Do plank struts
+  - [x] Fifth blind playtest (v5 live: difficulty rises across the bands, par tight and fair once you know the idioms;
+        stuck on several levels until reading `__game.level.ref`: relay twine (L7, L9, L18), fan-braced strut chains,
+        bank-to-node ties were never taught; L34/L20 a bare down-stepping plank chain 64 vs par 85/84; L13 two bare planks
+        40 vs 47; boat levels 10/22/25 one answer, gap lanterns 26/32/35 one answer, the daily a near-copy of L27; wind
+        mattered only on L29) and fixes (rules v6): why the stepped chain holds: the steep end plank lets the chain's end
+        swing, so the flat run can sag a little and hangs as a ribbon at modest tension (a flat chain between two fixed
+        pegs can't sag without stretching, so its tension spikes and it snaps); real, so the surveyor builds steep-step
+        roads and bare roads (and roads through island anchors), par never exceeds a plain road, and crossings a bare road
+        holds are redrawn past d 0.1; tricks taught by a card on the first level whose par build needs them (tie at 8,
+        relay at 12, fan at 20); answer fingerprints (`solutionSig`) keep picks and dailies from repeating; boat and gap
+        levels vary (face pegs both/one/none, hooks, lane width, two lanterns over a gap); updraughts `LIFT_K` 1.6 → 2.4 and
+        wind on more levels (`wind.ts 18 2.4`: the calm par build fails in 13/18); a drag past reach that places nothing says
+        so; "At par or under." capitalised. 24 tests.
+  - [ ] Next: sixth blind playtest. Watch: do the trick cards land at the right moment? Is a ribbon road fair when it
+        appears? Old v5 watch items: does ★★★ now take thought from the middle of the trail on? Do plank struts
         feel like a discovery or an exploit? Are the late levels (diff ~0.9, par 160-230) a wall? Old v4 watch items: are polished pars beatable at all (★★★ rate)? Is the early sawtooth (14 gap
         0.28 → 15 hooks 0.07 → 16 arch 0.35) noticeable? Is the Moss-Hook-style two-ring wall still loose (its par stayed
         ~111-126 while the tester found 92)? Old watch items: does difficulty (shapes that fail) match how hard people find levels? Is

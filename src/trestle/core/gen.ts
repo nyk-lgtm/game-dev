@@ -12,7 +12,7 @@
 // logs / rock floors are twists on top.
 
 import { Rng, mixSeed } from '../../shared/rng';
-import { costOf, replayBuild, toActions } from './build';
+import { PLANK, TWINE, costOf, replayBuild, toActions, type Member } from './build';
 import { COLS, pt, px, py, ringsOf, type Level, type Rock } from './level';
 import { WON, runSim } from './sim';
 import { polish, survey } from './solve';
@@ -53,7 +53,7 @@ export function dailyName(seed: number, lantern: boolean): string {
 }
 
 /** Gusty weather on harder levels: + blows to the right. */
-function windFor(rng: Rng, d: number, p = 0.15 + 0.35 * d): number | undefined {
+function windFor(rng: Rng, d: number, p = 0.2 + 0.4 * d): number | undefined {
   if (d < 0.25 || rng.next() >= p) return undefined;
   return Math.round((1.5 + 1.8 * d) * 10 * rng.pick([-1, 1])) / 10;
 }
@@ -106,12 +106,18 @@ function layoutCross(rng: Rng, d: number, id: string, type: LevelType): Level {
     anchors.push(pt(c, top), pt(c + wide, top));
     tips.push(low ? 'Low island: prop the road from it.' : 'The road can rest on the island.');
   }
+  let boatHooks = false;
   if (type === 'boat') {
-    terrain.push({ x0: xL + 1, y0: yLow + 1, x1: xR - 1, y1: 14, kind: 'clear' });
+    // Boat levels vary: the lane narrower or wider, sometimes no pegs on the cliff faces (so no struts from below),
+    // sometimes a hook overhead.
+    const inset = span >= 6 && rng.next() < 0.4 ? 2 : 1;
+    terrain.push({ x0: xL + inset, y0: yLow + 1, x1: xR - inset, y1: 14, kind: 'clear' });
+    if (rng.next() < 0.35) anchors.splice(2);
+    boatHooks = d > 0.3 && rng.next() < 0.35;
     tips.push('Keep the boat lane clear.');
   }
   // Hooks on overhanging branches: always for hooks levels, sometimes on plain ones, never on arches or boats.
-  if (type === 'hooks' || (type === 'plain' && rng.next() < 0.35 - 0.25 * d)) {
+  if (type === 'hooks' || boatHooks || (type === 'plain' && rng.next() < 0.35 - 0.25 * d)) {
     // Hooks vary: one to three, high or low, over the middle, over one bank only, or spread out.
     const n = type === 'hooks' ? rng.pick([1, 1, 2, 2, 3]) : 1;
     const where = rng.pick(['middle', 'left', 'right', 'spread'] as const);
@@ -166,22 +172,29 @@ function layoutGap(rng: Rng, d: number, id: string): Level {
     { x0: xR, y0: yR, x1: 15, y1: 14, kind: 'bank' },
   ];
   const anchors = [pt(xL, yL), pt(xR, yR)];
-  for (const [x, y] of [[xL, yL], [xR, yR]] as const) for (let k = 1; k <= 3; k++) if (rng.next() < 0.55 - 0.35 * d) anchors.push(pt(x, y + k));
+  // Gap lanterns vary: cliff-face pegs on both banks, one bank only, or none; sometimes a hook overhead; the ring
+  // level, low or high; later on two lanterns.
+  const faces = rng.pick(['both', 'left', 'right', 'none'] as const);
+  for (const [x, y, side] of [[xL, yL, 'left'], [xR, yR, 'right']] as const)
+    if (faces === 'both' || faces === side) for (let k = 1; k <= 3; k++) if (rng.next() < 0.6 - 0.3 * d) anchors.push(pt(x, y + k));
   const rx = xL + Math.floor(span / 2) + (span % 2 ? rng.int(0, 1) : 0);
-  const ry = Math.min(yL, yR) + (d < 0.3 ? rng.int(0, 1) : rng.int(-2, 1));
-  const weight = Math.round((1.0 + 1.2 * d + rng.next() * 0.3) * 10) / 10;
+  const ry = Math.min(yL, yR) + (d < 0.3 ? rng.int(0, 1) : rng.int(-3, 1));
+  const rings = [pt(rx, ry)];
+  if (d >= 0.45 && span >= 6 && rng.next() < 0.35) rings.push(pt(rx + (rx - xL > xR - rx ? -2 : 2), ry + rng.pick([-1, 0, 1])));
+  if (d > 0.3 && rng.next() < 0.3) anchors.push(pt(rng.pick([xL, xR]) + rng.int(-1, 1), Math.max(0, ry - rng.int(3, 4))));
+  const weight = Math.round((1.0 + 1.2 * d + rng.next() * 0.3) * (rings.length > 1 ? 0.8 : 1) * 10) / 10;
   const wind = windFor(rng, d);
   return {
     id,
     name: '',
     terrain,
     anchors: [...new Set(anchors)],
-    goal: { kind: 'reach', rings: [pt(rx, ry)], weight },
+    goal: { kind: 'reach', rings, weight },
     budget: 0,
     par: 0,
     parParts: 0,
     ...(wind ? { wind } : {}),
-    tip: `Hang the lantern over the gap, from one bank or both.${wind ? ` ${windTip(wind, true)}` : ''}`,
+    tip: `Hang the lantern${rings.length > 1 ? 's' : ''} over the gap.${wind ? ` ${windTip(wind, true)}` : ''}`,
   };
 }
 
@@ -245,6 +258,8 @@ export function priceLevel(l: Level, d: number, info?: GenInfo): Level | null {
   // A short polish (the offline pool polishes far longer).
   const ms = polish(l, s.members, LIVE_POLISH, 3);
   if (ms.length < 3) return null;
+  // A bare road of planks (no struts, no twine) that holds makes a dull level: past the first few, redraw.
+  if (d > 0.1 && l.goal.kind === 'cross' && ms.every((m) => m.mat === PLANK)) return null;
   // Round-trip through actions, so the proof is exactly what a player could build.
   const a = toActions(l, ms);
   const b = replayBuild(l, a).members;
@@ -292,3 +307,40 @@ export function makeLevel(seed: number, d: number, info?: GenInfo, type?: LevelT
 
 /** The n-th generated level of the trail (n ≥ 1), the same for everyone. */
 export const trailSeed = (n: number) => mixSeed(0x7e57, n);
+
+/**
+ * A rough fingerprint of a level's answer: the type, how many planks / twigs / twine and free pegs
+ * the par build uses. Pool picks and dailies avoid repeating one.
+ */
+export function solutionSig(l: Level): string {
+  const ms = replayBuild(l, l.ref ?? '').members;
+  const n = (mat: number) => ms.filter((m) => m.mat === mat).length;
+  const free = new Set<number>();
+  for (const m of ms) for (const p of [m.a, m.b]) if (!l.anchors.includes(p)) free.add(p);
+  return `${l.type}|${n(0)}|${n(1)}|${n(2)}|${free.size}`;
+}
+
+/** Tricks a par build relies on (for teaching each once, on the first level that needs it). */
+export function tricksOf(l: Level): ('relay' | 'fan' | 'tie')[] {
+  const ms: Member[] = replayBuild(l, l.ref ?? '').members;
+  const anchors = new Set(l.anchors);
+  const rings = new Set(l.goal.kind === 'reach' ? l.goal.rings : []);
+  const at = new Map<number, Member[]>();
+  for (const m of ms) for (const p of [m.a, m.b]) at.set(p, [...(at.get(p) ?? []), m]);
+  const out = new Set<'relay' | 'fan' | 'tie'>();
+  for (const [p, list] of at) {
+    if (anchors.has(p) || rings.has(p)) continue;
+    // Relay: a free peg held only by twine, one of them from an anchor (a far hook reached in two legs).
+    const roadPeg = list.some((m) => m.mat === PLANK);
+    if (!roadPeg && list.length >= 2 && list.every((m) => m.mat === TWINE) && list.some((m) => anchors.has(m.a) || anchors.has(m.b))) out.add('relay');
+  }
+  for (const a of l.anchors) {
+    const cords = (at.get(a) ?? []).filter((m) => m.mat === TWINE);
+    // Fan: three or more cords from one anchor out to pegs of a strut chain.
+    if (cords.length >= 3) out.add('fan');
+    // Tie: a cord from a peg on the rock (not a hook) back to a road or arm peg.
+    const onRock = l.terrain.some((r) => r.kind !== 'clear' && px(a) >= r.x0 && px(a) <= r.x1 && py(a) >= r.y0 && py(a) <= r.y1);
+    if (onRock && cords.some((m) => !anchors.has(m.a === a ? m.b : m.a))) out.add('tie');
+  }
+  return [...out];
+}

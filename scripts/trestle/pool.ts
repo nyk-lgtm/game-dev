@@ -8,7 +8,7 @@
 
 import { writeFileSync } from 'node:fs';
 import { mixSeed } from '../../src/shared/rng';
-import { LEVEL_TYPES, costOf, difficulty, isLantern, makeLevel, polish, replayBuild, survey, toActions, trailName, WON, runSim, type Level, type LevelType } from '../../src/trestle/core';
+import { LEVEL_TYPES, costOf, difficulty, isLantern, makeLevel, polish, replayBuild, solutionSig, survey, toActions, trailName, tricksOf, WON, runSim, type Level, type LevelType } from '../../src/trestle/core';
 
 const SLOTS = Number(process.argv[2] ?? 60);
 const PER = Number(process.argv[3] ?? 14);
@@ -49,6 +49,9 @@ LEVEL_TYPES.forEach((type, ti) => {
   console.error(`${type}: ${cands.filter((c) => c.type === type).length} candidates (${((performance.now() - t0) / 1000).toFixed(0)} s)`);
 });
 
+const sigs = new Map<Cand, string>();
+const sigOf = (c: Cand) => sigs.get(c) ?? (sigs.set(c, solutionSig(c.l)), sigs.get(c)!);
+
 /** A rough look of a level: pegs, span (or rings) and wind. */
 const shapeKey = (l: Level) =>
   `${l.anchors.length}:${l.goal.kind === 'cross' ? (l.goal.to % 13) - (l.goal.from % 13) : `r${l.goal.rings.length}`}:${l.wind ? 'w' : ''}`;
@@ -74,7 +77,9 @@ for (let i = 0; i < SLOTS; i++) {
     // Hooks and spires felt like clones in playtests: at most 3 of each in the first 30 levels, 5 in all.
     const capOf = (t: LevelType) => (t === 'hooks' || t === 'spire' ? (i < 30 ? 3 : 5) : 99);
     if (picked.filter((p) => p.type === c.type).length >= capOf(c.type)) continue;
-    const score = Math.abs((c.l.diff ?? 0) - target) + 0.25 * Math.abs(c.d - f) + (c.type === type ? 0 : 0.2) + (twin ? 0.5 : 0);
+    // The same answer shape as a level already picked (playtest: boat and gap levels shared one answer) is kept out.
+    const same = picked.some((p) => sigOf(p) === sigOf(c));
+    const score = Math.abs((c.l.diff ?? 0) - target) + 0.25 * Math.abs(c.d - f) + (c.type === type ? 0 : 0.2) + (twin ? 0.5 : 0) + (same ? 1 : 0);
     if (score < bs) (bs = score), (best = c);
   }
   used.add(best!);
@@ -109,8 +114,18 @@ const levels = order.map((c, i) => {
       l = { ...l, par: cost, parParts: b.length, ref: a, budget: Math.ceil((cost * (1.4 - 0.25 * c.d)) / 10) * 10 };
     }
   }
-  return { ...l, id: `p${i + 1}`, name: trailName(i, isLantern(c.type)) };
+  return { ...l, id: `p${i + 1}`, name: trailName(i, isLantern(c.type)) } as Level;
 });
+// Teach each trick once, on the first level whose par build needs it.
+const taught = new Set<string>();
+for (const l of levels)
+  for (const t of tricksOf(l))
+    if (!taught.has(t)) {
+      taught.add(t);
+      l.trick = t;
+      break;
+    }
+console.log(`tricks taught: ${levels.map((l, i) => (l.trick ? `${l.trick} at ${i + 7}` : '')).filter(Boolean).join(', ') || 'none'}`);
 let jump = 0;
 let drop = 0;
 const lines = levels.map((l, i) => {

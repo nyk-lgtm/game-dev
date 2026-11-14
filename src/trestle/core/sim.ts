@@ -64,7 +64,7 @@ export function lift(step: number): number {
   return rise * (-0.3 + 1.3 * tri);
 }
 /** How hard an updraught lifts compared with the sideways gust. */
-const LIFT_K = 1.6;
+const LIFT_K = 2.4;
 const LIFT_STEPS = Math.round(HZ * 1.4);
 /** Gap between carts in a convoy (middle to middle). */
 const CONVOY_GAP = 1.6;

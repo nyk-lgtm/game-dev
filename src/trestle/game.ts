@@ -328,6 +328,23 @@ export class Game {
     this.resize();
     this.info(this.debrief ?? this.intro());
     this.save();
+    this.teach();
+  }
+
+  /** The first level whose answer needs a trick explains it once. */
+  private teach(): void {
+    const t = this.level.trick;
+    if (!t || this.mode !== 'trail') return;
+    const seen = store.load<string[]>('tricks', []);
+    if (seen.includes(t)) return;
+    store.save('tricks', [...seen, t]);
+    const text: Record<string, [string, string]> = {
+      relay: ['Relay the twine', 'A hook too far for one cord? Run twine to a free peg, then on to the hook, and tie that peg back with a second cord so it can’t swing.'],
+      fan: ['Fan of cords', 'Hold a row of struts up with a fan of twine from one high peg: one cord to each peg along the row.'],
+      tie: ['Tie it back', 'Twine from a peg on the rock to a peg out in the gap pulls it back and keeps the shape from leaning.'],
+    };
+    const [title, body] = text[t];
+    setTimeout(() => showCard(`<h2>Trick: ${title}</h2><p>${body}</p>`, [{ label: 'Build', primary: true, onClick: closeOverlay }]), 250);
   }
 
   private intro(): string {
@@ -628,7 +645,10 @@ export class Game {
           buzz(8);
           this.info(`${pr.clamped ? `<span class="warn">Past its reach: joined to the nearest peg in line instead.</span> ` : ''}${this.costLine()}`);
         } else this.info('That piece is already there.');
-      } else if (pr.why && pr.why !== 'nowhere') toast(pr.why);
+      } else if (pr.why && pr.why !== 'nowhere') {
+        toast(pr.why);
+        this.info(`<span class="bad">${pr.why}.</span> Nothing placed.${pr.clamped && !pr.why.startsWith('Too far') ? ` <span class="warn">${MATS[this.mat].name} reaches ${MAXLEN[this.mat]} at most.</span>` : ''}`);
+      } else if (pr.clamped) this.info(`<span class="warn">Too far: ${MATS[this.mat].name.toLowerCase()} reaches ${MAXLEN[this.mat]} at most.</span> Nothing placed.`);
       this.draw();
       return;
     }
@@ -678,7 +698,8 @@ export class Game {
             : dangling
               ? `${plural(dangling, 'piece')} with a free end (faded: ${dangling === 1 ? 'it does' : 'they do'} nothing)`
               : '';
-    const state = over > 0 ? ` <span class="bad">${over} over budget</span>` : notYet ? ` <span class="warn">${notYet}</span>` : c <= this.level.par ? ' <span class="good">at par or under</span>' : '';
+    const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+    const state = over > 0 ? ` <span class="bad">${over} over budget.</span>` : notYet ? ` <span class="warn">${cap(notYet)}.</span>` : c <= this.level.par ? ' <span class="good">At par or under.</span>' : '';
     return `${plural(this.members.length, 'part')}, cost ${c}.${state}`;
   }
 

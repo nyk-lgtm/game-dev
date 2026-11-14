@@ -4,7 +4,7 @@
 // difficulty. Level n is the same for everyone. `judge` replays a build.
 
 import { costOf, replayBuild } from './build';
-import { dailyName, makeLevel, trailName, trailSeed, isLantern, type LevelType } from './gen';
+import { dailyName, makeLevel, solutionSig, trailName, trailSeed, isLantern, type LevelType } from './gen';
 import { starsFor, type Level } from './level';
 import { mixSeed } from '../../shared/rng';
 import { POOL } from './pool';
@@ -40,7 +40,14 @@ export const DAILY_TARGET = 0.5;
 
 /** A generated level from a seed (the daily, bug reports); a daily picks, of two (d, d + 0.3), the one nearest mid difficulty and gets its own name. */
 export function seedLevel(seed: number, d: number, id: string, daily = false): Level {
-  const l = daily ? nearest([0, 0.3].map((up, i) => makeLevel(i ? mixSeed(seed, i) : seed, Math.min(1, d + up))), DAILY_TARGET) : makeLevel(seed, d);
+  let l: Level;
+  if (daily) {
+    // Two candidates; one whose answer has the same shape as a trail level's is passed over when the other isn't.
+    const cands = [0, 0.3].map((up, i) => makeLevel(i ? mixSeed(seed, i) : seed, Math.min(1, d + up)));
+    const sigs = new Set(POOL.map(solutionSig));
+    const fresh = cands.filter((c) => !sigs.has(solutionSig(c)));
+    l = nearest(fresh.length ? fresh : cands, DAILY_TARGET);
+  } else l = makeLevel(seed, d);
   return { ...l, id, ...(daily ? { name: dailyName(seed, isLantern(l.type as LevelType)) } : {}) };
 }
 

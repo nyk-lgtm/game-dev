@@ -2,6 +2,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   POOL,
+  solutionSig,
+  tricksOf,
   looseOf,
   dailyName,
   type Level,
@@ -255,6 +257,29 @@ describe('diagnosis', () => {
     const r = runSim(l, ms);
     expect(WON.has(r.outcome)).toBe(false);
     expect(['wobbly', 'weak', 'sag']).toContain(explain(l, ms, r).cause);
+  });
+});
+
+describe('par and variety', () => {
+  it('a steep step off the bank lets a bare plank chain hang; the surveyor knows it, so par is never above it', () => {
+    const t = TUTORIALS[2];
+    // A tilted copy of tutorial 3 (the right bank one lower).
+    const l = { ...t, terrain: [t.terrain[0], { ...t.terrain[1], y0: 7 }], anchors: [pt(3, 6), pt(9, 7)], goal: { ...t.goal, to: pt(9, 7) } as typeof t.goal };
+    let ms: Member[] = [];
+    for (const [a, b] of [[pt(3, 6), pt(4, 7)], [pt(4, 7), pt(6, 7)], [pt(6, 7), pt(8, 7)], [pt(8, 7), pt(9, 7)]]) ms = addMember(l, ms, a, b, PLANK)!;
+    const r = runSim(l, ms);
+    expect(WON.has(r.outcome)).toBe(true);
+    expect(survey(l, SURVEY_EFFORT)!.cost).toBeLessThanOrEqual(costOf(ms));
+  });
+  it('picked levels rarely repeat an answer shape and are never a bare road; each trick is taught once', () => {
+    // (The polish after picking can make two answers converge: allow a few, never close together.)
+    const sigs = POOL.map(solutionSig);
+    expect(POOL.length - new Set(sigs).size).toBeLessThanOrEqual(3);
+    sigs.forEach((sg, i) => expect(sigs.slice(Math.max(0, i - 2), i)).not.toContain(sg));
+    for (const l of POOL) if (l.goal.kind === 'cross') expect(replayBuild(l, l.ref!).members.every((m) => m.mat === PLANK), l.name).toBe(false);
+    const taught = POOL.filter((l) => l.trick).map((l) => l.trick);
+    expect(new Set(taught).size).toBe(taught.length);
+    for (const l of POOL) if (l.trick) expect(tricksOf(l)).toContain(l.trick);
   });
 });
 

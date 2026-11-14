@@ -78,6 +78,32 @@ export function crossCandidates(l: Level): Member[][] {
   const roads = [road(2), road(2, true), road(1)];
   // Tilted roads may also step down right after the left bank or just before the right one.
   const extra = y0 !== y1 ? [road(2, false, x0 + 1), road(2, true, x0 + 1), road(2, false, x1 - 1), road(2, true, x1 - 1)] : [];
+  // A steep (1 across, 1 down) step right after the left bank, mid-gap or just before the right bank: going down is fine,
+  // and a chain hung from such a step can swing a little and hang as a ribbon (testers found it).
+  if (y1 === y0 + 1)
+    for (const at of [x0, x0 + Math.floor(span / 2) - 1, x1 - 1]) {
+      if (at < x0 || at + 1 > x1) continue;
+      const xs: number[] = [];
+      for (let x = at; x > x0; x -= 2) xs.unshift(x);
+      xs.unshift(x0);
+      const left = [...new Set(xs)].map((x) => pt(x, y0));
+      const right: number[] = [];
+      for (let x = at + 1; x < x1; x += 2) right.push(pt(x, y1));
+      right.push(pt(x1, y1));
+      extra.push([...left, ...right]);
+    }
+  // Through any anchors on the road line (island tops): the plainest road there is.
+  const onLine = l.anchors.filter((a) => px(a) > x0 && px(a) < x1 && (py(a) === y0 || py(a) === y1)).sort((a, b) => px(a) - px(b));
+  if (onLine.length) {
+    const via = [g.from, ...onLine, g.to];
+    const pts: number[] = [via[0]];
+    for (let i = 0; i + 1 < via.length; i++) {
+      const [a, b] = [via[i], via[i + 1]];
+      for (let x = px(a) + 2; x < px(b) - (py(a) === py(b) ? 0 : 1); x += 2) pts.push(pt(x, py(a)));
+      pts.push(b);
+    }
+    extra.push(pts);
+  }
   const out: Member[][] = [];
   // Warren trusses: a chord peg over or under the middle of each 2-long plank.
   for (const deck of roads.slice(0, 2))
@@ -133,8 +159,12 @@ export function crossCandidates(l: Level): Member[][] {
       link(l, b, { twig: true, twine: true });
       out.push(b.ms);
     }
-  // Roads on struts from the rock below, or hung from hooks above (struts as twigs, or as planks: stronger).
+  // Roads on struts from the rock below, or hung from hooks above (struts as twigs, or as planks: stronger),
+  // and each road bare (the plainest builds bound par from above).
   for (const deck of [...roads, ...extra]) {
+    const bare = new Builder(l);
+    bare.chain(deck, PLANK);
+    out.push(bare.ms);
     const b = new Builder(l);
     b.chain(deck, PLANK);
     link(l, b, { twig: true, twine: true });
