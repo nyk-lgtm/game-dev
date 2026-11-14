@@ -101,6 +101,8 @@ export interface SavedRun {
   village?: number;
   /** The run reached the end; it stays the saved run (and reopens on its ending) until a new language. */
   done?: boolean;
+  /** The end card has been shown for this finished run; a reload then opens on the final page instead. */
+  seen?: boolean;
 }
 
 /** Where each village's run is saved (village 1 keeps its original key). */
@@ -123,6 +125,8 @@ export class Game {
   actions: string[] = [];
   daily: string | null = null;
   village = 1;
+  /** The end card has been shown for the current (finished) run. */
+  private endingSeen = false;
   view = 0;
   sfx = new Sfx();
   private sceneCache = new Map<string, HTMLCanvasElement>();
@@ -175,6 +179,9 @@ export class Game {
       this.s = newGame(seed, this.village, !!daily);
       this.actions = [];
     }
+    // Was this finished run's end card already shown (same run in the save, marked seen)?
+    const prev = store.load<SavedRun | null>(daily ? 'dailyRun' : runKey(this.village), null);
+    this.endingSeen = !!prev?.seen && prev.seed === seed && prev.a === this.actions.join(',');
     document.body.classList.toggle('v2', this.village === 2);
     if (!daily) store.save('village', this.village);
     this.sceneCache.clear();
@@ -183,13 +190,13 @@ export class Game {
     this.pickWrong.clear();
     this.view = this.s.chapter;
     this.page = 0;
-    // A finished run reopens on its last page, with the ending card over it.
+    // A finished run reopens on its last page; the end card shows only once, when the run is finished.
     if (this.s.over) this.page = this.pages(this.view).length - 1;
     // A run opened from a link becomes your current run in its village too (a refresh carries on with it).
     this.persist();
     this.render();
     $('main').scrollTop = 0;
-    if (this.s.over) setTimeout(() => this.showEnding(), 300);
+    if (this.s.over && !this.endingSeen) setTimeout(() => this.showEnding(), 300);
   }
 
   /** Save the run, finished or not: a finished run stays the saved one until the player picks a new language. */
@@ -197,6 +204,7 @@ export class Game {
     const run: SavedRun = { v: this.daily ? DAILY_VERSION : rulesVersion(this.village), seed: this.seed, a: this.actions.join(','), day: this.daily };
     if (this.village === 2) run.village = 2;
     if (this.s.over) run.done = true;
+    if (this.s.over && this.endingSeen) run.seen = true;
     store.save(this.daily ? 'dailyRun' : runKey(this.village), run);
   }
 
@@ -1047,6 +1055,10 @@ export class Game {
     const p = progress(s);
     const pct = Math.round((100 * p.confirmed) / p.total);
     document.querySelectorAll('.toast').forEach((t) => t.remove());
+    if (!this.endingSeen) {
+      this.endingSeen = true;
+      this.persist();
+    }
     this.sfx.victory();
     const gloss = (id: string) => (s.notebook[id] ? short(s.notebook[id]) : '⟨?⟩');
     const v2 = this.village === 2;

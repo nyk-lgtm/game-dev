@@ -234,7 +234,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   order; from the Houses on 4 riddles a place with 2-3+ grammar `features`, grammar mixed from earlier places,
   wrong scenes that keep every word, up to 5 sly decoy tiles); its saves carry `DAILY_VERSION` (3), reports
   `UNSPOKEN v3 daily=<day>` and links `&day=` (opened as that day's daily). Finished runs stay saved (`done`) and
-  reopen on the ending until "A new language". Toasts (game.ts `toast`, one at a time) sit over the header's
+  reopen on the final page until "A new language" (the end card shows once: `seen` in the save). Toasts (game.ts `toast`, one at a time) sit over the header's
   language box at z 9, under the sheet and cards. Signs/riddles shrink their glyphs to stay on one line
   (`caption()`, ≥ 34 px glyph = 44 px tile); the glyph sheet folds scenes behind "Show N more" when the meanings
   would fall below the fold; the ‹ › beside the place tabs are real buttons that scroll the strip.

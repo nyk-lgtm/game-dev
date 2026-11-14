@@ -939,7 +939,7 @@ playtests with fixes shipped. Open threads, in order:
 ## Done (recent)
 - Unspoken third blind playtest (village 1: 46/46, 16/16 riddles; "deduction satisfying and fair, great payoff") and
   fixes, village-1 world hashes unchanged, no RULES_VERSION bump: finished runs stay saved (`done`) and reopen on the
-  ending after a reload until "A new language" (they used to be wiped, so a reload gave a new language); the menu's daily
+  final page after a reload (end card once: `seen`) until "A new language" (they used to be wiped, so a reload gave a new language); the menu's daily
   line says in progress / done · result (it said "not played"); toasts sit over the header's language box, one at a
   time, under the sheet and cards (they covered the place tabs and the end card's "46 of 46"); signs and riddles shrink
   their glyphs to stay on one line at 390 px (≥ 34 px glyph); the glyph sheet folds extra scenes behind "Show N more"
