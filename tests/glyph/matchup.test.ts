@@ -51,7 +51,9 @@ describe('matchups and warnings', () => {
   });
 
   it('flags immunity, resistance and heavy armor, worst first', () => {
-    expect(warnings(row('bolt', 'fire'), [foe('drake', 4)])[0]).toMatchObject({ level: 2, text: 'Drakes immune to fire' });
+    expect(warnings(row('bolt', 'fire'), [foe('drake', 4)])[0]).toMatchObject({ level: 2, text: 'Drakes immune (fire)' });
+    // A Fire Nova: the immunity comes before the flyer note (the v5 playtest's daily, wave 9).
+    expect(warnings(row('nova', 'haste', 'heavy', 'fire'), [foe('drake', 4), foe('imp', 4)])[0]).toMatchObject({ level: 2, text: 'Drakes immune (fire)' });
     expect(warnings(row('bolt', 'storm'), [foe('golem', 2)])[0]).toMatchObject({ level: 1, kind: 'golem' });
     expect(warnings(row('rain'), [foe('golem', 2)])[0].text).toBe('Golems: armor eats 55%');
     // Fire then Storm: storm hits land on drakes, the burn doesn't.

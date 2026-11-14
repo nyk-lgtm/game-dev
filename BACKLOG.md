@@ -763,7 +763,17 @@ blind playtests with fixes shipped (Simmer 5, Trestle 5, Delve 4). Open threads,
     at 0.62). v5 result: smart 70% (200 seeds; deaths 9:1 10:6 11:4 12:8 13:10 14:6 15:26), favor bolt 67, orb 63,
     beam 61, nova 60, rain 54%; nova-primary runs win 48/75 (v4: 8/51). The favor/smart targets pull apart: GROWTH
     0.72 → smart 61%, favor 38-57%.
-  - [ ] Next: re-run sweep.ts (economy knobs predate v4).
+  - [x] Glyphwright v5 blind playtest (rules v6, 2026-11-14; won the daily, Nova and free runs died on wave 11, Rain on
+    15: "not too hard, but spiky"; the merge prompt read well). Forecast in the wave preview (`waveTrial`: the coming
+    wave with the loom as it stands, exact) and "Wave 15 with this loom" from wave 11 (the whole wave, replacing the
+    Lich-alone trial that said "room to spare" before a wave that cost 17); immunity warning before Nova's flyer note
+    (Fire Nova vs Drakes); shop rune onto a filled slot replaces it (confirm, old rune to bench or sold); "Keep them
+    apart" primary when a merge lowers dps; Split on Nova says "wider"; rows and warnings wrap, tip text opens in full;
+    32 px wave chips; a daily win opens Ascension 1 and the menu says how. Spikes: drake 85 → 70 HP with GROWTH.hp
+    0.69 → 0.74. Bot (200 seeds): 70% → 69%; per-wave leaks (100 runs) w9 drake 102 → 87, w10 162 → 132, w11 150 → 66,
+    w12 138 → 108; favor bolt 71, nova 68, rain 62, beam 58, orb 58%.
+  - [ ] Next: re-run sweep.ts (economy knobs predate v4). Drakes still lead the leaks on 9-13; watch whether the
+    forecast makes them feel fair before softening more.
     Watch: does Ascension pull players back after a win; do humans now spend their gold by wave 6-8?
   - [x] Telegraph: depths 2-3 get +2 enemy budget (depth 1 stays the tutorial; rules v4). Greedy bot
     median depth 8 → 7 (back on target), more of its runs end on depth 3. A bomb someone stands on

@@ -3,7 +3,7 @@
 // card; the battle itself uses the same `mitigate`.
 
 import { MOD } from './runes';
-import { ENEMIES, WAVES, enemyHp, isBoss, mitigate, newBattle, stepBattle, waveQueue } from './battle';
+import { ENEMIES, enemyHp, isBoss, mitigate, newBattle, stepBattle, waveQueue } from './battle';
 import type { Enemy, EnemyKind, GameState, Spell } from './types';
 
 export interface FoeMatch {
@@ -79,8 +79,9 @@ export function warnings(sp: Spell, foes: WaveFoe[]): Warning[] {
     if (m.share < 0.04 && !isBoss(m.kind)) continue;
     const name = plural(m.kind, m.count);
     if (!m.canHit) out.push({ level: 2, text: `${name} ${m.count > 1 ? 'fly' : 'flies'} over it`, kind: m.kind });
+    // Immunity before the flyer note: a Fire Nova does nothing at all to Drakes.
+    else if (m.resist === 0) out.push({ level: 2, text: `${name} immune (${sp.element})`, kind: m.kind });
     else if (reach(sp, m.kind) < 1) out.push({ level: 1, text: `${name} ${m.count > 1 ? 'take' : 'takes'} ${Math.round(reach(sp, m.kind) * 100)}% (${m.count > 1 ? 'flyers' : 'a flyer'})`, kind: m.kind });
-    else if (m.resist === 0) out.push({ level: 2, text: `${name} immune to ${sp.element}`, kind: m.kind });
     else if (m.resist <= 0.5) out.push({ level: m.resist <= 0.25 ? 2 : 1, text: `${name} ${m.count > 1 ? 'resist' : 'resists'} ${sp.element}`, kind: m.kind });
     else if (m.ratio < 0.5) out.push({ level: m.ratio < 0.25 ? 2 : 1, text: `${name}: armor eats ${Math.round((1 - m.ratio) * 100)}%`, kind: m.kind });
     // Hits of another element still land, but the burn doesn't.
@@ -89,31 +90,36 @@ export function warnings(sp: Spell, foes: WaveFoe[]): Warning[] {
   return out.sort((a, b) => b.level - a.level);
 }
 
-export interface LichTrial {
-  /** The Lich fell before reaching the tower. */
-  killed: boolean;
-  /** How far down the lane it got (0..1; 1 = it reached the tower). */
-  progress: number;
-  /** Share of its HP and shield left when it reached the tower (0 if killed). */
-  left: number;
+export interface WaveTrial {
+  /** Tower HP the wave would cost with this loom. */
+  leaked: number;
+  /** That cost by foe kind. */
+  by: Partial<Record<EnemyKind, number>>;
+  /** The wave's boss, if any: did it fall, how far down the lane it got (1 = the tower), share left. */
+  boss: { kind: EnemyKind; killed: boolean; progress: number; left: number } | null;
 }
 
 /**
- * A trial run of the loom against the final boss alone (it still raises its
- * imps, which soak shots aimed at the front foe), on a copy of the state. An
- * estimate for the wave preview: the real wave 15 brings other foes too.
+ * Play a wave with the current loom on a copy of the state (the real battle is
+ * deterministic, so this is the wave preview's forecast; rules v6). `wave`
+ * defaults to the coming one; `bossOnly` keeps just the boss (and what it raises).
  */
-export function lichTrial(s: GameState): LichTrial {
-  const t: GameState = { ...s, wave: WAVES, hp: 1e6, maxHp: 1e6, loom: s.loom.map((r) => r.map((x) => x && { ...x })), bench: [], shop: [], battle: null };
+export function waveTrial(s: GameState, wave = s.wave, bossOnly = false): WaveTrial {
+  const t: GameState = { ...s, wave, hp: 1e6, maxHp: 1e6, loom: s.loom.map((r) => r.map((x) => x && { ...x })), bench: [], shop: [], battle: null };
   const b = newBattle(t);
-  b.queue = [[0.5, 'lich', 0.5]];
-  const full = enemyHp('lich', WAVES, s.asc) + ENEMIES.lich.shield;
-  let lich: Enemy | undefined;
-  for (let n = 0; n < 60 * 120 && !b.over; n++) {
+  if (bossOnly) b.queue = b.queue.filter(([, k]) => isBoss(k));
+  let boss: Enemy | undefined;
+  let y = 0;
+  for (let n = 0; n < 60 * 600 && !b.over; n++) {
     stepBattle(t, b);
-    lich ??= b.enemies.find((e) => e.kind === 'lich');
-    if (lich && !lich.alive) break;
+    boss ??= b.enemies.find((e) => isBoss(e.kind));
+    if (boss?.alive) y = boss.y;
   }
-  if (!lich || b.leakedBy.lich) return { killed: false, progress: 1, left: lich ? Math.max(0, lich.hp + lich.shield) / full : 1 };
-  return { killed: true, progress: Math.min(1, lich.y), left: 0 };
+  const out: WaveTrial = { leaked: b.leaked, by: { ...b.leakHp }, boss: null };
+  if (boss) {
+    const through = !!b.leakedBy[boss.kind];
+    const full = boss.maxHp + ENEMIES[boss.kind].shield;
+    out.boss = { kind: boss.kind, killed: !through, progress: through ? 1 : Math.min(1, y), left: through ? Math.max(0, boss.hp + boss.shield) / full : 0 };
+  }
+  return out;
 }

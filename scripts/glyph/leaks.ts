@@ -1,4 +1,5 @@
 // What gets through in smart-bot runs: tower HP lost by primary caster, wave band and foe kind.
+// BYWAVE=1 splits by single wave instead of bands.
 // Run: npx vite-node scripts/glyph/leaks.ts [runs] [favor rune]
 import { apply, compileRow, finishBattle, newGame, mixSeed } from '../../src/glyph/core';
 import { Rng } from '../../src/shared/rng';
@@ -38,7 +39,7 @@ for (let seed = 1; seed <= runs; seed++) {
     }
   });
   for (const [w, lb] of leaks) {
-    const band = w <= 8 ? 'w1-8' : w <= 12 ? 'w9-12' : 'w13-15';
+    const band = process.env.BYWAVE ? `w${String(w).padStart(2, '0')}` : w <= 8 ? 'w1-8' : w <= 12 ? 'w9-12' : 'w13-15';
     for (const [k, v] of Object.entries(lb)) {
       for (const key of [prim + ' ' + band, 'ALL ' + band]) {
         agg[key] ??= {};

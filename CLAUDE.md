@@ -81,9 +81,10 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     screen; no sprite draws below the car's baseline (the pedals). Bends past `BEND_CURVE` (1.5) get kerb chevrons
     (yellow; red past SHARP_CURVE) and a steady "BEND LEFT/RIGHT" ~1.5 s out. Bests per clock: `best<RULES_VERSION>`
     (best4 now; title lists "Old best (v3 clock)" from `best3`, "(v2 clock)" from `best`; the hub card falls back).
-  - Glyphwright: `npx vite-node scripts/glyph/balance.ts 200 smart` (rules v5: smart bot ~70% wins (200 seeds), losses
-    spread over waves 10-15 (Lich ~40% of them); `favor` (100): bolt 67, orb 63, beam 61, nova 60, rain 54%. `favor` pushes
-    the bot toward a caster, so it always trails smart: GROWTH.hp 0.72 gives smart 61% but favor 38-57%).
+  - Glyphwright: `npx vite-node scripts/glyph/balance.ts 200 smart` (rules v6: smart bot ~69% wins (200 seeds), deaths
+    9:2 10:6 11:8 12:11 13:4 14:5 15:26; `favor` (100): bolt 71, nova 68, rain 62, beam 58, orb 58%. `favor` pushes the
+    bot toward a caster, so it always trails smart). `BYWAVE=1 leaks.ts 100` splits leaks per wave: Drakes still lead
+    on 9-13 (v6 drake 85 → 70 HP: wave 11 drake leaks 150 → 66).
     A fresh `fit.ts` on v4 ranks looms better with `cover=1` but that bot plays far worse (36% vs 73%): keep W as is and
     judge any refit by balance.ts.
     `scripts/glyph/probe.ts 2` ranks every caster × modifier row by real leaks (beside two plain bolts) with a per-caster
@@ -91,7 +92,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     times and what leaks, by foe); `leaks.ts` splits bot leaks by primary caster, wave band and foe; `fit.ts` refits the
     bot's model `W` in smart.ts (row sets + 1500 random late looms, Spearman rho; `--fresh` after rule changes).
     `TWEAK='beam.dmg=17,MOD.pierceThrough=t,drake.hp=100,BUDGET.square=0.5,GROWTH.hp=0.5,lich.leak=10'` (tweak.ts;
-    probe/looms/balance) tries rule numbers (v5: GROWTH.hp 0.68 → ~72%, 0.72 → 61%, 0.76 → 44%), `BOTW='cover=1,novaStack=1'` bot weights.
+    probe/looms/balance) tries rule numbers (v6 with drake 70: GROWTH.hp 0.72 → 75%, 0.74 → 69%, 0.76 → 64%), `BOTW='cover=1,novaStack=1'` bot weights.
   - Summit: `npx vite-node scripts/summit/balance.ts 1000` (greedy bot with chain lookahead, rules v4: floor 1
     ~100%, floor 2 ~98%, median floor 5, ~14-15% win all 8); `DRAWS=34,13,…` tries other allotments, `TUNE=mirrors:1`
     other charm strengths, and `CHARM=mirror` starts every run holding one charm (the fair way to compare charms:
@@ -224,12 +225,16 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   `W.novaStack`. Rules v4 (third playtest): a tier-II modifier is never weaker than two tier-I (Haste 0.75^t, Storm 2t
   arcs, Split ×1.35^t, Pierce ×1.1^t; a test checks II ≥ I+I and III ≥ II+I on every caster); spare Split beams strike
   the target's column again and a Nova's Split only widens it (`MOD.novaWiden`); `spellDps` counts every beam. Foes
-  grow `GROWTH.hp` (v5: 0.69) a wave; bosses leak by the share of them left (`leakOf`, ≥ 1); `leakHp` per kind. Buy without a
-  slot puts the rune on the bench (a fitting loom slot only when the bench is full). `lichTrial(s)` (core/matchup.ts)
-  runs the loom against the Lich alone (with its imps) on a copy: the wave preview shows it from wave 11 (✓ / ⚠ from 80%
-  of the lane / ✗ with the leak). Ascension (`s.asc`, `newGame(seed, asc)`, `replay(seed, a, asc)`, `?asc=`): +10% foe
+  grow `GROWTH.hp` (v6: 0.74) a wave; bosses leak by the share of them left (`leakOf`, ≥ 1); `leakHp` per kind. Buy without a
+  slot puts the rune on the bench (a fitting loom slot only when the bench is full). `waveTrial(s, wave?, bossOnly?)`
+  (core/matchup.ts) plays a wave with the loom on a copy (battles are deterministic, so it is exact; a test checks it):
+  the preview's "Forecast: ≈ −N tower · Drakes −9…" for the coming wave, and from wave 11 "Wave 15 with this loom" (the
+  whole wave, the Lich and all; v5's Lich-alone trial said "room to spare" before a wave that cost 17). The page runs
+  trials off the tap (a setTimeout, cached per loom; ~40-70 ms a late wave on a laptop). Warnings put immunity before the
+  Nova flyer note; a shop rune dropped/tapped onto a filled slot replaces it after a confirm (old rune to a free bench
+  slot, else sold); "Keep them apart" is the primary button when a merge lowers total dps; the tip text opens in full on tap. Ascension (`s.asc`, `newGame(seed, asc)`, `replay(seed, a, asc)`, `?asc=`): +10% foe
   HP a level (`ASC`), a win at your top level opens the next (profile `asc`/`ascPick`/`ascWins`, max 10; dailies are
-  A0). The merge prompt lists each changed row's dps and asks when a merge lowers a row; the shop's ★ only marks merges
+  A0 and a daily win opens A1). The merge prompt lists each changed row's dps and asks when a merge lowers a row; the shop's ★ only marks merges
   that don't lower total dps; Empower clears the selection; rows show crowd and `1 foe` dps; end screen has a share line.
 - Rewild runs are a seed + actions (`P<card>.<cell>` place, `R` new hand, `E` end season). The
   season sim (src/rewild/core/sim.ts) visits cells in index order with one Rng per season, so

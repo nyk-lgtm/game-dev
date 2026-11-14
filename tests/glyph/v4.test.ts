@@ -10,7 +10,8 @@ import {
   enemyHp,
   finishBattle,
   leakOf,
-  lichTrial,
+  waveTrial,
+  apply,
   newBattle,
   newGame,
   replay,
@@ -95,18 +96,29 @@ describe('bosses and the Lich', () => {
     expect(leakOf({ kind: 'drake', hp: 1, maxHp: 300, shield: 0 })).toBe(ENEMIES.drake.leak);
   });
 
-  it('the Lich trial is pure, leaves the state alone and rewards a stronger loom', () => {
+  it('the wave trial is pure, leaves the state alone and rewards a stronger loom', () => {
     const s = newGame(9);
     const before = JSON.stringify(s);
-    const weak = lichTrial(s);
+    const weak = waveTrial(s, 15, true);
     expect(JSON.stringify(s)).toBe(before);
-    expect(lichTrial(s)).toEqual(weak);
-    expect(weak.killed).toBe(false);
-    expect(weak.left).toBeGreaterThan(0.9);
+    expect(waveTrial(s, 15, true)).toEqual(weak);
+    expect(weak.boss).toMatchObject({ kind: 'lich', killed: false });
+    expect(weak.boss!.left).toBeGreaterThan(0.9);
     const strong: GameState = { ...s, loom: [row(R('bolt', 3), R('pierce', 3), R('haste', 3), R('echo', 2)), row(R('beam', 3), R('heavy', 3), R('haste', 3), R('split', 2)), row(R('orb', 3), R('heavy', 3), R('haste', 3), R('split', 2))] };
-    const t = lichTrial(strong);
-    expect(t.killed).toBe(true);
-    expect(t.progress).toBeLessThan(1);
+    const t = waveTrial(strong, 15, true);
+    expect(t.boss!.killed).toBe(true);
+    expect(t.boss!.progress).toBeLessThan(1);
+    // The whole wave costs at least what the boss alone does.
+    expect(waveTrial(s, 15).leaked).toBeGreaterThanOrEqual(weak.leaked);
+  });
+
+  it('the forecast is exactly what the battle then does (rules v6)', () => {
+    const s = replay(21, 'B0,G,B1,G,B0,B1,G');
+    const f = waveTrial(s);
+    apply(s, { t: 'fight' });
+    const hp = s.hp;
+    finishBattle(s);
+    expect(hp - s.hp).toBe(Math.min(hp, f.leaked));
   });
 });
 
@@ -118,7 +130,7 @@ describe('Ascension and saves', () => {
     expect(a.asc).toBe(3);
     const s = newGame(4, 3);
     s.loom = a.loom;
-    expect(RULES_VERSION).toBe(5);
+    expect(RULES_VERSION).toBe(6);
   });
 
   it('a harder level leaks at least as much with the same loom', () => {

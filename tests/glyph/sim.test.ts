@@ -118,7 +118,7 @@ describe('replay encoding', () => {
     }
     expect(() => decode('X')).toThrow();
     expect(() => decode('ML00')).toThrow();
-    expect(RULES_VERSION).toBe(5);
+    expect(RULES_VERSION).toBe(6);
     expect(decode('B2b0k')).toEqual({ t: 'buy', i: 2, to: { area: 'bench', i: 0 }, keep: true });
     expect(encode({ t: 'move', from: slots[0], to: slots[2], keep: true })).toBe('ML00b0k');
     expect(decode('EL01k')).toMatchObject({ t: 'empower', keep: true });

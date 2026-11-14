@@ -38,7 +38,7 @@ export const ENEMIES: Record<EnemyKind, EnemyDef> = {
   golem: { name: 'Golem', hp: 150, speed: 0.04, armor: 6, shield: 0, leak: 3, gold: 1, resist: { storm: 0.5 }, flying: false, steady: true, r: 0.05, hue: 35, blurb: 'Huge armor, unstoppable. Storm is weak against it.' },
   splitter: { name: 'Splitter', hp: 45, speed: 0.065, armor: 0, shield: 0, leak: 2, gold: 0, resist: {}, flying: false, steady: false, r: 0.036, hue: 300, blurb: 'Bursts into two imps.' },
   mender: { name: 'Mender', hp: 40, speed: 0.06, armor: 1, shield: 0, leak: 1, gold: 1, resist: { arcane: 0.6 }, flying: false, steady: false, r: 0.032, hue: 130, blurb: 'Heals everything near it. Kill it first.' },
-  drake: { name: 'Drake', hp: 85, speed: 0.075, armor: 2, shield: 0, leak: 3, gold: 1, resist: { fire: 0 }, flying: true, steady: false, r: 0.042, hue: 15, blurb: 'Flies (a Nova only half reaches it), and fire cannot hurt it.' },
+  drake: { name: 'Drake', hp: 70, speed: 0.075, armor: 2, shield: 0, leak: 3, gold: 1, resist: { fire: 0 }, flying: true, steady: false, r: 0.042, hue: 15, blurb: 'Flies (a Nova only half reaches it), and fire cannot hurt it.' },
   warden: { name: 'Warden', hp: 1000, speed: 0.03, armor: 4, shield: 250, leak: 10, gold: 6, resist: {}, flying: false, steady: true, r: 0.075, hue: 220, blurb: 'A shielded boss. Break the shield, then the rest.' },
   colossus: { name: 'Colossus', hp: 2300, speed: 0.022, armor: 9, shield: 0, leak: 15, gold: 8, resist: { frost: 0.5 }, flying: false, steady: true, r: 0.09, hue: 40, blurb: 'Massive armor. Only heavy hits get through.' },
   lich: { name: 'Lich', hp: 4000, speed: 0.025, armor: 4, shield: 300, leak: 20, gold: 0, resist: { arcane: 0.5 }, flying: false, steady: true, r: 0.085, hue: 280, blurb: 'Summons imps as it comes. The final foe.' },
@@ -131,7 +131,7 @@ export function leakOf(e: Pick<Enemy, 'kind' | 'hp' | 'maxHp' | 'shield'>): numb
 }
 
 /** Regular foes gain `hp` of their base HP every wave (an object so probes can try numbers). */
-export const GROWTH = { hp: 0.69 };
+export const GROWTH = { hp: 0.74 };
 
 /** Ascension: each win unlocks the next level; every level gives all foes `hp` more HP. */
 export const ASC = { hp: 0.1, max: 10 };
