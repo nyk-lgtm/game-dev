@@ -121,7 +121,19 @@ playtests with fixes shipped. Open threads, in order:
         existing peg or ring in line (else "Too far", nothing placed); a cart stuck uphill lights the climbing plank (and
         stalls are judged by progress, so rolling to and fro in a dip counts); plural "The lanterns hold!"; help in short
         sections with a row per material. 22 tests.
-  - [ ] Next: fourth blind playtest. Watch: are polished pars beatable at all (★★★ rate)? Is the early sawtooth (14 gap
+  - [x] Fourth blind playtest (v4 live: every level cleared, ★★★ on all but L18 and L26; 7-11 trivial, 12-20 the best
+        band, 21-30 no harder, wind levels no harder; hook and spire levels felt like clones; testers beat par with plank
+        struts and early down-steps: L28 84 vs 107, L27 63 vs 79, L23 84 vs 87, daily 118 vs 149) and fixes (rules v5): the
+        surveyor adds plank struts (link `strut: PLANK`) and tilted roads stepping down near either bank, and `polish` swaps
+        twig↔plank and may drop non-level planks (on the v4 levels it now finds 84 / 54 / 84 for L28 / L27 / L23); pool
+        regenerated with concave targets (thirds 0.38 → 0.64 → 0.90; 21-30 now 0.42-0.54 vs 12-20 0.34-0.41), hooks/spires
+        capped and varied (hooks one to three, high or low, one bank only; spires off centre, two at times), stronger wind
+        (1.5 + 1.8d); boat-lane pegs/pieces say "Keep the boat lane clear"; the too-far cue shows once; ending a piece
+        mid-plank warns it won't join; tips are only the twists (no #info overflow on any of the 66 levels at 360×740 or
+        390×844); help fits 360×640 and 360×740, says a plank can be a strut, pieces join only at pegs, reach 2.2 fits a 2×1
+        diagonal.
+  - [ ] Next: fifth blind playtest. Watch: does ★★★ now take thought from the middle of the trail on? Do plank struts
+        feel like a discovery or an exploit? Are the late levels (diff ~0.9, par 160-230) a wall? Old v4 watch items: are polished pars beatable at all (★★★ rate)? Is the early sawtooth (14 gap
         0.28 → 15 hooks 0.07 → 16 arch 0.35) noticeable? Is the Moss-Hook-style two-ring wall still loose (its par stayed
         ~111-126 while the tester found 92)? Old watch items: does difficulty (shapes that fail) match how hard people find levels? Is
         "no climbing" clear (the stuck message says so)? Do boat lanes and arches feel fair? Is the late pool (diff ~0.9,

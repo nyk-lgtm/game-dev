@@ -21,6 +21,7 @@ import {
   WON,
   addMember,
   addToken,
+  between,
   costOf,
   delToken,
   explain,
@@ -587,7 +588,15 @@ export class Game {
       pr.why = t < 0 ? 'nowhere' : stop ? `Too far: ${MATS[this.mat].name.toLowerCase()} reaches ${MAXLEN[this.mat]}. Come back within the circle` : whyNot(this.level, this.members, pr.peg, t, this.mat);
       if (t >= 0) buzz(3);
       const len = t >= 0 ? lenOf(pr.peg, t) : 0;
-      const cue = clamped ? ` <span class="warn">max length: ${MATS[this.mat].name.toLowerCase()} reaches ${MAXLEN[this.mat]}</span>` : '';
+      // One cue at a time: past reach, or ending in the middle of another piece (that doesn't join it).
+      const mid = t >= 0 && !pegs(this.level, this.members).has(t) && this.members.some((m) => between(m.a, m.b).includes(t));
+      const cue = stop
+        ? ''
+        : clamped
+          ? ` <span class="warn">max length: ${MATS[this.mat].name.toLowerCase()} reaches ${MAXLEN[this.mat]}</span>`
+          : mid
+            ? ' <span class="warn">ends mid-piece: it won’t join it (pieces join only at pegs)</span>'
+            : '';
       if (t < 0) this.info('');
       else if (pr.why) this.info(`<span class="bad">${pr.why}</span>${cue}`);
       else {
@@ -947,18 +956,19 @@ export class Game {
   showHelp(): void {
     store.save('seenHelp', true);
     const row = (m: number, what: string) =>
-      `<div class="mrow">${matSvg(m, 22)}<b>${MATS[m].name}</b><span>${what}</span><small>${MATS[m].cost}/u · ≤${MAXLEN[m]} · ${MATS[m].rope ? 'pull' : 'holds'} ${MATS[m].strength}</small></div>`;
+      `<div class="mrow">${matSvg(m, 22)}<b>${MATS[m].name}</b><span>${what}</span><small>${MATS[m].cost}/u · reach ${MAXLEN[m]} · ${MATS[m].rope ? 'pull' : 'holds'} ${MATS[m].strength}</small></div>`;
     showCard(
       `<h2>Trestle</h2>
       <p>Get the beetle’s cart to the flag, or hang lanterns at their rings.</p>
       <h3>Build</h3>
-      <p><b>Drag</b> from a peg to a point. <b>Tap</b> a piece to pick it, again to remove it. Pinch or ⤢ to zoom.</p>
+      <p><b>Drag</b> from a peg to a point; pieces join only at pegs, not mid-plank. <b>Tap</b> a piece twice to remove it. Pinch or ⤢ zooms.</p>
       <h3>Pieces</h3>
-      ${row(0, 'the road')}${row(1, 'push or pull')}${row(2, 'pulls only')}
+      ${row(0, 'road, or a strong strut')}${row(1, 'push or pull')}${row(2, 'pulls only')}
+      <p class="sm">Reach 2.2 fits a 2×1 diagonal; twine reaches 4.5.</p>
       <h3>Rules</h3>
-      <ul><li><b>Triangles</b> hold; a lone row of planks sags.</li><li>The beetle can’t haul <b>uphill</b>.</li><li><b>Wind</b> lifts whatever only hangs.</li><li>A piece with a <b>free end</b> does nothing.</li></ul>
+      <p>Triangles hold; a lone row sags. No uphill road. Wind lifts what only hangs. A piece with a free end does nothing.</p>
       <h3>Stars</h3>
-      <p>★ within budget · ★★ par cost · ★★★ par cost and parts.</p>`,
+      <p>★ budget · ★★ par cost · ★★★ par cost + parts</p>`,
       [{ label: 'Build', primary: true, onClick: closeOverlay }],
     );
   }

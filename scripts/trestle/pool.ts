@@ -49,6 +49,10 @@ LEVEL_TYPES.forEach((type, ti) => {
   console.error(`${type}: ${cands.filter((c) => c.type === type).length} candidates (${((performance.now() - t0) / 1000).toFixed(0)} s)`);
 });
 
+/** A rough look of a level: pegs, span (or rings) and wind. */
+const shapeKey = (l: Level) =>
+  `${l.anchors.length}:${l.goal.kind === 'cross' ? (l.goal.to % 13) - (l.goal.from % 13) : `r${l.goal.rings.length}`}:${l.wind ? 'w' : ''}`;
+
 // Targets: a steady rise through the spread of difficulties on offer.
 const diffs = cands.map((c) => c.l.diff ?? 0).sort((a, b) => a - b);
 const q = (p: number) => diffs[Math.min(diffs.length - 1, Math.floor(p * diffs.length))];
@@ -56,14 +60,20 @@ const used = new Set<Cand>();
 const picked: Cand[] = [];
 for (let i = 0; i < SLOTS; i++) {
   const f = i / (SLOTS - 1);
-  const target = q(0.08 + 0.84 * f);
+  // Concave: the easy end is short and the middle of the trail already asks for something (playtest: 21-30 were too easy).
+  const target = q(0.12 + 0.86 * f ** 0.75);
   const type = ROT[i % ROT.length];
   let best: Cand | null = null;
   let bs = Infinity;
   for (const c of cands) {
     if (used.has(c)) continue;
     // Near-twins of a level already picked (same type, parts and about the same par) are kept apart.
-    const twin = picked.some((p) => p.type === c.type && p.l.parParts === c.l.parParts && Math.abs(p.l.par - c.l.par) <= 8);
+    const twin = picked.some(
+      (p) => p.type === c.type && ((p.l.parParts === c.l.parParts && Math.abs(p.l.par - c.l.par) <= 8) || shapeKey(p.l) === shapeKey(c.l)),
+    );
+    // Hooks and spires felt like clones in playtests: at most 3 of each in the first 30 levels, 5 in all.
+    const capOf = (t: LevelType) => (t === 'hooks' || t === 'spire' ? (i < 30 ? 3 : 5) : 99);
+    if (picked.filter((p) => p.type === c.type).length >= capOf(c.type)) continue;
     const score = Math.abs((c.l.diff ?? 0) - target) + 0.25 * Math.abs(c.d - f) + (c.type === type ? 0 : 0.2) + (twin ? 0.5 : 0);
     if (score < bs) (bs = score), (best = c);
   }

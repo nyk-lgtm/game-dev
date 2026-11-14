@@ -47,14 +47,14 @@ class Builder {
 
 const ok = (p: number) => p >= 0 && p < COLS * ROWS;
 
-/** Links spare anchors to nodes in reach: twigs within twig length, twine from above. */
-function link(l: Level, b: Builder, opts: { twig: boolean; twine: boolean }): void {
+/** Links spare anchors to nodes in reach: struts (twigs, or planks: stronger) within reach, twine from above. */
+function link(l: Level, b: Builder, opts: { twig: boolean; twine: boolean; strut?: Mat }): void {
   const nodes = [...b.nodes()];
   for (const an of l.anchors) {
     for (const n of nodes) {
       if (l.anchors.includes(n)) continue;
       const d = lenOf(an, n);
-      if (opts.twig && d <= MATS[TWIG].maxLen) b.add(an, n, TWIG);
+      if (opts.twig && d <= MATS[TWIG].maxLen) b.add(an, n, opts.strut ?? TWIG);
       else if (opts.twine && py(an) < py(n) && d <= MATS[TWINE].maxLen) b.add(an, n, TWINE);
     }
   }
@@ -65,11 +65,10 @@ export function crossCandidates(l: Level): Member[][] {
   if (g.kind !== 'cross') return [];
   const x0 = px(g.from), y0 = py(g.from), x1 = px(g.to), y1 = py(g.to);
   const span = x1 - x0;
-  // A tilted road climbs its one step on a 2-long plank in the middle (a 1-long step is too steep).
-  const mid = x0 + Math.floor(span / 2);
-  const yAt = (x: number) => (y0 === y1 || x < mid ? y0 : x > mid ? y1 : Math.min(y0, y1));
-  /** Road pegs: every `step`, starting with a 1-long plank when `shift`. */
-  const road = (step: number, shift = false) => {
+  // A tilted road takes its one step down on a 2-long plank (a 1-long step is too steep), in the middle or near a bank.
+  /** Road pegs: every `step`, starting with a 1-long plank when `shift`, stepping down around `mid`. */
+  const road = (step: number, shift = false, mid = x0 + Math.floor(span / 2)) => {
+    const yAt = (x: number) => (y0 === y1 || x < mid ? y0 : x > mid ? y1 : Math.min(y0, y1));
     let xs: number[] = [x0];
     for (let x = x0 + (shift ? 1 : step); x < x1; x += step) xs.push(x);
     xs.push(x1);
@@ -77,6 +76,8 @@ export function crossCandidates(l: Level): Member[][] {
     return xs.map((x) => pt(x, yAt(x)));
   };
   const roads = [road(2), road(2, true), road(1)];
+  // Tilted roads may also step down right after the left bank or just before the right one.
+  const extra = y0 !== y1 ? [road(2, false, x0 + 1), road(2, true, x0 + 1), road(2, false, x1 - 1), road(2, true, x1 - 1)] : [];
   const out: Member[][] = [];
   // Warren trusses: a chord peg over or under the middle of each 2-long plank.
   for (const deck of roads.slice(0, 2))
@@ -132,12 +133,16 @@ export function crossCandidates(l: Level): Member[][] {
       link(l, b, { twig: true, twine: true });
       out.push(b.ms);
     }
-  // Roads on struts from the rock below, or hung from hooks above.
-  for (const deck of roads) {
+  // Roads on struts from the rock below, or hung from hooks above (struts as twigs, or as planks: stronger).
+  for (const deck of [...roads, ...extra]) {
     const b = new Builder(l);
     b.chain(deck, PLANK);
     link(l, b, { twig: true, twine: true });
     out.push(b.ms);
+    const pb = new Builder(l);
+    pb.chain(deck, PLANK);
+    link(l, pb, { twig: true, twine: true, strut: PLANK });
+    out.push(pb.ms);
     // The same with a small triangle under each road peg.
     const t = new Builder(l);
     t.chain(deck, PLANK);
@@ -391,16 +396,19 @@ export function polish(l: Level, start: Member[], iters: number, seed = 1): Memb
   for (let it = 0; it < iters; it++) {
     const slack = it < (iters * 2) / 3 ? 14 * (1 - (1.5 * it) / iters) : 0;
     let next: (Member | null)[] = [...cur];
-    // Remove one or two (never the road planks of a crossing).
-    const removable = cur.map((_, i) => i).filter((i) => !(cross && cur[i].mat === PLANK));
+    // Remove one or two (a crossing's level road planks stay; sloped planks and plank struts may go).
+    const removable = cur.map((_, i) => i).filter((i) => !(cross && cur[i].mat === PLANK && py(cur[i].a) === py(cur[i].b)));
     const k = rng.next() < 0.6 ? 1 : 2;
     for (let r = 0; r < k && removable.length; r++) next[removable.splice(Math.floor(rng.next() * removable.length), 1)[0]] = null;
     let ms = next.filter((m): m is Member => m !== null);
     if (rng.next() < 0.3 && ms.length) {
       const i = Math.floor(rng.next() * ms.length);
       const m = ms[i];
-      if (m.mat === TWIG && lenOf(m.a, m.b) <= MATS[TWINE].maxLen) ms[i] = { ...m, mat: TWINE };
-      else if (m.mat === TWINE && lenOf(m.a, m.b) <= MATS[TWIG].maxLen) ms[i] = { ...m, mat: TWIG };
+      const r = rng.next();
+      // Twig ↔ twine, and twig ↔ plank (a plank strut is stronger).
+      if (m.mat === TWIG) ms[i] = { ...m, mat: r < 0.6 && lenOf(m.a, m.b) <= MATS[TWINE].maxLen ? TWINE : PLANK };
+      else if (m.mat === TWINE && lenOf(m.a, m.b) <= MATS[TWIG].maxLen) ms[i] = { ...m, mat: r < 0.75 ? TWIG : PLANK };
+      else if (m.mat === PLANK && !(cross && py(m.a) === py(m.b))) ms[i] = { ...m, mat: TWIG };
     }
     // Add a piece between two pegs (anchors, rings, member ends), or a new peg braced to two of them.
     const ps = new Set<number>([...l.anchors, ...rings]);
@@ -409,7 +417,8 @@ export function polish(l: Level, start: Member[], iters: number, seed = 1): Memb
     const add = (a: number, b: number): boolean => {
       if (b < 0 || b >= COLS * ROWS || a === b || Math.abs(px(b) - px(a)) > 4) return false;
       const len = lenOf(a, b);
-      const mat: Mat = len > MATS[TWIG].maxLen + 1e-9 || rng.next() < 0.35 ? TWINE : TWIG;
+      const r = rng.next();
+      const mat: Mat = len > MATS[TWIG].maxLen + 1e-9 || r < 0.35 ? TWINE : r < 0.8 ? TWIG : PLANK;
       if (geomWhy(l, a, b, mat)) return false;
       const kb = keyOf({ a, b, mat });
       if (ms.some((m) => keyOf(m) === kb)) return false;

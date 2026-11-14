@@ -107,14 +107,14 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     `show.ts <seed> [size]` prints a puzzle, its light and the model's eliminations; `hints.ts <seed> [size]` the hint
     texts in order (`hints.ts longest 150`: the longest; #info is 76 px = 4 lines at 360 px and must hold them); `stress.ts 200` checks the model never rules out an answer piece from part-filled boards and
     hints always finish.
-  - Trestle: `npx vite-node scripts/trestle/probe.ts 120` (rules v4, live generation of seed-picked types over d 0..1: first
-    layout proven 78% (crossings ~91%, lanterns ~42%), always within ≤ 15 layouts; par/budget median 0.75; gen median ~0.5 s,
-    p90 ~1.4 s, max ~2.3 s on a laptop incl. a 300-step polish (the page's worker; live trail levels make two candidates,
-    dailies two); one test run ~3 ms). `pool.ts 60 18` rebuilds the picked trail (src/trestle/core/pool.ts, ~10 min with
-    the polish): v4 difficulty thirds 0.27 → 0.54 → 0.83, every type by level 16 (gap lantern at 14), one early sawtooth
-    (0.28 → 0.07 → 0.35 at 14-16), otherwise neighbour steps ≤ ~0.1. `trail.ts 1 80` lists the trail with difficulty (past
-    the pool v4 runs ~0.69-0.96). `par.ts 45` re-surveys 4× harder; `wind.ts 18 2` adds wind to calm levels (v3: the calm
-    par build fails in 15/18); `why.ts`, `bumps.ts [cart]`, `tutorials.ts` (each tutorial's `ref` peak < 0.85, surveyor ≤ par).
+  - Trestle: `npx vite-node scripts/trestle/probe.ts 100` (rules v5, live generation of seed-picked types over d 0..1: first
+    layout proven 76% (crossings ~88%, lanterns ~38%), always within ≤ 15 layouts; par/budget median 0.74; gen median ~0.4 s,
+    p90 ~1.3 s, max ~2 s on a laptop incl. a 300-step polish (the page's worker; live trail levels and dailies make two
+    candidates); one test run ~3 ms). `pool.ts 60 18` rebuilds the picked trail (src/trestle/core/pool.ts, ~12 min with the
+    polish): v5 difficulty thirds 0.38 → 0.64 → 0.90 (v4 0.27 → 0.54 → 0.83), levels 21-30 0.42-0.54 vs 12-20 0.34-0.41,
+    neighbour steps ≤ 0.15, hooks/spires 5 each spread out. `trail.ts 1 80` lists the trail with difficulty (past the pool
+    ~0.69-0.96). `par.ts 45` re-surveys 4× harder; `wind.ts 18 2` adds wind to calm levels (v3: the calm par build fails in
+    15/18); `why.ts`, `bumps.ts [cart]`, `tutorials.ts` (each tutorial's `ref` peak < 0.85, surveyor ≤ par).
   - Tidings: `npx vite-node scripts/tidings/balance.ts 400 [careful,casual,random,safe,risky,greedy,crowd,miser]` (rules v3:
     careful (plans every order of this stop's cards, choices, provisions and partings, gambles by their shown odds, then the
     road, valuing stock against the cheapest remaining leg costs on the map) arrives ~79% (seed sets 1000/5000), ★★★ ~23%
@@ -426,7 +426,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   (`<sock b36><code>`, `H…` hint, `M<a><b>` swap, `U`, `R`); `replay(p, a)`. Reports `GLEAM v… seed=… size=… a=…`,
   `?seed=&size=&a=`. Bump `RULES_VERSION` when the generator or rules change puzzles.
 - Trestle (src/trestle/core): a 13×12 grid of build points (y down, `pt(x,y)`), rock as axis boxes (`Rock`: bank, wall,
-  spire `rock`, `log` low over a gap, `floor` close under it, `clear` = a boat lane: no building, no collisions), fixed
+  spire `rock`, `log` low over a gap, `floor` close under it, `clear` = a boat lane: no building (`geomWhy` says "Keep the boat lane clear"), no collisions), fixed
   anchors, optional `wind` (gusts across, `gust(step)`, and updraughts, `lift(step)` × `LIFT_K`, that lift whatever only
   hangs; each peg is pushed in proportion to the pieces it holds), a goal: `cross` (cart(s) from `startX` to past `goalX`,
   road from anchor `from` to `to`, `carts: 2` = a convoy 1.6 apart) or `reach` (a peg on every ring in `rings` holds its
@@ -446,19 +446,26 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   (both road alignments), braced bands over/under the road, roads on struts/hooks (with or without small triangles),
   cantilever rails and cord/strut Vs to each ring (several rings: best shapes per ring merged); keeps those that pass with
   nothing snapping, strips the cheapest few in several orders, swaps pulling twigs for twine, merges lone road pegs, local
-  search, all within `cap` test runs. Lantern shapes also include Warren arms and cable-stayed arms (a strut rail with cords
+  search, all within `cap` test runs. Roads also come stepping down near either bank (tilted levels), and struts from the
+  rock also come as planks (stronger; rules v5: testers beat par with plank struts and early down-steps, e.g. 84 vs 107).
+  Lantern shapes also include Warren arms and cable-stayed arms (a strut rail with cords
   from every anchor above), and a second ring hung off the first ring's arm. `polish(l, ms, iters, seed)` is a seeded local
-  search (remove one or two pieces, maybe swap twig/twine, add a piece between pegs or a new peg braced to two; keep when
+  search (remove one or two pieces (not level road planks), maybe swap twig/twine/plank, add a piece between pegs or a new
+  peg braced to two; keep when
   it still passes and costs no more, early steps may cost up to 14 more); live levels polish `LIVE_POLISH` (300) steps,
   the pool 3 × 5000. gen.ts: level types (`LEVEL_TYPES`: plain, hooks, arch = pegs only low on the faces
   and nothing above, boat = a lane under the road kept clear, convoy, island, spire; lanterns: wall brackets with one or two
   rings, gap = a lantern over the middle of a gap: from span 3 with the ring level with the banks early on), islands 2-3
-  wide, off centre, sometimes a step low, `layout(seed, d, t, type)`, wind from d 0.25, logs/floors as twists;
+  wide, off centre, sometimes a step low; spires off centre, varied height, sometimes two; hooks one to three, 2-5 above
+  the road, over the middle, one bank only or spread; `layout(seed, d, t, type)`, wind (1.5 + 1.8d) from d 0.25, logs/floors
+  as twists; tips are only the twists (short, so #info holds tip + star line at 360 px);
   `priceLevel` rejects lanterns straight under an anchor and builds of < 3 parts, sets par, parParts, budget = ceil(par ×
   (1.4 − 0.25d) / 10) × 10, `ref`, `diff` = `difficulty(ease, parts)` (0.65 × shapes that failed + 0.35 × parts).
   The trail (trail.ts): 6 tutorials (par = the obvious lesson build, `ref`), then `POOL` (pool.ts, generated by
   `scripts/trestle/pool.ts`: candidates of every type over d 0..1 re-surveyed at effort 4 for tight par, picked to rising
-  difficulty targets in a type rotation (playtest bias: arch +0.12, island −0.05; near-twins kept apart), then ordered
+  difficulty targets (concave, `q(0.12 + 0.86 f^0.75)`, so the middle of the trail is already demanding) in a type
+  rotation (playtest bias: arch +0.12, island −0.05, gap −0.15; near-twins by par/parts or by pegs/span/wind kept apart;
+  hooks and spires at most 3 each in the first 30 picks, 5 in all), then ordered
   easiest-first with no type repeated within two levels and every type within the first dozen, then each par build polished;
   unique `trailName`s), then live levels in `ROTATION`: three candidates at d 0.75 / 0.9 / 1, the one nearest
   `liveTarget(k)` (from the pool's last difficulty, +0.004 a level, ≤ 0.95). Regenerate the pool after any physics/gen change (bump

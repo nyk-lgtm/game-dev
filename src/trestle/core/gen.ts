@@ -55,11 +55,11 @@ export function dailyName(seed: number, lantern: boolean): string {
 /** Gusty weather on harder levels: + blows to the right. */
 function windFor(rng: Rng, d: number, p = 0.15 + 0.35 * d): number | undefined {
   if (d < 0.25 || rng.next() >= p) return undefined;
-  return Math.round((1.2 + 1.4 * d) * 10 * rng.pick([-1, 1])) / 10;
+  return Math.round((1.5 + 1.8 * d) * 10 * rng.pick([-1, 1])) / 10;
 }
 
 const windTip = (w: number, lantern: boolean) =>
-  `Gusts from the ${w > 0 ? 'left' : 'right'} and updraughts${lantern ? ' swing the lantern' : ': anything only hung will lift, so brace it'}.`;
+  `Gusts from the ${w > 0 ? 'left' : 'right'}${lantern ? ' swing the lantern' : '; updraughts lift what only hangs'}.`;
 
 function layoutCross(rng: Rng, d: number, id: string, type: LevelType): Level {
   const minSpan = type === 'island' ? 7 : type === 'spire' ? 6 : 4;
@@ -86,10 +86,15 @@ function layoutCross(rng: Rng, d: number, id: string, type: LevelType): Level {
     for (let k = 1; k <= 3; k++) if (y + k <= 10 && rng.next() < pFace / k) anchors.push(pt(x, y + k));
   }
   if (type === 'spire' || (type === 'plain' && span >= 6 && rng.next() < 0.3)) {
-    const c = xL + Math.floor(span / 2) + (span % 2 ? rng.int(0, 1) : 0);
-    const top = yLow + rng.int(1, 3);
-    terrain.push({ x0: c - 0.4, y0: top, x1: c + 0.4, y1: 14, kind: 'rock' });
-    anchors.push(pt(c, top));
+    // Spires vary: off centre, shorter or taller, now and then two of them, or one with a peg partway down.
+    const two = type === 'spire' && span >= 7 && rng.next() < 0.35;
+    const spots = two ? [xL + 2 + rng.int(0, 1), xR - 2 - rng.int(0, 1)] : [xL + 2 + rng.int(0, Math.max(0, span - 4))];
+    for (const c of [...new Set(spots)]) {
+      const top = yLow + rng.int(1, two ? 4 : 3);
+      terrain.push({ x0: c - 0.4, y0: top, x1: c + 0.4, y1: 14, kind: 'rock' });
+      anchors.push(pt(c, top));
+    }
+    if (two) tips.push('Two stone spires.');
   }
   if (type === 'island') {
     // Islands vary: 2 or 3 wide, off centre, and sometimes a step low (posts can stand on it, the road can't).
@@ -99,17 +104,25 @@ function layoutCross(rng: Rng, d: number, id: string, type: LevelType): Level {
     const top = yL + (low ? 1 : 0);
     terrain.push({ x0: c, y0: top, x1: c + wide, y1: 14, kind: 'bank' });
     anchors.push(pt(c, top), pt(c + wide, top));
-    tips.push(low ? 'The island sits a step low: prop the road from it.' : 'The road can rest on the island.');
+    tips.push(low ? 'Low island: prop the road from it.' : 'The road can rest on the island.');
   }
   if (type === 'boat') {
     terrain.push({ x0: xL + 1, y0: yLow + 1, x1: xR - 1, y1: 14, kind: 'clear' });
-    tips.push('A boat passes under: keep its lane clear.');
+    tips.push('Keep the boat lane clear.');
   }
   // Hooks on overhanging branches: always for hooks levels, sometimes on plain ones, never on arches or boats.
   if (type === 'hooks' || (type === 'plain' && rng.next() < 0.35 - 0.25 * d)) {
-    const n = type === 'hooks' && rng.next() < 0.5 ? 2 : 1;
-    const xs = n === 2 ? [xL + rng.int(0, 1), xR - rng.int(0, 1)] : [xL + Math.floor(span / 2) + rng.int(-1, 1)];
-    for (const x of xs) anchors.push(pt(x, Math.min(yL, yR) - rng.int(3, 4)));
+    // Hooks vary: one to three, high or low, over the middle, over one bank only, or spread out.
+    const n = type === 'hooks' ? rng.pick([1, 1, 2, 2, 3]) : 1;
+    const where = rng.pick(['middle', 'left', 'right', 'spread'] as const);
+    const xs: number[] = [];
+    for (let i = 0; i < n; i++) {
+      const x =
+        where === 'left' ? xL + rng.int(0, 2) : where === 'right' ? xR - rng.int(0, 2) : where === 'middle' ? xL + Math.floor(span / 2) + rng.int(-1, 1) : xL + Math.round(((i + 0.5) * span) / n);
+      xs.push(x);
+    }
+    for (const x of [...new Set(xs)]) anchors.push(pt(x, Math.max(0, Math.min(yL, yR) - rng.int(2, 5))));
+    if (type === 'hooks' && where !== 'middle' && where !== 'spread') tips.push(`Hooks only over the ${where} bank.`);
   }
   if ((type === 'plain' || type === 'arch') && d >= 0.25 && rng.next() < 0.3) {
     if (type === 'plain' && rng.next() < 0.5) {
@@ -117,14 +130,14 @@ function layoutCross(rng: Rng, d: number, id: string, type: LevelType): Level {
       tips.push('A log lies low over the gap.');
     } else {
       terrain.push({ x0: xL, y0: yLow + 2, x1: xR, y1: 14, kind: 'floor' });
-      tips.push('Rock lies close under the road.');
+      tips.push('Rock close under the road.');
     }
   }
   const convoy = type === 'convoy';
   const cart = Math.round((2.3 + 1.6 * d + rng.next() * 0.3) * (convoy ? 0.75 : 1) * 10) / 10;
   const wind = windFor(rng, d, type === 'hooks' ? 0.5 : undefined);
   if (convoy) tips.push('Two carts in a row.');
-  else if (cart >= 3.8) tips.push('A heavy load of acorns.');
+  else if (cart >= 3.8) tips.push('A heavy load.');
   if (wind) tips.push(windTip(wind, false));
   return {
     id,
@@ -136,7 +149,7 @@ function layoutCross(rng: Rng, d: number, id: string, type: LevelType): Level {
     par: 0,
     parParts: 0,
     ...(wind ? { wind } : {}),
-    tip: `Get the cart${convoy ? 's' : ''} over to the flag.${tips.length ? ` ${tips.join(' ')}` : ''}`,
+    tip: tips.length ? tips.join(' ') : 'Get the cart over to the flag.',
   };
 }
 
@@ -168,7 +181,7 @@ function layoutGap(rng: Rng, d: number, id: string): Level {
     par: 0,
     parParts: 0,
     ...(wind ? { wind } : {}),
-    tip: `Hang the lantern over the middle of the gap, from one bank or both.${wind ? ` ${windTip(wind, true)}` : ''}`,
+    tip: `Hang the lantern over the gap, from one bank or both.${wind ? ` ${windTip(wind, true)}` : ''}`,
   };
 }
 
@@ -204,7 +217,7 @@ function layoutWall(rng: Rng, d: number, id: string): Level {
   const w0 = windFor(rng, d);
   const wind = w0 && flip ? -w0 : w0;
   const tips: string[] = [];
-  if (rings.length > 1) tips.push('Two lanterns: put a peg on each ring.');
+  if (rings.length > 1) tips.push('Two lanterns: a peg on each ring.');
   if (wind) tips.push(windTip(wind, true));
   return {
     id,
@@ -216,7 +229,7 @@ function layoutWall(rng: Rng, d: number, id: string): Level {
     par: 0,
     parParts: 0,
     ...(wind ? { wind } : {}),
-    tip: `Hold the lantern${rings.length > 1 ? 's' : ''} up at the ring${rings.length > 1 ? 's' : ''}.${tips.length ? ` ${tips.join(' ')}` : ''}`,
+    tip: tips.length ? tips.join(' ') : 'Hold the lantern up at the ring.',
   };
 }
 

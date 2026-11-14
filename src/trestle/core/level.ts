@@ -2,7 +2,7 @@
 // anchor pegs and a goal: roll the beetle's cart across, or hold a lantern up
 // at a ring. Pure data; gen.ts makes them from a seed, tutorials.ts by hand.
 
-export const RULES_VERSION = 4;
+export const RULES_VERSION = 5;
 
 /** Grid size in points: x 0..COLS-1, y 0..ROWS-1 (y grows downward). */
 export const COLS = 13;

@@ -97,11 +97,17 @@ export function between(a: number, b: number): number[] {
 /** Why a member can't go from a to b on this level (pegs aside), or null. */
 export function geomWhy(l: Level, a: number, b: number, mat: Mat): string | null {
   if (a === b || a < 0 || b < 0 || a >= COLS * ROWS || b >= COLS * ROWS) return 'nowhere';
-  if (!buildable(l, a) || !buildable(l, b)) return 'Pegs can’t go into rock';
+  const lane = (x: number, y: number, deep: boolean) =>
+    l.terrain.some((r) => r.kind === 'clear' && (deep ? x > r.x0 + 1e-6 && x < r.x1 - 1e-6 && y > r.y0 + 1e-6 && y < r.y1 - 1e-6 : x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1));
+  for (const p of [a, b]) if (!buildable(l, p)) return lane(px(p), py(p), false) ? 'Keep the boat lane clear' : 'Pegs can’t go into rock';
   if (lenOf(a, b) > MATS[mat].maxLen + 1e-9) return `Too long for ${MATS[mat].name.toLowerCase()}`;
   // Through rock: sample along the segment.
   const ax = px(a), ay = py(a), bx = px(b), by = py(b);
-  for (let k = 1; k < 8; k++) if (deepInRock(l, ax + ((bx - ax) * k) / 8, ay + ((by - ay) * k) / 8)) return 'It would go through rock';
+  for (let k = 1; k < 8; k++) {
+    const x = ax + ((bx - ax) * k) / 8;
+    const y = ay + ((by - ay) * k) / 8;
+    if (deepInRock(l, x, y)) return lane(x, y, true) ? 'It would cross the boat lane' : 'It would go through rock';
+  }
   if (l.anchors.includes(a) && l.anchors.includes(b) && rockEdge(l, a, b)) return 'That’s along the rock';
   return null;
 }
