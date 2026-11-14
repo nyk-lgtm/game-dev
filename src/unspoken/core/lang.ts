@@ -371,13 +371,29 @@ function normalize(strokes: Stroke[]): { k: string; p: number[][] }[] {
   });
 }
 
-/** Do two glyphs look alike: the same strokes, give or take a little, wherever they sit and however big? */
-export function glyphsAlike(a: Stroke[], b: Stroke[], tol = 0.15): boolean {
-  if (a.length !== b.length || a.length === 0) return false;
+/** Longest a stroke can be (in a glyph's unit box) and still read as a tick that a dot could be taken for. */
+const TICK = 0.4;
+
+/** Do two glyphs look alike: the same strokes, give or take a little, wherever they sit and however big?
+ *  Any two glyphs that are a single line or curve count as alike (small and alone, both read as "a short
+ *  stroke"), and a dot matches a short tick in about the same spot (a playtest mixed up a dog and a bird
+ *  that differed only by a dot and a tick). */
+export function glyphsAlike(a: Stroke[], b: Stroke[], tol = 0.2): boolean {
+  if (a.length === 0 || b.length === 0) return false;
+  const lone = (s: Stroke[]) => s.length === 1 && (s[0].k === 'L' || s[0].k === 'Q');
+  if (lone(a) && lone(b)) return true;
+  if (a.length !== b.length) return false;
   const A = normalize(a);
   const B = normalize(b);
-  const close = (x: { k: string; p: number[][] }, y: { k: string; p: number[][] }) =>
-    x.k === y.k && x.p.every((pt, i) => Math.abs(pt[0] - y.p[i][0]) <= tol && Math.abs(pt[1] - y.p[i][1]) <= tol);
+  type N = { k: string; p: number[][] };
+  const near = (p: number[], q: number[], t: number) => Math.abs(p[0] - q[0]) <= t && Math.abs(p[1] - q[1]) <= t;
+  const dotTick = (d: N, s: N) => {
+    if (d.k !== 'D' || (s.k !== 'L' && s.k !== 'Q')) return false;
+    const [e1, e2] = s.p;
+    const len = Math.hypot(e2[0] - e1[0], e2[1] - e1[1]);
+    return len <= TICK && near(d.p[0], [(e1[0] + e2[0]) / 2, (e1[1] + e2[1]) / 2], tol + len / 2);
+  };
+  const close = (x: N, y: N) => (x.k === y.k && x.p.every((pt, i) => near(pt, y.p[i], tol))) || dotTick(x, y) || dotTick(y, x);
   const used = new Set<number>();
   return A.every((x) => {
     const j = B.findIndex((y, k) => !used.has(k) && close(x, y));

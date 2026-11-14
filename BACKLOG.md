@@ -937,6 +937,20 @@ playtests with fixes shipped. Open threads, in order:
 - Grove: owner wants it kept as is (no smaller board).
 
 ## Done (recent)
+- Unspoken third blind playtest (village 1: 46/46, 16/16 riddles; "deduction satisfying and fair, great payoff") and
+  fixes, village-1 world hashes unchanged, no RULES_VERSION bump: finished runs stay saved (`done`) and reopen on the
+  final page after a reload (end card once: `seen`) until "A new language" (they used to be wiped, so a reload gave a new language); the menu's daily
+  line says in progress / done · result (it said "not played"); toasts sit over the header's language box, one at a
+  time, under the sheet and cards (they covered the place tabs and the end card's "46 of 46"); signs and riddles shrink
+  their glyphs to stay on one line at 390 px (≥ 34 px glyph); the glyph sheet folds extra scenes behind "Show N more"
+  so the meanings stay in view; the ‹ › beside the place tabs are real buttons that scroll the strip (the › did nothing
+  and looked like it sat on the last tab); `glyphsAlike` ±0.2, lone strokes all alike, dot ≈ short tick (redraws ~1 glyph
+  a language, nearly all particles; `alike.ts`); help's marks line depends on whether the language has marks. Today's
+  language now has its own world (`makeWorld(lang, { daily: true })`, `DAILY_VERSION` 3): scenes shuffled within each
+  place, and from the Houses on 4 riddles a place with mixed grammar (features/riddle 1.4 → 2.3-3.3), wrong scenes that
+  keep every word, more decoys (`riddles.ts`). Not done, and why: normal play's riddles are part of the pinned world (the
+  hash covers `world.chapters[].challenges`, and saves store pick/tile indices), so the post-Market difficulty drop is
+  fixed only in the daily; a harder normal mode would need a new world version beside the pinned one.
 - Hexhold fourth blind playtest fixes (rules v6): see the Hexhold milestones above.
 - Grove UI fixes (rules v2 unchanged, replays unchanged; owner: keep Grove as it is): #info is a fixed 60 px box
   (`#tray #info`), so the board no longer shifts ~9 px when the Place button and one-line preview replace the two-line

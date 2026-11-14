@@ -335,15 +335,40 @@ export function mutations(rng: Rng, f: Frame, known: Set<string>, adjOk = adjVis
 
 // ---------------------------------------------------------------- the world
 
-export function makeWorld(lang: Language): World {
-  const rng = new Rng(mixSeed(lang.seed, 2024));
+export interface WorldOpts {
+  /** Today's language: its own seed stream, scenes in a shuffled order (the murals keep their story order),
+   *  and harder riddles from the Houses on (four a place, mixed grammar, look-alike wrong scenes, more decoy
+   *  tiles). Without it the world is exactly the original game's (pinned by the village-1 hash test). */
+  daily?: boolean;
+}
+
+/** How many grammar features a frame shows (plural, adjective, not, tense, a destination). */
+export function features(f: Frame): number {
+  const nps = [f.s, f.o, f.d].filter((x): x is NP => !!x);
+  return Number(!!f.neg) + Number(f.tense !== 'now') + Number(nps.some((p) => p.pl)) + Number(nps.some((p) => p.adj)) + Number(!!f.d);
+}
+
+/** A wrong scene that keeps every word: only a mark or a little word changed (tense, not, many, a quality),
+ *  or the doer and done-to swapped places. */
+const sameWords = (a: Frame, b: Frame) =>
+  a.v === b.v && a.d?.n === b.d?.n && ((a.s.n === b.s.n && a.o?.n === b.o?.n) || (!!a.o && a.s.n === b.o?.n && a.o.n === b.s.n));
+
+export function makeWorld(lang: Language, opts: WorldOpts = {}): World {
+  const daily = !!opts.daily;
+  const rng = new Rng(mixSeed(lang.seed, daily ? 2031 : 2024));
   const known = new Set<string>();
   const chapters: Chapter[] = [];
   const story: Frame[] = [];
   const usedKeys = new Set<string>();
 
   CHAPTERS.forEach((def, ch) => {
-    const panels: Panel[] = def.panels.map((x, i) => {
+    let defs = def.panels;
+    // The daily shuffles each place's scenes, keeping its opening scene(s) and the murals' story order.
+    if (daily && def.backdrop !== 'murals') {
+      const keep = ch === 0 ? 2 : 1;
+      defs = [...defs.slice(0, keep), ...rng.shuffle(defs.slice(keep))];
+    }
+    const panels: Panel[] = defs.map((x, i) => {
       const frame = frameOf(rng, x);
       usedKeys.add(frameKey(frame));
       return { id: `p${ch}.${i}`, ch, frame, tokens: realize(lang, frame) };
@@ -352,15 +377,22 @@ export function makeWorld(lang: Language): World {
     if (def.backdrop === 'murals') story.push(...panels.map((p) => p.frame));
 
     const challenges: Challenge[] = [];
-    const kinds: Challenge['kind'][] = ch === 0 ? ['pick', 'pick', 'compose'] : ['pick', 'compose', 'pick'];
+    // The daily's later places are harder: a fourth riddle, grammar from every place so far mixed in,
+    // wrong scenes that differ by a mark rather than a word, and more decoy tiles.
+    const hard = daily && ch >= 2;
+    const kinds: Challenge['kind'][] = ch === 0 ? ['pick', 'pick', 'compose'] : hard ? ['pick', 'compose', 'pick', 'compose'] : ['pick', 'compose', 'pick'];
+    const focus: Focus[] = hard ? [...new Set(CHAPTERS.slice(0, ch + 1).flatMap((d) => d.focus))] : def.focus;
+    const minFeatures = hard ? (ch >= 3 ? 3 : 2) : 0;
     let n = 0;
     for (const kind of kinds) {
-      for (let tries = 0; tries < 60; tries++) {
-        const frame = randomFrame(rng, known, def.focus);
+      for (let tries = 0; tries < (daily ? 160 : 60); tries++) {
+        const frame = randomFrame(rng, known, focus);
         if (!frame || usedKeys.has(frameKey(frame))) continue;
+        if (hard && features(frame) < (tries < 110 ? minFeatures : minFeatures - 1)) continue;
         const tokens = realize(lang, frame);
         if (tokens.length > 7) continue;
-        const muts = mutations(rng, frame, known).filter((m) => frameKey(m) !== frameKey(frame));
+        let muts = mutations(rng, frame, known).filter((m) => frameKey(m) !== frameKey(frame));
+        if (hard) muts = [...muts.filter((m) => sameWords(m, frame)), ...muts.filter((m) => !sameWords(m, frame))];
         // Distinct wrong answers whose writing differs from the right one.
         const wrong: Frame[] = [];
         const seenW = new Set([tokens.map(tokenKey).join(' ')]);
@@ -385,7 +417,14 @@ export function makeWorld(lang: Language): World {
             if (!right.has(k) && !decoys.some((d) => tokenKey(d) === k)) decoys.push(tk);
           }
         }
-        const tiles = rng.shuffle([...tokens, ...rng.shuffle(decoys).slice(0, 3)]);
+        let pool = rng.shuffle(decoys);
+        // Hard decoys first: a right word with other marks, or a little grammar word.
+        if (hard) {
+          const roots = new Set(tokens.map((tk) => tk.m));
+          const sly = (tk: Token) => roots.has(tk.m) || catOf(tk.m) === 'grammar';
+          pool = [...pool.filter(sly), ...pool.filter((tk) => !sly(tk))];
+        }
+        const tiles = rng.shuffle([...tokens, ...pool.slice(0, hard ? 5 : 3)]);
         challenges.push({ id: `c${ch}.${n++}`, ch, kind, frame, tokens, options: kind === 'pick' ? options : [], answer: kind === 'pick' ? answer : -1, tiles });
         break;
       }

@@ -227,7 +227,19 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
 - Unspoken: `makeLanguage(seed)` (core/lang.ts) invents grammar, sounds and glyphs; `makeWorld` builds
   5 chapters of authored scenes (every word in 2+ scenes; tests enforce it) plus generated riddles; state
   actions are `G<glyph>=<guess>` and `A<challenge>~p<n>` / `~<tile.tile…>`. Scene art: render/scene.ts.
-  `npx vite-node scripts/unspoken/inspect.ts <seed> [village]` prints a language and its world.
+  `npx vite-node scripts/unspoken/inspect.ts <seed> [village]` prints a language and its world; `solve.ts <seed>
+  [places] [village] [daily]` a perfect run's actions for `?seed=&a=`; `riddles.ts 200` riddle difficulty per place
+  (normal vs daily); `alike.ts 500 [seed]` how many glyphs the look-alike fix redraws. The hash test pins the whole
+  village-1 world, riddles included (saves store pick/tile indices), so normal play's riddles can't change.
+  Today's language (`?daily`) has its own world: `makeWorld(lang, { daily: true })` / `newGame(seed, 1, true)` /
+  `replay(.., 1, true)` (own seed stream, each place's scenes shuffled after its opener(s), the murals in story
+  order; from the Houses on 4 riddles a place with 2-3+ grammar `features`, grammar mixed from earlier places,
+  wrong scenes that keep every word, up to 5 sly decoy tiles); its saves carry `DAILY_VERSION` (3), reports
+  `UNSPOKEN v3 daily=<day>` and links `&day=` (opened as that day's daily). Finished runs stay saved (`done`) and
+  reopen on the final page until "A new language" (the end card shows once: `seen` in the save). Toasts (game.ts `toast`, one at a time) sit over the header's
+  language box at z 9, under the sheet and cards. Signs/riddles shrink their glyphs to stay on one line
+  (`caption()`, ≥ 34 px glyph = 44 px tile); the glyph sheet folds scenes behind "Show N more" when the meanings
+  would fall below the fold; the ‹ › beside the place tabs are real buttons that scroll the strip.
   Village 2 (the mountain village, core/world2.ts `CHAPTERS2`, `makeLanguage(seed, 2)`, `newGame(seed, 2)`): case
   particles `SUBJ`/`OBJ` (`grammar.cased`: verb first/middle/last, particle before/after), so `Frame.ofirst` may put
   the done-to first; the verb carries the `PLV` mark when the subject is plural. Its extra concepts live in `GRAMMAR2`
@@ -237,7 +249,8 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   their own version (`RULES_VERSION2`, `rulesVersion(village)`); its riddles only use `adjShown2` adjectives. Copied
   links hide answers: `linkActions`/`unlinkActions` turn `G<glyph>=<guess>` into `g<code>-<code>` (old links still
   load), and a link-opened run becomes the current saved run of its village. Glyphs never look alike: after
-  generating, `glyphsAlike` (strokes moved/scaled to a unit box, ends unordered, ±0.15) redraws a later look-alike
+  generating, `glyphsAlike` (strokes moved/scaled to a unit box, ends unordered, ±0.2; any two lone lines/curves
+  match, and a dot matches a short tick (≤ 0.4) near its middle) redraws a later look-alike
   from its own seed stream (only that glyph changes; world and saves don't depend on shapes). The hash test pins
   `makeLanguage(seed, 1, false)` (the pre-fix language) and checks only look-alikes were redrawn.
 - Hexhold runs are a seed + tick-stamped actions (`<tick>:B<cell>.<tower>`, `U`, `S`, `W`); enemies follow a

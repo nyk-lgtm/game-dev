@@ -5,13 +5,14 @@
 import { Sfx } from '../afterglow/audio';
 import { soundOn } from '../shared/settings';
 import { closeOverlay, showCard } from '../shared/cards';
-import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey } from '../shared/daily';
-import { copyText, toast } from '../shared/debug';
+import { dailySeed, leaveDaily, prettyDay, recordDaily, todayKey } from '../shared/daily';
+import { copyText, toast as shellToast } from '../shared/debug';
+import { dailyState } from '../hub/logic';
 import { makeStore } from '../shared/storage';
 import {
   ALL_CONCEPTS,
   CONCEPT,
-  RULES_VERSION,
+  DAILY_VERSION,
   apply,
   decode,
   linkActions,
@@ -42,6 +43,13 @@ import { drawScene } from './render/scene';
 export const store = makeStore('unspoken.');
 const $ = (id: string) => document.getElementById(id)!;
 
+/** One toast at a time, over the header's language box (style.css): never over the place tabs, the page,
+ *  the glyph sheet or a card (it sits under both). */
+function toast(msg: string): HTMLDivElement {
+  document.querySelectorAll('.toast').forEach((t) => t.remove());
+  return shellToast(msg);
+}
+
 /** Short labels for guesses under glyphs. */
 const SHORT: Record<string, string> = {
   ama: 'red woman',
@@ -58,6 +66,8 @@ const SHORT: Record<string, string> = {
   PLV: 'many do',
 };
 const short = (id: string) => SHORT[id] ?? CONCEPT.get(id)!.en;
+/** Smallest glyph a sign shrinks to (a 44 px tile with its padding). */
+const MIN_GLYPH = 34;
 
 const TABS: { label: string; cats: Category[] }[] = [
   { label: 'People', cats: ['name', 'person'] },
@@ -89,6 +99,10 @@ export interface SavedRun {
   a: string;
   day?: string | null;
   village?: number;
+  /** The run reached the end; it stays the saved run (and reopens on its ending) until a new language. */
+  done?: boolean;
+  /** The end card has been shown for this finished run; a reload then opens on the final page instead. */
+  seen?: boolean;
 }
 
 /** Where each village's run is saved (village 1 keeps its original key). */
@@ -111,6 +125,8 @@ export class Game {
   actions: string[] = [];
   daily: string | null = null;
   village = 1;
+  /** The end card has been shown for the current (finished) run. */
+  private endingSeen = false;
   view = 0;
   sfx = new Sfx();
   private sceneCache = new Map<string, HTMLCanvasElement>();
@@ -137,6 +153,12 @@ export class Game {
       if (e.target === $('sheet')) this.closeSheet();
     };
     this.bindSwipe();
+    const scrollPlaces = (dir: number) => {
+      const nav = $('places');
+      nav.scrollBy({ left: dir * Math.max(120, nav.clientWidth * 0.7), behavior: 'smooth' });
+    };
+    $('placesL').onclick = () => scrollPlaces(-1);
+    $('placesR').onclick = () => scrollPlaces(1);
     new ResizeObserver(() => {
       const w = this.sceneWidth();
       if (Math.abs(w - this.cacheWidth) > 4) this.render();
@@ -150,13 +172,16 @@ export class Game {
     this.daily = daily;
     this.village = daily ? 1 : village;
     try {
-      this.s = replay(seed, actions, this.village);
+      this.s = replay(seed, actions, this.village, !!daily);
       this.actions = actions ? actions.split(',') : [];
     } catch (e) {
       if (fromLink) toast(`Replay failed: ${(e as Error).message}`);
-      this.s = newGame(seed, this.village);
+      this.s = newGame(seed, this.village, !!daily);
       this.actions = [];
     }
+    // Was this finished run's end card already shown (same run in the save, marked seen)?
+    const prev = store.load<SavedRun | null>(daily ? 'dailyRun' : runKey(this.village), null);
+    this.endingSeen = !!prev?.seen && prev.seed === seed && prev.a === this.actions.join(',');
     document.body.classList.toggle('v2', this.village === 2);
     if (!daily) store.save('village', this.village);
     this.sceneCache.clear();
@@ -165,16 +190,21 @@ export class Game {
     this.pickWrong.clear();
     this.view = this.s.chapter;
     this.page = 0;
+    // A finished run reopens on its last page; the end card shows only once, when the run is finished.
+    if (this.s.over) this.page = this.pages(this.view).length - 1;
     // A run opened from a link becomes your current run in its village too (a refresh carries on with it).
     this.persist();
     this.render();
     $('main').scrollTop = 0;
-    if (this.s.over) setTimeout(() => this.showEnding(), 300);
+    if (this.s.over && !this.endingSeen) setTimeout(() => this.showEnding(), 300);
   }
 
+  /** Save the run, finished or not: a finished run stays the saved one until the player picks a new language. */
   private persist(): void {
-    const run: SavedRun | null = this.s.over ? null : { v: rulesVersion(this.village), seed: this.seed, a: this.actions.join(','), day: this.daily };
-    if (run && this.village === 2) run.village = 2;
+    const run: SavedRun = { v: this.daily ? DAILY_VERSION : rulesVersion(this.village), seed: this.seed, a: this.actions.join(','), day: this.daily };
+    if (this.village === 2) run.village = 2;
+    if (this.s.over) run.done = true;
+    if (this.s.over && this.endingSeen) run.seen = true;
     store.save(this.daily ? 'dailyRun' : runKey(this.village), run);
   }
 
@@ -207,7 +237,7 @@ export class Game {
     closeOverlay();
     const day = todayKey();
     const saved = store.load<{ v: number; seed: number; a: string; day: string } | null>('dailyRun', null);
-    if (!fresh && saved && saved.v === RULES_VERSION && saved.day === day) this.start(saved.seed, saved.a, false, day);
+    if (!fresh && saved && saved.v === DAILY_VERSION && saved.day === day) this.start(saved.seed, saved.a, false, day);
     else this.start(dailySeed('unspoken', day), '', false, day);
     if (this.actions.length === 0) toast(`Today's language · ${prettyDay(day)}`);
   }
@@ -277,8 +307,18 @@ export class Game {
     return b;
   }
 
-  private caption(tokens: Token[], size = 46): HTMLElement {
+  /** A sign on one line: glyphs shrink (down to MIN_GLYPH, so tiles stay 44 px wide) until it fits `room`. */
+  private caption(tokens: Token[], size = 46, room = this.sceneWidth()): HTMLElement {
     const row = el('div', 'caption');
+    const n = tokens.length;
+    // A tile is the glyph plus 8 px padding and 2 px border, at least 56 px wide; glyphs sit 8 px apart.
+    const loose = n * Math.max(56, size + 10) + (n - 1) * 8;
+    if (loose > room) {
+      size = Math.max(MIN_GLYPH, Math.min(size, Math.floor((room - (n - 1) * 4) / n) - 10));
+      row.classList.add('fit');
+      if (size < 48) row.classList.add('small');
+      row.style.setProperty('--tw', `${size + 10}px`);
+    }
     for (const t of tokens) row.appendChild(this.tokenButton(t, size));
     return row;
   }
@@ -364,8 +404,13 @@ export class Game {
     (nav.children[this.view] as HTMLElement | undefined)?.scrollIntoView?.({ inline: 'center', block: 'nearest' });
     // Fade the edge(s) that hide more places, so the strip reads as scrollable.
     const fade = () => {
-      nav.classList.toggle('more-left', nav.scrollLeft > 2);
-      nav.classList.toggle('more-right', nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 2);
+      const left = nav.scrollLeft > 2;
+      const right = nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 2;
+      nav.classList.toggle('more-left', left);
+      nav.classList.toggle('more-right', right);
+      // The ‹ › buttons beside the strip scroll it; they show only while places hide that way.
+      ($('placesL') as HTMLButtonElement).hidden = !left;
+      ($('placesR') as HTMLButtonElement).hidden = !right;
     };
     nav.onscroll = fade;
     fade();
@@ -555,7 +600,7 @@ export class Game {
     if (c.question) {
       const q = el('div', 'speech');
       q.appendChild(el('b', '', 'The elder:'));
-      const cap = this.caption(c.question, 40);
+      const cap = this.caption(c.question, 40, this.sceneWidth() - 26);
       cap.classList.add('compact');
       q.appendChild(cap);
       box.appendChild(q);
@@ -732,6 +777,8 @@ export class Game {
     const here = this.pages(this.view)[this.page];
     const hereId = here?.kind === 'panel' ? here.p.id : '';
     const ctxs = [...(contexts(s.world, s.chapter).get(id) ?? [])].sort((a, b) => Number(b.id === hereId) - Number(a.id === hereId));
+    const rows: HTMLElement[] = [];
+    let more: HTMLButtonElement | null = null;
     if (ctxs.length) {
       inner.appendChild(el('h4', '', `Seen in ${ctxs.length} scene${ctxs.length > 1 ? 's' : ''}`));
       const box = el('div', 'ctx');
@@ -749,8 +796,17 @@ export class Game {
         }
         row.appendChild(cap);
         box.appendChild(row);
+        rows.push(row);
       }
       inner.appendChild(box);
+      // When the scenes would push the meanings below the fold, the last ones fold away behind a button.
+      more = el('button', 'secondary more');
+      more.hidden = true;
+      more.onclick = () => {
+        for (const r of rows) r.hidden = false;
+        more!.remove();
+      };
+      inner.appendChild(more);
     }
 
     if (st !== 'known') {
@@ -801,6 +857,15 @@ export class Game {
     inner.appendChild(actions);
     sheet.appendChild(inner);
     sheet.hidden = false;
+    if (more && st !== 'known') {
+      let shown = rows.length;
+      while (shown > 2 && inner.scrollHeight > inner.clientHeight + 1) {
+        rows[--shown].hidden = true;
+        const hid = rows.length - shown;
+        more.hidden = false;
+        more.textContent = `Show ${hid} more scene${hid > 1 ? 's' : ''}`;
+      }
+    }
   }
 
   closeSheet(): void {
@@ -873,7 +938,7 @@ export class Game {
       { label: 'How to play', onClick: () => this.showHelp() },
       { label: 'Notebook', onClick: () => this.showNotebook() },
       { label: village2Open() ? 'Villages' : 'Villages · the second is locked', onClick: () => this.showVillages() },
-      this.daily ? { label: 'Back to my language', onClick: () => this.resumeOwn() } : { label: `Today's language · ${loadDaily(store)?.label ?? 'not played'}`, onClick: () => this.playDaily() },
+      this.daily ? { label: 'Back to my language', onClick: () => this.resumeOwn() } : { label: `Today's language · ${this.dailyStatus()}`, onClick: () => this.playDaily() },
       {
         label: muted ? 'Sound: off' : 'Sound: on',
         onClick: () => {
@@ -895,6 +960,14 @@ export class Game {
     ]);
   }
 
+  /** Today's language in a few words: done (with its result), in progress, or not played. */
+  private dailyStatus(): string {
+    const d = dailyState(store, todayKey());
+    if (d.state === 'done') return `done · ${d.label}`;
+    const run = store.load<SavedRun | null>('dailyRun', null);
+    return d.state === 'started' && run?.v === DAILY_VERSION ? 'in progress' : 'not played';
+  }
+
   /** Choose between the river village and (once it is finished) the mountain village. */
   showVillages(): void {
     const open = village2Open() || this.village === 2;
@@ -902,7 +975,8 @@ export class Game {
       if (v === 2 && !open) return 'Locked: finish the river village first.';
       if (!this.daily && v === this.village) return this.s.over ? 'Finished. Here now.' : `Here now · place ${this.s.chapter + 1} of ${this.s.world.chapters.length}`;
       const saved = store.load<SavedRun | null>(runKey(v), null);
-      return saved && saved.v === rulesVersion(v) && saved.a ? 'A language in progress' : 'A new language';
+      if (!saved || saved.v !== rulesVersion(v) || !saved.a) return 'A new language';
+      return saved.done ? 'Finished' : 'A language in progress';
     };
     showCard(
       `<h2>Villages</h2><div class="villages">
@@ -947,7 +1021,11 @@ export class Game {
         <li>Each painted <b>scene</b> has a sign beneath it. The sign says what the scene shows.</li>
         <li><b>Tap a glyph</b> to see every scene it appears in, and write down what you think it means.</li>
         <li>When every glyph under a scene is read right, the scene <b>comes clear</b> and those readings are proven.</li>
-        <li>Little <b>marks</b> above or below a glyph change its meaning. Watch what changes in the pictures.</li>
+        <li>${
+          Object.values(this.s.lang.glyphs).some((g) => g.mark && g.strokes.length)
+            ? 'This language puts little <b>marks</b> above or below some glyphs. A mark adds to the word, the way an ending does. Watch what changes in the pictures.'
+            : 'Some signs carry small extra glyphs that come and go between scenes. Watch what changes in the pictures when they appear.'
+        }</li>
         <li><b>Riddles</b> close each place: pick the scene a sign describes, or write a scene yourself. Solving one proves your right guesses and clears your wrong ones.</li>
         <li>Notice the order of words. Notice what repeats. Nobody will tell you.</li>
         <li>Finish the village and a <b>second village</b> opens up the mountain (menu ☰ › Villages), with a harder language.</li>
@@ -976,6 +1054,11 @@ export class Game {
     const s = this.s;
     const p = progress(s);
     const pct = Math.round((100 * p.confirmed) / p.total);
+    document.querySelectorAll('.toast').forEach((t) => t.remove());
+    if (!this.endingSeen) {
+      this.endingSeen = true;
+      this.persist();
+    }
     this.sfx.victory();
     const gloss = (id: string) => (s.notebook[id] ? short(s.notebook[id]) : '⟨?⟩');
     const v2 = this.village === 2;
@@ -1025,10 +1108,14 @@ export class Game {
   }
 
   async copyReport(): Promise<void> {
+    closeOverlay();
     const a = linkActions(this.seed, this.village, this.actions);
     const v = this.village === 2 ? '&v=2' : '';
-    const url = `${location.origin}${location.pathname}?seed=${this.seed}${v}&a=${a || '-'}`;
-    toast((await copyText(`UNSPOKEN v${rulesVersion(this.village)}${this.village === 2 ? ' village=2' : ''} seed=${this.seed} a=${a}\n${url}`)) ? 'Bug report copied' : 'Copy failed');
+    // Today's language has its own world: the link says which day it was.
+    const day = this.daily ? `&day=${this.daily}` : '';
+    const url = `${location.origin}${location.pathname}?seed=${this.seed}${v}${day}&a=${a || '-'}`;
+    const ver = this.daily ? `v${DAILY_VERSION} daily=${this.daily}` : `v${rulesVersion(this.village)}${this.village === 2 ? ' village=2' : ''}`;
+    toast((await copyText(`UNSPOKEN ${ver} seed=${this.seed} a=${a}\n${url}`)) ? 'Bug report copied' : 'Copy failed');
   }
 }
 

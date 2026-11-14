@@ -13,6 +13,8 @@ export const RULES_VERSION = 2;
 /** The mountain village's own save version (its first release saved as 2; v3 changed its riddles). */
 export const RULES_VERSION2 = 3;
 export const rulesVersion = (village: number) => (village === 2 ? RULES_VERSION2 : RULES_VERSION);
+/** Today's language has its own world (shuffled scenes, harder riddles: `makeWorld(lang, { daily: true })`); its saves carry this. */
+export const DAILY_VERSION = 3;
 
 export interface State {
   seed: number;
@@ -34,16 +36,20 @@ export interface State {
   /** Highest chapter open (index). */
   chapter: number;
   over: boolean;
+  /** Today's language (its own world); absent in normal play. */
+  daily?: true;
 }
 
 export type Action =
   | { t: 'guess'; glyph: string; meaning: string | null }
   | { t: 'answer'; challenge: string; pick?: number; tiles?: number[] };
 
-export function newGame(seed: number, village = 1): State {
+export function newGame(seed: number, village = 1, daily = false): State {
   const lang = makeLanguage(seed, village);
-  const world = village === 2 ? makeWorld2(lang) : makeWorld(lang);
-  return { seed, village, lang, world, notebook: {}, confirmed: [], doubted: [], understood: [], solved: [], mistakes: 0, chapter: 0, over: false };
+  const world = village === 2 ? makeWorld2(lang) : makeWorld(lang, { daily });
+  const s: State = { seed, village, lang, world, notebook: {}, confirmed: [], doubted: [], understood: [], solved: [], mistakes: 0, chapter: 0, over: false };
+  if (daily && village !== 2) s.daily = true;
+  return s;
 }
 
 export function findChallenge(s: State, id: string) {
@@ -165,8 +171,8 @@ export function decode(tok: string): Action | null {
   return null;
 }
 
-export function replay(seed: number, actions: string, village = 1): State {
-  const s = newGame(seed, village);
+export function replay(seed: number, actions: string, village = 1, daily = false): State {
+  const s = newGame(seed, village, daily);
   const toks = actions ? actions.split(',') : [];
   toks.forEach((tk, i) => {
     const a = decode(tk);

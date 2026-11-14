@@ -105,7 +105,27 @@ describe('village 1 is unchanged', () => {
     expect(glyphsAlike(raw.glyphs.PAST.strokes, raw.glyphs.Q.strokes)).toBe(true);
     const L = makeLanguage(2043983302);
     expect(glyphsAlike(L.glyphs.PAST.strokes, L.glyphs.Q.strokes)).toBe(false);
-    expect(L.glyphs.PAST).toEqual(raw.glyphs.PAST);
+  });
+
+  it('counts lone strokes, and a dot against a short tick, as look-alikes', () => {
+    const line = (x1: number, y1: number, x2: number, y2: number): Stroke => ({ k: 'L', x1, y1, x2, y2 });
+    // Any two single short strokes ("before" and "what?" in the third playtest).
+    expect(glyphsAlike([line(0.25, 0.25, 0.75, 0.25)], [line(0.5, 0.25, 0.5, 0.75)])).toBe(true);
+    expect(glyphsAlike([line(0.25, 0.25, 0.75, 0.25)], [{ k: 'Q', x1: 0.25, y1: 0.75, cx: 0.26, cy: 0.52, x2: 0.5, y2: 0.5 }])).toBe(true);
+    // A lone dot or ring is not a stroke.
+    expect(glyphsAlike([line(0.25, 0.25, 0.75, 0.25)], [{ k: 'D', x: 0.5, y: 0.5 }])).toBe(false);
+    // The same radical and body, but a dot where the other has a short tick (dog and bird in village 2).
+    const body = [line(0.04, 0.12, 0.28, 0.12), line(0.04, 0.12, 0.04, 0.88), line(0.36, 0.5, 0.94, 0.5), line(0.65, 0.08, 0.65, 0.92)];
+    expect(glyphsAlike([...body, { k: 'D', x: 0.8, y: 0.3 }], [...body, line(0.75, 0.25, 0.85, 0.35)])).toBe(true);
+    // A long stroke is no tick.
+    expect(glyphsAlike([...body, { k: 'D', x: 0.8, y: 0.3 }], [...body, line(0.36, 0.92, 0.94, 0.92)])).toBe(false);
+    // In the fixed languages no glyph is a lone stroke beside another lone stroke.
+    for (let seed = 0; seed < 100; seed++)
+      for (const village of [1, 2]) {
+        const L = makeLanguage(seed, village);
+        const lone = Object.values(L.glyphs).filter((g) => !g.mark && g.strokes.length === 1 && (g.strokes[0].k === 'L' || g.strokes[0].k === 'Q'));
+        expect(lone.length, `${seed}/${village}`).toBeLessThanOrEqual(1);
+      }
   });
 
   it('has none of the second village grammar', () => {
