@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#1d2547" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Trestle</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231d2547'/%3E%3Cpath d='M4 14h24' stroke='%23b0773f' stroke-width='3.5' stroke-linecap='round'/%3E%3Cpath d='M4 14l6 7 6-7 6 7 6-7M10 21h12' stroke='%23c9b27a' stroke-width='2' fill='none' stroke-linejoin='round'/%3E%3Ccircle cx='4' cy='14' r='2.4' fill='%23e0b25a'/%3E%3Ccircle cx='28' cy='14' r='2.4' fill='%23e0b25a'/%3E%3C/svg%3E" />
+    <script type="module" crossorigin src="../assets/trestle--a_JWJaZ.js"></script>
+    <link rel="modulepreload" crossorigin href="../assets/storage-20bEmBCf.js">
+    <link rel="modulepreload" crossorigin href="../assets/rng-Dkl72p5S.js">
+    <link rel="modulepreload" crossorigin href="../assets/daily-B7bh9VBh.js">
+    <link rel="modulepreload" crossorigin href="../assets/cards-C2W5ZOxE.js">
+    <link rel="stylesheet" crossorigin href="../assets/trestle-GkIp0H0b.css">
+    <link rel="stylesheet" crossorigin href="../assets/shell-Dcmhcd0y.css">
+  </head>
+  <body>
+    <div id="app">
+      <header id="hud">
+        <div class="stat lvl"><span class="label"><span id="levelLabel">Level 1</span> <span id="best" class="stars"></span></span><span id="levelName" class="name">…</span></div>
+        <div class="stat cost"><span class="label">Cost</span><span id="cost" class="value">0</span></div>
+        <button id="helpBtn" class="icon-btn" aria-label="How to play">?</button>
+        <button id="levelsBtn" class="icon-btn" aria-label="Levels">▦</button>
+        <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>
+      </header>
+      <main id="stage"><canvas id="board"></canvas><div id="loading" hidden><span class="spin"></span>Surveying the gap…</div></main>
+      <section id="controls">
+        <div id="info"></div>
+        <div id="mats">
+          <button data-m="0"><span class="ic"></span><span class="nm">Plank</span><span class="pr"></span><span class="st"></span></button>
+          <button data-m="1"><span class="ic"></span><span class="nm">Twig</span><span class="pr"></span><span class="st"></span></button>
+          <button data-m="2"><span class="ic"></span><span class="nm">Twine</span><span class="pr"></span><span class="st"></span></button>
+        </div>
+        <div id="tools">
+          <button id="undoBtn" class="tool" aria-label="Undo">↶</button>
+          <button id="clearBtn" class="tool" aria-label="Clear">⟲</button>
+          <button id="zoomBtn" class="tool" aria-label="Zoom">⤢</button>
+          <button id="goBtn" class="tool go">▶ Go</button>
+        </div>
+      </section>
+    </div>
+    <div id="overlay" hidden></div>
+    <div id="errors"></div>
+  </body>
+</html>

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#11141d" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Triad</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2311141d'/%3E%3Ccircle cx='16' cy='9' r='5' fill='%23ff8a3d'/%3E%3Ccircle cx='9' cy='21' r='5' fill='%236fd36f'/%3E%3Ccircle cx='23' cy='21' r='5' fill='%234fb3ff'/%3E%3C/svg%3E" />
+    <script type="module" crossorigin src="../assets/triad-YUncGms3.js"></script>
+    <link rel="modulepreload" crossorigin href="../assets/storage-20bEmBCf.js">
+    <link rel="modulepreload" crossorigin href="../assets/rng-Dkl72p5S.js">
+    <link rel="modulepreload" crossorigin href="../assets/daily-B7bh9VBh.js">
+    <link rel="modulepreload" crossorigin href="../assets/hex-CS7kKvDW.js">
+    <link rel="modulepreload" crossorigin href="../assets/cards-C2W5ZOxE.js">
+    <link rel="modulepreload" crossorigin href="../assets/streak-CenNLWor.js">
+    <link rel="modulepreload" crossorigin href="../assets/hexlayout-Pfprzn7V.js">
+    <link rel="stylesheet" crossorigin href="../assets/triad-BwBublFA.css">
+    <link rel="stylesheet" crossorigin href="../assets/shell-Dcmhcd0y.css">
+  </head>
+  <body>
+    <div id="app">
+      <header id="hud">
+        <div class="stat"><span id="levelLabel" class="label">Normal</span><span id="size" class="value">Medium</span></div>
+        <div class="stat"><span class="label">Time</span><span id="clock" class="value">0:00</span></div>
+        <div class="spacer"></div>
+        <button id="newBtn" class="icon-btn" aria-label="New puzzle">＋</button>
+        <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>
+      </header>
+      <div id="rule"></div>
+      <main id="stage"><canvas id="board"></canvas></main>
+      <section id="controls">
+        <div id="info"></div>
+        <div id="pad">
+          <button id="el0" class="el"></button>
+          <button id="el1" class="el"></button>
+          <button id="el2" class="el"></button>
+          <button id="erase" class="el tool">⌫<span>Clear</span></button>
+        </div>
+        <div id="tools">
+          <button id="notesBtn" class="tool">✎ Notes</button>
+          <button id="undoBtn" class="tool">↶ Undo</button>
+          <button id="hintBtn" class="tool">💡 Hint</button>
+        </div>
+      </section>
+    </div>
+    <div id="overlay" hidden></div>
+    <div id="errors"></div>
+  </body>
+</html>

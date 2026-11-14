@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0e1522" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Summit</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231b2a44'/%3E%3Cpath d='M3 27l10-16 5 7 4-5 7 14z' fill='%23f7f2e6'/%3E%3Cpath d='M13 11l3 4.5-3-1-2.4 1.6z' fill='%23ffcf6e'/%3E%3C/svg%3E" />
+    <script type="module" crossorigin src="../assets/summit-CJEsZh3Z.js"></script>
+    <link rel="modulepreload" crossorigin href="../assets/storage-20bEmBCf.js">
+    <link rel="modulepreload" crossorigin href="../assets/rng-Dkl72p5S.js">
+    <link rel="modulepreload" crossorigin href="../assets/daily-B7bh9VBh.js">
+    <link rel="modulepreload" crossorigin href="../assets/cards-C2W5ZOxE.js">
+    <link rel="stylesheet" crossorigin href="../assets/summit-BbikHz3U.css">
+    <link rel="stylesheet" crossorigin href="../assets/shell-Dcmhcd0y.css">
+  </head>
+  <body>
+    <div id="app">
+      <header id="hud">
+        <div class="stat"><span class="label">Floor</span><span id="floorNo" class="value">1/8</span></div>
+        <div class="stat"><span class="label">Draws</span><span id="draws" class="value">0</span></div>
+        <div class="stat"><span class="label">Score</span><span id="score" class="value">0</span></div>
+        <span id="dailyTag" hidden>Daily</span>
+        <div class="spacer"></div>
+        <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>
+      </header>
+      <main id="stage">
+        <div id="table"></div>
+        <div id="combo"></div>
+        <div id="banner" hidden></div>
+        <div id="charmBar"></div>
+      </main>
+      <section id="dock">
+        <div id="infoRow"><div id="info"></div><button id="endBtn" class="tool end" hidden>End run</button></div>
+        <div id="piles">
+          <button id="stock" aria-label="Draw"><span class="pc back big"></span><span id="stockN" class="count">0</span><span id="luck" class="luck"></span></button>
+          <div id="peek"></div>
+          <div id="wasteBox"><div id="waste"></div></div>
+          <div id="tools">
+            <button id="undoBtn" class="tool" hidden>↶ <span id="undoN">2</span></button>
+            <button id="blastBtn" class="tool" hidden>💥</button>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div id="fx"></div>
+    <div id="overlay" hidden></div>
+    <div id="errors"></div>
+  </body>
+</html>
