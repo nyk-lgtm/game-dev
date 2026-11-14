@@ -17,26 +17,19 @@ at any time; their word beats this list.
 Ground rules: never break saves without bumping RULES_VERSION; never leave main red;
 keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
 
-## Start here (summary, 2026-11-13 evening)
-22 games are live (new today: Simmer, Gleam, Lull); every one has had at least two blind playtests and the fixes shipped
-(Lull: one so far, second running). Open threads, in order:
+## Start here (summary, 2026-11-14)
+24 games are live (new 2026-11-13/14: Simmer, Gleam, Lull, Trestle, Tidings); every game has had at least two blind
+playtests with fixes shipped. Open threads, in order:
 1. Owner feedback first: anything the owner reports beats this list.
-2. Real-phone checks only the owner can do: Loomsong sound/timing, Lull sound mix, Sungrazer smoothness.
-3. Done and shipped today: third playtests (Summit v4, Kitbag v4, Sungrazer v4 + ~3x cheaper frames, Brink AI v4, Quarry v4),
-   Loomsong second pass, Delve v6 (depth 5 eased), Rewild v7 (fire telegraphed a season ahead), Simmer v4 (three playtests),
-   Gleam v2 (two playtests), Lull (one playtest; second running). Hexhold gold sink: not needed (gold stays spendable).
-   Glyphwright bot refit: the refit bot wins ~83% (old 37% was a bot flaw); harder late waves/Lich only if the owner asks.
-4. Next: Lull second-pass fixes; Simmer fourth playtest (watch "buy everything" dominating); Gleam third pass if wanted.
+2. Real-phone checks only the owner can do: Loomsong sound/timing, Lull sound mix, Sungrazer smoothness, Trestle level
+   generation time past L66 (several seconds when not prefetched).
+3. In flight: Trestle v4 fourth playtest, Simmer v5 fifth playtest.
+4. Known watch items: Glyphwright is easier than thought (refit bot wins ~83%; harden late waves/Lich only if the owner
+   asks); Tidings careful bot ~79% (TUNE=startC:3 → 73/18 if humans find it easy); Trestle wall-lantern par still loose on
+   some levels; Hexhold "max first, then expand" (~45% bot wins) may need teeth at waves 26-30 if players find it.
 5. Grove: owner said keep it as is (board and balance); only bugs/clarity. Afterglow: leave alone unless asked.
-6. New games are welcome when the queue is quiet (recent additions: Ninefold, Summit, Quarry, Sungrazer, Kitbag,
-   Brink, Loomsong, Simmer, Gleam, Lull, Trestle). Ideas: a co-op-free social/daily puzzle. (The creative/sandbox toy is Lull.)
-   Trestle (new physics builder): third playtest fixes done (rules v4: free ends left out, polished par, smoother pool); fourth blind playtest next.
-7. Simmer: second blind playtest (see its item below). Gleam (new light puzzle): first blind playtest. Lull: first playtest fixes shipped;
-   second blind playtest and a real-phone sound check next.
-   Brink, Loomsong, Simmer). Ideas: a creative/sandbox toy, a co-op-free social/daily puzzle.
-7. Simmer: fifth blind playtest (see its item below).
-6. New games are welcome when the queue is quiet (recent: Ninefold, Summit, Quarry, Sungrazer, Kitbag, Brink, Loomsong,
-   Simmer, Gleam, Lull). Ideas: a co-op-free social/daily puzzle, a short narrative roguelite, a physics builder.
+6. A 320×568 audit pass (2026-11-14) fixed Rewild/Ninefold/Gleam layouts; Summit's cards are 43 px wide on 8-wide rows (kept).
+7. New games when the queue is quiet; prefer depth and polish over sprawl now that there are 24.
 
 ## Now
 - [ ] **Tidings** (original narrative roguelite: carry the winter post from Tarrow Bridge over the hills and the Teeth to
