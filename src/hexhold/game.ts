@@ -6,13 +6,11 @@ import { Sfx } from '../afterglow/audio';
 import { closeOverlay, showCard } from '../shared/cards';
 import { dailySeed, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey } from '../shared/daily';
 import { copyText, toast } from '../shared/debug';
-import { pxToHex } from '../shared/hexlayout';
 import { makeStore } from '../shared/storage';
 import {
   ADJ,
   BEACON_BOOST,
   ENEMIES,
-  HEXES,
   LEVEL_DMG,
   MAX_LEVEL,
   POS,
@@ -206,9 +204,7 @@ export class Game {
     this.canvas.addEventListener('pointerup', (e) => {
       this.sfx.unlock();
       const r = this.canvas.getBoundingClientRect();
-      const h = pxToHex(this.view.L, e.clientX - r.left, e.clientY - r.top);
-      const i = HEXES.findIndex((x) => x.q === h.q && x.r === h.r);
-      this.tapCell(i);
+      this.tapCell(nearestCell(this.view, e.clientX - r.left, e.clientY - r.top));
     });
     $('speedBtn').onclick = () => {
       this.speed = this.speed >= 3 ? 1 : this.speed + 1;
@@ -234,6 +230,10 @@ export class Game {
       this.s = newGame(seed);
       this.actions = [];
     }
+    // Rebuilding the run queued every effect it ever made (banners, leak buzzes, sounds):
+    // only live play shows effects, so drop them.
+    this.s.fx.length = 0;
+    this.hurt = 0;
     this.selected = -1;
     this.ghost = null;
     this.ghostPath = null;
@@ -401,7 +401,8 @@ export class Game {
   private drainFx(time: number): void {
     const s = this.s;
     for (const f of s.fx) {
-      if (this.effects.length > 160) break;
+      // Game events (leaks, a held wave) always land; shots and bursts give way when the screen is busy.
+      if (this.effects.length > 160 && f.type !== 'leak' && f.type !== 'wave') continue;
       switch (f.type) {
         case 'shot':
           this.effects.push({ kind: 'shot', pts: [posX(f.from), posY(f.from), f.x, f.y], color: TOWERS[f.tower].color, t0: time, life: 0.12 });
@@ -502,28 +503,48 @@ export class Game {
     const counts = new Map<EnemyId, number>();
     for (const id of plan) counts.set(id, (counts.get(id) ?? 0) + 1);
     p.appendChild(el('div', 'title', `Next: wave ${next} of ${WAVES} <span>${plan.length} enemies</span>`));
+    // Chips and notes scroll inside their own box, so a busy wave never pushes text under Send.
+    const body = el('div', 'body');
     const chips = el('div', 'chips');
     for (const [id, n] of counts) chips.appendChild(el('span', 'chip', `<i style="background:${ENEMIES[id].color}"></i>${ENEMIES[id].name} ×${n}${ENEMIES[id].leak > 1 ? ` <em>−${ENEMIES[id].leak}♥</em>` : ''}`));
-    p.appendChild(chips);
+    body.appendChild(chips);
     // The threat that makes up most of the wave, in a sentence (the Colossus always gets the line).
     const weight = (id: EnemyId) => (counts.get(id) ?? 0) * WAVE_COST[id];
     const special = (['digger', 'flyer', 'brute', 'healer', 'splitter', 'swarm'] as EnemyId[]).filter((id) => counts.has(id));
     const notable = counts.has('boss') ? 'boss' : special.sort((a, b) => weight(b) - weight(a))[0];
+    const lines = [notable ? `<b>${ENEMIES[notable].name}:</b> ${ENEMIES[notable].text}` : s.wave === 0 ? (s.portals.length > 1 ? 'Two portals on this map: enemies take turns. Towers are walls: make both paths long.' : 'Tap an empty hex to build a tower. Towers are walls: make the path long.') : 'Build, upgrade, then send it.'];
+    // Burrowers always get their warning: a maze that covers their line shields them.
+    if (counts.has('digger') && notable !== 'digger') lines.push(`<b>Burrowers:</b> ${ENEMIES.digger.text}`);
+    // The Colossus a wave ahead, while there's still time to build for it.
+    if (next + 1 <= WAVES && wavePlan(s.seed, next + 1).includes('boss'))
+      lines.push(`<span class="ahead">⚠ <b>Wave ${next + 1}: the Colossus.</b> Armor 7 shrugs off small hits: get a <b>Longbow</b> or <b>Siege</b> (a level-3 Bolt or Mortar) ready now.</span>`);
     const costly = [...counts.keys()].find((id) => ENEMIES[id].leak > 1);
-    const legend = costly ? `<br><span class="note"><em>−${ENEMIES[costly].leak}♥</em> = lives lost for each one that reaches your core.</span>` : '';
-    p.appendChild(
-      el(
-        'div',
-        'text',
-        (notable ? `<b>${ENEMIES[notable].name}:</b> ${ENEMIES[notable].text}` : s.wave === 0 ? (s.portals.length > 1 ? 'Two portals on this map: enemies take turns. Towers are walls: make both paths long.' : 'Tap an empty hex to build a tower. Towers are walls: make the path long.') : 'Build, upgrade, then send it.') + legend,
-      ),
-    );
+    if (costly) lines.push(`<span class="note"><em>−${ENEMIES[costly].leak}♥</em> = lives lost for each one that reaches your core.</span>`);
+    body.appendChild(el('div', 'text', lines.join('<br>')));
+    p.appendChild(body);
     const b = el('button', 'primary');
     b.textContent = `Send wave ${next}`;
     b.onclick = () => this.sendWave();
     const foot = el('div', 'foot');
     foot.appendChild(b);
     p.appendChild(foot);
+    // A fade at the bottom says there's more to scroll to (gone once scrolled to the end).
+    const fade = () => body.classList.toggle('more', body.scrollTop + body.clientHeight < body.scrollHeight - 2);
+    body.onscroll = fade;
+    fade();
+  }
+
+  /** Send from the tower panel too, so building or upgrading never hides it. */
+  private sendRow(): HTMLElement | null {
+    const s = this.s;
+    if (s.active || s.wave >= WAVES) return null;
+    const b = el('button', 'secondary send');
+    b.textContent = `Send wave ${s.wave + 1} ▶`;
+    b.onclick = () => {
+      if (performance.now() < this.guardUntil) return;
+      this.sendWave();
+    };
+    return b;
   }
 
   private buildPanel(p: HTMLElement): void {
@@ -683,6 +704,12 @@ export class Game {
         pick.appendChild(b);
       });
       p.appendChild(pick);
+      const send = this.sendRow();
+      if (send) {
+        const foot = el('div', 'foot');
+        foot.appendChild(send);
+        p.appendChild(foot);
+      }
       return;
     }
     sell.textContent = `Sell +${refund}`;
@@ -703,6 +730,8 @@ export class Game {
       row.append(up);
     }
     const foot = el('div', 'foot');
+    const send = this.sendRow();
+    if (send) foot.appendChild(send);
     foot.appendChild(row);
     p.appendChild(foot);
   }
@@ -748,6 +777,7 @@ export class Game {
       `<h2>${won ? 'The hold stands' : 'The core has fallen'}</h2>
       <p>${won ? `All ${WAVES} waves held with ${s.lives} lives to spare.` : `Held ${s.wave - 1} of ${WAVES} waves; the core fell on wave ${s.wave}.`} ${s.stats.kills} enem${s.stats.kills === 1 ? 'y' : 'ies'} stopped.${record}</p>
       ${this.daily ? `<p><b>Today's map · ${prettyDay(this.daily)}</b>: best ${loadDaily(store, this.daily)?.label ?? '—'}</p>` : ''}
+      ${leakList(s)}
       ${bars}
       ${s.stats.chilled > 1 ? `<p style="font-size:13px">Frost kept enemies slowed for ${Math.round(s.stats.chilled)} enemy-seconds; its share above includes the extra damage chilled enemies took from its neighbors.</p>` : ''}`,
       [
@@ -797,6 +827,8 @@ export class Game {
         <li><b>Neighbors matter.</b> Every tower gives something to the six hexes around it: Bolts let neighbors hit flyers, Frost makes neighbors hit chilled enemies harder, Beacons boost everything next to them. Clusters are strong.</li>
         <li><b>Glowing hexes</b> are ley lines: towers built on them hit 25% harder.</li>
         <li>Check the next wave before sending it: Wisps fly over the maze, Brutes shrug off small hits, Menders heal their friends, Burrowers dig straight under your maze.</li>
+        <li><b>Burrowers</b> can't be hit while they're under a tower, except by <b>Mortar</b> shells. A maze that covers their whole line (blue diamonds) shields them: leave open hexes on it, or keep a Mortar in range.</li>
+        <li><b>The Colossus</b> comes every tenth wave with armor 7: small hits barely scratch it. Have a <b>Longbow</b> or <b>Siege</b> (a level-3 Bolt or Mortar) ready.</li>
         <li>Most enemies cost 1 life if they reach your core; Brutes and Burrowers cost 2 (the <b>−2♥</b> on the wave preview) and the Colossus 6.</li>
         <li>Tap a tower to upgrade or sell it. Use the speed button when things are under control.</li>
       </ul>`,
@@ -806,7 +838,7 @@ export class Game {
 
   showTowers(): void {
     showCard(
-      `<h2>Towers</h2><p>At level 3 each tower can specialize into one of two forms.</p>${TOWER_IDS.map((id) => `<p><b style="color:${TOWERS[id].color}">${TOWERS[id].name}</b> · ${TOWERS[id].cost} gold<br>${TOWERS[id].text} ${TOWERS[id].air ? 'Hits flyers.' : TOWERS[id].range ? 'Ground only (a Bolt next to it lets it hit flyers).' : ''}<br><i>Neighbors: ${TOWERS[id].aura}</i><br>Becomes <b>${SPECS[id][0].name}</b> or <b>${SPECS[id][1].name}</b>.</p>`).join('')}`,
+      `<h2>Towers</h2><p>At level 3 each tower can specialize into one of two forms.</p>${TOWER_IDS.map((id) => `<p><b style="color:${TOWERS[id].color}">${TOWERS[id].name}</b> · ${TOWERS[id].cost} gold<br>${TOWERS[id].text} ${TOWERS[id].air ? (/flyers/i.test(TOWERS[id].text) ? '' : 'Hits flyers.') : TOWERS[id].range ? 'Ground only (a Bolt next to it lets it hit flyers).' : ''}<br><i>Neighbors: ${TOWERS[id].aura}</i><br>Becomes <b>${SPECS[id][0].name}</b> or <b>${SPECS[id][1].name}</b>.</p>`).join('')}`,
       [{ label: 'Close', primary: true, onClick: closeOverlay }],
     );
   }
@@ -816,6 +848,32 @@ export class Game {
     const url = `${location.origin}${location.pathname}?seed=${this.seed}&a=${a || '-'}&t=${this.s.tick}`;
     toast((await copyText(`HEXHOLD v${RULES_VERSION} seed=${this.seed} t=${this.s.tick} a=${a}\n${url}`)) ? 'Bug report copied' : 'Copy failed');
   }
+}
+
+/** The hex whose center is nearest the tap (the same as the hex under it on the board), or -1 when the tap
+ *  is more than a hex beyond the board's edge: hexes are only ~38 px apart, so edge taps still count. */
+function nearestCell(v: View, px: number, py: number): number {
+  const L = v.L;
+  let best = -1;
+  let bd = Infinity;
+  for (let i = 0; i < POS.length; i++) {
+    const d = (POS[i].x * L.size + L.ox - px) ** 2 + (POS[i].y * L.size + L.oy - py) ** 2;
+    if (d < bd) (bd = d), (best = i);
+  }
+  return bd <= (1.3 * L.size) ** 2 ? best : -1;
+}
+
+/** What reached the core, wave by wave, for the results card. */
+function leakList(s: State): string {
+  const leaks = s.stats.leaks;
+  if (!leaks.length) return '<p>Nothing got through: not a single life lost.</p>';
+  const waves = [...new Set(leaks.map((l) => l.wave))].sort((a, b) => a - b);
+  const rows = waves.map((w) => {
+    const ls = leaks.filter((l) => l.wave === w).sort((a, b) => b.lives - a.lives);
+    const kinds = ls.map((l) => `${ENEMIES[l.id].name}${l.n > 1 ? ` ×${l.n}` : ''}${l.split ? ' (from Splitters)' : ''}`).join(', ');
+    return `<div class="leak"><b>Wave ${w}</b><em>−${ls.reduce((a, l) => a + l.lives, 0)}♥</em><span>${kinds}</span></div>`;
+  });
+  return `<div class="leaks"><p><b>What got through</b></p>${rows.join('')}</div>`;
 }
 
 const posX = (i: number) => POS[i].x;

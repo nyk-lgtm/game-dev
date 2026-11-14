@@ -23,9 +23,9 @@ export interface TowerDef {
 
 export const TOWERS: Record<TowerId, TowerDef> = {
   bolt: { id: 'bolt', name: 'Bolt', cost: 50, range: 2.6, rate: 0.75, dmg: 11, air: true, color: '#7ad7ff',
-    text: 'Fast shots at one enemy. Hits flyers.', aura: 'Neighbors can hit flyers too.' },
+    text: 'Fast shots at one enemy.', aura: 'Neighbors can hit flyers too.' },
   mortar: { id: 'mortar', name: 'Mortar', cost: 90, range: 3.6, rate: 2.0, dmg: 30, air: false, color: '#ffb35c',
-    text: 'Slow shells that burst on a group.', aura: 'Neighbors reach half a cell further.' },
+    text: 'Slow shells that burst on a group, and reach Burrowers even under towers.', aura: 'Neighbors reach half a cell further.' },
   frost: { id: 'frost', name: 'Frost', cost: 70, range: 1.8, rate: 0, dmg: 2, air: true, color: '#b9e6ff',
     text: 'Chills everything nearby: 40% slower.', aura: 'Neighbors deal +30% to chilled enemies.' },
   tesla: { id: 'tesla', name: 'Tesla', cost: 110, range: 2.6, rate: 1.2, dmg: 17, air: true, color: '#c9a2ff',
@@ -129,13 +129,13 @@ export const ENEMIES: Record<EnemyId, EnemyDef> = {
   flyer: { id: 'flyer', name: 'Wisp', hp: 44, speed: 1.2, armor: 0, bounty: 5, leak: 1, fly: true, from: 5, color: '#9ef0d8', text: 'Flies straight over your maze. Only some towers hit it.' },
   healer: { id: 'healer', name: 'Mender', hp: 80, speed: 0.9, armor: 1, bounty: 8, leak: 1, heal: 7, from: 8, color: '#7cff9a', text: 'Heals nearby enemies. Kill it first.' },
   splitter: { id: 'splitter', name: 'Splitter', hp: 95, speed: 0.95, armor: 0, bounty: 6, leak: 1, split: 3, from: 10, color: '#d88cff', text: 'Bursts into three runners.' },
-  digger: { id: 'digger', name: 'Burrower', hp: 125, speed: 0.8, armor: 2, bounty: 8, leak: 2, dig: true, from: 12, color: '#8fa8ff', text: "Ignores your maze: it digs the straight way (blue diamonds) and can't be hit while under a tower. Cover its line with open ground." },
-  boss: { id: 'boss', name: 'Colossus', hp: 1050, speed: 0.45, armor: 7, bounty: 120, leak: 6, from: 10, color: '#ff5a5a', text: 'A giant that comes every tenth wave. Armored, slow, and it costs 6 lives if it reaches your core. Have big hits ready.' },
+  digger: { id: 'digger', name: 'Burrower', hp: 125, speed: 0.8, armor: 2, bounty: 8, leak: 2, dig: true, from: 12, color: '#8fa8ff', text: 'Digs the straight way under your maze (blue diamonds). Under a tower only Mortar shells can hit it: leave open ground on its line, or keep a Mortar in range.' },
+  boss: { id: 'boss', name: 'Colossus', hp: 1050, speed: 0.45, armor: 7, bounty: 120, leak: 6, from: 10, color: '#ff5a5a', text: 'A giant every tenth wave. Armor 7 takes 7 off every hit, so small hits barely scratch it: a Longbow or Siege (a level-3 Bolt or Mortar) does the work. Costs 6 lives if it gets through.' },
 };
 export const ENEMY_IDS = Object.keys(ENEMIES) as EnemyId[];
 
 export const WAVES = 30;
-export const START_GOLD = 210;
+export const START_GOLD = 230;
 /** Extra starting gold on two-portal maps. */
 export const TWIN_GOLD = 60;
 export const START_LIVES = 20;

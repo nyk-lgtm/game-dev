@@ -17,6 +17,9 @@ const banked = BANDS.map(() => [] as number[]);
 const cells = BANDS.map(() => [] as number[]);
 const left = BANDS.map(() => [] as number[]);
 const ends: string[] = [];
+// The early curve wave by wave (a first-timer's waves): lives lost and runs that lost any.
+const early = new Array(12).fill(0);
+const earlyRuns = new Array(12).fill(0);
 const bandOf = (w: number) => BANDS.findIndex(([a, b]) => w >= a && w <= b);
 for (let k = 0; k < n; k++) {
   const seed = 100 + k;
@@ -24,6 +27,7 @@ for (let k = 0; k < n; k++) {
   const kind = r.s.portals.length > 1 ? 'twin' : 'single';
   by[kind].push(r.s.status === 'won' ? 31 : r.reached);
   r.lost.forEach((l, w) => (band[bandOf(w + 1)] += l));
+  r.lost.slice(0, 12).forEach((l, w) => ((early[w] += l), (earlyRuns[w] += l > 0 ? 1 : 0)));
   r.banked.forEach((g, w) => {
     banked[bandOf(w + 1)].push(g);
     cells[bandOf(w + 1)].push(r.room[w].cells);
@@ -41,6 +45,7 @@ const all = [...by.single, ...by.twin].sort((a, b) => a - b);
 console.log(`median wave (31 = won) ${all[n >> 1]}, wins ${ends.filter((e) => e[0] === 'W').length}/${n}`);
 console.log('lives lost by waves:', BANDS.map(([a, b], k) => `${a}-${b}: ${band[k]}`).join(', '));
 const q = (a: number[], f: number) => [...a].sort((x, y) => x - y)[Math.floor((a.length - 1) * f)] ?? 0;
+console.log('waves 1-12, lives lost / runs that lost any:', early.map((l, w) => `${w + 1}:${l}/${earlyRuns[w]}`).join(' '));
 console.log('as a wave is sent: gold banked (median / p90), open cells, gold of upgrades+specs left (medians):');
 BANDS.forEach(([a, b], k) =>
   console.log(`  ${a}-${b}: ${q(banked[k], 0.5)} / ${q(banked[k], 0.9)} gold, ${q(cells[k], 0.5)} cells, ${q(left[k], 0.5)} to upgrade`),
