@@ -118,7 +118,7 @@ describe('Ascension and saves', () => {
     expect(a.asc).toBe(3);
     const s = newGame(4, 3);
     s.loom = a.loom;
-    expect(RULES_VERSION).toBe(4);
+    expect(RULES_VERSION).toBe(5);
   });
 
   it('a harder level leaks at least as much with the same loom', () => {

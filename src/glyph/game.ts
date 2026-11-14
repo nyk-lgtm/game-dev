@@ -32,6 +32,7 @@ import {
   isBoss,
   lichTrial,
   matchups,
+  reach,
   newGame,
   price,
   replay,
@@ -1043,8 +1044,11 @@ export class Game {
     const foes = matchups(sp, this.foes())
       .map((m) => {
         const d = ENEMIES[m.kind];
+        const air = reach(sp, m.kind);
         const note = !m.canHit
           ? '<span class="bad">flies over it</span>'
+          : air < 1
+            ? `<span class="warn">a flyer: takes ${pc(air)}</span>`
           : m.resist === 0
             ? `<span class="bad">immune to ${sp.element}</span>`
             : [m.resist !== 1 ? `${sp.element} ×${m.resist}` : '', m.armor ? `armor ${m.armor}` : ''].filter(Boolean).join(', ');

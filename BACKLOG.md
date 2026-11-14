@@ -756,9 +756,14 @@ blind playtests with fixes shipped (Simmer 5, Trestle 5, Delve 4). Open threads,
     100% (v4 mods at old HP) → 63%, median wave won; deaths 9:1 10:4 11:8 12:18 13:8 14:6 15:29 (v3 refit: all 17 at
     15); HP lost ~1-2 a wave from 9 (0 before). Waves 6-8 still cost the bot ~0.1 (it spends everything; a hoarder
     will feel them). Lich trial vs real wave 15 (80 bot runs): trial under 80% almost never leaks the Lich, ≥ 85% often.
-  - [ ] Next: Nova lags in v4 (favor 47% vs bolt 85, orb 83, rain 71, beam 70; nova-primary runs win 8/51, Drakes at
-    waves 9-12). More Nova damage makes the bot lean on it and lose (nova.dmg 36 → favor 32%); a wider ring helps
-    (nova.area 0.4 → favor 59%, smart 76%, so retune GROWTH with it). Re-run sweep.ts (economy knobs predate v4).
+  - [x] Nova lag fixed (rules v5, 2026-11-14): flyers in a Nova's ring take half its blast (`MOD.novaAir` 0.5) and the
+    ring is wider (area 0.34 → 0.4); foes grow 0.69 a wave (was 0.52) to pay for it. Tried (100 seeds, smart / favor
+    nova): area 0.4 alone 63 / 40 at growth 0.56; novaAir 0.5 alone 90 / 90 at 0.52, 74 / 62 at 0.60, 59 / 42 at 0.64
+    (Nova falls behind as HP grows: foes pass through its ring); novaAir + area 0.4 keeps casters even (82-87% each
+    at 0.62). v5 result: smart 70% (200 seeds; deaths 9:1 10:6 11:4 12:8 13:10 14:6 15:26), favor bolt 67, orb 63,
+    beam 61, nova 60, rain 54%; nova-primary runs win 48/75 (v4: 8/51). The favor/smart targets pull apart: GROWTH
+    0.72 → smart 61%, favor 38-57%.
+  - [ ] Next: re-run sweep.ts (economy knobs predate v4).
     Watch: does Ascension pull players back after a win; do humans now spend their gold by wave 6-8?
   - [x] Telegraph: depths 2-3 get +2 enemy budget (depth 1 stays the tutorial; rules v4). Greedy bot
     median depth 8 → 7 (back on target), more of its runs end on depth 3. A bomb someone stands on

@@ -200,9 +200,10 @@ function castValue(sp: Spell, cd: number, P: Profile): number[] {
   const arcs = sp.chain > 0 ? instances * Math.min(sp.chain, 1 + W.chainD * D) * W.arc : 0;
   const burnT = Math.min(3, 1.5 + cd) * W.burn;
   return P.foes.map((f) => {
-    if (sp.caster === 'nova' && f.flying) return 0;
+    const air = sp.caster === 'nova' && f.flying ? MOD.novaAir : 1;
+    if (air <= 0) return 0;
     const res = f.resist[sp.element] ?? 1;
-    const raw = sp.dmg * res;
+    const raw = sp.dmg * res * air;
     const armor = Math.max(0, f.armor - sp.shred * W.shred);
     const hitD = raw > 0 ? Math.min(f.hp, Math.max(1, raw - armor)) : 0;
     const arcD = raw > 0 ? Math.min(f.hp, Math.max(1, raw * MOD.stormDmg - armor)) : 0;
@@ -243,7 +244,7 @@ export function evalRow(row: (Rune | null)[], P: Profile): RowEval {
   for (const x of slowers) {
     let share = 0;
     for (const f of P.foes) {
-      if (ENEMIES[f.kind].steady || (x.caster === 'nova' && f.flying)) continue;
+      if (ENEMIES[f.kind].steady || (x.caster === 'nova' && f.flying && MOD.novaAir <= 0)) continue;
       if (f.flying && x.element === 'frost' && (f.resist.frost ?? 1) < 0.5) continue;
       share += f.w;
     }

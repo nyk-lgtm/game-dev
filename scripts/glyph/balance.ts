@@ -1,6 +1,8 @@
 // Glyphwright balance probe. Run: npx vite-node scripts/glyph/balance.ts [runs] [bots]
 //   bots: comma list of naive, smart, favor (smart bot pushed toward each caster),
 //   favor:mods (toward each modifier), favor:beam+fire (toward the given runes)
+// Rules v5 (Nova hits flyers for half, ring 0.4; GROWTH.hp 0.69), 200 seeds: smart 70%; favor (100) bolt 67,
+//   orb 63, beam 61, nova 60, rain 54%.
 // Rules v4 (merges never lose power, bosses leak by what's left, GROWTH.hp 0.52), 200 seeds: smart 63%, deaths
 //   9:1 10:4 11:8 12:18 13:8 14:6 15:29; primary bolt 102/73 nova 51/8 rain 32/30 orb 11/11 beam 4/4 (runs/wins);
 //   favor (100) bolt 85, beam 70, nova 47, rain 71, orb 83%.

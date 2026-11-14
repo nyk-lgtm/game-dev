@@ -2,6 +2,7 @@
 // resistances and flyers. Read-only helpers for the row preview and the spell
 // card; the battle itself uses the same `mitigate`.
 
+import { MOD } from './runes';
 import { ENEMIES, WAVES, enemyHp, isBoss, mitigate, newBattle, stepBattle, waveQueue } from './battle';
 import type { Enemy, EnemyKind, GameState, Spell } from './types';
 
@@ -37,14 +38,17 @@ export function waveFoes(seed: number, wave: number, asc = 0): WaveFoe[] {
 }
 
 /** Novas only reach foes on the ground. */
-export const canHit = (sp: Pick<Spell, 'caster'>, kind: EnemyKind) => !(sp.caster === 'nova' && ENEMIES[kind].flying);
+export const canHit = (sp: Pick<Spell, 'caster'>, kind: EnemyKind) => !(sp.caster === 'nova' && ENEMIES[kind].flying && MOD.novaAir <= 0);
+
+/** How much of a spell's hit reaches this foe before resistances (Novas hit flyers for a share). */
+export const reach = (sp: Pick<Spell, 'caster'>, kind: EnemyKind) => (sp.caster === 'nova' && ENEMIES[kind].flying ? MOD.novaAir : 1);
 
 export function matchups(sp: Spell, foes: WaveFoe[]): FoeMatch[] {
   const total = foes.reduce((n, f) => n + f.hp * f.count, 0) || 1;
   return foes.map(({ kind, count, hp }) => {
     const d = ENEMIES[kind];
     const ok = canHit(sp, kind);
-    const perHit = ok ? mitigate(kind, sp, sp.dmg) : 0;
+    const perHit = ok ? mitigate(kind, sp, sp.dmg * reach(sp, kind)) : 0;
     return {
       kind,
       count,
@@ -75,6 +79,7 @@ export function warnings(sp: Spell, foes: WaveFoe[]): Warning[] {
     if (m.share < 0.04 && !isBoss(m.kind)) continue;
     const name = plural(m.kind, m.count);
     if (!m.canHit) out.push({ level: 2, text: `${name} ${m.count > 1 ? 'fly' : 'flies'} over it`, kind: m.kind });
+    else if (reach(sp, m.kind) < 1) out.push({ level: 1, text: `${name} ${m.count > 1 ? 'take' : 'takes'} ${Math.round(reach(sp, m.kind) * 100)}% (${m.count > 1 ? 'flyers' : 'a flyer'})`, kind: m.kind });
     else if (m.resist === 0) out.push({ level: 2, text: `${name} immune to ${sp.element}`, kind: m.kind });
     else if (m.resist <= 0.5) out.push({ level: m.resist <= 0.25 ? 2 : 1, text: `${name} ${m.count > 1 ? 'resist' : 'resists'} ${sp.element}`, kind: m.kind });
     else if (m.ratio < 0.5) out.push({ level: m.ratio < 0.25 ? 2 : 1, text: `${name}: armor eats ${Math.round((1 - m.ratio) * 100)}%`, kind: m.kind });

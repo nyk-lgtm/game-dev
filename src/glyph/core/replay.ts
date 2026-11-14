@@ -15,7 +15,7 @@
 import { buy, empower, move, newGame, reroll, sell, startBattle, tick, toggleFreeze } from './state';
 import type { GameState, Slot } from './types';
 
-export const RULES_VERSION = 4;
+export const RULES_VERSION = 5;
 
 export type Action =
   | { t: 'buy'; i: number; to?: Slot; keep?: boolean }

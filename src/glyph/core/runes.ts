@@ -31,6 +31,8 @@ export const MOD = {
   splitGain: (t: number) => 1.35 ** t,
   /** How much wider a Split makes a Nova's blast, per extra count (Novas don't share their damage out). */
   novaWiden: 0.35,
+  /** Share of a Nova's damage that reaches flyers inside its ring (rules v5; 0 = they fly over it). */
+  novaAir: 0.5,
   heavyDmg: (t: number) => 1.5 + 0.3 * (t - 1),
   heavyCd: 1.3,
   pierceThrough: (t: number) => t,
@@ -47,7 +49,7 @@ const pct = (x: number) => Math.round(x * 100);
 const BASE: Record<CasterId, Omit<Spell, 'caster' | 'echoes'>> = {
   bolt: { element: 'arcane', dmg: 15, count: 1, pierce: 1, shred: 0, chain: 0, slow: 0, burn: 0, area: 0.04, cooldown: 1.0, leech: 0, gild: 0 },
   beam: { element: 'arcane', dmg: 17, count: 1, pierce: 99, shred: 0, chain: 0, slow: 0, burn: 0, area: 0.045, cooldown: 2.2, leech: 0, gild: 0 },
-  nova: { element: 'arcane', dmg: 30, count: 1, pierce: 99, shred: 0, chain: 0, slow: 0, burn: 0, area: 0.34, cooldown: 1.8, leech: 0, gild: 0 },
+  nova: { element: 'arcane', dmg: 30, count: 1, pierce: 99, shred: 0, chain: 0, slow: 0, burn: 0, area: 0.4, cooldown: 1.8, leech: 0, gild: 0 },
   rain: { element: 'arcane', dmg: 11, count: 3, pierce: 1, shred: 0, chain: 0, slow: 0, burn: 0, area: 0.07, cooldown: 2.2, leech: 0, gild: 0 },
   orb: { element: 'arcane', dmg: 14, count: 1, pierce: 5, shred: 0, chain: 0, slow: 0, burn: 0, area: 0.05, cooldown: 2.2, leech: 0, gild: 0 },
 };
@@ -69,7 +71,7 @@ const mod = (id: ModId, name: string, hue: number, text: (t: number) => string, 
 export const RUNES: Record<RuneId, RuneDef> = {
   bolt: caster('bolt', 'Bolt', 200, (d, cd) => `Fires a bolt at the nearest foe (${d} dmg, every ${cd}s).`),
   beam: caster('beam', 'Beam', 50, (d, cd) => `A beam pierces a whole column (${d} dmg, every ${cd}s).`),
-  nova: caster('nova', 'Nova', 280, (d, cd) => `Blasts every walker near the tower (${d} dmg, every ${cd}s); waits for foes in reach.`),
+  nova: caster('nova', 'Nova', 280, (d, cd) => `Blasts every foe near the tower (${d} dmg, every ${cd}s; flyers take ${Math.round(MOD.novaAir * 100)}%); waits for foes in reach.`),
   rain: caster('rain', 'Rain', 160, (d, cd) => `${BASE.rain.count} strikes on random foes (${d} dmg, small splash, every ${cd}s).`),
   orb: caster('orb', 'Orb', 320, (d, cd) => `A slow homing orb passing through ${BASE.orb.pierce} foes (${d} dmg, every ${cd}s).`),
   fire: mod('fire', 'Fire', 15, (t) => `+${pct(MOD.fireDmg - 1)}% damage, then burns for ${pct(MOD.fireBurn(t))}% of the hit per second for 3s. Element: fire.`, (t) => `burn ${pct(MOD.fireBurn(t))}%/s`),

@@ -42,11 +42,12 @@ describe('waveFoes', () => {
 });
 
 describe('matchups and warnings', () => {
-  it('novas cannot reach flyers', () => {
+  it('novas only half reach flyers (rules v5)', () => {
     const m = matchups(row('nova'), [foe('wisp', 3), foe('imp', 3)]);
-    expect(m[0]).toMatchObject({ kind: 'wisp', canHit: false, perHit: 0 });
+    expect(m[0]).toMatchObject({ kind: 'wisp', canHit: true });
+    expect(m[0].perHit).toBeCloseTo(row('nova').dmg * MOD.novaAir * 0.7);
     expect(m[1].canHit).toBe(true);
-    expect(warnings(row('nova'), [foe('wisp', 3), foe('imp', 3)])[0]).toMatchObject({ level: 2, kind: 'wisp' });
+    expect(warnings(row('nova'), [foe('wisp', 3), foe('imp', 3)])[0]).toMatchObject({ level: 1, kind: 'wisp' });
   });
 
   it('flags immunity, resistance and heavy armor, worst first', () => {
