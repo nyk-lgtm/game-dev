@@ -19,9 +19,6 @@ export interface Choice {
   need?: CompId;
   /** A gamble: chance of fx/out, else `lose`. */
   odds?: number;
-  /** A riddle answer: shows both outcomes; `right` says which one it gets. */
-  riddle?: boolean;
-  right?: boolean;
   lose?: Outcome;
   /** This companion in the band adds to the odds. */
   boost?: [CompId, number];
@@ -61,6 +58,8 @@ export interface Card {
   must?: boolean;
   /** May come up again in the same run (at another stop). */
   repeat?: boolean;
+  /** Deal weight multiplier (default 1). */
+  w?: number;
   choices: Choice[];
 }
 
@@ -83,16 +82,6 @@ const gam = (t: string, odds: number, win: string, winOut: string, lose: string,
   odds,
   lose: { fx: F(lose), out: loseOut },
   ...x,
-});
-
-/** A riddle answer: both outcomes shown, only the wit decides. */
-const riddle = (t: string, right: boolean, win: string, winOut: string, lose: string, loseOut: string): Choice => ({
-  t,
-  fx: F(win),
-  out: winOut,
-  riddle: true,
-  right,
-  lose: { fx: F(lose), out: loseOut },
 });
 
 const L: [number, number] = [0, 3];
@@ -244,8 +233,9 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'rain', title: 'Rain on the Downs', art: '🌧️🧥', sky: 'storm', at: L, where: ['road', 'river', 'town'], must: true,
+    id: 'rain', title: 'Rain on the Downs', art: '🌧️🧥', sky: 'storm', at: L, where: ['road', 'river', 'town'], must: true, w: 0.45,
     text: `Rain comes sideways off the downs and finds every gap in every coat.`,
+    alts: [{ title: 'Hail on the Downs', text: `Hail the size of peas comes bouncing down the lane, and the mule takes it personally.`, art: '🌨️🫏' }],
     choices: [
       ch('Push on through', 'h-2', 'Wet to the bone, but on time.'),
       ch('Light a fire in a barn', 'o-1 f-1', 'You lose the afternoon, and dry out by the evening.'),
@@ -447,7 +437,7 @@ export const CARDS: Card[] = [
   },
   {
     id: 'weather', title: 'The Weatherwise Shepherd', art: '👴🌨️', sky: 'dusk', at: [5, 7], where: ['wild', 'town', 'shrine', 'river', 'inn'],
-    text: `An old shepherd squints up at the Teeth. “Blizzard up there inside the week. Keep bread and oil by, or the legs to push through it.”`,
+    text: `An old shepherd squints up at the Teeth. “Might be a blizzard up there this week, might not. Keep bread and oil by, or the legs to push through one.”`,
     choices: [
       ch('Buy his spare oil', 'c-2 o+2', 'A stoppered jug that smells of sheep.'),
       ch('Ask where to shelter', 't+1', 'He marks the huts on your map with a burnt stick.'),
@@ -456,12 +446,12 @@ export const CARDS: Card[] = [
   },
   {
     id: 'hermit', title: 'The Hermit’s Riddle', art: '🧙❓', sky: 'dusk', at: U, where: ['shrine', 'wild'],
-    text: `A hermit offers a blessing for his riddle: “The more of me you take, the more you leave behind.” He looks hard at your muddy boots.`,
+    text: `A hermit offers a blessing for an answer: “What do you carry that grows heavier the further you go?” Any honest answer will do, he says.`,
     choices: [
-      riddle('“Footsteps.”', true, 'h+2 t+1', 'He beams, and blesses every boot in turn.', 't-1', ''),
-      riddle('“Bread.”', false, 'h+2 t+1', '', 't-1', 'He laughs until he coughs. The band giggles all afternoon.'),
+      ch('“The post sack.”', 'o+2', '“A practical soul.” He fills your lamps from his own jar.'),
+      ch('“The worry of the ones who wait.”', 't+2', 'He nods slowly, and blesses each of you by name.'),
       ch('Give him bread for the blessing', 'f-1 h+2', 'He blesses the bread, too, before he eats it.'),
-      ch('Fen asks him for a song instead', 't+2', 'The hermit has a lovely voice. Who knew.', { need: 'fen' }),
+      ch('Fen asks him for a song instead', 'h+1 t+1', 'The hermit has a lovely voice. Who knew.', { need: 'fen' }),
     ],
   },
   {

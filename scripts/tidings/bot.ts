@@ -25,7 +25,7 @@ export function legal(r: Run): string[] {
 }
 
 const clone = (r: Run): Run => {
-  const c = { ...r, res: { ...r.res }, band: r.band.map((b) => ({ ...b })), met: [...r.met], parted: [...r.parted], flags: { ...r.flags }, promises: { ...r.promises }, used: [...r.used], hand: r.hand.map((h) => ({ ...h })), path: [...r.path], legs: [...r.legs], log: [...r.log], actions: [...r.actions] };
+  const c = { ...r, res: { ...r.res }, band: r.band.map((b) => ({ ...b })), met: [...r.met], parted: [...r.parted], buys: [...r.buys], flags: { ...r.flags }, promises: { ...r.promises }, used: [...r.used], hand: r.hand.map((h) => ({ ...h })), path: [...r.path], legs: [...r.legs], log: [...r.log], actions: [...r.actions] };
   return c;
 };
 

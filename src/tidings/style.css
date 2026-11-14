@@ -168,6 +168,9 @@ small { color: var(--muted); }
 #dock .need span { color: var(--text); font-weight: 700; white-space: nowrap; }
 #dock .need span.short { color: #ff9c86; }
 #dock .need small { font-size: 11px; }
+.ending .also { margin: 8px 0; padding: 8px 10px; border: 1px solid #8a6a3a; border-radius: 10px; background: rgba(233, 180, 90, 0.08); text-align: left; }
+.ending .also b { display: block; font-size: 14px; }
+.ending .also small { display: block; font-size: 12.5px; line-height: 1.35; color: var(--muted); margin-top: 2px; }
 #dock .buy {
   display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: 44px; margin-top: 8px;
   border-radius: 10px; border: 1px solid #8a6a3a; background: var(--panel2); color: var(--text); font-size: 14px; font-weight: 700;

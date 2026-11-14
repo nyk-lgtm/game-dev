@@ -1,7 +1,7 @@
 // Tidings: shared types, tunable numbers, the band you can recruit, places and endings.
 // Pure data; no DOM, no Math.random, no Date.
 
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 
 /** Food, oil, coin, health, trust. Coin can run dry; the other four end the journey at 0. */
 export type Res = 'f' | 'o' | 'c' | 'h' | 't';
@@ -36,7 +36,7 @@ export const TUNE = {
   /** Each `bandAt` companions make the band eat `bandFood` more food a leg. */
   bandFood: 1,
   bandAt: 3,
-  /** Provisions at a village or inn, once a stop: coin for food, `buyRise` dearer each time. */
+  /** Provisions at a village or inn, once a stop: coin for food, `buyRise` dearer each time in the same region. */
   buyCost: 2,
   buyRise: 1,
   buyFood: 2,
@@ -52,6 +52,8 @@ export const TUNE = {
   wet: 1,
   /** Deal weight of a companion's recruit card (dealt anywhere in stops 0-6). */
   recruitW: 1.5,
+  /** Deal weight of a card whose ✦ choices can no longer be remembered before Hollin. */
+  lateSetW: 0.3,
   /** Most companions at once. */
   bandMax: 3,
   /** Cards dealt at each stop, and how many of them you face. */
@@ -139,7 +141,7 @@ export const ENDINGS: Ending[] = [
   { id: 'dark', kind: 'fail', title: 'The Lamps Go Out', icon: '🪔', text: 'The last wick gutters. In the dark you can only sit together and wait for a dawn that takes its time.', hint: 'Run out of oil.' },
   { id: 'hurt', kind: 'fail', title: 'Carried Down', icon: '❤️', text: 'You can’t stand. The band carries you back down the road on the mule, which complains the whole way.', hint: 'Run out of health.' },
   { id: 'scatter', kind: 'fail', title: 'The Band Turns Back', icon: '🤝', text: 'One by one they stop believing you, and one morning the camp is empty except for the mule and the post.', hint: 'Run out of trust.' },
-  { id: 'wedding', kind: 'arrive', title: 'The Winter Wedding', icon: '💍', text: 'You came for the post and stayed for a wedding. The whole band dances, and the mule wears a ribbon.', hint: 'Carry a ring all the way to Hollin.' },
+  { id: 'wedding', kind: 'arrive', title: 'The Winter Wedding', icon: '💍', text: 'You came for the post and stayed for a wedding. The whole band dances, and the mule wears a ribbon.', hint: 'Carry a ring all the way to Hollin (it comes as well as another ending).' },
   { id: 'full', kind: 'arrive', title: 'A Full Table', icon: '🍲', text: 'Every one of you squeezes round the postmaster’s table. There aren’t enough chairs, and nobody cares.', hint: 'Reach Hollin with three companions.' },
   { id: 'beloved', kind: 'arrive', title: 'Followed Anywhere', icon: '🔥', text: 'Your band would walk the Teeth again tomorrow if you asked. Please don’t ask.', hint: 'Reach Hollin with trust of 9 or more.' },
   { id: 'rich', kind: 'arrive', title: 'Silver in the Snow', icon: '🪙', text: 'You arrive with a purse heavier than the post sack. The valley eyes you with interest.', hint: 'Reach Hollin with 14 coin or more.' },

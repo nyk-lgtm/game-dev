@@ -11,12 +11,12 @@ document.getElementById('menuBtn')!.onclick = () => game.showMenu();
 
 // ?seed=123&a=... replays a journey (for bug reports).
 const p = new URLSearchParams(location.search);
-const saved = store.load<{ v: number; seed: number; a: string } | null>('run', null);
+const saved = store.load<{ v: number; seed: number; a: string; t?: number } | null>('run', null);
 if (p.has('seed') && Number.isFinite(Number(p.get('seed')))) {
-  game.start(Number(p.get('seed')), (p.get('a') ?? '').split(',').filter(Boolean));
+  game.start(Number(p.get('seed')), (p.get('a') ?? '').split(',').filter(Boolean), null, 0);
   history.replaceState(null, '', location.pathname);
 } else if (wantsDaily()) game.playDaily();
-else if (saved && saved.v === RULES_VERSION) game.start(saved.seed, saved.a ? saved.a.split(',') : []);
+else if (saved && saved.v === RULES_VERSION) game.start(saved.seed, saved.a ? saved.a.split(',') : [], null, saved.t ?? 0);
 else {
   game.start(randomSeed());
   if (saved && saved.a) setTimeout(() => toast('Tidings was updated, so a new journey started'), 600);

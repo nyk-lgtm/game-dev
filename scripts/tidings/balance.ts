@@ -45,6 +45,7 @@ for (const name of names) {
     const r = playRun(newRun(seed0 + k), pol);
     const e = r.end!;
     endings[e.ending] = (endings[e.ending] ?? 0) + 1;
+    for (const x of e.also ?? []) endings[`+${x}`] = (endings[`+${x}`] ?? 0) + 1;
     for (const l of r.log) {
       if (CARD[l.id].choices[l.pick].odds !== undefined) (gambles++, l.won && gambleWins++);
       if (CARD[l.id].cb) cbs++;

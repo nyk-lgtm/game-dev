@@ -67,6 +67,8 @@ export interface End {
   score: number;
   stars: number;
   kept: string[];
+  /** Endings earned alongside the main one (the wedding, when the ring was kept). */
+  also?: string[];
 }
 export interface Run {
   seed: number;
@@ -87,9 +89,9 @@ export interface Run {
   used: string[];
   hand: HandCard[];
   faced: number;
-  /** The stop provisions were last bought at (-1: never), and how many times. */
+  /** The stop provisions were last bought at (-1: never), and every stop they were bought at. */
   bought: number;
-  buys: number;
+  buys: number[];
   phase: 'cards' | 'road' | 'over';
   /** The leg costs paid on arriving at each stop. */
   legs: Fx[];
@@ -169,8 +171,11 @@ function deal(r: Run): void {
     take(c);
   }
   const rest = ok.filter((c) => !c.cb);
-  // Recruits go anywhere but weigh less, so each is offered about as often as the others.
-  const weight = (c: Card) => (c.repeat ? 1 : recruitOf(c) ? TUNE.recruitW : c.where ? 4 : 2) * (c.must ? 0.7 : 1);
+  // Recruits go anywhere but weigh less, so each is offered about as often as the others. A card whose ✦ choices
+  // could no longer be remembered (too late in the road) comes up less.
+  const late = (c: Card) => c.choices.some((ch) => ch.set) && c.choices.every((ch) => !ch.set || !recallable(r, ch.set));
+  const weight = (c: Card) =>
+    (c.repeat ? 1 : recruitOf(c) ? TUNE.recruitW : c.where ? 4 : 2) * (c.must ? 0.7 : 1) * (c.w ?? 1) * (late(c) ? TUNE.lateSetW : 1);
   while (hand.length < TUNE.hand) {
     const pool = rest.filter((c) => !hand.includes(c) && !(c.must && musts));
     if (!pool.length) break;
@@ -286,16 +291,23 @@ export function routeNeed(r: Run, k: number): Record<'f' | 'o' | 'h' | 't', numb
   return need;
 }
 
-/** What taking road k leaves you short of for the rest of the way to Hollin (oil, health, trust; the cards
- *  rarely refill them much), at the least it could cost. Food is shown as a total instead: it always runs short early. */
-export function shortOf(r: Run, k: number): ('o' | 'h' | 't')[] {
-  if (r.stop + 1 >= LAST) return [];
+/** How much more of each lethal resource you must find to reach Hollin after taking road k, on the cheapest
+ *  roads (0 ends the journey, so you must arrive with at least 1): need − have + 1 where that is positive. */
+export function shortBy(r: Run, k: number): Partial<Record<'f' | 'o' | 'h' | 't', number>> {
+  const out: Partial<Record<'f' | 'o' | 'h' | 't', number>> = {};
+  if (r.stop + 1 >= LAST) return out;
   const need = routeNeed(r, k);
-  return (['o', 'h', 't'] as const).filter((x) => need[x] > 0 && need[x] >= r.res[x]);
+  for (const x of ['f', 'o', 'h', 't'] as const) if (need[x] > 0 && need[x] >= r.res[x]) out[x] = need[x] - r.res[x] + 1;
+  return out;
 }
+export const shortOf = (r: Run, k: number): ('f' | 'o' | 'h' | 't')[] => Object.keys(shortBy(r, k)) as ('f' | 'o' | 'h' | 't')[];
 
-/** What provisions cost now: dearer each time you buy (word gets round). */
-export const buyPrice = (r: Run): number => TUNE.buyCost + TUNE.buyRise * r.buys;
+/** Could a choice that sets this flag still be remembered before Hollin (some callback can still come)? */
+export const recallable = (r: Run, flag: string): boolean =>
+  CARDS.some((c) => c.when?.flag === flag && r.stop + (c.when.gap ?? 2) <= c.at[1]);
+
+/** What provisions cost now: dearer each time you buy in this region (word gets round), fresh prices in the next. */
+export const buyPrice = (r: Run): number => TUNE.buyCost + TUNE.buyRise * r.buys.filter((s) => regionOf(s) === regionOf(r.stop)).length;
 
 /** Provisions on sale here (a village or inn, once a stop). */
 export const canBuy = (r: Run): boolean =>
@@ -334,9 +346,8 @@ function arrive(r: Run): void {
   }
   const score = scoreOf(r);
   const low = Math.min(...LETHAL.map((k) => r.res[k]));
-  const ending = kept.includes('ring')
-    ? 'wedding'
-    : low <= 1
+  // The ring's wedding comes as well as whatever else the journey earned, never instead of it.
+  const ending = low <= 1
       ? 'thin'
       : r.band.length >= TUNE.bandMax
         ? 'full'
@@ -348,7 +359,7 @@ function arrive(r: Run): void {
               ? 'alone'
               : 'plain';
   r.phase = 'over';
-  r.end = { ending, score, stars: starsOf(score), kept };
+  r.end = { ending, score, stars: starsOf(score), kept, also: kept.includes('ring') ? ['wedding'] : [] };
 }
 
 export const arrived = (r: Run): boolean => r.phase === 'over' && ENDING[r.end!.ending].kind === 'arrive';
@@ -371,7 +382,7 @@ export function newRun(seed: number): Run {
     hand: [],
     faced: 0,
     bought: -1,
-    buys: 0,
+    buys: [],
     phase: 'cards',
     legs: [{}],
     log: [],
@@ -425,10 +436,7 @@ export function act(r: Run, a: string, force?: boolean): boolean {
     const ch = card.choices[k];
     let fx = ch.fx;
     let won: boolean | undefined;
-    if (ch.riddle) {
-      won = !!ch.right;
-      if (!won) fx = ch.lose!.fx;
-    } else if (ch.odds !== undefined) {
+    if (ch.odds !== undefined) {
       hc.p = oddsOf(r, ch);
       won = force ?? rngFor(r.seed, T_GAMBLE, r.stop, CARD_INDEX[card.id]).next() < hc.p;
       if (!won) fx = ch.lose!.fx;
@@ -459,7 +467,7 @@ export function act(r: Run, a: string, force?: boolean): boolean {
   if (a === 'B') {
     apply(r, { c: -buyPrice(r), f: TUNE.buyFood });
     r.bought = r.stop;
-    r.buys++;
+    r.buys.push(r.stop);
     return true;
   }
   if (a[0] === 'L') {

@@ -62,8 +62,13 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         journal filed by type with ending hints, the Hermit's riddle is a real answer with a clue, Camp/Brothers text fixed,
         ⛪/🏰 for the shrine/fort. Bots: careful ~74%, casual ~21% (the ~50-point gap resisted every knob; careful's deaths
         are now oil > food). Learned: provisions are worth ~+15 to every policy; the careful bot plans B/L inside a stop.
-  - [ ] Next: second blind playtest. Watch: does oil in the Teeth now feel fair with the warnings? Is careful-level play
-        too safe (74%)? `startC:3` gives 67/16 if it needs tightening. Do players use parting at all?
+  - [x] Second blind playtest (v2: fair, winnable, warm writing). Fixes (rules v3): finished runs record once (main and
+        daily no longer re-count each other: per-journey keys), road warnings include food and read "find N more" (arrive
+        with ≥ 1), provisions' rise resets each region, the Hermit takes either of two honest answers with different
+        rewards, the wedding comes alongside the earned ending, late ✦ cards deal at ×0.3 and drop the ✦ tag when nothing
+        can follow, Rain on the Downs ×0.45 plus a Hail telling (29% → 15% of runs), blizzard hints say "may"/"risk".
+        Bots: careful ~79%, casual ~24% (`startC:3` → 73/18 if it should be harder).
+  - [ ] Next: third blind playtest if wanted. Watch: oil deaths on the Teeth, whether parting is used, endings variety.
 - [ ] **Trestle** (original physics builder: planks, twigs and twine on a peg grid; carry the beetle's cart over a gap or
   hold a lantern at a ring; stars for matching the surveyor bot's cost and part count). Milestones:
   - [x] Core (src/trestle/core, rules v1): XPBD sim at 480 Hz (rigid members, one-sided twine, smoothed forces snap past

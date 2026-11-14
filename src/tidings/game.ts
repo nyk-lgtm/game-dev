@@ -38,8 +38,8 @@ import {
   recruitOf,
   regionOf,
   replay,
-  routeNeed,
-  shortOf,
+  recallable,
+  shortBy,
   telling,
   type Card,
   type Choice,
@@ -130,10 +130,15 @@ export class Game {
 
   // ---------------------------------------------------------------- runs
 
-  start(seed: number, actions: string[] = [], daily: string | null = null): void {
+  /** When this journey began (ms; 0 for a replayed link): with the mode and actions it names the journey, so a
+   *  finished one is recorded in the journal exactly once, however often its end card is shown. */
+  private began = 0;
+
+  start(seed: number, actions: string[] = [], daily: string | null = null, began = Date.now()): void {
     closeOverlay();
     this.closeFocus(true);
     this.daily = daily;
+    this.began = began;
     this.r = replay(seed, actions);
     this.save();
     this.learn();
@@ -148,14 +153,14 @@ export class Game {
 
   playDaily(): void {
     const day = todayKey();
-    const saved = store.load<{ v: number; seed: number; a: string; day: string } | null>('dailyRun', null);
+    const saved = store.load<{ v: number; seed: number; a: string; day: string; t?: number } | null>('dailyRun', null);
     const seed = dailySeed('tidings', day);
-    if (saved && saved.v === RULES_VERSION && saved.day === day && saved.seed === seed) this.start(seed, saved.a ? saved.a.split(',') : [], day);
+    if (saved && saved.v === RULES_VERSION && saved.day === day && saved.seed === seed) this.start(seed, saved.a ? saved.a.split(',') : [], day, saved.t ?? 0);
     else this.start(seed, [], day);
   }
 
   private save(): void {
-    const data = { v: RULES_VERSION, seed: this.r.seed, a: this.r.actions.join(',') };
+    const data = { v: RULES_VERSION, seed: this.r.seed, a: this.r.actions.join(','), t: this.began };
     if (this.daily) store.save('dailyRun', { ...data, day: this.daily });
     else store.save('run', data);
   }
@@ -208,7 +213,7 @@ export class Game {
     }
     s += '</svg>';
     // The Teeth: blizzards blow there (the route card says what they cost).
-    let nodes = `<span class="snowtag" style="left:${((x(7.5) / W) * 100).toFixed(2)}%">❄ blizzards</span>`;
+    let nodes = `<span class="snowtag" style="left:${((x(7.5) / W) * 100).toFixed(2)}%">❄ blizzard risk</span>`;
     r.map.forEach((col, row) =>
       col.forEach((n, k) => {
         const taken = row <= r.stop && r.path[row] === k;
@@ -257,7 +262,7 @@ export class Game {
           .join('');
         const rec = recruitOf(c);
         const body = hc.done
-          ? `<div class="did"><span class="ok">✓</span> ${esc(c.choices[hc.pick!].t)}${hc.won === undefined ? '' : c.choices[hc.pick!].riddle ? (hc.won ? ' · right' : ' · wrong') : hc.won ? ' · 🎲 came off' : ' · 🎲 no luck'}</div><div class="got">${chips(hc.got ?? {}) || '<span class="fx none">no change</span>'}</div>`
+          ? `<div class="did"><span class="ok">✓</span> ${esc(c.choices[hc.pick!].t)}${hc.won === undefined ? '' : hc.won ? ' · 🎲 came off' : ' · 🎲 no luck'}</div><div class="got">${chips(hc.got ?? {}) || '<span class="fx none">no change</span>'}</div>`
           : passed
             ? `<div class="did passed">Passed by</div>`
             : `<div class="ex">${esc(t.text)}</div><div class="tags">${tags}<span class="meta">${plural(c.choices.length, 'choice')}</span>${rec ? `<span class="meta">${COMPANIONS[rec].icon} recruit</span>` : ''}${gated ? `<span class="meta">${gated}</span>` : ''}</div>`;
@@ -291,28 +296,30 @@ export class Game {
         const fx = legCost(r, k);
         const dead = emptied(r, fx);
         const icon = r.stop + 1 >= LAST ? '🏡' : KIND_INFO[n.kind].icon;
-        const short = dead.length ? [] : shortOf(r, k);
+        const by = dead.length ? {} : shortBy(r, k);
+        const short = (['f', 'o', 'h', 't'] as const).filter((x) => by[x]);
         return `<button class="road" data-road="${k}"><span class="ri">${icon}</span><span class="rn">${esc(n.name)}</span><span class="rk">${r.stop + 1 >= LAST ? 'journey’s end' : KIND_INFO[n.kind].word}</span><span class="rc">${legChips(fx)}</span>${
           dead.length
             ? `<span class="warn">☠ out of ${dead.map((k2) => RES_INFO[k2].short).join(' and ')}</span>`
             : short.length
-              ? `<span class="warn soft">⚠ short of ${short.map((k2) => RES_INFO[k2].icon).join(' ')} to reach Hollin</span>`
+              ? `<span class="warn soft">⚠ find ${short.map((k2) => `${by[k2]} more ${RES_INFO[k2].icon}`).join(', ')} to reach Hollin</span>`
               : ''
         }</button>`;
       })
       .join('')}</div>${this.needLine()}${this.buyButton()}`;
   }
 
-  /** "To Hollin, at the least: …": the cheapest the rest of the road could cost, beside what you carry. */
+  /** "To reach Hollin you need 3 more 🍞": what the cheapest rest of the road still asks for beyond what you carry
+   *  (you must arrive with at least 1, since 0 ends the journey). */
   private needLine(): string {
     const r = this.r;
     if (r.stop + 1 >= LAST) return '';
     const ks = r.map[r.stop + 1].map((_, k) => k);
-    const need = (['f', 'o', 'h', 't'] as const).map((x) => [x, Math.min(...ks.map((k) => routeNeed(r, k)[x]))] as const).filter(([, v]) => v > 0);
-    if (!need.length) return '';
-    return `<div class="need">To Hollin, at the least: ${need
-      .map(([x, v]) => `<span class="${v >= r.res[x] ? 'short' : ''}">${v}&#8202;${RES_INFO[x].icon}</span>`)
-      .join(' ')} <small>(you carry ${need.map(([x]) => `${r.res[x]}&#8202;${RES_INFO[x].icon}`).join(' ')}; cards can refill them)</small></div>`;
+    const more = (['f', 'o', 'h', 't'] as const).map((x) => [x, Math.min(...ks.map((k) => shortBy(r, k)[x] ?? 0))] as const).filter(([, v]) => v > 0);
+    if (!more.length) return `<div class="need">You carry enough to reach Hollin on the cheapest roads.</div>`;
+    return `<div class="need">To reach Hollin on the cheapest roads, find ${more
+      .map(([x, v]) => `<span class="short">${v} more&#8202;${RES_INFO[x].icon}</span>`)
+      .join(' and ')} <small>(0 ends the journey, so arrive with at least 1; cards and provisions refill)</small></div>`;
   }
 
   /** The provisions stall at a village or inn: coin for food, once a stop. */
@@ -323,7 +330,7 @@ export class Game {
     const poor = r.res.c < price;
     const full = r.res.f >= TUNE.capF;
     return `<button class="buy" data-buy="1" ${poor || full ? 'disabled' : ''}>🧺 Buy provisions: ${price}&#8202;🪙 → +${TUNE.buyFood}&#8202;🍞${
-      poor ? '<small>not enough coin</small>' : full ? '<small>packs full</small>' : `<small>once here${TUNE.buyRise ? `; ${TUNE.buyRise} 🪙 dearer each time you buy` : ''}</small>`
+      poor ? '<small>not enough coin</small>' : full ? '<small>packs full</small>' : `<small>once here${TUNE.buyRise ? `; ${TUNE.buyRise} 🪙 dearer each time in ${REGION_NAME[regionOf(r.stop)].replace(/^The /, 'the ')}` : ''}</small>`
     }</button>`;
   }
 
@@ -398,11 +405,7 @@ export class Game {
     const bits: string[] = [];
     if (ch.need) bits.push(`<span class="tag comp">${COMPANIONS[ch.need].icon} ${COMPANIONS[ch.need].name}</span>`);
     let main = '';
-    if (ch.riddle) {
-      main = `<div class="odds"><span class="dice">❓ An answer</span><span><b>Right</b> ${chips(ch.fx, r)}</span><span><b>Wrong</b> ${chips(ch.lose!.fx, r)}</span></div>`;
-      const dl = emptied(r, ch.lose!.fx);
-      if (dl.length) bits.push(`<span class="tag bad">☠ if wrong: out of ${RES_INFO[dl[0]].short}</span>`);
-    } else if (ch.odds !== undefined) {
+    if (ch.odds !== undefined) {
       const p = oddsOf(r, ch);
       const pc = Math.round(p * 100);
       const boosted = ch.boost && p > ch.odds;
@@ -425,7 +428,7 @@ export class Game {
     }
     if (ch.promise) bits.push(`<span class="tag prom">${PROMISES[ch.promise].icon} A promise: +${TUNE.promisePts} at Hollin if kept</span>`);
     if (ch.breaks && r.promises[ch.breaks] === 'carry') bits.push(`<span class="tag bad">${PROMISES[ch.breaks].icon} ${ch.odds !== undefined ? 'If it fails, the promise is broken' : 'Breaks your promise'}</span>`);
-    if (ch.set) bits.push(`<span class="tag later">✦ may be remembered</span>`);
+    if (ch.set && recallable(r, ch.set)) bits.push(`<span class="tag later">✦ may be remembered</span>`);
     if (!main && !bits.length) main = '<span class="fx none">no change</span>';
     return `<button class="choice" data-choice="${k}" ${block || locked ? 'disabled' : ''}><span class="ct">${esc(ch.t)}</span><span class="cfx">${main}</span>${
       bits.length ? `<span class="cbits">${bits.join('')}</span>` : ''
@@ -441,9 +444,7 @@ export class Game {
     const roll =
       hc.won === undefined
         ? ''
-        : ch.riddle
-          ? `<div class="roll ${hc.won ? 'won' : 'lost'}">${hc.won ? '✓ The right answer' : '✗ Not the answer'}</div>`
-          : `<div class="roll ${hc.won ? 'won' : 'lost'}">🎲 ${Math.round((hc.won ? hc.p ?? 0 : 1 - (hc.p ?? 0)) * 100)}% — ${hc.won ? 'it came off' : 'not this time'}</div>`;
+        : `<div class="roll ${hc.won ? 'won' : 'lost'}">🎲 ${Math.round((hc.won ? hc.p ?? 0 : 1 - (hc.p ?? 0)) * 100)}% — ${hc.won ? 'it came off' : 'not this time'}</div>`;
     const over = r.phase === 'over' && this.focusH === h;
     return `<div class="big"><div class="face back${fresh ? ' flip' : ''}">
       <div class="art small">${cardArt(c.id, t.art, c.sky, regionOf(r.stop), true)}</div>
@@ -549,11 +550,14 @@ export class Game {
     const e = r.end!;
     const end = ENDING[e.ending];
     const arrivedHome = end.kind === 'arrive';
-    const key = `${r.seed}:${r.actions.join(',')}`;
+    // One key per journey (main and daily apart); the last few recorded are kept, so switching between the main
+    // run and the daily never records either twice.
+    const key = `${this.daily ? `d${this.daily}` : 'r'}:${r.seed}:${this.began}:${r.actions.join(',')}`;
+    const done = store.load<string[]>('recordedRuns', []);
     let newEnding = false;
-    if (this.recorded !== key && store.load('lastRecorded', '') !== key) {
+    if (this.recorded !== key && !done.includes(key)) {
       this.recorded = key;
-      store.save('lastRecorded', key);
+      store.save('recordedRuns', [...done, key].slice(-40));
       const p = loadProfile();
       p.runs++;
       if (arrivedHome) {
@@ -561,9 +565,11 @@ export class Game {
         p.best = Math.max(p.best, e.score);
         p.bestStars = Math.max(p.bestStars, e.stars);
       }
-      if (!p.endings.includes(e.ending)) {
-        p.endings.push(e.ending);
-        newEnding = true;
+      for (const id of [e.ending, ...(e.also ?? [])]) {
+        if (!p.endings.includes(id)) {
+          p.endings.push(id);
+          newEnding = true;
+        }
       }
       store.save('profile', p);
       if (this.daily) recordDaily(store, arrivedHome ? 100 + e.score : r.stop, arrivedHome ? `${stars(e.stars)} ${e.score}` : `stop ${r.stop} of ${LAST}`, this.daily);
@@ -584,11 +590,13 @@ export class Game {
           <tr class="sum"><td>Score</td><td>${e.score}</td></tr></table>
         <p class="meta2">Stars at ${STARS[1]} and ${STARS[2]}${nextStar ? ` · ${nextStar - e.score} more for the next` : ''}</p>${kept}
         ${r.band.length ? `<p class="meta2">With you: ${r.band.map((b) => `${COMPANIONS[b.id].icon} ${COMPANIONS[b.id].name}`).join(', ')}</p>` : ''}`;
+      // Endings earned as well as the main one (the wedding).
+      body = (e.also ?? []).map((id) => `<div class="also"><b>${ENDING[id].icon} And: ${ENDING[id].title}</b><small>${ENDING[id].text}</small></div>`).join('') + body;
     } else {
       body = `<p class="meta2">Out of ${RES_INFO[e.cause!].short} at ${esc(nodeOf(r).name)}, ${stopLabel(r.stop).toLowerCase()}.</p>`;
     }
     const recap = r.log
-      .map((l) => `<li><span>${l.stop}</span> ${esc(telling(l).title)}: <i>${esc(CARD[l.id].choices[l.pick].t)}</i>${l.won === undefined ? '' : CARD[l.id].choices[l.pick].riddle ? (l.won ? ' ✓' : ' ✗') : l.won ? ' 🎲✓' : ' 🎲✗'}</li>`)
+      .map((l) => `<li><span>${l.stop}</span> ${esc(telling(l).title)}: <i>${esc(CARD[l.id].choices[l.pick].t)}</i>${l.won === undefined ? '' : l.won ? ' 🎲✓' : ' 🎲✗'}</li>`)
       .join('');
     showCard(
       `<div class="ending ${end.kind}"><div class="eicon">${end.icon}</div><h2>${end.title}${newEnding ? '<span class="new">New ending</span>' : ''}</h2>
@@ -686,7 +694,7 @@ export class Game {
     const plain = (fx: Fx) => RES.filter((k) => fx[k]).map((k) => `${fx[k]! > 0 ? '+' : '−'}${Math.abs(fx[k]!)} ${RES_INFO[k].icon}`).join(' ');
     const free = b.choices.filter((ch) => !ch.need).map((ch) => `${ch.t.toLowerCase()} (${plain(ch.fx)})`);
     const helpers = [...new Set(b.choices.filter((ch) => ch.need).map((ch) => COMPANIONS[ch.need!].name))];
-    return `A blizzard often catches travellers on the Teeth (stops ${b.at[0]}-${b.at[1]}), and it can’t be passed by: ${free.join(' or ')}${
+    return `A blizzard may catch you on the Teeth (stops ${b.at[0]}-${b.at[1]}; about half of crossings). If it does, it can’t be passed by: ${free.join(' or ')}${
       helpers.length ? `, or let ${helpers.join(' or ')} help` : ''
     }. Keep enough by.`;
   }
@@ -776,7 +784,7 @@ export class Game {
          <li>Then pick the road. Each leg costs food, and some cost oil, health or trust; the strip at the top shows the whole route.</li>
          <li>If food, oil, health or trust hits <b>0</b>, the journey ends. Coin can run out safely.</li>
          <li>Packs have limits: at most ${TUNE.capF} 🍞, ${TUNE.capO} 🪔, ${TUNE.capH} ❤️, ${TUNE.capT} 🤝 and ${TUNE.capC} 🪙. A gain past the limit is lost; choices say “+1 fits” or “full”.</li>
-         <li>Villages and inns sell <b>provisions</b>: ${TUNE.buyFood} 🍞 for ${TUNE.buyCost} 🪙, once a stop, ${TUNE.buyRise} 🪙 dearer each time you buy. The road buttons warn when you’re short of 🪔, ❤️ or 🤝 to reach Hollin.</li>
+         <li>Villages and inns sell <b>provisions</b>: ${TUNE.buyFood} 🍞 for ${TUNE.buyCost} 🪙, once a stop, ${TUNE.buyRise} 🪙 dearer each time you buy in the same region. Road buttons say how much more 🍞, 🪔, ❤️ or 🤝 you’d still have to find to reach Hollin (0 ends the journey, so you must arrive with at least 1).</li>
          <li><b>Companions</b> open special choices, but ${bandLine()}. Tap one to part ways (−${TUNE.partTrust} 🤝). Some choices are <b>remembered</b> (✦): a stranger you helped may turn up again.</li>
          <li>❄ ${this.blizzardNote()}</li>
          <li>Reach Hollin for a score: what you have left, ½ your coin, ${TUNE.compPts} per companion and ${TUNE.promisePts} per <b>promise</b> kept. Stars at ${STARS[1]} and ${STARS[2]}.</li>

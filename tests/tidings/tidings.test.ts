@@ -27,7 +27,10 @@ import {
   recruitOf,
   regionOf,
   replay,
+  recallable,
+  routeNeed,
   scoreOf,
+  shortBy,
   shortOf,
   telling,
   type Run,
@@ -303,6 +306,9 @@ describe('tidings runs', () => {
     expect(x.res.f).toBe(Math.min(TUNE.capF, f + TUNE.buyFood));
     expect(actError(x, 'B')).toMatch(/provisions/);
     expect(buyPrice(x)).toBe(TUNE.buyCost + TUNE.buyRise);
+    // Fresh prices in the next region.
+    x.stop = 4;
+    expect(buyPrice(x)).toBe(TUNE.buyCost);
     // Never at the start.
     expect(canBuy(newRun(1))).toBe(false);
   });
@@ -330,27 +336,36 @@ describe('tidings runs', () => {
     expect(shortOf(r, 0)).not.toContain('o');
   });
 
-  it('settles the hermit’s riddle by the answer, not by luck', () => {
-    const right = CARD.hermit.choices.filter((ch) => ch.riddle && ch.right);
-    expect(right.length).toBe(1);
-    expect(CARD.hermit.text).toMatch(/boots/);
-    for (let seed = 0; seed < 4000; seed++) {
-      const r = newRun(seed);
-      for (let i = 0; i < 40 && r.phase !== 'over' && r.stop < 8 && !r.hand.some((h) => h.id === 'hermit'); i++) {
-        if (r.phase === 'cards') act(r, legal(r).find((a) => a[0] === 'P')!);
-        else act(r, 'M0');
-        r.res.f = r.res.o = r.res.h = r.res.t = 9;
-      }
-      const h = r.hand.findIndex((x) => x.id === 'hermit' && !x.done);
-      if (h < 0 || cardBlock(r, h)) continue;
-      const k = CARD.hermit.choices.indexOf(right[0]);
-      const t = r.res.t;
-      act(r, `P${h}.${k}`);
-      expect(r.hand[h].won).toBe(true);
-      expect(r.res.t).toBe(Math.min(TUNE.capT, t + 1));
-      return;
+  it('gives the hermit two honest answers with different rewards, and no wrong one', () => {
+    const answers = CARD.hermit.choices.filter((ch) => ch.t.startsWith('“'));
+    expect(answers.length).toBe(2);
+    for (const a of answers) expect(a.odds === undefined && !a.lose && !a.need).toBe(true);
+    expect(JSON.stringify(answers[0].fx)).not.toBe(JSON.stringify(answers[1].fx));
+  });
+
+  it('lets the ring’s wedding come as well as the journey’s own ending', () => {
+    let r: Run | null = null;
+    for (let seed = 1000; seed < 1400 && !r; seed++) {
+      const x = playRun(newRun(seed), careful());
+      if (x.end!.kept.includes('ring')) r = x;
     }
-    throw new Error('never dealt the hermit');
+    expect(r).toBeTruthy();
+    expect(r!.end!.also).toEqual(['wedding']);
+    expect(r!.end!.ending).not.toBe('wedding');
+    expect(ENDING[r!.end!.ending].kind).toBe('arrive');
+  });
+
+  it('asks for at least 1 left at Hollin, and stops promising ✦ when no callback can come', () => {
+    const r = newRun(9);
+    const need = routeNeed(r, 0).o;
+    r.res.o = need;
+    expect(shortBy(r, 0).o).toBe(1);
+    r.res.o = need + 1;
+    expect(shortBy(r, 0).o).toBeUndefined();
+    r.stop = 2;
+    expect(recallable(r, 'peddler')).toBe(true);
+    r.stop = 9;
+    expect(recallable(r, 'peddler')).toBe(false);
   });
 
   it('offers every companion about as often', () => {
