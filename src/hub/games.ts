@@ -97,9 +97,10 @@ export const GAMES: GameCard[] = [
     pitch: 'A little garden that sings. Plant chimebells, ferns, reeds, lilies, glowcaps and willows: left to right is the note, back to front is the beat. Bees and fireflies carry the tune while days, rain and mist drift by. Nothing can go wrong.',
     accent: '#b9e48c',
     best: () => {
-      const p = lull.load<{ wishes?: string[]; planted?: number } | null>('profile', null);
+      const p = lull.load<{ wishes?: string[]; planted?: number; streak?: { last: string; n: number } } | null>('profile', null);
       if (!p?.planted) return null;
-      return `${p.planted} planted${p.wishes?.length ? ` · ★ ${p.wishes.length} wish${p.wishes.length === 1 ? '' : 'es'}` : ''}`;
+      const streak = p.streak && p.streak.n > 1 ? ` · 🔥 ${p.streak.n}-day wish streak` : '';
+      return `${p.planted} planted${p.wishes?.length ? ` · ★ ${p.wishes.length} milestone${p.wishes.length === 1 ? '' : 's'}` : ''}${streak}`;
     },
     thumb: `<svg viewBox="0 0 76 76"><defs><linearGradient id="lullsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b3a7c"/><stop offset="1" stop-color="#ffa274"/></linearGradient></defs>
       <rect width="76" height="76" fill="url(#lullsky)"/>
@@ -555,4 +556,5 @@ export const DAILY: DailyLink[] = [
   { path: './gleam/?daily', title: 'Gleam', store: gleam, accent: '#ff5cf0' },
   { path: './trestle/?daily', title: 'Trestle', store: trestle, accent: '#e0b25a' },
   { path: './tidings/?daily', title: 'Tidings', store: tidings, accent: '#e9b45a' },
+  { path: './lull/?daily', title: 'Lull', store: lull, accent: '#b9e48c' },
 ];

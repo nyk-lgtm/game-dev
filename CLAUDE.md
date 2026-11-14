@@ -159,7 +159,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   with batched `fillText` runs; art lives in each game's `art.ts`.
 - Daily challenges (src/shared/daily.ts): `<game>/?daily` plays today's seed (`dailySeed(game, day)`,
   local date); each game keeps its in-progress daily under `dailyRun` and today's best under `daily`.
-  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad, Ninefold, Summit, Quarry, Sungrazer, Kitbag, Brink (a daily win-in-N puzzle), Loomsong (a daily song), Simmer (a daily season), Gleam (a Medium puzzle), Trestle (a d 0.55 level) and Tidings (a daily road); the hub's Daily section links them.
+  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad, Ninefold, Summit, Quarry, Sungrazer, Kitbag, Brink (a daily win-in-N puzzle), Loomsong (a daily song), Simmer (a daily season), Gleam (a Medium puzzle), Trestle (a d 0.55 level), Tidings (a daily road) and Lull (a daily wish); the hub's Daily section links them.
 - Afterglow extras: Nights 1-5 (`NIGHTS` in content.ts, unlocked by `profile.nightsWon`), arenas
   (`ARENAS`/pillars in core/arena.ts, hashed from the seed), unions (`union` on a WeaponDef: two
   maxed weapons merge in a chest), and player damage is attributed (`w.taken`, `w.killedBy`).
@@ -514,14 +514,27 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   index). A garden = seed + timestamped actions (`P<sp>`, `W`, `X` dig by exact x,y; `apply`/`replay`); `encode` writes the
   live plants as planting actions with ages (6 chars a plant; flourish is dropped), `decode` replays them, so saves
   (`lull.garden` {code, at}) and share links (`?g=CODE`, opened as a visit until "Keep") are the same thing; time away
-  grows the garden on by up to half a day. Wishes (wishes.ts) are pure tests of the garden at its step: 9 milestones
-  (`WISHES`, once per player, in the profile) and each garden's own rotating wishes: 3 active ids from a seeded order
-  (`gardenWishAt(seed, n)`, weighted `KINDS`: mostly compositions and moments, e.g. `chord.<lane>`, `minor.<lane>`, `rise`,
-  `fall`, `groove`, `offbeat.<sp>`, `beevisit.<sp>`, `flyvisit`, `frogvisit`, `duskchord`; a single plant on a note (`sing`)
-  is rare; the first is always `twin.<col>`; built by `gardenWish(id)`). Only plants ≥ half grown count. `fillWishes` never
-  draws a wish that `tooEasy` finds true now, with every plant grown up, or grown up at six times over the next day (so
-  waiting alone never grants one); `grantWishes` swaps met ones for the next; the `WishState` saves with the garden
-  (`lull.garden.w`), not in codes. Sun up t 0.97 → 0.57 (sets mid-dusk, fading), moon 0.56 → 0.97; dawn starts at light 0
+  grows the garden on by up to half a day. Wishes (wishes.ts) are pure tests of the garden at its step, each with a
+  `progress(g)` line ("2 of 3 notes on beat 3 (1 more growing) · missing so"). 10 milestones (`WISHES`, once per player, in
+  the profile), each a deliberate act: one of each kind, pond song, all five notes on one beat or half-beat, Dusk chord
+  (do-mi-so on one row, any of the 8, at dusk), three Glowcaps on one row at night, three flourishing, span, 24 plants, and
+  two `event` ones the page grants (`Harp sweep`: 8 plants in one strum; `Gift`: sharing). Each garden's rotating wishes:
+  3 active ids from a seeded order (`gardenWishAt(seed, n)`, weighted `KINDS`: mostly compositions and moments, e.g.
+  `chord.<lane>`, `minor.<lane>`, `rise`, `fall`, `groove`, `offbeat.<sp>`, `beevisit.<sp>`, `flyvisit`, `frogvisit`; a
+  single plant on a note (`sing`) is rare; the first is always `twin.<col>`; built by `gardenWish(id)`; old saved
+  `duskchord` ids are dropped). Only plants ≥ half grown count. `fillWishes` never draws a wish that `tooEasy` finds true
+  now, with every plant grown up, or grown up at six times over the next day (so waiting alone never grants one);
+  `grantWishes` swaps met ones for the next; the `WishState` saves with the garden (`lull.garden.w`), not in codes. A
+  visitor is granted garden wishes only after changing something, and never milestones. The daily wish
+  (`dailyWishId(dailySeed('lull', day))`, a placement composition from `DAILY_KINDS`) counts only plants planted today in
+  your own garden (`profile.daily` {day, keys, done}, `onlyPlants`; `dailyRun` {day, a: keys} marks it started for the
+  hub); met → `recordDaily(store, streak, '✓ · 🔥 n')` and `profile.streak` {last, n}. `?daily` opens your garden with
+  the wishes card. Notes have a colour per scale degree (`DEG_COLORS`: do red, re orange, mi yellow, so green, la blue): a
+  dot under every plant (white centre = high octave, baked into the sprite), the ring when it sings, the planting label,
+  the info line (`noteTag`) and note names floating up on a strum (`Scene.tag`, ≤ 10). The ★ count is written by an
+  inline script in lull/index.html before the module loads. The pond's lobes are separate closed subpaths (a moveTo per
+  ellipse) and the dashed shore is stroked per lobe then covered by refilling the union, so only the outer outline shows.
+  Night darkens the land by 45% at most. Sun up t 0.97 → 0.57 (sets mid-dusk, fading), moon 0.56 → 0.97; dawn starts at light 0
   (stars fade by light 0.35), so the sky matches the label.
   A shared link (`?g=`) stays in the address while visiting and is rewritten with the visit's current code on save, until
   Keep / Back to my garden (a visitor with no garden of their own gets "Keep this garden" / "Start my own garden"). After a

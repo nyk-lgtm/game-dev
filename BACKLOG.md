@@ -191,7 +191,16 @@ playtests with fixes shipped. Open threads, in order:
         mist built at device size (1:1 blits, no 'lighter'), unlit beat chips baked into the landscape layer, shadows
         baked into sprites, ≤ 3 glows a plant; DPR steps back up after a sustained good stretch (with backoff).
         ×4 throttled first measurement 45-48 fps at DPR 2 (was ~32), desktop 60.
-  - [ ] Next: third blind playtest + owner's phone (sound!). Watch: is "left = note, back-to-front = beat" discoverable
+  - [x] Third blind playtest ("lovely and smooth, nothing pulls you back tomorrow") and fixes (rules and codes unchanged):
+        a daily wish (same for everyone via shared/daily.ts, counts plants planted today in your own garden, ✓ + streak,
+        hub Daily row); every wish shows what's missing (`progress`); milestones reworked to need a deliberate act (two
+        are action events: a long strum, sharing), the duplicate Sunset chord dropped, Dusk chord counts "&" rows;
+        visitors only get garden wishes after changing something; a colour per scale degree (dot under each plant, coloured
+        rings, note names floating up on a strum, label and info line); pond lobes as separate subpaths (no sand wedge)
+        with only the outer dashed shore; "Visiting" stays in the label in rain/mist; ★ count shown before the module
+        loads; shorter help; lighter night. Seasons not done (could come later).
+  - [ ] Next: fourth blind playtest + owner's phone (sound!). Does the daily wish bring people back? Is the colour per note
+        readable? Are milestones still met by accident? Watch: is "left = note, back-to-front = beat" discoverable
         from the ghost label and the sweeping band? Is a full garden too busy (Harpfern runs dominate; MAX_PER_STEP 6)? Do
         seedlings read at the back rows? Is half a day of growth while away welcome? Does the DPR step-down ever fire on
         a real phone (it never steps back up)? Maybe: a gentle master volume, more species (a bass drone moss?), seasons.

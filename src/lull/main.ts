@@ -1,6 +1,7 @@
 import { installErrorOverlay } from '../shared/debug';
 import { closeOverlay, showCard } from '../shared/cards';
 import { randomSeed } from '../shared/rng';
+import { wantsDaily } from '../shared/daily';
 import { decode, newGarden } from './core';
 import { Game, store } from './game';
 
@@ -13,6 +14,8 @@ document.getElementById('wishBtn')!.onclick = () => game.showWishes();
 
 // ?g=CODE opens a shared garden as a visit; ?seed=N opens a fresh garden with that seed (tests).
 const q = new URLSearchParams(location.search);
+// ?daily (from the hub's Daily row): your own garden with today's wish open.
+const daily = wantsDaily();
 const shared = q.get('g');
 const visit = shared ? decode(shared) : null;
 if (visit) {
@@ -39,7 +42,10 @@ if (visit) {
     showCard('<h2>That link didn’t work</h2><p>The garden code was cut short or is from another version. Here is your own garden.</p>', [
       { label: 'OK', primary: true, onClick: closeOverlay },
     ]);
-  else if (!store.load('seenHelp', false)) game.showHelp();
+  else if (daily) {
+    store.save('seenHelp', true);
+    game.showWishes();
+  } else if (!store.load('seenHelp', false)) game.showHelp();
 }
 
 (window as unknown as { __game: Game }).__game = game;

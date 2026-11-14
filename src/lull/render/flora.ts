@@ -271,7 +271,7 @@ function willow(r: Rng): Shape {
 function finish(prims: Prim[], heads: Pt[], glow: string): Shape {
   // Room for the seedling's two leaves too.
   // (maxY leaves room for the soft shadow drawn under the base.)
-  let minX = -11, maxX = 11, minY = -12, maxY = 5;
+  let minX = -11, maxX = 11, minY = -12, maxY = 8;
   const add = (x: number, y: number, pad: number) => {
     minX = Math.min(minX, x - pad);
     maxX = Math.max(maxX, x + pad);

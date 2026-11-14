@@ -4,8 +4,14 @@
 // The canvas DPR is capped at 2; per frame it is mostly drawImage calls.
 
 import {
-  COLS, LANES, ROWS, SPECIES, XS, dayTime, growth, type CritterPos, type Garden, type Plant, type Weather,
+  COLS, LANES, ROWS, SPECIES, XS, colOf, dayTime, growth, type CritterPos, type Garden, type Plant, type Weather,
 } from '../core';
+
+/**
+ * One colour per scale degree (do re mi so la), so a tune reads without sound: a dot under every
+ * plant, the ring when it sings, the planting label and the note names that float up as you strum.
+ */
+export const DEG_COLORS = ['#ff6f61', '#ffa64d', '#ffe14d', '#6fdc8c', '#6fb4ff'];
 import { Rng, mixSeed } from '../../shared/rng';
 import { drawShape, makeShape, showGrowth, sizeAt, type Shape } from './flora';
 
@@ -45,6 +51,8 @@ interface Sprite {
   pop: number;
   /** Shadow half-width in plant units. */
   shadow: number;
+  /** Pitch column (its colour dot is drawn at the base; high notes get a white centre). */
+  col: number;
 }
 
 interface Particle {
@@ -54,9 +62,11 @@ interface Particle {
   vy: number;
   life: number;
   max: number;
-  kind: 'dirt' | 'drop' | 'spark' | 'ring' | 'leaf';
+  kind: 'dirt' | 'drop' | 'spark' | 'ring' | 'leaf' | 'tag';
   c: string;
   r: number;
+  /** A floating note name (kind 'tag'). */
+  text?: string;
 }
 
 export interface Ghost {
@@ -65,6 +75,8 @@ export interface Ghost {
   y: number;
   ok: boolean;
   label: string;
+  /** Pitch column, for the note's colour dot in the label. */
+  col?: number;
 }
 
 export interface Frame {
@@ -88,7 +100,7 @@ const mix = (a: RGB, b: RGB, t: number): RGB => [a[0] + (b[0] - a[0]) * t, a[1] 
 const css = (c: RGB, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
 
 const SKY = {
-  night: [hex('#060920'), hex('#1a2152')] as RGB[],
+  night: [hex('#0b1130'), hex('#25306a')] as RGB[],
   day: [hex('#5fb0e6'), hex('#d4f0ee')] as RGB[],
   warm: [hex('#3b3a7c'), hex('#ffa274')] as RGB[],
   grey: [hex('#59667a'), hex('#a9b4bd')] as RGB[],
@@ -192,7 +204,7 @@ export class Scene {
     let s = this.sprites.get(k);
     if (!s) {
       const shape = makeShape(g.seed, p.sp, p.x, p.y);
-      s = { shape, cv: null, gq: -1, sleep: false, tone: '', ox: 0, oy: 0, w: 0, h: 0, phase: (mixSeed(p.x, p.y) % 1000) / 159, kick: 0, flash: 0, pop: 0, shadow: p.sp === 5 ? 22 : 10 };
+      s = { shape, cv: null, gq: -1, sleep: false, tone: '', ox: 0, oy: 0, w: 0, h: 0, phase: (mixSeed(p.x, p.y) % 1000) / 159, kick: 0, flash: 0, pop: 0, shadow: p.sp === 5 ? 22 : 10, col: colOf(p.x) };
       this.sprites.set(k, s);
     }
     return s;
@@ -332,6 +344,12 @@ export class Scene {
     if (!p) return;
     const s = this.sprite(g, p);
     s.kick = Math.min(0.14, s.kick + v);
+  }
+
+  /** A note name floating up from a plant in its degree colour (at most 10 at once). */
+  tag(x: number, y: number, text: string, c: string): void {
+    if (this.parts.filter((p) => p.kind === 'tag').length >= 10) return;
+    this.parts.push({ x, y, vx: 0, vy: -26 * this.L.u, life: 0, max: 1.1, kind: 'tag', c, r: 0, text });
   }
 
   burst(kind: Particle['kind'], x: number, y: number, n: number, c: string): void {
@@ -488,12 +506,23 @@ export class Scene {
       for (const e of g.pond) {
         const c = this.pos(e.cx, e.cy - 0.5);
         const rx = (e.rx / XS) * (W - 2 * this.L.padX) * scale, ry = (e.ry / ROWS) * (bot - top) * scale;
+        // Each lobe is its own closed subpath: without the moveTo, Path2D joined the lobes with
+        // straight lines and the fill showed a sand wedge cut into the water.
+        p.moveTo(c.sx + rx, c.sy);
         p.ellipse(c.sx, c.sy, rx, ry, 0, 0, TAU);
+        p.closePath();
       }
       return p;
     };
-    // The shore (where reeds grow): sand with a darker edge, so it reads as its own ground.
+    // The shore (where reeds grow): sand with a darker dashed edge, so it reads as its own ground.
+    // Only the union's outer outline should show: stroke every lobe, then fill the union again,
+    // which covers the inner halves of the strokes and every line that crosses the sand.
     const shore = path(Math.sqrt(1.8));
+    x.strokeStyle = 'rgba(70,58,25,0.5)';
+    x.lineWidth = 2.8 * u;
+    x.setLineDash([3 * u, 3 * u]);
+    x.stroke(shore);
+    x.setLineDash([]);
     x.fillStyle = '#b3a56c';
     x.fill(shore);
     x.save();
@@ -501,11 +530,6 @@ export class Scene {
     x.fillStyle = 'rgba(255,245,200,0.18)';
     for (let i = 0; i < 160; i++) x.fillRect(r.next() * W, top + r.next() * (bot - top), 1.2 * u, 1.2 * u);
     x.restore();
-    x.strokeStyle = 'rgba(70,58,25,0.45)';
-    x.lineWidth = 1.4 * u;
-    x.setLineDash([3 * u, 3 * u]);
-    x.stroke(shore);
-    x.setLineDash([]);
     x.fillStyle = '#c4b47c';
     x.fill(path(1.12));
     const water = path(1);
@@ -670,6 +694,20 @@ export class Scene {
     x.beginPath();
     x.ellipse(0, 1 / k, sp.shadow, (3 * s) / k, 0, 0, TAU);
     x.fill();
+    // The note's colour dot at the base, in front of the stem (a white centre for the high octave).
+    if (sp.col >= 0) {
+      const dr = (2.6 * this.L.u) / k;
+      x.fillStyle = DEG_COLORS[sp.col % 5];
+      x.beginPath();
+      x.arc(0, (2 * this.L.u) / k, dr, 0, TAU);
+      x.fill();
+      if (sp.col >= 5) {
+        x.fillStyle = '#ffffff';
+        x.beginPath();
+        x.arc(0, (2 * this.L.u) / k, dr * 0.42, 0, TAU);
+        x.fill();
+      }
+    }
     drawShape(x, sh, gq, sleep);
     // A seedling is a pair of tiny leaves even before its first prims show.
     if (gq < 0.15) {
@@ -742,7 +780,8 @@ export class Scene {
     const moonT = dtm.t >= 0.56 ? dtm.t - 0.56 : dtm.t + 0.44;
     // The moon sets as dawn begins (t 0.97), so the sky never shows night while the label says Dawn.
     const moon = moonT <= 0.41 ? { ...arc(moonT, 0, 0.41), fade: Math.min(1, (0.41 - moonT) / 0.03) } : null;
-    const dark = (1 - light) * 0.6 + grey * 0.15;
+    // Night is dark blue, not black: the land darkens to 45% at most (was 60%).
+    const dark = (1 - light) * 0.45 + grey * 0.15;
     const key = [light * 40, warm * 20, grey * 20, (sun?.x ?? -9) / 2, (sun?.y ?? 0) / 2, (moon?.x ?? -9) / 2, (moon?.y ?? 0) / 2].map(Math.round).join('|');
     if (!this.landKey || (key !== this.landKey && time - this.landAt > 0.4) || Math.abs(time - this.landAt) > 30) {
       this.renderLand(g, light, warm, grey, dark, sun, moon);
@@ -927,6 +966,15 @@ export class Scene {
         c.beginPath();
         c.ellipse(p.x, p.y, p.r + k * 22 * u, (p.r + k * 22 * u) * 0.3, 0, 0, TAU);
         c.stroke();
+      } else if (p.kind === 'tag') {
+        c.font = `800 ${Math.round(13 * Math.max(1, u))}px system-ui, sans-serif`;
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        c.lineWidth = 3 * u;
+        c.strokeStyle = 'rgba(16,22,30,0.85)';
+        c.strokeText(p.text ?? '', p.x, p.y);
+        c.fillStyle = p.c;
+        c.fillText(p.text ?? '', p.x, p.y);
       } else if (p.kind === 'drop') {
         c.strokeStyle = p.c;
         c.lineWidth = p.r;
@@ -1002,7 +1050,7 @@ export class Scene {
     const key = `ghost.${gh.sp}`;
     let sp = this.sprites.get(key);
     if (!sp) {
-      sp = { shape: makeShape(7, gh.sp, 500, 18), cv: null, gq: -1, sleep: false, tone: '', ox: 0, oy: 0, w: 0, h: 0, phase: 0, kick: 0, flash: 0, pop: 0, shadow: 10 };
+      sp = { shape: makeShape(7, gh.sp, 500, 18), cv: null, gq: -1, sleep: false, tone: '', ox: 0, oy: 0, w: 0, h: 0, phase: 0, kick: 0, flash: 0, pop: 0, shadow: 10, col: -1 };
       this.sprites.set(key, sp);
     }
     if (!sp.cv || Math.abs(sp.w - (sp.shape.maxX - sp.shape.minX) * s - 2) > 0.5) this.redrawSprite(sp, s, 1, false);
@@ -1021,14 +1069,27 @@ export class Scene {
     c.font = `700 ${Math.round(14 * Math.max(1, u))}px system-ui, sans-serif`;
     c.textAlign = 'center';
     c.textBaseline = 'middle';
-    const tw = c.measureText(gh.label).width + 20;
+    const dot = gh.ok && gh.col !== undefined ? 16 : 0;
+    const tw = c.measureText(gh.label).width + 20 + dot;
     const lx = Math.max(tw / 2 + 4, Math.min(W - tw / 2 - 4, sx));
     c.fillStyle = gh.ok ? 'rgba(20,28,40,0.82)' : 'rgba(70,16,24,0.88)';
     c.beginPath();
     c.roundRect(lx - tw / 2, ly - 15, tw, 30, 15);
     c.fill();
+    if (dot) {
+      c.fillStyle = DEG_COLORS[gh.col! % 5];
+      c.beginPath();
+      c.arc(lx - tw / 2 + 16, ly, 5.5, 0, TAU);
+      c.fill();
+      if (gh.col! >= 5) {
+        c.fillStyle = '#fff';
+        c.beginPath();
+        c.arc(lx - tw / 2 + 16, ly, 2.3, 0, TAU);
+        c.fill();
+      }
+    }
     c.fillStyle = gh.ok ? '#fff6dc' : '#ffd0d0';
-    c.fillText(gh.label, lx, ly + 1);
+    c.fillText(gh.label, lx + dot / 2, ly + 1);
     void time;
     void g;
   }

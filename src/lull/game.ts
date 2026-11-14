@@ -6,14 +6,16 @@ import { closeOverlay, showCard } from '../shared/cards';
 import { copyText, toast } from '../shared/debug';
 import { loadSettings, reducedFx, saveSettings, soundOn } from '../shared/settings';
 import { makeStore } from '../shared/storage';
+import { dailySeed, prettyDay, recordDaily, todayKey } from '../shared/daily';
 import { randomSeed } from '../shared/rng';
 import {
   DAY, KEY_NAMES, MAX_PLANTS, RULES_VERSION, SPECIES, STEP_SEC, WISHES, XS, apply, cloneGarden, colOf, crittersAt,
   dayTime, decode, encode, growth, keyOf, laneOf, midiOf, newGarden, noteName, notesAt, plantError, rootOf, watered, weatherAt,
-  wishesMet, fillWishes, gardenWish, grantWishes, newWishState, type Action, type Garden, type Plant, type PlantError, type WishState,
+  wishesMet, fillWishes, gardenWish, grantWishes, newWishState, dailyWishId, onlyPlants, type Action, type Garden, type Plant, type PlantError,
+  type Wish, type WishState,
 } from './core';
 import { GardenAudio } from './audio';
-import { Scene, type Ghost } from './render/draw';
+import { DEG_COLORS, Scene, type Ghost } from './render/draw';
 import { drawShape, makeShape } from './render/flora';
 
 export const store = makeStore('lull.');
@@ -32,8 +34,21 @@ export interface Profile {
   wishes: string[];
   planted: number;
   gardens: number;
+  /** Today's wish: the plants (x.y) planted today in your own garden, and whether it came true. */
+  daily?: { day: string; keys: string[]; done: boolean };
+  /** Daily wish streak: days in a row ending on `last`. */
+  streak?: { last: string; n: number };
 }
 export const loadProfile = (): Profile => ({ wishes: [], planted: 0, gardens: 0, ...store.load<Partial<Profile>>('profile', {}) });
+
+const SOLFA = ['do', 're', 'mi', 'so', 'la'];
+/** A coloured dot and the note's name: the colour is the scale degree (the same dot sits under each plant). */
+export const noteTag = (col: number): string =>
+  `<span class="deg" style="background:${DEG_COLORS[col % 5]}"></span>${noteName(col)}`;
+const dayBefore = (day: string): string => {
+  const [y, m, d] = day.split('-').map(Number);
+  return todayKey(new Date(y, m - 1, d - 1));
+};
 
 type Tool = 'seed' | 'water' | 'strum' | 'dig';
 const TOOL_HINT: Record<Tool, string> = {
@@ -94,6 +109,7 @@ export class Game {
   private lastHud = '';
   profile = loadProfile();
   private gaps: number[] = [];
+  private strumCount = 0;
   private good = 0;
   private goodNeed = 4;
   private steppedUp = false;
@@ -265,7 +281,7 @@ export class Game {
           this.scene.flash(this.g, i, f.vel);
           if (f.why === 'song' && !this.reduced) {
             const p = this.g.plants[i];
-            this.scene.burst('ring', this.scene.baseX(this.g, i), this.scene.pos(p.x, p.y).sy, 1, 'rgba(255,245,200,0.75)');
+            this.scene.burst('ring', this.scene.baseX(this.g, i), this.scene.pos(p.x, p.y).sy, 1, DEG_COLORS[colOf(p.x) % 5]);
           }
           if ((f.why === 'visit' || f.why === 'gust') && !this.reduced) {
             const h = this.scene.head(this.g, i, 0, step, t / 1000);
@@ -352,6 +368,7 @@ export class Game {
     if (this.tool === 'seed') this.aim(p.x, p.y, true);
     else if (this.tool === 'water') this.water(p.x, p.y, true);
     else if (this.tool === 'strum') {
+      this.strumCount = 0;
       this.toolPos = { kind: 'strum', x: p.x, y: p.y };
       this.scene.addTrail(p.x, p.y, performance.now() / 1000);
     }
@@ -401,7 +418,7 @@ export class Game {
     const col = colOf(q.x);
     const lane = laneOf(q.y);
     const label = err ? this.errorText(err.err, err.near).short : `♪ ${noteName(col)} · beat ${BEAT[lane]}`;
-    this.ghost = { sp: this.sp, x: q.x, y: q.y, ok: !err, label };
+    this.ghost = { sp: this.sp, x: q.x, y: q.y, ok: !err, label, col };
     if (this.press && (first || this.press.col !== col)) {
       this.press.col = col;
       this.preview(this.sp, col);
@@ -443,7 +460,7 @@ export class Game {
     const gr = growth(p, this.g.now);
     const grown = gr >= 1 ? 'fully grown' : `${Math.round(gr * 100)}% grown`;
     const fl = p.flourish > this.g.now ? ' · <b>flourishing</b>' : '';
-    return `<b>${s.name}</b> · sings <b>${noteName(colOf(p.x))}</b> on beat ${BEAT[laneOf(p.y)]}, every ${s.every === 1 ? 'bar' : `${s.every} bars`} · ${grown}${fl}`;
+    return `<b>${s.name}</b> · sings <b>${noteTag(colOf(p.x))}</b> on beat ${BEAT[laneOf(p.y)]}, every ${s.every === 1 ? 'bar' : `${s.every} bars`} · ${grown}${fl}`;
   }
 
   /** Plants a seed (exported for tests and the perf probe). */
@@ -453,6 +470,12 @@ export class Game {
     this.groups.push([a]);
     this.updateUndo();
     this.profile.planted++;
+    // Today's wish counts plants planted today in your own garden.
+    if (!this.visiting) {
+      const d = this.todayDaily();
+      if (!d.keys.includes(`${x}.${y}`)) d.keys.push(`${x}.${y}`);
+      store.save('dailyRun', { day: d.day, a: d.keys });
+    }
     store.save('profile', this.profile);
     const { sx, sy } = this.scene.pos(x, y);
     this.scene.burst('dirt', sx, sy, this.reduced ? 4 : 10, '#6b4a2e');
@@ -506,14 +529,17 @@ export class Game {
       this.audio.note(midiOf(this.g.seed, p.sp, colOf(p.x)), sp.voice, 0.4 + 0.4 * gr, Math.max(2, sp.len >> 1) * STEP_SEC, t + n * 0.015);
       this.scene.flash(this.g, i, 1.2);
       this.scene.kick(this.g, i, this.reduced ? 0.04 : 0.12);
-      if (!this.reduced) {
-        this.scene.burst('ring', sx, sy, 1, 'rgba(255,240,190,0.9)');
-        const h = this.scene.head(this.g, i, 0, step, performance.now() / 1000);
-        this.scene.burst('spark', h.x, h.y, 4, '#fff3c4');
-      }
+      const col = colOf(p.x);
+      this.scene.burst('ring', sx, sy, 1, DEG_COLORS[col % 5]);
+      // The note's name floats up in its colour, so the tune reads without sound too.
+      const h = this.scene.head(this.g, i, 0, step, performance.now() / 1000);
+      this.scene.tag(h.x, h.y - 6, SOLFA[col % 5], DEG_COLORS[col % 5]);
+      if (!this.reduced) this.scene.burst('spark', h.x, h.y, 4, '#fff3c4');
       n++;
     });
     if (n) navigator.vibrate?.(4);
+    this.strumCount += n;
+    if (this.strumCount >= 8) this.grantEvent('strum');
   }
 
   private dig(sx: number, sy: number): void {
@@ -554,11 +580,49 @@ export class Game {
 
   // ---------------------------------------------------------------- wishes
 
+  /** Today's record (reset when the day changes). */
+  private todayDaily(): { day: string; keys: string[]; done: boolean } {
+    const day = todayKey();
+    if (this.profile.daily?.day !== day) this.profile.daily = { day, keys: [], done: false };
+    return this.profile.daily;
+  }
+
+  /** Today's wish, the same for everyone. */
+  dailyWish(): Wish {
+    return gardenWish(dailyWishId(dailySeed('lull', todayKey())))!;
+  }
+
+  /** Your garden with only the plants planted today (what today's wish counts). */
+  private todaysGarden(): Garden {
+    const keys = new Set(this.todayDaily().keys);
+    return onlyPlants(this.g, (x, y) => keys.has(`${x}.${y}`));
+  }
+
+  /** A milestone granted by an action (a long strum, sharing). */
+  private grantEvent(id: string): void {
+    if (this.visiting || this.profile.wishes.includes(id)) return;
+    this.profile.wishes.push(id);
+    store.save('profile', this.profile);
+    toast(`★ ${WISHES.find((w) => w.id === id)!.name}`).classList.add('wish');
+    this.audio.chime(rootOf(this.g.seed));
+  }
+
   private checkWishes(): void {
     const names: string[] = [];
-    // This garden's own wishes (also while visiting: Keep carries them over).
-    for (const id of grantWishes(this.g, this.ws)) names.push(gardenWish(id)!.name);
+    // This garden's own wishes. A visitor gets them only once they change something
+    // (a shared garden shouldn't hand out wishes just for opening it); Keep carries them over.
+    if (!this.visiting || this.groups.length) for (const id of grantWishes(this.g, this.ws)) names.push(gardenWish(id)!.name);
     if (!this.visiting) {
+      const d = this.todayDaily();
+      if (!d.done && d.keys.length && this.dailyWish().test(this.todaysGarden())) {
+        d.done = true;
+        const st = this.profile.streak;
+        const n = st && (st.last === d.day ? st.n : st.last === dayBefore(d.day) ? st.n + 1 : 1) || 1;
+        this.profile.streak = { last: d.day, n };
+        recordDaily(store, n, n > 1 ? `✓ · 🔥 ${n}` : '✓');
+        names.unshift(`Today’s wish: ${this.dailyWish().name}`);
+        store.save('profile', this.profile);
+      }
       const met = wishesMet(this.g).filter((id) => !this.profile.wishes.includes(id));
       for (const id of met) {
         this.profile.wishes.push(id);
@@ -646,14 +710,17 @@ export class Game {
     const d = dayTime(this.g.now);
     const w = weatherAt(this.g.seed, this.g.now);
     const ph = d.phase[0].toUpperCase() + d.phase.slice(1);
-    const wish = `★ ${this.ws.done.length}`;
+    const wish = `★ ${this.ws.done.length}${this.profile.daily?.day === todayKey() && this.profile.daily.done ? ' ✓' : ''}`;
     const hud = `${d.day}|${ph}|${w.amt > 0.3 ? w.kind : 'clear'}|${wish}|${this.g.plants.length}|${this.visiting}`;
     if (!force && hud === this.lastHud) return;
     this.lastHud = hud;
     const wet = w.amt > 0.3 && w.kind !== 'clear';
     // The weather word rides in the small label so the big line never gets cut.
     // Short enough for 360 px: the weather word wins over the key and the word Visiting (the info line says that).
-    $('dayLabel').textContent = wet ? `Day ${d.day} · ${WEATHER_WORD[w.kind]}` : this.visiting ? `Visiting · day ${d.day}` : `Day ${d.day} · key of ${KEY_NAMES[keyOf(this.g.seed)]}`;
+    // A visit always says so (the weather word then replaces the day number).
+    $('dayLabel').textContent = this.visiting
+      ? `Visiting · ${wet ? WEATHER_WORD[w.kind] : `day ${d.day}`}`
+      : wet ? `Day ${d.day} · ${WEATHER_WORD[w.kind]}` : `Day ${d.day} · key of ${KEY_NAMES[keyOf(this.g.seed)]}`;
     $('phase').textContent = `${PHASE_ICON[d.phase]} ${ph}${wet ? WEATHER_ICON[w.kind] : ''}`;
     $('wishBtn').textContent = wish;
   }
@@ -664,15 +731,12 @@ export class Game {
     store.save('seenHelp', true);
     showCard(
       `<h2>Lull</h2>
-      <p>A little garden that sings. Nothing here can wilt or go wrong: plant, listen, change things.</p>
+      <p>A garden that sings. Nothing can wilt or go wrong.</p>
       <ul>
-        <li><b>Plant</b>: pick a kind and tap the meadow. Slide your finger to hear the note before you let go.</li>
-        <li><b>Left to right is the note</b>, low to high, always in one gentle scale. <b>Back to front is when</b>: a band of light sweeps from the back row to the front every bar (the dots and numbers at the edges count the beats), and each plant sings and pulses as it passes.</li>
-        <li>Each kind has its own voice and rhythm. Chimebells sleep at night; Glowcaps and Moonlilies shine then.</li>
-        <li><b>Bees</b> by day, <b>fireflies</b> by night and a <b>frog</b> on the lilies hop between plants and make them sing.</li>
-        <li><b>Water</b> helps seedlings grow and makes grown plants flourish. <b>Strum</b>: drag across to play the garden like a harp. <b>Dig</b> takes a plant out.</li>
-        <li>Days, rain, breezes and mist drift by on their own. ★ <b>Wishes</b>: each garden always has three little ideas to try; a granted one is replaced by a new one.</li>
-        <li>The garden saves itself. Share it as a link from the menu.</li>
+        <li><b>Left to right is the note</b>, low to high: ${SOLFA.map((n, i) => `<span class="deg" style="background:${DEG_COLORS[i]}"></span>${n}`).join(' ')}.</li>
+        <li><b>Back to front is the beat</b>: the light sweeps the rows (numbered at the edges) and each plant sings as it passes.</li>
+        <li>💧 Water to grow and flourish, 🎐 drag to strum, 🪏 dig to remove.</li>
+        <li>★ Wishes: three ideas per garden, plus one for everyone each day.</li>
       </ul>`,
       [{ label: 'Start planting', primary: true, onClick: closeOverlay }],
     );
@@ -681,12 +745,20 @@ export class Game {
   showWishes(): void {
     const done = new Set(this.profile.wishes);
     const here = this.ws.a.map((id) => gardenWish(id)).filter((w) => !!w);
-    const now = here.map((w) => `<li><b>☆ ${w!.name}</b><br>${w!.text}</li>`).join('');
+    const prog = (w: Wish, g: Garden) => (w.progress ? `<span class="prog">${w.progress(g)}</span>` : '');
+    const now = here.map((w) => `<li><b>☆ ${w!.name}</b><br>${w!.text}${prog(w!, this.g)}</li>`).join('');
+    // Today's wish (the same for everyone; counts only plants you plant today, in your own garden).
+    const dw = this.dailyWish();
+    const td = this.todayDaily();
+    const streak = this.profile.streak && (this.profile.streak.last === td.day || this.profile.streak.last === dayBefore(td.day)) ? this.profile.streak.n : 0;
+    const daily = `<div class="daily ${td.done ? 'done' : ''}"><b>${td.done ? '✓' : '☀'} Today’s wish · ${prettyDay()}</b><br><b>${dw.name}</b>: ${dw.text}
+      ${td.done ? '<span class="prog">Granted. A new one tomorrow.</span>' : this.visiting ? '<span class="prog">Plant it in your own garden.</span>' : `<span class="prog">With today’s plants: ${dw.progress?.(this.todaysGarden()) ?? ''}</span>`}
+      ${streak > 1 ? `<span class="prog">🔥 ${streak}-day streak</span>` : ''}</div>`;
     const n = this.ws.done.length;
     const left = WISHES.length - WISHES.filter((w) => done.has(w.id)).length;
-    const rows = WISHES.map((w) => `<li class="${done.has(w.id) ? 'done' : ''}"><b>${done.has(w.id) ? '★' : '☆'} ${w.name}</b><br>${w.text}</li>`).join('');
+    const rows = WISHES.map((w) => `<li class="${done.has(w.id) ? 'done' : ''}"><b>${done.has(w.id) ? '★' : '☆'} ${w.name}</b><br>${w.text}${done.has(w.id) || this.visiting ? '' : prog(w, this.g)}</li>`).join('');
     showCard(
-      `<h2>Wishes</h2><p>Little ideas for this garden. When one comes true, a new one takes its place. No hurry, no failing.</p>
+      `<h2>Wishes</h2>${daily}<p>Ideas for this garden. When one comes true, a new one takes its place. No hurry, no failing.</p>
       <ul class="wishes">${now}</ul>
       <p class="meta-line">${n ? `★ ${n} granted in this garden.` : 'None granted in this garden yet.'}</p>
       <details class="milestones"><summary>Milestones · ${WISHES.length - left}/${WISHES.length}</summary><ul class="wishes">${rows}</ul></details>`,
@@ -741,6 +813,7 @@ export class Game {
 
   private async share(copyOnly = false): Promise<void> {
     const url = this.shareUrl();
+    this.grantEvent('share');
     const nav = navigator as Navigator & { share?: (d: ShareData) => Promise<void> };
     if (!copyOnly && nav.share) {
       try {

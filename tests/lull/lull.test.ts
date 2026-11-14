@@ -5,7 +5,7 @@ import { Rng } from '../../src/shared/rng';
 import {
   BAR, BEE, DAY, FLY, FLOURISH, MAX_PER_STEP, MAX_PLANTS, PENT, ROWS, SPECIES, START, XS, apply, colOf, critterCount, crittersAt,
   dayTime, decode, decodeActions, eligible, encode, groundAt, growth, newGarden, notesAt, plantError, replay, rootOf, sameGarden, target,
-  weatherAt, wishesMet, GARDEN_WISHES, fillWishes, gardenWish, gardenWishAt, grantWishes, newWishState, tooEasy, type Action, type Garden,
+  weatherAt, wishesMet, GARDEN_WISHES, fillWishes, gardenWish, gardenWishAt, grantWishes, newWishState, tooEasy, WISHES, dailyWishId, onlyPlants, type Action, type Garden,
 } from '../../src/lull/core';
 
 describe('garden wishes', () => {
@@ -320,10 +320,59 @@ describe('wishes', () => {
     const g = fullGarden(8);
     g.now += 2000;
     const met = wishesMet(g);
-    expect(met).toContain('bloom');
     expect(met).toContain('kinds');
     expect(met).toContain('full');
-    expect(met).toContain('scale');
+    // Event milestones are never met by the garden alone.
+    expect(met).not.toContain('strum');
+    expect(met).not.toContain('share');
+  });
+
+  it('milestones need a deliberate act: a garden of random plants grown up meets few', () => {
+    let total = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const g = newGarden(seed);
+      const r = new Rng(seed);
+      for (let i = 0; i < 400 && g.plants.length < 10; i++) apply(g, { t: g.now, k: 'P', sp: r.int(0, 5), x: r.int(0, XS - 1), y: r.int(0, ROWS - 1) });
+      g.now += 600;
+      total += wishesMet(g).length;
+    }
+    // Ten random plants: on average at most about one milestone (mostly "Pond song" or "One of each").
+    expect(total / 20).toBeLessThan(1.5);
+  });
+
+  it('every wish says what is missing, and the daily wish is a composition any garden can make', () => {
+    const g = fullGarden(3);
+    for (let n = 0; n < 200; n++) {
+      const w = gardenWish(gardenWishAt(11, n))!;
+      expect(typeof w.progress?.(g), w.id).toBe('string');
+      expect(typeof w.progress?.(newGarden(3)), w.id).toBe('string');
+    }
+    for (const w of WISHES) if (!w.event) expect(typeof w.progress?.(g), w.id).toBe('string');
+    const kinds = new Set<string>();
+    for (let d = 0; d < 300; d++) {
+      const id = dailyWishId(d * 7919);
+      const w = gardenWish(id)!;
+      expect(w, id).not.toBeNull();
+      expect(w.test(newGarden(d)), id).toBe(false);
+      kinds.add(id.split('.')[0]);
+    }
+    expect(kinds.size).toBeGreaterThan(6);
+    // Counted on plants planted today only.
+    const only = onlyPlants(g, (x) => x < 100);
+    expect(only.plants.every((p) => p.x < 100)).toBe(true);
+  });
+
+  it('chords on a half-beat count for the dusk chord', () => {
+    const g = newGarden(4);
+    g.now = DAY + Math.round(DAY * 0.55);
+    // do, mi, so (columns 0, 2, 3) all on lane 1 (beat 1&: rows 5-8), on soil.
+    for (const col of [0, 2, 3]) {
+      let ok = false;
+      for (const sp of [4, 3, 2]) for (let y = 5; y <= 8 && !ok; y++) for (let x = col * 100; x < col * 100 + 100 && !ok; x += 9) ok = apply(g, { t: g.now, k: 'P', sp, x, y });
+      expect(ok).toBe(true);
+    }
+    for (const p of g.plants) p.born -= 1000;
+    expect(WISHES.find((w) => w.id === 'chord')!.test(g)).toBe(true);
   });
 
   it('the dusk chord needs dusk', () => {

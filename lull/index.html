@@ -14,7 +14,16 @@
     <div id="app">
       <header id="hud">
         <div class="stat"><span id="dayLabel" class="label">Day 1</span><span id="phase" class="value">☀️ Day</span></div>
-        <button id="wishBtn" class="icon-btn wide" aria-label="Wishes">★ 0</button>
+        <button id="wishBtn" class="icon-btn wide" aria-label="Wishes">★</button>
+        <script>
+          // The saved count at once (the module loads a moment later; it showed 0 meanwhile).
+          try {
+            var s = JSON.parse(localStorage.getItem('lull.garden') || 'null');
+            var p = JSON.parse(localStorage.getItem('lull.profile') || 'null');
+            var d = new Date(), day = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+            if (s && s.w && s.w.done) document.getElementById('wishBtn').textContent = '★ ' + s.w.done.length + (p && p.daily && p.daily.day === day && p.daily.done ? ' ✓' : '');
+          } catch (e) {}
+        </script>
         <button id="soundBtn" class="icon-btn" aria-label="Sound on or off">🔊</button>
         <button id="helpBtn" class="icon-btn" aria-label="How to play">?</button>
         <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>

@@ -66,6 +66,12 @@ body #info { flex: none; height: 38px; max-height: 38px; overflow-y: auto; font-
 .card ul.wishes li.done { background: #2b3a26; }
 .card ul.wishes li.done b { color: #ffe08a; }
 .card .meta-line { font-size: 13px; }
+.card .prog { display: block; margin-top: 4px; font-size: 13px; color: #cfe6b0; }
+.card .daily { padding: 10px 12px; border-radius: 12px; border: 1px solid #ffe08a; background: #2a2c22; color: var(--muted); }
+.card .daily b { color: var(--text); }
+.card .daily.done { border-color: #8fdc6a; background: #22301f; }
+/* The note's colour (one per scale degree), as under each plant. */
+.deg { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 3px 0 2px; vertical-align: -1px; }
 .card details.milestones summary { color: var(--text); font-weight: 700; padding: 6px 0; min-height: 44px; display: flex; align-items: center; }
 .card details.milestones summary::after { content: "▾"; margin-left: 6px; color: var(--muted); }
 .card details.milestones[open] summary::after { content: "▴"; }
