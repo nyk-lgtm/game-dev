@@ -111,6 +111,7 @@ export function newBattle(s: GameState): Battle {
     kills: 0,
     leaked: 0,
     leakedBy: {},
+    leakHp: {},
     fx: [],
     over: false,
   };
@@ -118,17 +119,31 @@ export function newBattle(s: GameState): Battle {
 
 export const isBoss = (kind: EnemyKind) => kind === 'warden' || kind === 'colossus' || kind === 'lich';
 
-/** Regular foes gain this fraction of their base HP every wave. */
-export const HP_GROWTH = 0.22;
+/**
+ * Tower HP a foe costs when it gets through. Bosses (rules v4) cost their
+ * `leak` scaled by the share of their HP and shield still left (at least 1),
+ * so a boss nearly brought down costs little and an untouched one the lot.
+ */
+export function leakOf(e: Pick<Enemy, 'kind' | 'hp' | 'maxHp' | 'shield'>): number {
+  const d = ENEMIES[e.kind];
+  if (!isBoss(e.kind)) return d.leak;
+  return Math.max(1, Math.ceil((d.leak * Math.max(0, e.hp + e.shield)) / (e.maxHp + d.shield)));
+}
 
-/** Max HP of a foe on a given wave: regular foes toughen every wave, bosses don't. */
-export function enemyHp(kind: EnemyKind, wave: number): number {
-  return ENEMIES[kind].hp * (isBoss(kind) ? 1 : 1 + HP_GROWTH * (wave - 1));
+/** Regular foes gain `hp` of their base HP every wave (an object so probes can try numbers). */
+export const GROWTH = { hp: 0.52 };
+
+/** Ascension: each win unlocks the next level; every level gives all foes `hp` more HP. */
+export const ASC = { hp: 0.1, max: 10 };
+
+/** Max HP of a foe on a given wave: regular foes toughen every wave, bosses don't; ascension toughens all. */
+export function enemyHp(kind: EnemyKind, wave: number, asc = 0): number {
+  return ENEMIES[kind].hp * (isBoss(kind) ? 1 : 1 + GROWTH.hp * (wave - 1)) * (1 + ASC.hp * asc);
 }
 
 function spawn(s: GameState, b: Battle, kind: EnemyKind, x: number, y = 0): Enemy {
   const d = ENEMIES[kind];
-  const hp = enemyHp(kind, s.wave);
+  const hp = enemyHp(kind, s.wave, s.asc);
   const e: Enemy = { id: b.nextId++, kind, x, y, hp, maxHp: hp, shield: d.shield, speed: d.speed, slow: 0, slowT: 0, burn: 0, burnT: 0, alive: true, flash: 0 };
   b.enemies.push(e);
   return e;
@@ -224,7 +239,7 @@ function front(b: Battle): Enemy | null {
   return best;
 }
 
-const novaRadius = (sp: Spell) => sp.area * (1 + (sp.count - 1) * 0.35);
+const novaRadius = (sp: Spell) => sp.area * (1 + (sp.count - 1) * MOD.novaWiden);
 const inNova = (e: Enemy, r: number) => e.alive && !ENEMIES[e.kind].flying && dist(e.x, e.y, TOWER.x, TOWER.y) < r + ENEMIES[e.kind].r;
 
 /** Is there something for this spell to hit? Novas wait for foes in reach. */
@@ -259,10 +274,11 @@ function cast(s: GameState, b: Battle, row: number, sp: Spell): void {
       break;
     }
     case 'beam': {
-      // Each extra count adds a parallel beam on the next foe's column.
+      // Each extra count adds a parallel beam on the next foe's column; with
+      // too few foes the spare beams strike the target's column again.
       const cols = [target.x];
       const others = b.enemies.filter((e) => e.alive && e !== target).sort((a, c) => c.y - a.y);
-      for (let i = 1; i < sp.count && others[i - 1]; i++) cols.push(others[i - 1].x);
+      for (let i = 1; i < sp.count; i++) cols.push(others[i - 1]?.x ?? target.x);
       for (const x of cols) {
         b.fx.push({ type: 'beam', x, element: sp.element });
         let chain = sp.chain;
@@ -328,7 +344,6 @@ export function stepBattle(s: GameState, b: Battle): void {
   // Enemies.
   for (const e of b.enemies) {
     if (!e.alive) continue;
-    const d = ENEMIES[e.kind];
     if (e.slowT > 0) e.slowT -= dt;
     else e.slow = 0;
     if (e.burnT > 0) {
@@ -346,10 +361,12 @@ export function stepBattle(s: GameState, b: Battle): void {
       for (const dx of [-0.08, 0.08]) spawn(s, b, 'imp', Math.min(0.95, Math.max(0.05, e.x + dx)), e.y + 0.02);
     if (e.y >= 1) {
       e.alive = false;
-      b.leaked += d.leak;
+      const dmg = leakOf(e);
+      b.leaked += dmg;
       b.leakedBy[e.kind] = (b.leakedBy[e.kind] ?? 0) + 1;
-      s.hp -= d.leak;
-      b.fx.push({ type: 'leak', dmg: d.leak });
+      b.leakHp[e.kind] = (b.leakHp[e.kind] ?? 0) + dmg;
+      s.hp -= dmg;
+      b.fx.push({ type: 'leak', dmg });
     }
   }
   // Spells.

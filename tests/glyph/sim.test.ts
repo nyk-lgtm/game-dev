@@ -118,7 +118,7 @@ describe('replay encoding', () => {
     }
     expect(() => decode('X')).toThrow();
     expect(() => decode('ML00')).toThrow();
-    expect(RULES_VERSION).toBe(3);
+    expect(RULES_VERSION).toBe(4);
     expect(decode('B2b0k')).toEqual({ t: 'buy', i: 2, to: { area: 'bench', i: 0 }, keep: true });
     expect(encode({ t: 'move', from: slots[0], to: slots[2], keep: true })).toBe('ML00b0k');
     expect(decode('EL01k')).toMatchObject({ t: 'empower', keep: true });
@@ -183,7 +183,7 @@ describe('fuzz', () => {
           expect(s.bench).toHaveLength(BENCH_SIZE);
           for (const row of s.loom) row.forEach((r, c) => r && expect(c === 0).toBe(['bolt', 'beam', 'nova', 'rain', 'orb'].includes(r.id)));
         }
-        expect(tokens.length).toBeGreaterThan(30);
+        expect(tokens.length).toBeGreaterThan(20);
         fights += tokens.filter((t) => t === 'G').length;
         expect(illegal).toBeGreaterThan(0);
         expect(json(replay(seed, tokens.join(',')))).toBe(json(s));

@@ -141,12 +141,12 @@ export const W = {
   orbD: 0.299,
   orbEff: 0.8,
   beamD: 0.6,
-  novaBase: 0.195,
+  novaBase: 0.146,
   novaD: 0.525,
   rainD: 0.075,
   chainD: 0.235,
   splitEff: 1,
-  slow: 0.056,
+  slow: 0.028,
   burn: 0.333,
   arc: 1,
   shred: 0.006,
@@ -155,7 +155,7 @@ export const W = {
    *  loom barely hurts, like Drakes against Nova and Fire). */
   cover: 0.15,
   /** A second Nova row counts this much (a third, its square): they share one ring of reach. */
-  novaStack: 0.07,
+  novaStack: 0.013,
   // Per-caster trust (fit too; the whole-loom set moved Nova 0.75 -> 1).
   bolt: 1,
   beam: 1,
@@ -190,7 +190,7 @@ function castValue(sp: Spell, cd: number, P: Profile): number[] {
       break;
     case 'nova':
       instances = 1;
-      per = (W.novaBase + W.novaD * D) * (1 + (sp.count - 1) * 0.35) * (sp.area / casterBase('nova').area) ** 2;
+      per = (W.novaBase + W.novaD * D) * (1 + (sp.count - 1) * MOD.novaWiden) * (sp.area / casterBase('nova').area) ** 2;
       break;
     case 'rain':
       per = 1 + W.rainD * D * (sp.area / casterBase('rain').area);

@@ -15,7 +15,7 @@
 import { buy, empower, move, newGame, reroll, sell, startBattle, tick, toggleFreeze } from './state';
 import type { GameState, Slot } from './types';
 
-export const RULES_VERSION = 3;
+export const RULES_VERSION = 4;
 
 export type Action =
   | { t: 'buy'; i: number; to?: Slot; keep?: boolean }
@@ -98,8 +98,8 @@ export function finishBattle(s: GameState): void {
   for (let n = 0; s.phase === 'battle' && n < 60 * 600; n++) tick(s);
 }
 
-export function replay(seed: number, actions: string): GameState {
-  const s = newGame(seed);
+export function replay(seed: number, actions: string, asc = 0): GameState {
+  const s = newGame(seed, asc);
   for (const tok of actions.split(',').filter(Boolean)) {
     if (!apply(s, decode(tok))) throw new Error(`illegal action ${tok}`);
     if (s.phase === 'battle') finishBattle(s);

@@ -13,9 +13,10 @@ export const REROLL_COST = 1;
 export const rerollCost = (s: GameState): number => REROLL_COST + Math.floor(s.waveRerolls / 2);
 export const START_GOLD = 9;
 
-export function newGame(seed: number): GameState {
+export function newGame(seed: number, asc = 0): GameState {
   const s: GameState = {
     seed,
+    asc,
     wave: 1,
     gold: START_GOLD,
     hp: 20,
@@ -136,26 +137,25 @@ export function buy(s: GameState, shopIndex: number, to?: Slot, keep = false): R
   let dest: Slot | undefined = to;
   if (dest && (get(s, dest) || !fits(o.rune, dest))) dest = undefined;
   if (!dest) {
-    // Auto-place: an empty loom slot it fits, else the bench.
+    // Auto-place (rules v4): the bench first, so a buy never changes a spell
+    // behind your back; with the bench full, an empty loom slot it fits.
     const caster = RUNES[o.rune.id].kind === 'caster';
     const row = s.loom.findIndex((r) => (caster ? !r[0] : r[0] && r.slice(1).some((x) => !x)));
-    if (row >= 0) dest = { area: 'loom', row, col: caster ? 0 : s.loom[row].findIndex((x, c) => c > 0 && !x) };
+    const i = freeBench(s);
+    if (i >= 0) dest = { area: 'bench', i };
+    else if (row >= 0) dest = { area: 'loom', row, col: caster ? 0 : s.loom[row].findIndex((x, c) => c > 0 && !x) };
     else {
-      const i = freeBench(s);
-      if (i < 0) {
-        // No room on the bench: still allowed if it completes a three-of-a-kind,
-        // since the merge frees the space at once.
-        const k = `${o.rune.id}:${o.rune.tier}`;
-        const owned = [...s.loom.flat(), ...s.bench].filter((r) => r && `${r.id}:${r.tier}` === k).length;
-        if (keep || owned < 2 || o.rune.tier >= 3) return null;
-        s.gold -= price(o.rune);
-        o.sold = true;
-        s.bench.push({ ...o.rune });
-        const made = mergeAll(s, [{ area: 'bench', i: BENCH_SIZE }]);
-        s.bench = s.bench.slice(0, BENCH_SIZE);
-        return made;
-      }
-      dest = { area: 'bench', i };
+      // No room anywhere: still allowed if it completes a three-of-a-kind,
+      // since the merge frees the space at once.
+      const k = `${o.rune.id}:${o.rune.tier}`;
+      const owned = [...s.loom.flat(), ...s.bench].filter((r) => r && `${r.id}:${r.tier}` === k).length;
+      if (keep || owned < 2 || o.rune.tier >= 3) return null;
+      s.gold -= price(o.rune);
+      o.sold = true;
+      s.bench.push({ ...o.rune });
+      const made = mergeAll(s, [{ area: 'bench', i: BENCH_SIZE }]);
+      s.bench = s.bench.slice(0, BENCH_SIZE);
+      return made;
     }
   }
   s.gold -= price(o.rune);

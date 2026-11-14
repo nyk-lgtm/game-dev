@@ -5,7 +5,7 @@
 //   three pool rows on the waves and reports, per caster, the best loom that
 //   uses it (once / twice or more) and what leaks through it, by foe kind.
 //   TWEAK tries numbers without editing the rules (tweak.ts).
-import { CASTERS, ENEMIES, MODS, finishBattle, newGame, startBattle, type EnemyKind, type ModId, type Rune } from '../../src/glyph/core';
+import { CASTERS, MODS, finishBattle, newGame, startBattle, type EnemyKind, type ModId, type Rune } from '../../src/glyph/core';
 import { applyTweaks } from './tweak';
 
 applyTweaks();
@@ -31,7 +31,7 @@ function play(loom: Row[]): { leak: number; by: Partial<Record<EnemyKind, number
       startBattle(s);
       finishBattle(s);
       leak += s.battle!.leaked;
-      for (const [k, n] of Object.entries(s.battle!.leakedBy)) by[k as EnemyKind] = (by[k as EnemyKind] ?? 0) + (n as number) * ENEMIES[k as EnemyKind].leak;
+      for (const [k, n] of Object.entries(s.battle!.leakHp)) by[k as EnemyKind] = (by[k as EnemyKind] ?? 0) + (n as number);
     }
   return { leak, by };
 }

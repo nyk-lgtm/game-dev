@@ -1,6 +1,6 @@
 // What gets through in smart-bot runs: tower HP lost by primary caster, wave band and foe kind.
 // Run: npx vite-node scripts/glyph/leaks.ts [runs] [favor rune]
-import { apply, compileRow, finishBattle, newGame, mixSeed, ENEMIES } from '../../src/glyph/core';
+import { apply, compileRow, finishBattle, newGame, mixSeed } from '../../src/glyph/core';
 import { Rng } from '../../src/shared/rng';
 import { smartPlayer, profileFor, evalRow } from './smart';
 const runs = Number(process.argv[2] ?? 100);
@@ -22,7 +22,7 @@ for (let seed = 1; seed <= runs; seed++) {
     act({ t: 'fight' });
     finishBattle(s);
     const lb: Record<string, number> = {};
-    for (const [k, n] of Object.entries(s.battle!.leakedBy)) lb[k] = (n as number) * ENEMIES[k as keyof typeof ENEMIES].leak;
+    for (const [k, n] of Object.entries(s.battle!.leakHp)) lb[k] = n as number;
     leaks.push([w, lb]);
   }
   if (s.phase === 'won') wins++;

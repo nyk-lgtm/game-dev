@@ -138,6 +138,17 @@ body.battle #bench, body.battle #shop { display: none; }
 .lrow .sum .dl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card .runes .tiers { color: #cdb8ff; font-size: 12px; }
 .card p.through { color: #ffb86b; }
+.lrow .sum .one { color: #cdb8ff; }
+#laneInfo .lich {
+  padding: 3px 9px; border-radius: 8px; font-weight: 700; font-size: 12px;
+  background: rgba(20, 14, 36, 0.9); border: 1px solid var(--line);
+}
+#laneInfo .lich.good { color: #2fd3a5; border-color: #2fd3a588; }
+#laneInfo .lich.warn { color: #ffb86b; border-color: #ffb86b88; }
+#laneInfo .lich.bad { color: #ff6b88; border-color: #ff6b88; }
+#hud small.asc { font-size: 11px; font-weight: 800; color: #cdb8ff; margin-left: 4px; vertical-align: 2px; }
+.card .dpsdiff { text-align: left; font-size: 14px; margin: 6px 0; display: grid; gap: 3px; }
+.card .lichp { text-align: left; font-size: 13px; }
 
 /* Short screens (360×640): smaller (still 44 px) slots and tighter help line,
    bench and shop rows, so the lane keeps ~190 px instead of ~130 in the shop.

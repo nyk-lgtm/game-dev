@@ -9,8 +9,9 @@ import { Sfx } from '../afterglow/audio';
 import {
   BENCH_SIZE,
   CASTERS,
+  ASC,
   ENEMIES,
-  HP_GROWTH,
+  GROWTH,
   MOD,
   MODS,
   SLOW_TIME,
@@ -27,7 +28,9 @@ import {
   finishBattle,
   fits,
   get,
+  enemyHp,
   isBoss,
+  lichTrial,
   matchups,
   newGame,
   price,
@@ -41,6 +44,7 @@ import {
   type Element,
   type EnemyKind,
   type GameState,
+  type LichTrial,
   type Rune,
   type Slot,
   type Spell,
@@ -58,6 +62,12 @@ interface Profile {
   bestWave: number;
   wins: number;
   runs: number;
+  /** Highest Ascension level unlocked (each win at the top level opens the next). */
+  asc?: number;
+  /** The level new runs start at. */
+  ascPick?: number;
+  /** Wins per Ascension level. */
+  ascWins?: number[];
 }
 
 const same = (a: Slot | null, b: Slot | null) =>
@@ -89,6 +99,8 @@ export class Game {
   private sfx = new Sfx();
   private drag: { from: Slot; el: HTMLElement; x0: number; y0: number; moved: boolean; ghost?: HTMLCanvasElement; over?: string } | null = null;
   private goldBefore = 0;
+  /** The Ascension level this run's win just unlocked (0 if none). */
+  private unlocked = 0;
   private profile: Profile = store.load<Profile>('profile', { bestWave: 0, wins: 0, runs: 0 });
 
   constructor() {
@@ -122,18 +134,20 @@ export class Game {
   daily: string | null = null;
   private dailyResult: ReturnType<typeof recordDaily> | null = null;
 
-  start(seed: number, actions = '', fromLink = false, daily: string | null = null): void {
+  start(seed: number, actions = '', fromLink = false, daily: string | null = null, asc = 0): void {
     this.seed = seed;
     this.daily = daily;
     this.dailyResult = null;
     this.sel = null;
     this.lane = new Lane();
+    this.lichCache = null;
+    asc = daily ? 0 : Math.max(0, Math.min(ASC.max, Math.floor(asc) || 0));
     try {
-      this.s = replay(seed, actions);
+      this.s = replay(seed, actions, asc);
       this.actions = actions.split(',').filter(Boolean);
     } catch (e) {
       if (fromLink) toast(`Replay failed: ${(e as Error).message}`);
-      this.s = newGame(seed);
+      this.s = newGame(seed, asc);
       this.actions = [];
     }
     this.replayOnly = fromLink;
@@ -143,10 +157,15 @@ export class Game {
     else if (daily && this.actions.length === 0) this.banner('Daily run', prettyDay(daily));
   }
 
-  newRun(): void {
+  newRun(asc = this.ascPick()): void {
     closeOverlay();
     leaveDaily();
-    this.start((Math.random() * 2 ** 31) >>> 0);
+    this.start((Math.random() * 2 ** 31) >>> 0, '', false, null, asc);
+  }
+
+  /** The Ascension level new runs start at (never above what's unlocked). */
+  private ascPick(): number {
+    return Math.min(this.profile.ascPick ?? 0, this.profile.asc ?? 0);
   }
 
   /** Today's daily run: resume it if started, else begin it. */
@@ -162,14 +181,14 @@ export class Game {
   resumeOwn(): void {
     closeOverlay();
     leaveDaily();
-    const saved = store.load<{ v: number; seed: number; a: string } | null>('run', null);
-    if (saved && saved.v === RULES_VERSION) this.start(saved.seed, saved.a);
-    else this.start((Math.random() * 2 ** 31) >>> 0);
+    const saved = store.load<{ v: number; seed: number; a: string; asc?: number } | null>('run', null);
+    if (saved && saved.v === RULES_VERSION) this.start(saved.seed, saved.a, false, null, saved.asc);
+    else this.start((Math.random() * 2 ** 31) >>> 0, '', false, null, this.ascPick());
   }
 
   private persist(): void {
     if (this.replayOnly) return;
-    store.save(this.daily ? 'dailyRun' : 'run', { v: RULES_VERSION, seed: this.seed, a: this.actions.join(','), day: this.daily });
+    store.save(this.daily ? 'dailyRun' : 'run', { v: RULES_VERSION, seed: this.seed, a: this.actions.join(','), day: this.daily, asc: this.s.asc });
   }
 
   private act(a: Action): boolean {
@@ -213,7 +232,7 @@ export class Game {
       bounty ? `${bounty} bounty${b.goldEarned > bounty ? ' (max)' : ''}` : '',
       b.gilded ? `${b.gilded} gild` : '',
     ].filter(Boolean);
-    this.banner(`Wave ${s.wave - 1} cleared`, `+${gained}● (${parts.join(' + ')})${b.leaked ? ` · −${b.leaked} tower: ${leakText(b.leakedBy)}` : ''}`);
+    this.banner(`Wave ${s.wave - 1} cleared`, `+${gained}● (${parts.join(' + ')})${b.leaked ? ` · −${b.leaked} tower: ${leakText(b)}` : ''}`);
     this.sfx.levelUp();
     this.render();
   }
@@ -224,7 +243,21 @@ export class Game {
     const reached = this.s.phase === 'won' ? WAVES : this.s.wave;
     p.bestWave = Math.max(p.bestWave, reached);
     p.runs++;
-    if (this.s.phase === 'won') p.wins++;
+    this.unlocked = 0;
+    if (this.s.phase === 'won') {
+      p.wins++;
+      if (!this.daily) {
+        const a = this.s.asc;
+        p.ascWins = p.ascWins ?? [];
+        p.ascWins[a] = (p.ascWins[a] ?? 0) + 1;
+        // A win at your top level opens the next one (and new runs start there).
+        if (a >= (p.asc ?? 0) && a < ASC.max) {
+          p.asc = a + 1;
+          p.ascPick = a + 1;
+          this.unlocked = a + 1;
+        }
+      }
+    }
     store.save('profile', p);
     if (this.daily) this.dailyResult = recordDaily(store, reached, this.s.phase === 'won' ? 'won' : `wave ${reached}`, this.daily);
   }
@@ -322,8 +355,8 @@ export class Game {
   private foeCache: { key: string; foes: WaveFoe[] } | null = null;
   /** The foes of the coming (or current) wave. */
   private foes(): WaveFoe[] {
-    const key = `${this.s.seed}:${this.s.wave}`;
-    if (this.foeCache?.key !== key) this.foeCache = { key, foes: waveFoes(this.s.seed, this.s.wave) };
+    const key = `${this.s.seed}:${this.s.wave}:${this.s.asc}`;
+    if (this.foeCache?.key !== key) this.foeCache = { key, foes: waveFoes(this.s.seed, this.s.wave, this.s.asc) };
     return this.foeCache.foes;
   }
 
@@ -357,7 +390,7 @@ export class Game {
     if (!s) return;
     const battle = s.phase === 'battle';
     document.body.classList.toggle('battle', battle);
-    $('wave').textContent = `${Math.min(s.wave, WAVES)}/${WAVES}`;
+    $('wave').innerHTML = `${Math.min(s.wave, WAVES)}/${WAVES}${s.asc ? `<small class="asc" title="Ascension ${s.asc}">A${s.asc}</small>` : ''}`;
     $('hp').textContent = String(Math.max(0, s.hp));
     $('hp').classList.toggle('hurt', s.hp <= 6);
     $('gold').textContent = `${s.gold}●`;
@@ -375,7 +408,7 @@ export class Game {
         const wrap = el.parentElement!;
         wrap.classList.toggle('sold', !o || o.sold);
         wrap.classList.toggle('poor', !!o && !o.sold && price(o.rune) > s.gold);
-        el.classList.toggle('merge', !!o && !o.sold && o.rune.tier < 3 && this.owned(o.rune) >= 2);
+        el.classList.toggle('merge', !!o && !o.sold && o.rune.tier < 3 && this.owned(o.rune) >= 2 && !this.buyMerge(at.i)?.down);
         (wrap.lastChild as HTMLElement).textContent = o ? `${price(o.rune)}●` : '';
         const nm = wrap.firstChild as HTMLElement;
         nm.textContent = o ? `${RUNES[o.rune.id].name}${o.rune.tier > 1 ? ` ${ROMAN[o.rune.tier]}` : ''}` : '';
@@ -440,7 +473,7 @@ export class Game {
       const empty = s.loom.findIndex((row) => !row[0]);
       tip.innerHTML = `<div class="txt">${
         s.wave === 1 && this.actions.length < 3
-          ? 'Tap a rune in the shop, then <b>Buy</b> (or tap the slot it goes in). Each row casts one spell: a <b>caster</b> on the left, then up to 3 <b>modifiers</b>.'
+          ? 'Tap a rune in the shop, then <b>Buy</b>: it waits on your bench (or tap the loom slot it should go in). Each row casts one spell: a <b>caster</b> on the left, then up to 3 <b>modifiers</b>.'
           : empty >= 0 && s.wave > 1
             ? `Row ${empty + 1} has no caster: it stays silent. Three identical runes merge into a stronger one.`
             : s.wave <= 3
@@ -457,17 +490,16 @@ export class Game {
     const div = document.createElement('div');
     div.className = 'txt';
     if (this.sel.area === 'shop') {
-      // Would buying it merge a rune out of a row? (Buy asks first.)
-      let loses = '';
-      if (r.tier < 3 && this.owned(r) >= 2) {
-        const t = JSON.parse(JSON.stringify(s)) as GameState;
-        const a: Action = { t: 'buy', i: this.sel.i };
-        if (apply(t, a)) {
-          const { lost } = this.mergeEffect(s, t, a);
-          if (lost.length) loses = ` <span class="bad">⚠ ${lost.map((l) => `row ${l.row + 1}`).join(', ')} would lose its ${def.name}</span>`;
-        }
+      // Would buying it merge a rune out of a row, or lower a row's dps? (Buy asks first.)
+      let merge = '';
+      const m = r.tier < 3 && this.owned(r) >= 2 ? this.buyMerge(this.sel.i) : null;
+      if (m) {
+        const loses = m.lost.length ? ` <span class="bad">⚠ ${m.lost.map((l) => `row ${l.row + 1}`).join(', ')} would lose its ${def.name}</span>` : '';
+        const drop = m.rows.filter((d) => d.b < d.a).map((d) => `row ${d.row + 1} ${d.a} → ${d.b} dps`);
+        merge = m.down
+          ? ` <span class="bad">⚠ merges with yours, but ${drop.join(', ')}</span>`
+          : ` <span class="star">★ merges with yours (${this.where(r).slice(0, 2).join(', ')}) → ${next}</span>${loses}`;
       }
-      const merge = r.tier < 3 && this.owned(r) >= 2 ? ` <span class="star">★ merges with yours (${this.where(r).slice(0, 2).join(', ')}) → ${next}</span>${loses}` : '';
       div.innerHTML = `${name} · ${price(r)}●${merge}<br>${def.text(r.tier)}`;
       const b = document.createElement('button');
       b.className = 'primary';
@@ -498,7 +530,8 @@ export class Game {
         e.disabled = cost > s.gold;
         e.setAttribute('aria-label', `Empower to ${ROMAN[r.tier + 1]} for ${cost} gold`);
         e.onclick = () => {
-          this.commit({ t: 'empower', at });
+          // Clear the selection: the next tap shouldn't move the rune just raised.
+          if (this.commit({ t: 'empower', at })) this.sel = null;
           this.render();
         };
         btns.unshift(e);
@@ -518,7 +551,44 @@ export class Game {
       const boss = isBoss(k);
       return `<span class="chip${boss ? ' boss' : ''}"><i style="background:hsl(${d.hue},85%,55%)"></i>${d.name}${n > 1 ? ` ×${n}` : ''}</span>`;
     });
-    info.innerHTML = `<div class="head">Wave ${this.s.wave} incoming · tap for details</div>${chips.join('')}`;
+    const lich = this.s.wave >= LICH_FROM && this.s.loom.some((r) => r[0]) ? this.lichLine() : null;
+    info.innerHTML = `<div class="head">Wave ${this.s.wave} incoming · tap for details</div>${chips.join('')}${
+      lich ? `<div class="lich ${lich.cls}">${this.s.wave < WAVES ? 'Wave 15 ' : ''}Lich trial: ${lich.short}</div>` : ''
+    }`;
+  }
+
+  private lichCache: { key: string; t: LichTrial } | null = null;
+  /** The loom against the Lich alone (cached until the loom changes). */
+  private lich(): LichTrial {
+    const key = `${this.s.asc}:${JSON.stringify(this.s.loom)}`;
+    if (this.lichCache?.key !== key) this.lichCache = { key, t: lichTrial(this.s) };
+    return this.lichCache.t;
+  }
+
+  /** The Lich trial in words: short for the wave preview, long for the Foes card. */
+  private lichLine(): { cls: string; short: string; long: string } {
+    const t = this.lich();
+    const full = ENEMIES.lich.leak;
+    if (!t.killed) {
+      const cost = Math.max(1, Math.ceil(full * t.left));
+      return {
+        cls: 'bad',
+        short: `✗ gets through with ${pc(t.left)} left (−${cost})`,
+        long: `Your spells bring the Lich only to <b>${pc(t.left)}</b> of its HP before it reaches the tower, which would cost <b>${cost}</b> tower HP, and that's against the Lich alone.`,
+      };
+    }
+    const at = pc(t.progress);
+    if (t.progress >= LICH_CLOSE)
+      return {
+        cls: 'warn',
+        short: `⚠ falls ${at} down the lane: close`,
+        long: `Alone, the Lich falls <b>${at}</b> of the way to the tower. That's close: in the real wave other foes take some of your shots, so it may get through. Bosses cost tower HP by how much of them is left (up to ${full}).`,
+      };
+    return {
+      cls: 'good',
+      short: `✓ falls ${at} down the lane`,
+      long: `Alone, the Lich falls <b>${at}</b> of the way to the tower: room to spare for the rest of the wave${t.progress >= 0.65 ? ', though not much' : ''}.`,
+    };
   }
 
   private renderBattleHud(): void {
@@ -705,9 +775,42 @@ export class Game {
       toast('Not enough gold');
       return;
     }
+    const benchBefore = this.s.bench.filter(Boolean).length;
     if (!this.commit({ t: 'buy', i })) toast('No room: sell something or make space on the bench');
+    else if (this.s.bench.filter(Boolean).length > benchBefore) {
+      // Bought runes wait on the bench (rules v4): say so the first few times.
+      const n = store.load('benchHint', 0);
+      if (n < 3) {
+        store.save('benchHint', n + 1);
+        toast('On the bench: drag it into a row, or tap it and then a slot');
+      }
+    }
     this.sel = null;
     this.render();
+  }
+
+  private mergeMemo: { key: string; m: (MergeCheck | null)[] } | null = null;
+  /** What buying shop offer i would merge, and whether that lowers the loom's dps (memoized per state). */
+  private buyMerge(i: number): MergeCheck | null {
+    const key = this.actions.length + ':' + this.s.wave;
+    if (this.mergeMemo?.key !== key) this.mergeMemo = { key, m: [] };
+    if (this.mergeMemo.m[i] === undefined) {
+      const t = JSON.parse(JSON.stringify(this.s)) as GameState;
+      const a: Action = { t: 'buy', i };
+      this.mergeMemo.m[i] = apply(t, a) ? this.mergeCheck(this.s, t, a) : null;
+    }
+    return this.mergeMemo.m[i];
+  }
+
+  /** Did action `a` merge runes, and what did that do to each row's dps? Null if nothing merged. */
+  private mergeCheck(before: GameState, after: GameState, a: Action): MergeCheck | null {
+    const count = (g: GameState) => [...g.loom.flat(), ...g.bench].filter(Boolean).length;
+    if (count(after) >= count(before) + (a.t === 'buy' ? 1 : 0)) return null;
+    const x = loomDps(before.loom);
+    const y = loomDps(after.loom);
+    const rows = x.map((v, row) => ({ row, a: v, b: y[row] })).filter((d) => d.a !== d.b);
+    const sum = (v: number[]) => v.reduce((p, q) => p + q, 0);
+    return { ...this.mergeEffect(before, after, a), rows, down: sum(y) < sum(x) };
   }
 
   /** "row 2 (Nova)" */
@@ -739,19 +842,22 @@ export class Game {
     if (a.t === 'buy' || a.t === 'move' || a.t === 'empower') {
       const t = JSON.parse(JSON.stringify(this.s)) as GameState;
       if (!apply(t, a)) return false;
-      const { lost } = this.mergeEffect(this.s, t, a);
-      if (lost.length) {
-        this.confirmMerge(a, t, lost);
+      const m = this.mergeCheck(this.s, t, a);
+      if (m && (m.lost.length || m.rows.some((d) => d.b < d.a))) {
+        this.confirmMerge(a, t, m);
         return true;
       }
     }
     return this.run(a);
   }
 
-  private confirmMerge(a: Action, after: GameState, lost: { row: number; rune: Rune }[]): void {
-    const r = lost[0].rune;
+  private confirmMerge(a: Action, after: GameState, m: MergeCheck): void {
+    const lost = m.lost;
+    // The merged rune: the one that went up a tier (a lost one, or what landed).
+    const r: Rune = lost[0]?.rune ?? this.madeBy(after) ?? { id: 'bolt', tier: 1 };
     const name = RUNES[r.id].name;
     const up = `${name} ${ROMAN[r.tier + 1]}`;
+    const dps = m.rows.map((d) => `<div>${this.rowName(d.row)}: ${d.a} → <b class="${d.b < d.a ? 'bad' : 'good'}">${d.b}</b> dps</div>`).join('');
     // Where it lands: the loom cell that went up a tier, else the bench.
     let land = 'on the bench';
     after.loom.forEach((cells, row) =>
@@ -775,7 +881,8 @@ export class Game {
     };
     showCard(
       `<h2>Merge into ${up}?</h2>
-       <p>Three ${name} ${ROMAN[r.tier]} make one ${up}, which lands ${land}. The ${name} in <b>${rows.join(' and ')}</b> joins it, so <b class="bad">that row loses it</b>.</p>
+       <p>Three ${name} ${ROMAN[r.tier]} make one ${up}, which lands ${land}.${rows.length ? ` The ${name} in <b>${rows.join(' and ')}</b> joins it, so <b class="bad">that row loses it</b>.` : ''}</p>
+       <div class="dpsdiff">${dps}</div>${m.down ? '<p class="bad">This merge lowers your total damage.</p>' : ''}
        ${canKeep ? `<p>Or keep them apart: no merge for now${a.t === 'buy' ? `, the new ${name} goes ${goes}` : ''}. They merge when you next move one of them.</p>` : ''}`,
       [
         { label: `Merge → ${up}`, primary: true, onClick: done(a) },
@@ -828,14 +935,42 @@ export class Game {
     return [...this.s.loom.flat(), ...this.s.bench].filter((r): r is Rune => !!r).map((r) => `${r.id}:${r.tier}`);
   }
 
+  /** The runes (at their old tier) that merged on the way from this state to `after`. */
+  private madeBy(after: GameState): Rune | null {
+    const tally = (g: GameState) => {
+      const m = new Map<string, number>();
+      for (const r of [...g.loom.flat(), ...g.bench]) if (r) m.set(`${r.id}:${r.tier}`, (m.get(`${r.id}:${r.tier}`) ?? 0) + 1);
+      return m;
+    };
+    const a = tally(this.s);
+    for (const [k, n] of tally(after)) {
+      const [id, tier] = k.split(':');
+      if (+tier > 1 && n > (a.get(k) ?? 0)) return { id: id as Rune['id'], tier: (+tier - 1) as Rune['tier'] };
+    }
+    return null;
+  }
+
   // ---- cards ----
 
   showMenu(): void {
     showCard(
       `<h2>Glyphwright</h2><p>Wave ${Math.min(this.s.wave, WAVES)} of ${WAVES} · seed ${this.seed}</p>
-       <p>Best: wave ${this.profile.bestWave || '—'}${this.profile.wins ? ` · ${this.profile.wins} win${this.profile.wins > 1 ? 's' : ''}` : ''}</p>`,
+       <p>Best: wave ${this.profile.bestWave || '—'}${this.profile.wins ? ` · ${this.profile.wins} win${this.profile.wins > 1 ? 's' : ''}` : ''}${this.profile.asc ? ` · Ascension ${this.profile.asc} open` : ''}${this.s.asc ? `<br>This run: Ascension ${this.s.asc} (foes +${pc(ASC.hp * this.s.asc)} HP)` : ''}</p>`,
       [
         { label: 'Resume', primary: true, onClick: closeOverlay },
+        ...(this.profile.asc
+          ? [
+              {
+                label: `New runs: ${this.ascPick() ? `Ascension ${this.ascPick()} (+${pc(ASC.hp * this.ascPick())} HP)` : 'normal'}`,
+                onClick: () => {
+                  // Cycle through the unlocked levels.
+                  this.profile.ascPick = (this.ascPick() + 1) % ((this.profile.asc ?? 0) + 1);
+                  store.save('profile', this.profile);
+                  this.showMenu();
+                },
+              },
+            ]
+          : []),
         { label: 'How to play', onClick: () => this.showHelp() },
         { label: 'Runes', onClick: () => this.showRunes() },
         { label: 'Foes', onClick: () => this.showFoes() },
@@ -872,12 +1007,14 @@ export class Game {
         <li>Foes march down the lane toward your <b>tower</b>. Each one that reaches it costs tower HP. Survive <b>15 waves</b>.</li>
         <li>Your <b>loom</b> has three rows. Each row is one spell: a <b>caster</b> in the first slot, then up to three <b>modifiers</b>. Spells fire on their own.</li>
         <li>Order matters in two ways: <b>Echo</b> repeats the spell as built so far (what sits after it isn't echoed), and the <b>last</b> Fire, Frost or Storm sets the element of the hits (an earlier one's burn, slow or arcs still work). Other modifiers stack the same in any order.</li>
-        <li>Buy runes in the shop, drag them around, or tap one and then tap where it goes. Drop on the bar above the bench to sell.</li>
+        <li>Buy runes in the shop: <b>Buy</b> puts them on the bench, or tap the slot it should go in. Drag runes around, or tap one and then tap where it goes. Drop on the bar above the bench to sell.</li>
         <li><b>Three identical runes merge</b> into the next tier (I → II → III). The ★ in the shop marks a rune that completes a set. If a merge would take a rune out of a row, you're asked first and can keep them apart.</li>
         <li>Or <b>empower</b> one: tap a rune you own and press <b>II ↑</b> / <b>III ↑</b> to raise it a tier for gold (pricier than finding copies, but sure).</li>
         <li>Between waves you earn 5 gold, more in later waves, plus <b>interest</b>: +1 per 5 gold banked (max +3), plus <b>bounty</b>: the gold tougher foes and bosses drop when slain (at most ${bountyCap(1)} + half the wave number per wave; Gild's extra gold always counts). <b>Freeze</b> keeps the shop for next wave. Rerolls get dearer the more you use them in one wave.</li>
         <li>Armor eats a flat amount of every hit, so big hits beat many small ones. Some foes resist elements. Tap the wave preview to see them.</li>
-        <li><b>Tap a spell</b> (the text beside its row) for a rune-by-rune breakdown and how it hits the next wave. <b style="color:#ffb86b">⚠</b> marks foes it struggles with.</li>
+        <li><b>Tap a spell</b> (the text beside its row) for a rune-by-rune breakdown and how it hits the next wave. <b style="color:#ffb86b">⚠</b> marks foes it struggles with. Each row shows its dps in a crowd and on <b>1 foe</b> (what a boss feels).</li>
+        <li>Bosses come on waves 5, 10 and 15 and cost tower HP by how much of them is left when they arrive. From wave ${LICH_FROM} the preview runs a <b>Lich trial</b>: your loom against the final boss alone, and how far down the lane it falls.</li>
+        <li>Win a run to open <b>Ascension</b> 1, then the next: every level gives all foes +${pc(ASC.hp)} HP.</li>
        </ul>`,
       [{ label: 'Got it', primary: true, onClick: closeOverlay }],
     );
@@ -962,10 +1099,13 @@ export class Game {
         const res = Object.entries(d.resist)
           .map(([el, m]) => `${el} ×${m}`)
           .join(', ');
-        return `${head}<div${f ? '' : ' class="later"'}><i style="background:hsl(${d.hue},85%,55%)"></i><b>${d.name}</b>${f && f.count > 1 ? ` ×${f.count}` : ''} · ${Math.round(f ? f.hp : d.hp)} hp${d.armor ? ` · armor ${d.armor}` : ''}${d.shield ? ` · shield ${d.shield}` : ''}${d.flying ? ' · flies' : ''}${res ? ` · ${res}` : ''}<br>${d.blurb}</div>`;
+        return `${head}<div${f ? '' : ' class="later"'}><i style="background:hsl(${d.hue},85%,55%)"></i><b>${d.name}</b>${f && f.count > 1 ? ` ×${f.count}` : ''} · ${Math.round(f ? f.hp : enemyHp(k, 1, this.s.asc))} hp${d.armor ? ` · armor ${d.armor}` : ''}${d.shield ? ` · shield ${d.shield}` : ''}${d.flying ? ' · flies' : ''}${res ? ` · ${res}` : ''}<br>${d.blurb}</div>`;
       })
       .join('');
-    showCard(`<h2>Foes</h2><div class="scroll foes">${html}</div><p>Normal foes gain ${Math.round(HP_GROWTH * 100)}% of their base HP each wave; bosses don't.</p>`, [
+    const lich = this.s.loom.some((r) => r[0]) ? this.lichLine() : null;
+    const trial = lich ? `<p class="lichp"><b>Lich trial</b> (your loom against the wave-15 boss alone, with its imps): <span class="${lich.cls}">${lich.short}</span>. ${lich.long}</p>` : '';
+    const asc = this.s.asc ? ` Ascension ${this.s.asc}: every foe has +${pc(ASC.hp * this.s.asc)} HP.` : '';
+    showCard(`<h2>Foes</h2>${trial}<div class="scroll foes">${html}</div><p>Normal foes gain ${Math.round(GROWTH.hp * 100)}% of their base HP each wave; bosses don't, and cost less tower HP the more of them is gone.${asc}</p>`, [
       { label: 'Close', primary: true, onClick: closeOverlay },
     ]);
   }
@@ -980,16 +1120,18 @@ export class Game {
       .join('');
     // What got through on the last wave.
     const b = this.s.battle;
-    const through = b && b.leaked ? `<p class="through">Wave ${this.s.wave}: <b>−${b.leaked} tower</b> from ${leakText(b.leakedBy)}.</p>` : '';
+    const through = b && b.leaked ? `<p class="through">Wave ${this.s.wave}: <b>−${b.leaked} tower</b> from ${leakText(b)}.</p>` : '';
     showCard(
       `<h2>${won ? 'The Lich is unmade' : 'The tower falls'}</h2>
        <p>${won ? `All ${WAVES} waves held.` : `Fell on wave ${this.s.wave} of ${WAVES}.`} ${this.s.totalKills} foes slain.</p>
        ${through}
+       ${this.unlocked ? `<p class="good">Ascension ${this.unlocked} is open: every foe has +${pc(ASC.hp * this.unlocked)} HP. New runs start there (change it in the menu).</p>` : this.s.asc ? `<p>Ascension ${this.s.asc}</p>` : ''}
        <ul>${spells}</ul>
        ${this.daily ? `<p><b>Daily run · ${prettyDay(this.daily)}</b><br>${this.dailyResult?.improved ? 'New best for today!' : `Today's best: ${loadDaily(store, this.daily)?.label ?? '—'}`}</p>` : ''}`,
       [
-        { label: 'New run', primary: true, onClick: () => this.newRun() },
+        { label: this.ascPick() ? `New run · Ascension ${this.ascPick()}` : 'New run', primary: true, onClick: () => this.newRun() },
         ...(this.daily ? [{ label: 'Retry today’s run', onClick: () => this.playDaily(true) }] : []),
+        { label: 'Copy my result', onClick: () => this.share() },
         { label: 'Copy bug report', onClick: () => this.copyReport() },
         { label: 'Back to Game Lab', onClick: () => (location.href = '../') },
       ],
@@ -999,9 +1141,24 @@ export class Game {
     else this.sfx.defeat();
   }
 
+  /** A spoiler-free result line to paste anywhere (the daily links today's run, others the seed). */
+  shareText(): string {
+    const s = this.s;
+    const won = s.phase === 'won';
+    const tag = this.daily ? ` daily ${this.daily}` : s.asc ? ` A${s.asc}` : '';
+    const bar = Array.from({ length: WAVES }, (_, i) => (i + 1 < s.wave || won ? '🟪' : i + 1 === s.wave ? '💀' : '⬛')).join('');
+    const link = this.daily ? `${location.origin}${location.pathname}?daily` : `${location.origin}${location.pathname}?seed=${this.seed}${s.asc ? `&asc=${s.asc}` : ''}`;
+    return `Glyphwright${tag}: ${won ? `the Lich is unmade, ${s.hp}♥ left` : `fell on wave ${s.wave}/${WAVES}`}\n${bar}\n${link}`;
+  }
+
+  private async share(): Promise<void> {
+    toast((await copyText(this.shareText())) ? 'Result copied: paste it anywhere' : 'Copy failed');
+  }
+
   private async copyReport(): Promise<void> {
     const a = this.actions.join(',') || '-';
-    const text = `GLYPH v${RULES_VERSION} seed=${this.seed} a=${a}\nwave=${this.s.wave} hp=${this.s.hp} gold=${this.s.gold} phase=${this.s.phase}\nbuild ${BUILD}\n${location.origin}${location.pathname}?seed=${this.seed}&a=${a}`;
+    const asc = this.s.asc ? `&asc=${this.s.asc}` : '';
+    const text = `GLYPH v${RULES_VERSION} seed=${this.seed}${this.s.asc ? ` asc=${this.s.asc}` : ''} a=${a}\nwave=${this.s.wave} hp=${this.s.hp} gold=${this.s.gold} phase=${this.s.phase}\nbuild ${BUILD}\n${location.origin}${location.pathname}?seed=${this.seed}${asc}&a=${a}`;
     toast((await copyText(text)) ? 'Bug report copied' : 'Copy failed');
   }
 }
@@ -1036,18 +1193,42 @@ function rowSummary(sp: Spell | null, extra = '', cells?: (Rune | null)[]): stri
   if (sp.slow) tags.push(`slows ${pc(sp.slow)}`);
   if (sp.burn) tags.push('burns');
   // The name gets its own line; tags ride after the dps so nothing important is cut off.
-  return `<b>${spellName(sp, cells)}</b><div class="dl"><span class="dps">${Math.round(spellDps(sp))} dps</span> · ${sp.cooldown.toFixed(1)}s${tags.length ? ` · ${tags.join(' · ')}` : ''}</div>${extra}`;
+  // Crowd dps, then on a single foe (what a boss like the Lich feels).
+  return `<b>${spellName(sp, cells)}</b><div class="dl"><span class="dps">${Math.round(spellDps(sp))} dps</span> · <span class="one">1 foe ${Math.round(spellDps(sp, false))}</span> · ${sp.cooldown.toFixed(1)}s${tags.length ? ` · ${tags.join(' · ')}` : ''}</div>${extra}`;
 }
 
 /** "3 Drakes (−9), Imp (−1)": what got through, worst first. */
-function leakText(by: Partial<Record<EnemyKind, number>>): string {
-  return (Object.entries(by) as [EnemyKind, number][])
-    .sort((a, b) => b[1] * ENEMIES[b[0]].leak - a[1] * ENEMIES[a[0]].leak)
-    .map(([k, n]) => `${n > 1 ? `${n} ${ENEMIES[k].name}s` : ENEMIES[k].name} (−${n * ENEMIES[k].leak})`)
+function leakText(b: { leakedBy: Partial<Record<EnemyKind, number>>; leakHp: Partial<Record<EnemyKind, number>> }): string {
+  const hp = (k: EnemyKind) => b.leakHp[k] ?? (b.leakedBy[k] ?? 0) * ENEMIES[k].leak;
+  return (Object.entries(b.leakedBy) as [EnemyKind, number][])
+    .sort((x, y) => hp(y[0]) - hp(x[0]))
+    .map(([k, n]) => `${n > 1 ? `${n} ${ENEMIES[k].name}s` : ENEMIES[k].name} (−${hp(k)})`)
     .join(', ');
 }
 
 const r0 = (x: number) => String(Math.round(x));
+
+/** The Lich trial shows in the wave preview from this wave on. */
+const LICH_FROM = 11;
+/** A trial Lich that falls this far down the lane (or further) is a warning. */
+const LICH_CLOSE = 0.8;
+
+interface MergeCheck {
+  lost: { row: number; rune: Rune }[];
+  landed: { row: number; rune: Rune } | null;
+  /** Rows whose dps the action changes (crowd dps, before → after). */
+  rows: { row: number; a: number; b: number }[];
+  /** The loom's total dps goes down. */
+  down: boolean;
+}
+
+/** Each row's crowd dps, rounded. */
+function loomDps(loom: (Rune | null)[][]): number[] {
+  return loom.map((r) => {
+    const sp = compileRow(r);
+    return sp ? Math.round(spellDps(sp)) : 0;
+  });
+}
 const pc = (x: number) => `${Math.round(x * 100)}%`;
 const UNIT: Record<Spell['caster'], string> = { bolt: 'bolts', beam: 'beams', nova: 'blast', rain: 'strikes', orb: 'orbs' };
 
@@ -1062,7 +1243,7 @@ function spellDiff(a: Spell, b: Spell): string {
   const out: string[] = [];
   if (b.element !== a.element) out.push(`turns <b>${b.element}</b>`);
   if (Math.abs(b.dmg - a.dmg) > 0.05) out.push(`dmg ${r0(a.dmg)} → <b>${r0(b.dmg)}</b>`);
-  if (b.count !== a.count) out.push(b.caster === 'nova' ? `blast ${pc((1 + (b.count - 1) * 0.35) / (1 + (a.count - 1) * 0.35) - 1)} wider` : `${a.count} → <b>${b.count}</b> ${UNIT[b.caster]}`);
+  if (b.count !== a.count) out.push(b.caster === 'nova' ? `blast ${pc((1 + (b.count - 1) * MOD.novaWiden) / (1 + (a.count - 1) * MOD.novaWiden) - 1)} wider` : `${a.count} → <b>${b.count}</b> ${UNIT[b.caster]}`);
   if (b.area > a.area * 1.01 && b.count === a.count) out.push(b.caster === 'nova' ? `blast ${pc(b.area / a.area - 1)} wider` : 'bigger hits');
   if (Math.abs(b.cooldown - a.cooldown) > 0.005) out.push(`every ${a.cooldown.toFixed(2)}s → <b>${b.cooldown.toFixed(2)}s</b>`);
   if (b.burn !== a.burn) out.push(`burns <b>${r0(b.burn)}/s</b> for 3s`);

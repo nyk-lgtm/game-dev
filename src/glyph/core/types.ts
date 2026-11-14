@@ -95,6 +95,8 @@ export interface Battle {
   leaked: number;
   /** Which foes got through (for the end-of-wave note). */
   leakedBy: Partial<Record<EnemyKind, number>>;
+  /** Tower HP each kind cost (bosses cost less the more of them is gone). */
+  leakHp: Partial<Record<EnemyKind, number>>;
   fx: BattleFx[];
   over: boolean;
 }
@@ -106,6 +108,8 @@ export interface Offer {
 
 export interface GameState {
   seed: number;
+  /** Ascension level (0 = normal): foes have more HP. */
+  asc: number;
   wave: number;
   gold: number;
   hp: number;
