@@ -34,7 +34,7 @@ export const MONSTERS: Record<MonsterKind, MonsterDef> = {
   wraith: { name: 'Wraith', hp: 32, atk: 15, def: 3, xp: 18, slow: 0, range: 0, erratic: 0, ghost: true, depths: [5, 10], weight: 1.5, blurb: 'Drifts through walls.' },
   mage: { name: 'Cultist', hp: 26, atk: 16, def: 2, xp: 20, slow: 0, range: 6, erratic: 0, ghost: false, depths: [5, 10], weight: 1.5, blurb: 'Hurls fire from afar.' },
   golem: { name: 'Stone golem', hp: 80, atk: 20, def: 5, xp: 30, slow: 1, range: 0, erratic: 0, ghost: false, depths: [6, 10], weight: 1.5, blurb: 'Slow as stone, hits like a landslide.' },
-  warden: { name: 'The Warden', hp: 420, atk: 24, def: 5, xp: 0, slow: 0, range: 0, erratic: 0, ghost: false, depths: [99, 99], weight: 0, blurb: 'Keeper of the deep. Calls the dead.' },
+  warden: { name: 'The Warden', hp: 460, atk: 24, def: 5, xp: 0, slow: 0, range: 0, erratic: 0, ghost: false, depths: [99, 99], weight: 0, blurb: 'Keeper of the deep. Calls the dead.' },
 };
 
 export const WEAPONS = ['Dagger', 'Sword', 'Axe', 'Warblade', 'Runeblade'];
@@ -52,20 +52,33 @@ export interface SpellDef {
 
 export const SPELLS: Record<SpellId, SpellDef> = {
   fire: { name: 'Firebolt', cost: 3, level: 1, desc: 'Burns the first foe ahead, up to 8 cells.' },
-  frost: { name: 'Frost', cost: 4, level: 3, desc: 'Freezes the first foe ahead (up to 8 cells) for 3 turns.' },
+  frost: { name: 'Frost', cost: 4, level: 3, desc: 'Freezes the first foe ahead (up to 8 cells) for 3 turns. The Warden: 1 turn, once between waves.' },
   heal: { name: 'Mend', cost: 8, level: 5, desc: 'Restore half your health.' },
-  blink: { name: 'Blink', cost: 4, level: 7, desc: 'Teleport up to 4 cells forward.' },
+  blink: { name: 'Blink', cost: 4, level: 7, desc: 'Teleport up to 4 cells forward (stops short of walls and foes).' },
 };
 
 /**
  * The Warden's patterns (the boss's `atk` is its plain melee blow). Every `chargeEvery`-th action, if you're
  * near, it draws in the cold (a tell), then looses a wave down its row and column (`reach` cells, stopped by
  * walls and pillars) that always lands for `blast`; after the wave it is spent for `rest` turns. At each
- * share of its HP in `summonAt` it calls up `summon` (beside it) and is spent for a turn. Only its ordinary
- * actions count toward the next wave, so it still swings at you between them.
+ * share of its HP in `summonAt` it calls up `summon` (near it, never beside you) and is spent for a turn. Only its
+ * ordinary actions count toward the next wave, so it still swings at you between them. Below half its HP it
+ * swings softer (`meleeLate`) and waves come every `chargeLate`-th action. It never charges while you have no
+ * cell to dodge into. Frost holds it for one action, once between waves, and never while it charges.
  */
-export const WARDEN: { chargeEvery: number; reach: number; blast: number; rest: number; summonAt: number[]; summon: MonsterKind[] } = {
+export const WARDEN: {
+  chargeEvery: number;
+  chargeLate: number;
+  meleeLate: number;
+  reach: number;
+  blast: number;
+  rest: number;
+  summonAt: number[];
+  summon: MonsterKind[];
+} = {
   chargeEvery: 4,
+  chargeLate: 3,
+  meleeLate: 21,
   reach: 5,
   blast: 34,
   rest: 1,
@@ -84,7 +97,7 @@ export const REGEN_EVERY = 4;
 export const REGEN_CAP = 0.5;
 /** Chance a slain foe leaves something (POTION_SHARE of drops are potions, the rest gold); rarer from depth LEAN_FROM. */
 export const DROP_CHANCE = 0.18;
-export const DROP_CHANCE_DEEP = 0.1;
+export const DROP_CHANCE_DEEP = 0.07;
 export const POTION_SHARE = 0.4;
 export const LEAN_FROM = 5;
 

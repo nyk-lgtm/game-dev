@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_DEPTH, MONSTERS, SIZE, distances, floorCap, generateFloor, newGame } from '../../src/delve/core';
+import { MAX_DEPTH, MONSTERS, SIZE, distances, floorCap, generateFloor, linedUp, newGame } from '../../src/delve/core';
 
 const SEEDS = Array.from({ length: 100 }, (_, i) => i + 1);
 const DEPTHS = Array.from({ length: MAX_DEPTH }, (_, i) => i + 1);
@@ -103,6 +103,19 @@ describe('floor generation', () => {
     expect(both).toBeGreaterThan(SEEDS.length / 2);
     expect(floorCap('wraith', 6)).toBe(2);
     expect(floorCap('ghoul', 4)).toBe(Infinity);
+  });
+
+  it('archers and cultists never wait in a clear straight line to where you arrive', () => {
+    let ranged = 0;
+    for (const seed of SEEDS)
+      for (const depth of [3, 5, 7, 9]) {
+        const f = generateFloor(seed, depth);
+        for (const m of f.monsters.filter((o) => MONSTERS[o.kind].range)) {
+          ranged++;
+          expect(linedUp(f.level.tiles, f.start, m, MONSTERS[m.kind].range + 1), `seed ${seed} depth ${depth}`).toBe(false);
+        }
+      }
+    expect(ranged).toBeGreaterThan(500);
   });
 
   it("the boss floor is the Warden's pillared hall with its guard", () => {

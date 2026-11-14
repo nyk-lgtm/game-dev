@@ -1012,6 +1012,17 @@ playtests with fixes shipped. Open threads, in order:
   wisps 20% → 22% (bot: 276 → 248 turns, Spirit Tree 49/60 → 30/60); help says wisps never merge and
   what traps pay; brighter labels; empty stash is dashed and says so. Still long for one sitting —
   owner said keep the board as is (no smaller board).
+- Delve Warden blind playtest (v7: telegraph and REST worked; the fight didn't) and fixes (rules v8): Frost held the Warden
+  every cast (5 in a row, no wave ever) → it holds one action once between waves and never mid-charge (text says so; the
+  menu warns "it would shrug off the hold"); "spent, strike now" is logged on the turn the wave resolves (it came a turn
+  late); summons rise within 2 of the Warden but never beside you, and it only charges while you have a dodge cell (adds
+  had boxed the tester into the wave's row); second half (≤ 50% HP) melee 24 → 21 and a wave every 3rd action, so it's
+  dodge/strike/heal rather than a potion race; Blink with no room is refused (no MP/turn) and the menu shows where it
+  lands; the summon popup sits low in the view; REST logs a line; the depth-9 stairs warn about the Warden; the wave
+  warning is a full-width banner plus a pulsing cyan border; archers/cultists never start lined up with a floor's
+  arrival cell (the tester took two firebolts arriving at d5). To hold the win rate: Warden 420 → 460 HP, deep kill-drop
+  chance 10% → 7%. Bot (400): 72% after the fixes alone → 57.2% (Warden ends 32.5% of runs; d5-9 ~8%); wardenprobe: 63%
+  of fights won, waves landed 2.2 → 0.2 a fight (the bot always has room now), melee ~148. Descent+ bot ~10%.
 - Delve third blind playtest (died d2 to a skeleton; won at L9 with the Warden at 1 HP; died d3 to an archer after a d2
   skeleton cost 3 potions; daily win at L8 with 0 potions) and fixes (rules v7): skeletons 22/7/2 → 18/6/1 (HP/atk/def);
   natural regen (1 HP / 4 turns with no awake foe in sight, up to half HP) and WAIT → REST (rest until healed or a foe

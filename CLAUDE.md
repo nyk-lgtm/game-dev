@@ -56,11 +56,11 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     exit. Taps snap to a monster/chest/person within 1.5 tiles unless on something or one step away. Daily: `?daily`.
   - Afterglow: `npx vite-node scripts/afterglow/balance.ts` (bot survival per character).
   - Delve: `npx vite-node scripts/delve/balance.ts 100` (descent bot: rests to the regen cap, dodges the Warden's wave;
-    rules v7, 400 seeds: 58% wins, d10 reached ~84%, deaths d2-4 ~1.5%, d5-9 ~6%, the Warden ~34%; floor damage d2-3 ~17,
-    d4 ~43, d5 ~109, d6-8 ~120, d10 ~216; potions on arrival d5 6, d7 5, d10 6). It also prints damage per depth by kind
-    with the killers there, each floor's monster mix, `DEATHS=1` how each death went, `PLUS=1` Descent+ (~17% wins).
-    `scripts/delve/wardenprobe.ts 100` splits Warden fights (v7: ~60% won, ~50 turns, 5 waves a fight, ~2.2 landed for
-    ~55, melee ~118, minions ~36). Per-floor caps `FLOOR_CAP`/`floorCap` in gen.ts: a capped kind's first depth holds
+    rules v8, 400 seeds: 57% wins, d10 reached ~89%, deaths d2-4 ~1.5%, d5-9 ~8%, the Warden ~33% of runs; floor damage
+    d2-3 ~17, d4 ~43, d5 ~108, d6-8 ~120, d10 ~185; potions on arrival d5 6, d7 4, d10 4). It also prints damage per depth
+    by kind with the killers there, each floor's monster mix, `DEATHS=1` how each death went, `PLUS=1` Descent+ (~10%).
+    `scripts/delve/wardenprobe.ts 100` splits Warden fights (v8: ~63% won, ~56 turns, ~5.5 waves a fight of which the bot
+    dodges all but ~0.2 (there is always a dodge cell), melee ~148 over ~11 hits, minions ~32: humans will eat more waves). Per-floor caps `FLOOR_CAP`/`floorCap` in gen.ts: a capped kind's first depth holds
     one (wraiths and cultists, both new at depth 5)); Nightline: `npx vite-node scripts/nightline/balance.ts 100 [clean,crashy]`
     (rules v3, 100 seeds × 2 seed sets, always-left / always-right: clean bot (~10-13 crashes) finishes 99-100% /
     91-93% with ~30 / ~19 s left; crashy (sees cars 0.45 s out, misses 8%: ~18 crashes) 89-96% / 77-86%, ~22 / ~14 s;
@@ -175,18 +175,22 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     `fire.ts 64 1 [random]` (per lightning summer: burns, the idle burn plan, whether the bot plays differently than in a
     drought, and the score vs the same game with lightning turned into drought; v7 greedy: ~1.6 lightning summers a game,
     something burns in ~44/101, mean −7; random −34).
-- Delve rules v7 (src/delve/core/rules.ts): a sleeping monster spends the turn it notices you (so sleepers are mostly seen
+- Delve rules v8 (src/delve/core/rules.ts): a sleeping monster spends the turn it notices you (so sleepers are mostly seen
   far off: zZ in the view, dim letters on the maps out to VIEW_RANGE 12); cultists rest a turn (`cd`) after each firebolt;
   blocked hunters try another equally short step; `use` (HIT) hits straight ahead only (corner hits were removed: corner foes
   can't strike back), opens/shuts doors (never with a foe beside you or in the doorway), else "You swing at nothing" (no
   turn); `doorNoises` drives the "?" on doors; scrolls of seeing are carried (`player.scrolls`, action `read`, code `v`).
   Regen: 1 HP every `REGEN_EVERY` (4) turns with no awake foe in sight (`foesInSight`), up to `regenCap` = half max HP;
   `canRest` turns the page's WAIT into REST (waits until healed/MP full or a foe shows; many `w`s in the run). Fire/Frost
-  reach `BOLT_RANGE` (8); with nothing in reach the cast is refused (no MP, no turn; `boltTarget`). The Warden (`WARDEN` in
-  content.ts, `wardenTurn`): every 4th ordinary action near you it draws in the cold (`charge`, event `charge`), next action
-  its wave hits its row/column within 5 unless a wall/pillar is between (`inWaveAt`; always lands, armour counts), then it is
-  spent a turn (`cd`); at 66%/33% HP it summons a ghoul + 2 skeletons and is spent. Potions are leaner: kill drops 18% (10%
-  from depth 5) × 40% potion, floor items 8%. Descent+ (`newGame(seed, true)`, `s.plus`, unlocked by a win; `&plus=1` on
+  reach `BOLT_RANGE` (8); with nothing in reach the cast is refused (no MP, no turn; `boltTarget`); Blink likewise when
+  `blinkReach` is 0. The Warden (`WARDEN` in content.ts, `wardenTurn`, 460 HP): every 4th ordinary action near you (3rd
+  below half HP, `wardenLate`) it draws in the cold (`charge`, event `charge`), but only while you have a `dodgeCells`
+  cell; next action its wave hits its row/column within 5 unless a wall/pillar is between (`inWaveAt`; always lands,
+  armour counts) and "spent" is logged that same turn; it then skips one action (`cd`). Melee 24, 21 below half HP
+  (`meleeLate`). At 66%/33% HP it summons a ghoul + 2 skeletons within 2 of it and never beside you, and is spent.
+  Frost holds it one action, once between waves (`chilled`, cleared by the wave), never mid-charge (`frostHolds`).
+  Archers and cultists are never placed in a clear line to a floor's start within range + 1 (`linedUp` in gen.ts).
+  Potions are leaner: kill drops 18% (7% from depth 5) × 40% potion, floor items 8%. Descent+ (`newGame(seed, true)`, `s.plus`, unlocked by a win; `&plus=1` on
   replay links, `plus=1` in reports): foes ×`PLUS_HP` HP, +`PLUS_ATK` damage. The page asks before descending stairs.
 - ASCII games (Delve, Nightline) draw into a character `Grid` (src/shared/ascii.ts) painted
   with batched `fillText` runs; art lives in each game's `art.ts`.

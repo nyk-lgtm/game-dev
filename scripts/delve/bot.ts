@@ -16,6 +16,7 @@ import {
   canBuy,
   canRest,
   encodeAction,
+  frostHolds,
   inWave,
   inWaveAt,
   regenCap,
@@ -151,7 +152,7 @@ function spellOn(s: GameState, m: Monster, k: number, dist: number): Action | nu
   const spare = (c: number) => p.mp - c >= reserve || m.kind === 'warden' || p.hp < p.maxHp * 0.5;
   if (!boltHits(s, k, m)) return null;
   // Frost on golems (and the Warden) that aren't frozen yet.
-  if ((m.kind === 'golem' || m.kind === 'warden' || (m.kind === 'ghoul' && p.hp < p.maxHp * 0.6)) && m.stun === 0 && can(s, 'frost') && spare(SPELLS.frost.cost))
+  if ((m.kind === 'golem' || m.kind === 'warden' || (m.kind === 'ghoul' && p.hp < p.maxHp * 0.6)) && m.stun === 0 && frostHolds(m) && can(s, 'frost') && spare(SPELLS.frost.cost))
     return face(s, k, { type: 'cast', spell: 'frost' });
   if (!can(s, 'fire') || !spare(SPELLS.fire.cost)) return null;
   // Fire on ranged foes, dangerous ones, or anything that would take many swings.

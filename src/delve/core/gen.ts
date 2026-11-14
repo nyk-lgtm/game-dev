@@ -73,6 +73,20 @@ export function distances(tiles: Tile[], from: { x: number; y: number }): Int16A
   return d;
 }
 
+/** Same row or column within `reach` steps, with nothing that blocks sight between (walls, pillars, closed doors). */
+export function linedUp(tiles: Tile[], a: { x: number; y: number }, b: { x: number; y: number }, reach: number): boolean {
+  if (a.x !== b.x && a.y !== b.y) return false;
+  const d = Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+  if (d > reach) return false;
+  const sx = Math.sign(b.x - a.x);
+  const sy = Math.sign(b.y - a.y);
+  for (let x = a.x + sx, y = a.y + sy; x !== b.x || y !== b.y; x += sx, y += sy) {
+    const t = tiles[idx(x, y)];
+    if (t === 'wall' || t === 'pillar' || t === 'door') return false;
+  }
+  return true;
+}
+
 export function generateFloor(seed: number, depth: number): Floor {
   const rng = new Rng(mixSeed(seed, depth * 101));
   const tiles: Tile[] = new Array(SIZE * SIZE).fill('wall');
@@ -185,6 +199,16 @@ export function generateFloor(seed: number, depth: number): Floor {
           continue;
         }
         kind = pool.find((k) => !ROOMY.has(k)) ?? kind;
+      }
+      // An archer or cultist never waits in a clear straight line to where you arrive (no shot on your first turns).
+      if (MONSTERS[kind].range) {
+        let at = spots.length - 1;
+        while (at >= 0 && linedUp(tiles, start, spots[at], MONSTERS[kind].range + 1)) at--;
+        if (at >= 0) {
+          const [s] = spots.splice(at, 1);
+          monsters.push(mk(kind, s.x, s.y));
+          continue;
+        }
       }
       const s = spots.pop()!;
       monsters.push(mk(kind, s.x, s.y));

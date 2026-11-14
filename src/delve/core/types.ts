@@ -33,6 +33,8 @@ export interface Monster {
   tick?: number;
   /** The Warden: summon phases used. */
   phase?: number;
+  /** The Warden: already held by Frost since its last wave. */
+  chilled?: boolean;
 }
 
 export type ItemKind =

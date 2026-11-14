@@ -26,7 +26,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: non
 #foe .bar { height: 7px; margin-top: 3px; border-color: #3a1a12; }
 #foe .bar i { background: #c0392b; transition: width 0.15s; }
 #foeNote { margin-top: 3px; font-size: 10px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#foeNote.warn { color: #7fe3ff; font-weight: 700; white-space: normal; }
+#foeNote.warn { color: #7fe3ff; font-size: 13px; font-weight: 800; white-space: normal; }
+#viewBox.wave::after { content: ''; position: absolute; inset: 0; pointer-events: none; border: 4px solid #7fe3ff; box-shadow: inset 0 0 24px rgba(127,227,255,0.6); animation: wave 0.4s ease-in-out infinite alternate; }
+@keyframes wave { from { opacity: 0.35; } to { opacity: 1; } }
+#viewBox.calm::after { animation: none; }
 #foeZ { font-style: normal; font-size: 11px; font-weight: 700; color: #8fb8ff; }
 #pad button.rest { color: #7fe08a; border-color: #2f5a35; }
 .bar.low i { animation: pulse 0.8s ease-in-out infinite alternate; }

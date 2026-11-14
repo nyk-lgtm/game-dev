@@ -25,6 +25,7 @@ import {
   XP_TABLE,
   applyAction,
   attackOf,
+  blinkReach,
   boltTarget,
   canBuy,
   canRest,
@@ -32,6 +33,7 @@ import {
   doorNoises,
   encodeAction,
   foesInSight,
+  frostHolds,
   idx,
   inWave,
   inWaveAt,
@@ -272,9 +274,13 @@ export class Game {
       else if (a.type === 'read') toast(this.state.player.scrolls ? 'This floor is already mapped' : 'No scrolls of seeing');
       return;
     }
-    // A bolt with nothing in reach costs nothing: say so here rather than record a no-op.
+    // A bolt with nothing in reach, or a Blink with no room, costs nothing: say so here rather than record a no-op.
     if (a.type === 'cast' && (a.spell === 'fire' || a.spell === 'frost') && !boltTarget(this.state).m) {
       toast(`Nothing to hit within ${BOLT_RANGE} cells ahead (no MP spent)`);
+      return;
+    }
+    if (a.type === 'cast' && a.spell === 'blink' && !blinkReach(this.state)) {
+      toast('No room to blink ahead (no MP spent)');
       return;
     }
     const before = this.state;
@@ -283,7 +289,11 @@ export class Game {
     if (!fromCard && events.some((e) => e.type === 'descend') && !store.load<boolean>('noDescendAsk', false)) {
       const go = () => (closeOverlay(), this.commit(a, state, events));
       showCard(
-        `<h2>Stairs down</h2><p>Go down to depth ${state.depth}? There is no way back up. You catch your breath on the stairs (+15% HP).</p>`,
+        `<h2>Stairs down</h2><p>Go down to depth ${state.depth}? There is no way back up. You catch your breath on the stairs (+15% HP).</p>${
+          state.depth === MAX_DEPTH
+            ? '<p><b style="color:#ff8a6a">The Warden waits below.</b> Rest to full and keep your potions and MP for it. When it draws in the cold, step out of its row and column (or behind a pillar), then strike while it is spent.</p>'
+            : ''
+        }`,
         [
           { label: `Descend to depth ${state.depth}`, primary: true, onClick: go },
           { label: 'Not yet', onClick: closeOverlay },
@@ -337,6 +347,9 @@ export class Game {
     const gain = [p.hp > p0.hp ? `+${p.hp - p0.hp} HP` : '', p.mp > p0.mp ? `+${p.mp - p0.mp} MP` : ''].filter(Boolean).join(', ');
     const capped = !why && p.hp >= regenCap(s) && p.hp < p.maxHp ? ' Rest heals to half; potions and Mend do the rest.' : '';
     toast(why ? `Rest broken after ${turns} turns${gain ? ` (${gain})` : ''}: ${why}` : `Rested ${turns} turns${gain ? `: ${gain}` : ''}.${capped}`);
+    // A line in the log too (shown only: the log is rebuilt from the run on reload).
+    s.log.push(`You rest ${turns} turn${turns > 1 ? 's' : ''}${gain ? `: ${gain}` : ''}.${why ? ` ${why}` : ''}`);
+    if (s.log.length > 30) s.log.splice(0, s.log.length - 30);
     this.persist();
     this.refresh();
     this.dirty = true;
@@ -414,7 +427,9 @@ export class Game {
           navigator.vibrate?.([20, 40, 20]);
           break;
         case 'summon':
-          toast('The Warden calls the dead!');
+          // Low in the view, clear of the Warden's name and health bar.
+          this.pop('THE DEAD RISE!', '#c9a6ff', 0.6);
+          navigator.vibrate?.(40);
           break;
         case 'levelUp':
           toast(`Level ${e.level}!`);
@@ -439,9 +454,17 @@ export class Game {
     const p = this.state.player;
     const known = SPELL_ORDER.filter((id) => p.spells.includes(id));
     const target = boltTarget(this.state);
+    const hop = blinkReach(this.state);
     const bolt = (id: SpellId) => id === 'fire' || id === 'frost';
+    const note = (id: SpellId) => {
+      if (id === 'blink') return hop ? ` Lands ${hop} cell${hop > 1 ? 's' : ''} ahead.` : ' Blocked: no room ahead.';
+      if (!bolt(id)) return '';
+      if (!target.m) return ' Nothing in reach.';
+      const shrug = id === 'frost' && !frostHolds(target.m) ? ' (it would shrug off the hold)' : '';
+      return ` Target: ${MONSTERS[target.m.kind].name}, ${target.dist} ahead${shrug}.`;
+    };
     const opts = known.map((id) => ({
-      label: `${SPELLS[id].name} (${SPELLS[id].cost} MP) - ${SPELLS[id].desc}${bolt(id) ? (target.m ? ` Target: ${MONSTERS[target.m.kind].name}, ${target.dist} ahead.` : ' Nothing in reach.') : ''}`,
+      label: `${SPELLS[id].name} (${SPELLS[id].cost} MP) - ${SPELLS[id].desc}${note(id)}`,
       onClick: () => {
         closeOverlay();
         this.act({ type: 'cast', spell: id });
@@ -450,7 +473,7 @@ export class Game {
     showCard(`<h2>Spells</h2><p>MP ${p.mp}/${p.maxMp}. New spells come with levels. Bolts reach ${BOLT_RANGE} cells ahead and cost nothing when there is nothing to hit.</p>`, [...opts, { label: 'Cancel', onClick: closeOverlay }]);
     document.querySelectorAll<HTMLButtonElement>('#overlay .card button').forEach((b, i) => {
       const id = known[i];
-      if (id) b.disabled = !isLegal(this.state, { type: 'cast', spell: id }) || (bolt(id) && !target.m);
+      if (id) b.disabled = !isLegal(this.state, { type: 'cast', spell: id }) || (bolt(id) && !target.m) || (id === 'blink' && !hop);
     });
   }
 
@@ -620,6 +643,10 @@ export class Game {
     $('ethCount').textContent = String(p.ethers);
     $('scrollCount').textContent = p.scrolls ? ` ?${p.scrolls}` : '';
     $('hpFill').parentElement!.classList.toggle('low', p.hp < p.maxHp * 0.3);
+    // The Warden's wave is coming and you're in its line: the whole view pulses.
+    const wave = s.status === 'playing' ? s.monsters.find((m) => m.kind === 'warden' && m.charge) : undefined;
+    $('viewBox').classList.toggle('wave', !!wave && inWave(s, wave));
+    $('viewBox').classList.toggle('calm', reducedFx());
     document.querySelector('#pad [data-a=potion]')!.classList.toggle('dim', !isLegal(s, { type: 'potion' }));
     document.querySelector('#pad [data-a=ether]')!.classList.toggle('dim', !isLegal(s, { type: 'ether' }));
     document.querySelector('#pad [data-a=magic]')!.classList.toggle('dim', !s.player.spells.some((id) => isLegal(s, { type: 'cast', spell: id })));
@@ -909,17 +936,25 @@ export class Game {
     const w = s.monsters.find((m) => m.kind === 'warden' && m.charge);
     if (!w || !inWave(s, w)) return;
     const g = this.grid;
-    const col = Math.floor(time * 5) % 2 ? '#7fe3ff' : '#ffffff';
-    const label = ' GET OUT OF ITS LINE! ';
-    const r = Math.floor(g.rows * 0.78);
-    const c = Math.floor((g.cols - label.length) / 2);
-    for (const rr of [r - 1, r, r + 1])
-      for (let i = 0; i < label.length; i++) {
-        const cc = c + i;
-        if (rr < 0 || rr >= g.rows || cc < 0 || cc >= g.cols) continue;
-        g.ch[rr * g.cols + cc] = rr === r ? label[i] : ' ';
-        g.color[rr * g.cols + cc] = col;
+    const on = Math.floor(time * 5) % 2 === 0;
+    // A full-width band: wave rows above and below, the warning in the middle.
+    const r = Math.floor(g.rows * 0.74);
+    const label = ' !! GET OUT OF ITS LINE !! ';
+    const c0 = Math.floor((g.cols - label.length) / 2);
+    for (let rr = r - 2; rr <= r + 2; rr++) {
+      if (rr < 0 || rr >= g.rows) continue;
+      for (let cc = 0; cc < g.cols; cc++) {
+        const i = rr * g.cols + cc;
+        if (rr === r) {
+          const k = cc - c0;
+          g.ch[i] = k >= 0 && k < label.length ? label[k] : ' ';
+          g.color[i] = on ? '#ffffff' : '#7fe3ff';
+        } else if (Math.abs(rr - r) === 2) {
+          g.ch[i] = (cc + Math.floor(time * 8)) % 4 < 2 ? '~' : ' ';
+          g.color[i] = on ? '#7fe3ff' : '#3a8aa8';
+        } else g.ch[i] = ' ';
       }
+    }
   }
 
   private overlayPopups(): void {

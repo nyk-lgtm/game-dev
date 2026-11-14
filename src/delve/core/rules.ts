@@ -86,6 +86,24 @@ export function canRest(s: GameState): boolean {
   return s.status === 'playing' && !s.shop && (p.hp < regenCap(s) || p.mp < p.maxMp) && !foesInSight(s).length;
 }
 
+/** How many cells a Blink now would carry you (0: blocked, so casting is refused). */
+export function blinkReach(s: GameState): number {
+  const p = s.player;
+  let d = 0;
+  for (let i = 1; i <= 4; i++) {
+    const x = p.x + DX[p.dir] * i;
+    const y = p.y + DY[p.dir] * i;
+    if (solid(tileAt(s, x, y)) || monsterAt(s, x, y)) break;
+    d = i;
+  }
+  return d;
+}
+
+/** Would Frost hold this foe now? (The Warden: once between waves, never while it charges.) */
+export function frostHolds(m: Monster): boolean {
+  return m.kind !== 'warden' || (!m.chilled && !m.charge);
+}
+
 /** The foe a Firebolt or Frost cast now would strike (null: nothing within reach, so casting is refused). */
 export function boltTarget(s: GameState): { m: Monster | null; dist: number } {
   return firstAhead(s, BOLT_RANGE);
@@ -544,6 +562,11 @@ function cast(s: GameState, spell: SpellId, ev: GameEvent[]): boolean {
     ev.push({ type: 'bump', what: 'air' });
     return false;
   }
+  if (spell === 'blink' && !blinkReach(s)) {
+    sayOnce(s, 'No room to blink ahead. (No MP spent.)');
+    ev.push({ type: 'bump', what: 'air' });
+    return false;
+  }
   p.mp -= SPELLS[spell].cost;
   if (spell === 'heal') {
     const heal = Math.min(p.maxHp - p.hp, Math.ceil(p.maxHp * 0.5));
@@ -552,18 +575,12 @@ function cast(s: GameState, spell: SpellId, ev: GameEvent[]): boolean {
     return true;
   }
   if (spell === 'blink') {
-    let d = 0;
-    for (let i = 1; i <= 4; i++) {
-      const x = p.x + DX[p.dir] * i;
-      const y = p.y + DY[p.dir] * i;
-      if (solid(tileAt(s, x, y)) || monsterAt(s, x, y)) break;
-      d = i;
-    }
+    const d = blinkReach(s);
     p.x += DX[p.dir] * d;
     p.y += DY[p.dir] * d;
-    say(s, d ? 'You blink forward.' : 'The spell fizzles against the wall.');
+    say(s, `You blink ${d} cell${d > 1 ? 's' : ''} forward.`);
     ev.push({ type: 'bolt', spell, dist: d });
-    if (d) pickup(s, ev);
+    pickup(s, ev);
     if (tileAt(s, p.x, p.y) === 'stairs') descend(s, ev);
     return true;
   }
@@ -572,9 +589,11 @@ function cast(s: GameState, spell: SpellId, ev: GameEvent[]): boolean {
   if (!m) return true;
   if (spell === 'fire') damage(s, m, fireDamage(p.level), ev, 'Fire engulfs it!');
   else {
-    // The Warden shakes frost off after one turn (otherwise it could be frozen forever).
-    m.stun = m.kind === 'warden' ? 1 : 3;
-    damage(s, m, 3 + p.level, ev, 'Frost locks it in place!');
+    // The Warden is held one action, once between waves, never mid-charge (else Frost chains lock it).
+    const holds = frostHolds(m);
+    if (holds) m.stun = m.kind === 'warden' ? 1 : 3;
+    if (holds && m.kind === 'warden') m.chilled = true;
+    damage(s, m, 3 + p.level, ev, holds ? 'Frost locks it in place!' : 'The Warden shrugs off the frost!');
   }
   return true;
 }
@@ -695,46 +714,78 @@ export function inWave(s: GameState, m: Monster): boolean {
 }
 
 /** The Warden's patterns; true if it spent its action (else it walks toward you as usual). */
+/** Cells beside you that you could step into, out of the Warden's wave. */
+export function dodgeCells(s: GameState, m: Monster): { x: number; y: number }[] {
+  const p = s.player;
+  const out: { x: number; y: number }[] = [];
+  for (let k = 0; k < 4; k++) {
+    const x = p.x + DX[k];
+    const y = p.y + DY[k];
+    if (!solid(tileAt(s, x, y)) && tileAt(s, x, y) !== 'stairs' && !monsterAt(s, x, y) && !inWaveAt(s, m, x, y)) out.push({ x, y });
+  }
+  return out;
+}
+
+/** Is the Warden in its second half (softer blows, waves more often)? */
+export const wardenLate = (m: Monster) => m.hp <= m.maxHp / 2;
+
 function wardenTurn(s: GameState, m: Monster, d: number, ev: GameEvent[]): boolean {
   if (m.cd) {
+    // The free turn was announced when it began (right after the wave or the summoning).
     m.cd--;
-    say(s, 'The Warden sags, spent. Strike now, or heal.');
     return true;
   }
   if (m.charge) {
     m.charge = 0;
+    m.chilled = false;
     m.cd = WARDEN.rest;
     ev.push({ type: 'shot', by: 'warden' });
     if (inWave(s, m)) hurtBy(s, m, WARDEN.blast, ev, 'A wave of grave-cold');
     else say(s, 'The wave of grave-cold rolls past you.');
+    if (s.status === 'playing') say(s, 'The Warden sags, spent. Strike now, or heal.');
     return true;
   }
+  const p = s.player;
   const phase = m.phase ?? 0;
   if (phase < WARDEN.summonAt.length && m.hp <= m.maxHp * WARDEN.summonAt[phase]) {
     m.phase = phase + 1;
     m.cd = 1;
-    const p = s.player;
-    let raised = 0;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]]) {
-      const kind = WARDEN.summon[raised];
-      if (!kind) break;
-      const x = m.x + dx;
-      const y = m.y + dy;
-      if (solid(tileAt(s, x, y)) || monsterAt(s, x, y) || (x === p.x && y === p.y)) continue;
+    // The dead rise near the Warden but never beside you (they must not box you in).
+    const spots: { x: number; y: number; d: number }[] = [];
+    for (let dy = -2; dy <= 2; dy++)
+      for (let dx = -2; dx <= 2; dx++) {
+        const x = m.x + dx;
+        const y = m.y + dy;
+        if ((!dx && !dy) || solid(tileAt(s, x, y)) || monsterAt(s, x, y)) continue;
+        if (Math.max(Math.abs(x - p.x), Math.abs(y - p.y)) < 2) continue;
+        spots.push({ x, y, d: Math.abs(dx) + Math.abs(dy) });
+      }
+    spots.sort((a, b) => a.d - b.d || a.y - b.y || a.x - b.x);
+    WARDEN.summon.forEach((kind, i) => {
+      const at = spots[i];
+      if (!at) return;
       const hp = foeHp(s, kind);
-      s.monsters.push({ id: s.nextId++, kind, x, y, hp, maxHp: hp, wait: 1, awake: true, stun: 0 });
-      raised++;
-    }
-    say(s, 'The Warden calls the dead! Bones claw up around it.');
+      s.monsters.push({ id: s.nextId++, kind, x: at.x, y: at.y, hp, maxHp: hp, wait: 1, awake: true, stun: 0 });
+    });
+    say(s, 'The Warden calls the dead! It sags, spent: strike now, or heal.');
     ev.push({ type: 'summon' });
     return true;
   }
-  // Its ordinary actions pace the wave (so it swings at you between waves).
+  // Its ordinary actions pace the wave (so it swings at you between waves), and it never charges while
+  // you have nowhere to dodge to.
   m.tick = (m.tick ?? 0) + 1;
-  if (m.tick % WARDEN.chargeEvery === 0 && d <= WARDEN.reach + 2 && los(s, m.x, m.y, s.player.x, s.player.y)) {
-    m.charge = 1;
-    say(s, 'The Warden draws in the cold. Get out of its row and column!');
-    ev.push({ type: 'charge' });
+  const every = wardenLate(m) ? WARDEN.chargeLate : WARDEN.chargeEvery;
+  if (m.tick % every === 0 && d <= WARDEN.reach + 2 && los(s, m.x, m.y, p.x, p.y)) {
+    if (dodgeCells(s, m).length) {
+      m.charge = 1;
+      say(s, 'The Warden draws in the cold. Get out of its row and column!');
+      ev.push({ type: 'charge' });
+      return true;
+    }
+    m.tick--; // try again on its next action
+  }
+  if (d === 1) {
+    hurt(s, m, wardenLate(m) ? WARDEN.meleeLate : MONSTERS.warden.atk, ev);
     return true;
   }
   return false;

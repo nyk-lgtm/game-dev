@@ -18,7 +18,11 @@ import {
   applyAction,
   article,
   attackOf,
+  blinkReach,
   canRest,
+  dodgeCells,
+  frostHolds,
+  wardenLate,
   doorNoises,
   foesInSight,
   inWave,
@@ -370,12 +374,25 @@ describe('spells', () => {
     expect(hurt).toBe(true);
   });
 
-  it('the Warden shakes off frost after one turn', () => {
+  it('the Warden shakes off frost after one turn, is held only once between waves, and never mid-charge', () => {
     const s = setup(['@W'], { dir: E });
     s.player.spells.push('frost');
-    s.player.mp = 20;
-    const r = act(s, cast('frost'));
-    expect(mon(r.state, 'warden').stun).toBe(0);
+    s.player.mp = 40;
+    s.player.hp = s.player.maxHp = 9999;
+    tough(mon(s, 'warden'), 5000);
+    let r = act(s, cast('frost'));
+    expect(mon(r.state, 'warden').stun).toBe(0); // held for its one action, then free
+    expect(mon(r.state, 'warden').chilled).toBe(true);
+    expect(frostHolds(mon(r.state, 'warden'))).toBe(false);
+    // A second Frost before its wave only hurts it.
+    r = act(r.state, cast('frost'));
+    expect(r.state.log.some((l) => /shrugs off the frost/.test(l))).toBe(true);
+    // Mid-charge, Frost never holds it: the wave always comes.
+    const c = structuredClone(s);
+    mon(c, 'warden').charge = 1;
+    expect(frostHolds(mon(c, 'warden'))).toBe(false);
+    const rc = act(c, cast('frost'));
+    expect(rc.events.some((e) => e.type === 'shot' && e.by === 'warden')).toBe(true);
   });
 
   it('Mend restores half your health (capped) and is illegal at full health', () => {
@@ -406,7 +423,11 @@ describe('spells', () => {
       s.player.mp = 20;
       const r = act(s, cast('blink'));
       expect(r.state.player.x - s.player.x, row).toBe(d);
-      expect(r.state.player.mp).toBe(20 - SPELLS.blink.cost);
+      expect(blinkReach(s)).toBe(d);
+      // No room: refused, with no MP spent and no turn taken.
+      expect(r.state.player.mp, row).toBe(d ? 20 - SPELLS.blink.cost : 20);
+      expect(r.state.turn, row).toBe(d ? 1 : 0);
+      if (!d) expect(r.state.log.at(-1)).toMatch(/No room to blink/);
       if (row.includes('+')) expect(r.state.level.tiles[idx(s.player.x + 1, s.player.y)]).toBe('door');
     }
   });
@@ -748,10 +769,12 @@ describe('floors and the Warden', () => {
       r = act(r.state, dodge ? 'strafeR' : 'wait');
       expect(r.events.some((e) => e.type === 'shot' && e.by === 'warden')).toBe(true);
       const hurt = r.events.filter((e) => e.type === 'hurt' && e.by === 'warden');
+      // "Spent" is said on the turn the wave resolves, so your free turn is the next one.
+      expect(r.state.log.at(-1)).toMatch(/spent\. Strike now/);
       if (dodge) {
         expect(hurt).toEqual([]);
         expect(r.state.player.hp).toBe(hp);
-        expect(r.state.log.at(-1)).toMatch(/rolls past you/);
+        expect(r.state.log.at(-2)).toMatch(/rolls past you/);
       } else {
         // It always lands (armour still counts).
         expect(hurt).toHaveLength(1);
@@ -760,9 +783,10 @@ describe('floors and the Warden', () => {
       }
       // Spent: its next action does nothing.
       const h2 = r.state.player.hp;
+      const w0 = mon(r.state, 'warden');
       r = act(r.state, 'wait');
-      expect(r.state.log.some((l) => /spent/.test(l))).toBe(true);
       expect(r.state.player.hp).toBe(h2);
+      expect([mon(r.state, 'warden').x, mon(r.state, 'warden').y]).toEqual([w0.x, w0.y]);
     };
     run(true);
     run(false);
@@ -782,6 +806,36 @@ describe('floors and the Warden', () => {
     expect(inWaveAt(open, w2, w2.x + WARDEN.reach + 1, w2.y)).toBe(false);
   });
 
+  it('the dead never rise beside you, and it never charges a wave while you have nowhere to dodge', () => {
+    for (let seed = 0; seed < 20; seed++) {
+      const st = setup(['.......', '...W...', '...@...', '.......'], { dir: N, seed: seed + 1 });
+      st.player.hp = st.player.maxHp = 9999;
+      const w = mon(st, 'warden');
+      w.hp = Math.floor(w.maxHp * WARDEN.summonAt[0]);
+      const r = act(st, 'wait');
+      const p = r.state.player;
+      for (const m of r.state.monsters.filter((o) => o.kind !== 'warden')) expect(Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y))).toBeGreaterThanOrEqual(2);
+    }
+    // Walled in a one-wide corridor in its column: no dodge cell, so no wave.
+    let t = setup(['#W#', '#.#', '#@#', '###'], { dir: N });
+    t.player.hp = t.player.maxHp = 9999;
+    tough(mon(t, 'warden'), 5000);
+    expect(dodgeCells(t, mon(t, 'warden'))).toEqual([]);
+    for (let i = 0; i < 12; i++) {
+      const r = act(t, 'wait');
+      expect(r.events).not.toContainEqual({ type: 'charge' });
+      t = r.state;
+    }
+  });
+
+  it('below half its health the Warden swings softer and waves come more often', () => {
+    const w = { hp: 100, maxHp: 400 } as Monster;
+    expect(wardenLate(w)).toBe(true);
+    expect(wardenLate({ ...w, hp: 300 })).toBe(false);
+    expect(WARDEN.meleeLate).toBeLessThan(MONSTERS.warden.atk);
+    expect(WARDEN.chargeLate).toBeLessThan(WARDEN.chargeEvery);
+  });
+
   it('at two thirds and one third of its health the Warden calls the dead, and is spent for a turn', () => {
     let st = setup(['.......', '...W...', '.......', '.......', '...@...'], { dir: N });
     st.player.hp = st.player.maxHp = 9999;
@@ -793,8 +847,8 @@ describe('floors and the Warden', () => {
     expect(r.state.monsters.filter((m) => m.kind !== 'warden').map((m) => m.kind)).toEqual(WARDEN.summon);
     expect(r.state.monsters.every((m) => m.awake)).toBe(true);
     expect(mon(r.state, 'warden').phase).toBe(1);
+    expect(r.state.log.at(-1)).toMatch(/spent: strike now/);
     r = act(r.state, 'wait');
-    expect(r.state.log.some((l) => /spent/.test(l))).toBe(true);
     // Not again until the next threshold.
     st = r.state;
     for (let i = 0; i < 6; i++) expect(act(st, 'wait').events).not.toContainEqual({ type: 'summon' });
