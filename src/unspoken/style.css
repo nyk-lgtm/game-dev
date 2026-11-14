@@ -32,19 +32,18 @@ body .icon-btn { background: transparent; border-color: var(--line); color: var(
   border-bottom: 1px solid var(--line); background: var(--bg);
 }
 #places::-webkit-scrollbar { display: none; }
-/* A "›" / "‹" cue over the faded edge while more places hide that way. */
-/* The cues take their own room beside the strip (never over a label). */
+/* ‹ › buttons take their own room beside the strip (never over a tab) while more places hide that way;
+   a tap scrolls the strip. */
 #placesBar { position: relative; flex: none; display: flex; align-items: center; background: var(--bg); border-bottom: 1px solid var(--line); }
 #placesBar > #places { flex: 1; min-width: 0; border-bottom: 0; }
-#placesBar::before, #placesBar::after {
-  flex: none; pointer-events: none; margin: 0 2px;
-  width: 26px; height: 26px; border-radius: 50%; display: none; align-items: center; justify-content: center;
-  background: var(--panel); border: 1px solid var(--line); color: var(--text); font-size: 18px; font-weight: 700; line-height: 1;
+#placesBar .cue {
+  flex: none; width: 44px; height: 44px; padding: 0 0 3px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--panel); border: 1px solid var(--line); color: var(--text); font-size: 24px; font-weight: 700; line-height: 1;
   box-shadow: 0 1px 4px rgba(43, 33, 24, 0.18);
 }
-#placesBar::before { content: '‹'; margin-left: 6px; }
-#placesBar::after { content: '›'; margin-right: 6px; }
-#placesBar:has(> #places.more-left)::before, #placesBar:has(> #places.more-right)::after { display: flex; }
+#placesBar .cue[hidden] { display: none; }
+#placesBar #placesL { margin-left: 6px; }
+#placesBar #placesR { margin-right: 6px; }
 #places.more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
 #places.more-left { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent); }
 #places.more-left.more-right {
@@ -133,6 +132,13 @@ body .icon-btn { background: transparent; border-color: var(--line); color: var(
 .tiles .tok.used { opacity: 0.18; pointer-events: none; box-shadow: none; }
 .caption.compact { gap: 2px 4px; }
 .caption.compact .tok { min-width: 44px; padding: 2px 1px; }
+/* A long sign shrinks to stay on one line (game.ts caption()): fixed-width tiles, labels clipped to them. */
+.caption.fit { flex-wrap: nowrap; column-gap: 4px; }
+.caption.fit .tok { min-width: 0; width: var(--tw); flex: none; padding-left: 4px; padding-right: 4px; }
+.caption.fit .tok .gl { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.caption.small .tok .gl { font-size: 10px; letter-spacing: -0.2px; }
+/* A word with marks has a two-part reading ("carry · before"): it may take two short lines rather than be cut. */
+.caption.fit .tok .gl.multi { white-space: normal; overflow-wrap: anywhere; line-height: 1.1; }
 .row-btns { display: flex; gap: 8px; }
 .row-btns button { flex: 1; }
 #app button.primary, #overlay button.primary, #sheet button.primary { background: var(--accent); color: #fff7ea; }
@@ -200,6 +206,8 @@ body .icon-btn { background: transparent; border-color: var(--line); color: var(
 #sheet .ctx .row canvas.thumb { flex: none; border-radius: 8px; }
 #sheet .ctx .row .caption { margin: 0; justify-content: flex-start; gap: 2px; }
 #sheet .ctx .row .tok { min-width: 44px; min-height: 44px; padding: 0; justify-content: center; }
+#sheet .ctx .row[hidden], #sheet button.more[hidden] { display: none; }
+#sheet button.more { min-height: 44px; font-size: 15px; }
 /* Nothing in the sheet may shrink; the sheet scrolls instead. */
 #sheet .inner > * { flex-shrink: 0; }
 /* All eight categories visible at once, in two rows. */
@@ -238,10 +246,13 @@ body .icon-btn { background: transparent; border-color: var(--line); color: var(
 #overlay .card b { color: var(--text); }
 #overlay .card .meta { color: var(--faint); }
 /* The shared shell positions toasts at the top; the bundle may load it after this file, so be specific. */
-/* At the top, over the place tabs, so it never hides the writing palette. */
+/* Over the header's language box (left of ✎ ☰): never over the place tabs, the page or the writing palette,
+   and under the glyph sheet (z 12) and cards (z 10), so it never covers one. */
 body .toast {
-  top: calc(env(safe-area-inset-top) + 60px); bottom: auto; height: auto; max-width: calc(100vw - 32px);
-  background: var(--text); border-color: var(--text); color: #fbf5e8; font-weight: 600; text-align: center;
+  top: calc(env(safe-area-inset-top) + 7px); left: calc(env(safe-area-inset-left) + 8px); right: calc(env(safe-area-inset-right) + 112px);
+  transform: none; bottom: auto; min-height: 44px; max-height: 52px; height: auto; max-width: none; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; padding: 4px 12px; border-radius: 12px; z-index: 9;
+  background: var(--text); border-color: var(--text); color: #fbf5e8; font-size: 13.5px; line-height: 1.25; font-weight: 600; text-align: center;
   pointer-events: none; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
 }
 

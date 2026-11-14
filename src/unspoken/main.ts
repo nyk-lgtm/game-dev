@@ -9,7 +9,7 @@ installErrorOverlay();
 const game = new Game();
 document.getElementById('menuBtn')!.onclick = () => game.showMenu();
 
-// ?seed=123&a=... replays a bug report exactly (&v=2 for the mountain village); it then becomes the
+// ?seed=123&a=... replays a bug report exactly (&v=2 for the mountain village, &day= for a daily); it then becomes the
 // current run of that village, so a refresh carries on. Each village keeps its own saved run; the one
 // played last opens (the mountain village also when a link opened it before the river village was done).
 const p = new URLSearchParams(location.search);
@@ -26,7 +26,9 @@ if (p.has('seed') && Number.isFinite(Number(p.get('seed')))) {
   } catch {
     acts = a;
   }
-  game.start(seed, acts, true, null, v);
+  // &day=YYYY-MM-DD: a report from today's language (its own world), opened as that day's daily.
+  const day = /^\d{4}-\d\d-\d\d$/.test(p.get('day') ?? '') ? p.get('day') : null;
+  game.start(seed, acts, true, day, day ? 1 : v);
   history.replaceState(null, '', location.pathname);
 } else if (wantsDaily()) game.playDaily();
 else if (saved && saved.v === rulesVersion(village)) game.start(saved.seed, saved.a, false, null, village);
