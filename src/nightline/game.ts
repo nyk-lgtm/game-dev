@@ -7,7 +7,7 @@ import { MONO, cellWidth, makeGrid, paintGrid, type Grid } from '../shared/ascii
 import { makeStore } from '../shared/storage';
 import { Sfx } from '../afterglow/audio';
 import { LOGO } from './art';
-import { BIOME_NAMES, DT, FORK_SPLIT, MAX_SPEED, NEAR_MISS_POINTS, NITRO_MAX, RISK_STEP, RULES_VERSION, SEG_LEN, SHARP_CURVE, STAGES, TREE, newRace, randomSeed, stageProgress, step, type Input, type Race } from './core';
+import { BIOMES, BIOME_NAMES, DT, FORK_SPLIT, MAX_SPEED, NEAR_MISS_POINTS, NITRO_MAX, RISK_STEP, RULES_VERSION, SEG_LEN, SHARP_CURVE, STAGES, newRace, randomSeed, stageProgress, step, type BiomeId, type Input, type Race } from './core';
 import { Engine } from './engine';
 import { FORK_LEAD, HORIZON, advanceSky, carBottomRow, drawRace, type SkyState, type View } from './render';
 
@@ -17,6 +17,23 @@ const CP_WARN_SECS = 15;
 const UNITS_PER_M = 100;
 
 const store = makeStore('nightline.');
+/** Steering: this many px of drag is full lock (70 was twitchy on a phone)... */
+const LOCK_PX = 120;
+/** ...but near a screen edge the short side reaches full lock at the edge (never in less than this). */
+const MIN_LOCK_PX = 40;
+
+/** v2 saved endings as positions in its fixed fork tree, whose last row was these biomes. */
+const V2_ENDINGS: BiomeId[] = ['coast', 'snow', 'forest', 'desert', 'city'];
+
+/** Endings found: the biomes you've finished in (v3 seeds the route, so an ending is its last biome). */
+function loadEndings(): BiomeId[] {
+  const saved = store.load<BiomeId[] | null>('endings', null);
+  if (saved) return saved.filter((b) => BIOMES.includes(b));
+  const old = store.load<number[]>('goals', []).map((i) => V2_ENDINGS[i]).filter(Boolean);
+  const fresh = [...new Set(old)];
+  store.save('endings', fresh);
+  return fresh;
+}
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 export class Game {
@@ -61,40 +78,74 @@ export class Game {
   // ---------- input ----------
 
   private bindInput(): void {
-    let id: number | null = null;
-    let x0 = 0;
+    // Every finger on the road, in the order they touched; the first one still down steers, so
+    // lifting it hands steering to the next (v2 dropped to straight while a second finger dragged).
+    const fingers: { id: number; x0: number; x: number }[] = [];
     const stick = $('stick');
     const knob = stick.firstElementChild as HTMLElement;
-    this.canvas.addEventListener('pointerdown', (e) => {
-      if (id !== null) return;
-      id = e.pointerId;
-      x0 = e.clientX;
-      if (this.tilt || !this.running) return;
+    const showStick = (x0: number) => {
       // A thin slider just under the car (never over the road ahead) shows how hard you're steering.
       stick.style.left = `${Math.max(80, Math.min(this.w - 80, x0))}px`;
       stick.style.top = `${Math.min(this.h - 96, carBottomRow(this.view) * this.view.ch)}px`;
-      knob.style.transform = '';
       stick.hidden = false;
+    };
+    /** Steering from the leading finger: the further from its anchor, the harder. */
+    const steerFrom = (f: { x0: number; x: number }) => {
+      // Full lock is LOCK_PX of drag, or the room left to the screen edge if that's less, so a
+      // thumb that lands near an edge still reaches full lock both ways.
+      const lockR = Math.max(MIN_LOCK_PX, Math.min(LOCK_PX, this.w - 4 - f.x0));
+      const lockL = Math.max(MIN_LOCK_PX, Math.min(LOCK_PX, f.x0 - 4));
+      // Dragging past full lock drags the anchor along, so reversing steers back at once.
+      if (f.x - f.x0 > lockR) f.x0 = f.x - lockR;
+      if (f.x0 - f.x > lockL) f.x0 = f.x + lockL;
+      const d = f.x - f.x0;
+      return Math.max(-1, Math.min(1, d >= 0 ? d / lockR : d / lockL));
+    };
+    const update = () => {
+      if (this.tilt) return;
+      const f = fingers[0];
+      if (!f) {
+        this.steer = 0;
+        stick.hidden = true;
+        return;
+      }
+      this.steer = steerFrom(f);
+      if (this.running) showStick(f.x0);
+      knob.style.transform = `translateX(${this.steer * 64}px)`;
+    };
+    this.canvas.addEventListener('pointerdown', (e) => {
+      if (fingers.some((f) => f.id === e.pointerId)) return;
+      fingers.push({ id: e.pointerId, x0: e.clientX, x: e.clientX });
+      // Keep getting this finger's moves and lift even if it slides over the HUD or a card opens.
+      try {
+        this.canvas.setPointerCapture(e.pointerId);
+      } catch {
+        /* not capturable (synthetic event) */
+      }
+      if (this.tilt || !this.running) return;
+      update();
       if (!$('hint').hidden) {
         $('hint').hidden = true;
         store.save('steered', true);
       }
     });
     this.canvas.addEventListener('pointermove', (e) => {
-      if (e.pointerId !== id || this.tilt) return;
-      // The further you drag from where you touched, the harder you steer.
-      // ~120 px of drag is full lock (70 was twitchy on a phone).
-      this.steer = Math.max(-1, Math.min(1, (e.clientX - x0) / 120));
-      knob.style.transform = `translateX(${this.steer * 64}px)`;
+      const f = fingers.find((ff) => ff.id === e.pointerId);
+      if (!f) return;
+      f.x = e.clientX;
+      // A waiting finger keeps its anchor within lock reach too, so it steers sensibly when handed over.
+      if (f !== fingers[0]) steerFrom(f);
+      else update();
     });
     const up = (e: PointerEvent) => {
-      if (e.pointerId !== id) return;
-      id = null;
-      stick.hidden = true;
-      if (!this.tilt) this.steer = 0;
+      const i = fingers.findIndex((f) => f.id === e.pointerId);
+      if (i < 0) return;
+      fingers.splice(i, 1);
+      update();
     };
     this.canvas.addEventListener('pointerup', up);
     this.canvas.addEventListener('pointercancel', up);
+    this.canvas.addEventListener('lostpointercapture', up);
     const hold = (el: HTMLElement, set: (v: boolean) => void) => {
       el.addEventListener('pointerdown', (e) => {
         e.preventDefault();
@@ -142,13 +193,11 @@ export class Game {
     $('hud').hidden = true;
     this.sfx.stopMusic();
     const best = store.load<number>('best', 0);
-    const goals = store.load<number[]>('goals', []);
+    const endings = loadEndings();
     const daily = loadDaily(store);
-    const goalList = TREE[STAGES - 1]
-      .map((b, i) => `<span style="color:${goals.includes(i) ? '#ffd166' : '#4a3a6a'}">${goals.includes(i) ? '[x]' : '[ ]'} ending ${i + 1}: ${BIOME_NAMES[b]}</span>`)
-      .join('<br>');
+    const goalList = BIOMES.map((b) => `<span style="color:${endings.includes(b) ? '#ffd166' : '#4a3a6a'}">${endings.includes(b) ? '[x]' : '[ ]'} finish in ${BIOME_NAMES[b]}</span>`).join('<br>');
     showCard(
-      `<pre>${LOGO.join('\n')}</pre><p>Five stages. One clock. Pick your road at every fork: right is harder, but every hard road raises your score multiplier.</p>${best ? `<p class="meta">Best score ${best.toLocaleString()}</p>` : ''}<p class="meta" style="text-align:left;display:inline-block;margin:0 auto">Endings found ${goals.length}/${TREE[STAGES - 1].length}<br>${goalList}</p>`,
+      `<pre>${LOGO.join('\n')}</pre><p>Five stages through six lands, never the same one twice. One clock. Pick your road at every fork: right is harder, but every hard road raises your score multiplier.</p>${best ? `<p class="meta">Best score ${best.toLocaleString()}</p>` : ''}<p class="meta" style="text-align:left;display:inline-block;margin:0 auto">Endings found ${endings.length}/${BIOMES.length}<br>${goalList}</p>`,
       [
         { label: 'Drive', primary: true, onClick: () => this.start() },
         { label: `Daily route · ${daily ? daily.label : 'not driven'}`, onClick: () => this.start(todayKey()) },
@@ -191,11 +240,11 @@ export class Game {
       <li><b>Drag</b> left or right anywhere to steer (or turn on <b>tilt</b> on the title screen).</li>
       <li>You accelerate on your own. Hold <b>BOOST</b> to burn nitro; hold <b>BRAKE</b> to slow for tight turns.</li>
       <li>Curves push you outward. The grass slows you down; hitting a roadside object costs most of your speed and bounces you back toward the road.</li>
-      <li>Passing cars refills nitro; a <b>close</b> pass (just beside them) scores extra and refills more. Ramming them costs speed.</li>
+      <li>Passing cars refills nitro; a <b>close</b> pass (just beside them) scores extra and refills more. Ramming one drops you below its speed: each crash costs about a second, and the clock is tight.</li>
       <li>Reach each checkpoint before the clock runs out to earn more time. When time runs low, the distance to the checkpoint shows under the clock (cyan: you can still make it at top speed).</li>
       <li>Far-off cars show as small tail lights; a red <b>V</b> marks one in your lane.</li>
-      <li>At the end of each stage the road forks (an orange divider and arrows mark it): stay <b>left</b> or in the <b>middle</b> for the gentler route; only <b>far right</b> (well right of the divider) takes the harder one. Each hard road adds x${RISK_STEP} to your score multiplier but gives a little less time.</li>
-      <li>Your forks decide which of five <b>endings</b> the last stage leads to (each a different road to the finish). Can you find them all?</li></ul>`,
+      <li>At the end of each stage the road forks (an orange divider and arrows mark it): stay <b>left</b> or in the <b>middle</b> for the gentler route; only <b>far right</b> (well right of the divider) takes the harder one. Each hard road adds x${RISK_STEP} to your score multiplier; it twists more (its checkpoint gives 2 s extra, not enough to make up for it).</li>
+      <li>Each race starts in a different land and never drives one twice; your forks decide which land the last stage (your <b>ending</b>) is in. Can you finish in all six?</li></ul>`,
       [{ label: 'Back', primary: true, onClick: () => this.title() }],
       false,
     );
@@ -259,14 +308,14 @@ export class Game {
     const score = Math.round(r.score);
     const best = store.load<number>('best', 0);
     if (score > best) store.save('best', score);
-    // Which of the five goals (if any) this was.
+    // Which ending (the land you finished in) this was.
     let goalLine = '';
     if (won) {
-      const pos = r.route.reduce((a, b) => a + b, 0);
-      const goals = store.load<number[]>('goals', []);
-      const fresh = !goals.includes(pos);
-      if (fresh) store.save('goals', [...goals, pos].sort());
-      goalLine = `<p>${fresh ? '<b>New ending found!</b> ' : ''}Endings ${goals.length + (fresh ? 1 : 0)}/${TREE[STAGES - 1].length}</p>`;
+      const end = r.stages[r.stages.length - 1].biome;
+      const endings = loadEndings();
+      const fresh = !endings.includes(end);
+      if (fresh) store.save('endings', [...endings, end]);
+      goalLine = `<p>${fresh ? '<b>New ending found!</b> ' : ''}Endings ${endings.length + (fresh ? 1 : 0)}/${BIOMES.length}</p>`;
     } else {
       goalLine = `<p>Time ran out ${Math.round(stageProgress(r) * 100)}% into stage ${r.stage + 1} of ${STAGES} (${BIOME_NAMES[r.stages[r.stage].biome]}).</p>`;
     }
@@ -467,17 +516,16 @@ export class Game {
     // The fork panel: both destinations, with the side you're on lit up.
     const stage = r.stages[r.stage];
     const toFork = stage.end - p.z / SEG_LEN;
-    const forkOn = r.status === 'racing' && r.stage + 1 < STAGES && toFork > 0 && toFork < FORK_LEAD + 50;
+    const forkOn = r.status === 'racing' && !!r.next && toFork > 0 && toFork < FORK_LEAD + 50;
     const side = forkOn ? (p.x > FORK_SPLIT ? 'R' : 'L') : '';
     const key = forkOn ? `${r.stage}${side}` : '';
     if (this.hudCache.get('fork') !== key) {
       this.hudCache.set('fork', key);
       $('fork').hidden = !forkOn;
       if (forkOn) {
-        const pos = r.route.reduce((a, b) => a + b, 0);
-        const next = TREE[r.stage + 1];
-        $('forkL').innerHTML = `&lt; ${BIOME_NAMES[next[pos]].toUpperCase()}<small>left/middle · gentle · x${r.mult}</small>`;
-        $('forkR').innerHTML = `${BIOME_NAMES[next[pos + 1]].toUpperCase()} &gt;<small>far right · hard · x${r.mult + RISK_STEP}</small>`;
+        const [left, right] = r.next!;
+        $('forkL').innerHTML = `&lt; ${BIOME_NAMES[left].toUpperCase()}<small>left/middle · gentle · x${r.mult}</small>`;
+        $('forkR').innerHTML = `${BIOME_NAMES[right].toUpperCase()} &gt;<small>far right · hard · x${r.mult + RISK_STEP}</small>`;
         $('forkL').classList.toggle('on', side === 'L');
         $('forkR').classList.toggle('on', side === 'R');
       }

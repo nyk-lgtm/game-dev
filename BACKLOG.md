@@ -910,6 +910,19 @@ playtests with fixes shipped. Open threads, in order:
   carries `rules=`. Bot (40 seeds) before → after: left 40/40 (median 38.4 s left) → 40/40 (42.8 s); right
   33/40 (16.1 s) → 38/40 (23.3 s); median crashes ~40/37 unchanged (it dodges with perfect information).
   Next: owner playtest; if humans still run out of time, consider a small clock bonus rather than more help.
+- [x] **Nightline third playtest fixes** (rules v3; tester finished every race: left 81k/19 crashes, right 124k/13,
+  daily 26 s left; 60 fps, ~50 at 4× throttle): (1) look-ahead: long lens from high and far back (`CAM_DIST` ~2900 at
+  speed, ~32°; was a 100° view from ~380), road at the car 80 text columns a side (~2.5 screens, was 3.7), traffic
+  scaled 1:1 at the car; segments 10-170 get ~22-24 rows (were ~6-8), a car 1 s out is ~2 rows at row ~12 below the
+  horizon; curve offsets re-centred on the car (camera yaws with the road there); player car 26 cols (was 32);
+  `CAR_HIT_W` per kind [0.30, 0.30, 0.325, 0.275] from the art (art test); (2) rear-end leaves you at 0.85 × the car's
+  speed: one crash, one 0.18 shove (v2: two crashes, 26%, 0.36); (3) multi-touch: next finger takes over steering;
+  (4) drag anchor follows past full lock, short side reaches lock at the screen edge; (5) clock 62 + 44..50 (+2 hard),
+  was 70 + 48..54 (−2 hard): bot clean left/right 99-100%/91-93% (~30/19 s left), crashy (~18 crashes) 89-96%/77-86%;
+  (6) six biomes (Ember Valley), seeded first stage, forks pick two undriven biomes (no repeats; a 5-biome tree can't),
+  endings = finish biome (6), v2 goals migrated. New balance.ts (clean/crashy skills, splits, biome counts) and
+  view.ts (rows per segment, text frame). Headless 4× throttle 59.7 fps.
+  Next: owner playtest of the new camera (hills look steeper with the long lens; far road above the horizon on climbs).
 
 ## Ideas (unscheduled)
 - Unspoken: more story templates so the village tale varies; (done: 🔊 speaks a word with the phone's

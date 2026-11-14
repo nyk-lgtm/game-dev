@@ -59,10 +59,17 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     ~84%, deaths mostly at the Warden (450 HP), then depth 5 ~6%, depth 6 ~3%; it also prints damage per depth by kind with the
     killers there, each floor's monster mix, and `DEATHS=1` how each death went (burst, potions left, foes in sight).
     Per-floor caps `FLOOR_CAP`/`floorCap` in gen.ts: a capped kind's first depth holds one, so wraiths and cultists,
-    both new at depth 5, come one of each; floor damage d4 ~50, d5 ~108, d6-8 ~120); Nightline: `npx vite-node scripts/nightline/balance.ts`
-    (rules v2: bot finishes ~40/40 always-left, ~38/40 always-right; it dodges with perfect information, so
-    human-facing fixes are about seeing traffic and curves sooner). Nightline's camera height follows the
-    horizon (`camHeight` in render.ts) so the road at the car stays as wide as CAR_HIT_W was measured for.
+    both new at depth 5, come one of each; floor damage d4 ~50, d5 ~108, d6-8 ~120); Nightline: `npx vite-node scripts/nightline/balance.ts 100 [clean,crashy]`
+    (rules v3, 100 seeds × 2 seed sets, always-left / always-right: clean bot (~10-13 crashes) finishes 99-100% /
+    91-93% with ~30 / ~19 s left; crashy (sees cars 0.45 s out, misses 8%: ~18 crashes) 89-96% / 77-86%, ~22 / ~14 s;
+    a crash costs ~1.2 s; humans run ~20 s slower than the crashy bot, so 15-20 crashes is at risk. Clock `TUNE` in
+    race.ts: 62 s + 42 + 2·stage a checkpoint, +2 on the hard road (it's twistier); `TUNE=start:60` tries numbers).
+    Projection (render.ts): the road's half-width at the car is `ROAD_HALF_COLS` (80) text columns (~2.5 screens;
+    v2 3.7) and cars beside you are drawn 1:1 there, so `CAR_HIT_W` (per traffic kind) is the art's silhouette
+    contact / 80 (tests/nightline/art.test.ts recomputes it; change the art or ROAD_HALF_COLS → re-measure);
+    `camHeight`/`camDepth` derive from that plus `CAM_DIST` (camera ~2900 behind at speed, a ~32° long lens; v2 a
+    100° view from ~380): segment 40 (1 s) lands ~12 rows below the horizon with cars ~2 rows tall.
+    `scripts/nightline/view.ts [w h] [dump seed secs]` prints rows per segment (v3 vs v2) and a text frame.
   - Glyphwright: `npx vite-node scripts/glyph/balance.ts 100 smart,favor` (rules v3, bot model refit 2026-11-13: smart bot
     ~83% wins (85% on 200 seeds), every loss at the Lich; favor runs 71-91%, Nova 91%. The old model's ~37% came from
     the bot stacking Novas/Fire with nothing for Drakes; the game didn't change). `favor` pushes it toward each caster.
@@ -169,6 +176,12 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   (no turn); `doorNoises` drives the "?" on doors; scrolls of seeing are carried (`player.scrolls`, action `read`, code `v`).
 - ASCII games (Delve, Nightline) draw into a character `Grid` (src/shared/ascii.ts) painted
   with batched `fillText` runs; art lives in each game's `art.ts`.
+- Nightline routes (rules v3): six biomes (`BIOMES`, Ember Valley new), stage 1 from `firstBiome(seed)`, each fork
+  `forkPair(seed, driven, route)` = two biomes not driven yet (`r.next`, [gentle, hard]), so no run repeats one (with
+  five biomes no fork tree can: proven by search) and even the last fork offers two endings; an ending = the biome
+  you finish in (store `endings`; v2's positional `goals` migrate). A rear-end leaves you at `REAR_KEEP` × the car's
+  speed (v2's half speed could hit twice). Drag steering: the first finger still down steers (lifting it hands over),
+  full lock 120 px or the room to the edge, and dragging past lock drags the anchor. `window.__core` in the page.
 - Daily challenges (src/shared/daily.ts): `<game>/?daily` plays today's seed (`dailySeed(game, day)`,
   local date); each game keeps its in-progress daily under `dailyRun` and today's best under `daily`.
   Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad, Ninefold, Summit, Quarry, Sungrazer, Kitbag, Brink (a daily win-in-N puzzle), Loomsong (a daily song), Simmer (a daily season), Gleam (a Medium puzzle), Trestle (a d 0.55 level), Tidings (a daily road), Lull (a daily wish), Telegraph (a daily run, streak + share line) and Lantern (a daily quest, fewest turns); the hub's Daily section links them.
