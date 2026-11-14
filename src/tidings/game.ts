@@ -24,7 +24,10 @@ import {
   STARS,
   TUNE,
   act,
+  bandFood,
   blockOf,
+  buyPrice,
+  canBuy,
   cardBlock,
   emptied,
   landed,
@@ -35,6 +38,8 @@ import {
   recruitOf,
   regionOf,
   replay,
+  routeNeed,
+  shortOf,
   telling,
   type Card,
   type Choice,
@@ -78,8 +83,14 @@ function chips(fx: Fx, r?: Run): string {
 }
 const legChips = (fx: Fx) => chips(fx) || '<span class="fx none">free</span>';
 
-/** Food a leg costs with n companions (before the place's own costs). */
-const bandFood = (n: number) => TUNE.bandFood * Math.floor(n / 2);
+/** "Stop 3 of 11": Tarrow Bridge is the start (stop 0), Hollin the 11th stop. */
+const stopLabel = (s: number) => (s === 0 ? 'Setting out' : s >= LAST ? `Hollin, stop ${LAST} of ${LAST}` : `Stop ${s} of ${LAST}`);
+/** How the band's appetite reads in help texts. */
+const bandLine = () =>
+  TUNE.bandAt >= TUNE.bandMax ? `a full band of ${TUNE.bandMax} eats +${TUNE.bandFood} 🍞 a leg` : `every ${TUNE.bandAt} companions eat +${TUNE.bandFood} 🍞 a leg`;
+/** What a companion's boost reads like, the same way whether or not they're with you. */
+const boostLine = (id: CompId, add: number, have: boolean) =>
+  `${COMPANIONS[id].icon} ${COMPANIONS[id].name}: +${Math.round(add * 100)}% ${have ? '(with you, counted)' : '(not with you)'}`;
 
 export class Game {
   r!: Run;
@@ -103,8 +114,10 @@ export class Game {
       else this.showDog();
     });
     $('dock').addEventListener('click', (e) => {
-      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-road]');
+      const t = e.target as HTMLElement;
+      const el = t.closest<HTMLElement>('[data-road]');
       if (el && !this.walking) this.walk(Number(el.dataset.road));
+      if (t.closest('[data-buy]') && !this.walking) this.buy();
     });
     $('focus').addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
@@ -194,7 +207,8 @@ export class Game {
       });
     }
     s += '</svg>';
-    let nodes = '';
+    // The Teeth: blizzards blow there (the route card says what they cost).
+    let nodes = `<span class="snowtag" style="left:${((x(7.5) / W) * 100).toFixed(2)}%">❄ blizzards</span>`;
     r.map.forEach((col, row) =>
       col.forEach((n, k) => {
         const taken = row <= r.stop && r.path[row] === k;
@@ -210,7 +224,7 @@ export class Game {
   private renderWhere(): void {
     const r = this.r;
     const n = nodeOf(r);
-    const stopWord = r.stop === 0 ? 'Setting out' : r.stop >= LAST ? 'Journey’s end' : `Stop ${r.stop} of ${LAST - 1}`;
+    const stopWord = r.stop >= LAST ? 'Journey’s end' : stopLabel(r.stop);
     $('placeLine').innerHTML = `<span class="stopno">${stopWord}</span> <b>${r.stop === 0 ? '🌉' : r.stop >= LAST ? '🏡' : KIND_INFO[n.kind].icon} ${esc(n.name)}</b> <span class="region">${r.stop >= LAST ? '' : REGION_NAME[regionOf(r.stop)]}</span>${this.daily ? '<span class="dailyTag">Daily</span>' : ''}`;
     const band = r.band
       .map((b) => `<button class="chip comp" data-comp="${b.id}">${COMPANIONS[b.id].icon} ${COMPANIONS[b.id].name.replace('Old ', '')}</button>`)
@@ -243,7 +257,7 @@ export class Game {
           .join('');
         const rec = recruitOf(c);
         const body = hc.done
-          ? `<div class="did"><span class="ok">✓</span> ${esc(c.choices[hc.pick!].t)}${hc.won === undefined ? '' : hc.won ? ' · 🎲 came off' : ' · 🎲 no luck'}</div><div class="got">${chips(hc.got ?? {}) || '<span class="fx none">no change</span>'}</div>`
+          ? `<div class="did"><span class="ok">✓</span> ${esc(c.choices[hc.pick!].t)}${hc.won === undefined ? '' : c.choices[hc.pick!].riddle ? (hc.won ? ' · right' : ' · wrong') : hc.won ? ' · 🎲 came off' : ' · 🎲 no luck'}</div><div class="got">${chips(hc.got ?? {}) || '<span class="fx none">no change</span>'}</div>`
           : passed
             ? `<div class="did passed">Passed by</div>`
             : `<div class="ex">${esc(t.text)}</div><div class="tags">${tags}<span class="meta">${plural(c.choices.length, 'choice')}</span>${rec ? `<span class="meta">${COMPANIONS[rec].icon} recruit</span>` : ''}${gated ? `<span class="meta">${gated}</span>` : ''}</div>`;
@@ -267,7 +281,7 @@ export class Game {
       const must = r.hand.some((x, i) => !x.done && CARD[x.id].must && i >= 0);
       d.innerHTML = `<div class="hint"><b>Face ${left === TUNE.face ? `${TUNE.face} of these ${r.hand.length}` : `${left} more`}</b>${
         must ? ' · the ⚑ card can’t be passed by' : ''
-      }. Tap a card to read it.</div>${this.roadPreview()}`;
+      }. Tap a card to read it.</div>${this.roadPreview()}${this.buyButton()}`;
       return;
     }
     // The road.
@@ -277,11 +291,50 @@ export class Game {
         const fx = legCost(r, k);
         const dead = emptied(r, fx);
         const icon = r.stop + 1 >= LAST ? '🏡' : KIND_INFO[n.kind].icon;
+        const short = dead.length ? [] : shortOf(r, k);
         return `<button class="road" data-road="${k}"><span class="ri">${icon}</span><span class="rn">${esc(n.name)}</span><span class="rk">${r.stop + 1 >= LAST ? 'journey’s end' : KIND_INFO[n.kind].word}</span><span class="rc">${legChips(fx)}</span>${
-          dead.length ? `<span class="warn">☠ out of ${dead.map((k2) => RES_INFO[k2].short).join(' and ')}</span>` : ''
+          dead.length
+            ? `<span class="warn">☠ out of ${dead.map((k2) => RES_INFO[k2].short).join(' and ')}</span>`
+            : short.length
+              ? `<span class="warn soft">⚠ short of ${short.map((k2) => RES_INFO[k2].icon).join(' ')} to reach Hollin</span>`
+              : ''
         }</button>`;
       })
-      .join('')}</div>`;
+      .join('')}</div>${this.needLine()}${this.buyButton()}`;
+  }
+
+  /** "To Hollin, at the least: …": the cheapest the rest of the road could cost, beside what you carry. */
+  private needLine(): string {
+    const r = this.r;
+    if (r.stop + 1 >= LAST) return '';
+    const ks = r.map[r.stop + 1].map((_, k) => k);
+    const need = (['f', 'o', 'h', 't'] as const).map((x) => [x, Math.min(...ks.map((k) => routeNeed(r, k)[x]))] as const).filter(([, v]) => v > 0);
+    if (!need.length) return '';
+    return `<div class="need">To Hollin, at the least: ${need
+      .map(([x, v]) => `<span class="${v >= r.res[x] ? 'short' : ''}">${v}&#8202;${RES_INFO[x].icon}</span>`)
+      .join(' ')} <small>(you carry ${need.map(([x]) => `${r.res[x]}&#8202;${RES_INFO[x].icon}`).join(' ')}; cards can refill them)</small></div>`;
+  }
+
+  /** The provisions stall at a village or inn: coin for food, once a stop. */
+  private buyButton(): string {
+    const r = this.r;
+    if (!canBuy(r)) return '';
+    const price = buyPrice(r);
+    const poor = r.res.c < price;
+    const full = r.res.f >= TUNE.capF;
+    return `<button class="buy" data-buy="1" ${poor || full ? 'disabled' : ''}>🧺 Buy provisions: ${price}&#8202;🪙 → +${TUNE.buyFood}&#8202;🍞${
+      poor ? '<small>not enough coin</small>' : full ? '<small>packs full</small>' : `<small>once here${TUNE.buyRise ? `; ${TUNE.buyRise} 🪙 dearer each time you buy` : ''}</small>`
+    }</button>`;
+  }
+
+  private buy(): void {
+    const r = this.r;
+    const prev = { ...r.res };
+    if (!act(r, 'B')) return void toast('Not possible right now');
+    this.save();
+    this.renderRes(prev);
+    this.renderDock();
+    toast(`Provisions: −${prev.c - r.res.c} 🪙, +${r.res.f - prev.f} 🍞`);
   }
 
   /** The two roads out of this stop, small, while the cards are still up. */
@@ -345,12 +398,16 @@ export class Game {
     const bits: string[] = [];
     if (ch.need) bits.push(`<span class="tag comp">${COMPANIONS[ch.need].icon} ${COMPANIONS[ch.need].name}</span>`);
     let main = '';
-    if (ch.odds !== undefined) {
+    if (ch.riddle) {
+      main = `<div class="odds"><span class="dice">❓ An answer</span><span><b>Right</b> ${chips(ch.fx, r)}</span><span><b>Wrong</b> ${chips(ch.lose!.fx, r)}</span></div>`;
+      const dl = emptied(r, ch.lose!.fx);
+      if (dl.length) bits.push(`<span class="tag bad">☠ if wrong: out of ${RES_INFO[dl[0]].short}</span>`);
+    } else if (ch.odds !== undefined) {
       const p = oddsOf(r, ch);
       const pc = Math.round(p * 100);
       const boosted = ch.boost && p > ch.odds;
       main = `<div class="odds"><span class="dice">🎲 Gamble</span><span><b>${pc}%</b> ${chips(ch.fx, r) || '<span class="fx none">nothing</span>'}</span><span><b>${100 - pc}%</b> ${chips(ch.lose!.fx, r) || '<span class="fx none">nothing</span>'}</span>${
-        ch.boost ? `<small>${boosted ? `${COMPANIONS[ch.boost[0]].name} adds ${Math.round(ch.boost[1] * 100)}%` : `+${Math.round(ch.boost[1] * 100)}% with ${COMPANIONS[ch.boost[0]].name}`}</small>` : ''
+        ch.boost ? `<small>${boostLine(ch.boost[0], ch.boost[1], !!boosted)}</small>` : ''
       }</div>`;
       const dl = emptied(r, ch.lose!.fx), dw = emptied(r, ch.fx);
       if (dw.length) bits.push(`<span class="tag bad">☠ ${pc}%: out of ${RES_INFO[dw[0]].short}</span>`);
@@ -384,7 +441,9 @@ export class Game {
     const roll =
       hc.won === undefined
         ? ''
-        : `<div class="roll ${hc.won ? 'won' : 'lost'}">🎲 ${Math.round((hc.won ? hc.p ?? 0 : 1 - (hc.p ?? 0)) * 100)}% — ${hc.won ? 'it came off' : 'not this time'}</div>`;
+        : ch.riddle
+          ? `<div class="roll ${hc.won ? 'won' : 'lost'}">${hc.won ? '✓ The right answer' : '✗ Not the answer'}</div>`
+          : `<div class="roll ${hc.won ? 'won' : 'lost'}">🎲 ${Math.round((hc.won ? hc.p ?? 0 : 1 - (hc.p ?? 0)) * 100)}% — ${hc.won ? 'it came off' : 'not this time'}</div>`;
     const over = r.phase === 'over' && this.focusH === h;
     return `<div class="big"><div class="face back${fresh ? ' flip' : ''}">
       <div class="art small">${cardArt(c.id, t.art, c.sky, regionOf(r.stop), true)}</div>
@@ -507,7 +566,7 @@ export class Game {
         newEnding = true;
       }
       store.save('profile', p);
-      if (this.daily) recordDaily(store, arrivedHome ? 100 + e.score : r.stop, arrivedHome ? `${stars(e.stars)} ${e.score}` : `stop ${r.stop}`, this.daily);
+      if (this.daily) recordDaily(store, arrivedHome ? 100 + e.score : r.stop, arrivedHome ? `${stars(e.stars)} ${e.score}` : `stop ${r.stop} of ${LAST}`, this.daily);
     }
     const p = loadProfile();
     const daily = this.daily ? loadDaily(store) : null;
@@ -526,10 +585,10 @@ export class Game {
         <p class="meta2">Stars at ${STARS[1]} and ${STARS[2]}${nextStar ? ` · ${nextStar - e.score} more for the next` : ''}</p>${kept}
         ${r.band.length ? `<p class="meta2">With you: ${r.band.map((b) => `${COMPANIONS[b.id].icon} ${COMPANIONS[b.id].name}`).join(', ')}</p>` : ''}`;
     } else {
-      body = `<p class="meta2">Out of ${RES_INFO[e.cause!].short} at ${esc(nodeOf(r).name)}, stop ${r.stop} of ${LAST - 1}.</p>`;
+      body = `<p class="meta2">Out of ${RES_INFO[e.cause!].short} at ${esc(nodeOf(r).name)}, ${stopLabel(r.stop).toLowerCase()}.</p>`;
     }
     const recap = r.log
-      .map((l) => `<li><span>${l.stop}</span> ${esc(telling(l).title)}: <i>${esc(CARD[l.id].choices[l.pick].t)}</i>${l.won === undefined ? '' : l.won ? ' 🎲✓' : ' 🎲✗'}</li>`)
+      .map((l) => `<li><span>${l.stop}</span> ${esc(telling(l).title)}: <i>${esc(CARD[l.id].choices[l.pick].t)}</i>${l.won === undefined ? '' : CARD[l.id].choices[l.pick].riddle ? (l.won ? ' ✓' : ' ✗') : l.won ? ' 🎲✓' : ' 🎲✗'}</li>`)
       .join('');
     showCard(
       `<div class="ending ${end.kind}"><div class="eicon">${end.icon}</div><h2>${end.title}${newEnding ? '<span class="new">New ending</span>' : ''}</h2>
@@ -556,7 +615,7 @@ export class Game {
     const ends = ENDINGS.map((e) =>
       p.endings.includes(e.id)
         ? `<div class="jend ${e.kind}"><span class="ji">${e.icon}</span><div><b>${e.title}</b><small>${e.text}</small></div></div>`
-        : `<div class="jend unknown"><span class="ji">?</span><div><b>???</b><small>${e.kind === 'arrive' ? 'A way to reach Hollin.' : 'A way for the journey to end.'}</small></div></div>`,
+        : `<div class="jend unknown"><span class="ji">?</span><div><b>${e.kind === 'arrive' ? 'An arrival' : 'A journey’s end'}</b><small>${esc(e.hint)}</small></div></div>`,
     ).join('');
     const comps = COMP_IDS.map((id) => {
       const c = COMPANIONS[id];
@@ -564,9 +623,19 @@ export class Game {
         ? `<div class="jcomp"><span class="ji">${c.icon}</span><div><b>${c.name}</b> · ${c.trait}<small>${c.blurb}</small></div></div>`
         : `<div class="jcomp unknown"><span class="ji">?</span><div><b>Someone on the road</b><small>Not met yet.</small></div></div>`;
     }).join('');
-    const regions = [0, 1, 2, 3].map((g) => {
-      const label = ['The Lowlands', 'The Greyback Hills', 'The Teeth', 'Anywhere, and callbacks'][g];
-      const list = CARDS.filter((c) => (g === 3 ? c.cb || (c.at[0] <= 3 && c.at[1] >= 8) : !c.cb && !(c.at[0] <= 3 && c.at[1] >= 8) && regionOf(c.at[0]) === g));
+    // Filed by kind of event (a card can turn up in more than one region, so regions would mislead).
+    const groups: [string, (c: Card) => boolean][] = [
+      ['Companions and their stories', (c) => !!recruitOf(c) || !!c.when?.comp],
+      ['Remembered choices and promises ✦', (c) => !!c.cb && !c.when?.comp],
+      ['Trouble that can’t be passed ⚑', (c) => !!c.must && !c.cb],
+      ['Everyday on the road', (c) => !!c.repeat && !c.must],
+      ['Encounters', (c) => c.at[0] < 8],
+      ['Only on the Teeth', () => true],
+    ];
+    const filed = new Set<string>();
+    const regions = groups.map(([label, test]) => {
+      const list = CARDS.filter((c) => !filed.has(c.id) && test(c));
+      for (const c of list) filed.add(c.id);
       const seen = list.filter((c) => p.cards.includes(c.id));
       return `<h3>${label} <small>${seen.length}/${list.length}</small></h3><div class="jcards">${list
         .map((c) => (p.cards.includes(c.id) ? `<span class="jc">${c.art.match(/\p{Extended_Pictographic}/u)?.[0] ?? '·'} ${esc(c.title)}</span>` : `<span class="jc unknown">· · ·</span>`))
@@ -604,10 +673,22 @@ export class Game {
     showCard(
       `<h2>The road to Hollin<span class="sub">Leg costs as they stand now (companions change the food)</span></h2>
        <div class="route">${rows}</div>
-       <p class="small">Every leg costs food: ${TUNE.legFood} in the lowlands, ${TUNE.legFoodHills} in the hills and the Teeth, +${TUNE.bandFood} for each pair of companions. Most places cost 1 🪔 to reach (the heights 2; villages, inns and rivers none). The heights and rivers also cost ❤️, the forest 🤝.</p>
+       <p class="small">Every leg costs food: ${TUNE.legFood} in the lowlands, ${TUNE.legFoodHills} in the hills and the Teeth, and ${bandLine()}. Most places cost 1 🪔 to reach (the heights 2; villages, inns and rivers none)${TUNE.passOil ? `, and every leg on the Teeth burns ${TUNE.passOil} more` : ''}. The heights and rivers also cost ❤️, the forest 🤝.</p>
+       <p class="small">❄ ${this.blizzardNote()}</p>
        <ul class="kinds">${kinds}</ul>`,
       [{ label: 'Back', primary: true, onClick: () => this.back() }],
     );
+  }
+
+  /** Foreshadows the Blizzard: what it will ask of you, read off the card itself. */
+  private blizzardNote(): string {
+    const b = CARD.blizzard;
+    const plain = (fx: Fx) => RES.filter((k) => fx[k]).map((k) => `${fx[k]! > 0 ? '+' : '−'}${Math.abs(fx[k]!)} ${RES_INFO[k].icon}`).join(' ');
+    const free = b.choices.filter((ch) => !ch.need).map((ch) => `${ch.t.toLowerCase()} (${plain(ch.fx)})`);
+    const helpers = [...new Set(b.choices.filter((ch) => ch.need).map((ch) => COMPANIONS[ch.need!].name))];
+    return `A blizzard often catches travellers on the Teeth (stops ${b.at[0]}-${b.at[1]}), and it can’t be passed by: ${free.join(' or ')}${
+      helpers.length ? `, or let ${helpers.join(' or ')} help` : ''
+    }. Keep enough by.`;
   }
 
   private showComp(id: CompId): void {
@@ -615,13 +696,47 @@ export class Game {
     const c = COMPANIONS[id];
     const opens = CARDS.filter((x) => x.choices.some((ch) => ch.need === id)).length;
     const b = r.band.find((x) => x.id === id);
+    const since = b ? (b.at === 0 ? 'with you since Tarrow Bridge' : `with you since stop ${b.at}, ${esc(r.map[b.at][r.path[b.at]].name)}`) : '';
+    const lastTrust = r.res.t <= TUNE.partTrust;
+    const buttons = [{ label: 'Back', primary: true, onClick: () => this.back() }];
+    if (b && r.phase !== 'over')
+      buttons.push({
+        label: `Part ways (−${TUNE.partTrust} 🤝)`,
+        primary: false,
+        onClick: () =>
+          showCard(
+            `<h2>Part ways with ${c.name}?</h2><p>${c.name} will find a cart going home, with your thanks and a share of the bread. The band takes it hard: −${TUNE.partTrust} 🤝.</p>${
+              lastTrust ? '<p class="small bad">☠ That is the last of your trust: the journey would end.</p>' : ''
+            }<p class="small">${
+              bandFood(r.band.length - 1) < bandFood(r.band.length) ? `One less mouth: each leg costs ${bandFood(r.band.length) - bandFood(r.band.length - 1)} 🍞 less. ` : ''
+            }Their special choices go with them, and they won’t come back.</p>`,
+            [
+              { label: `Stay together`, primary: true, onClick: () => this.back() },
+              { label: `Say goodbye`, primary: false, onClick: () => this.part(id) },
+            ],
+          ),
+      });
     showCard(
-      `<h2>${c.icon} ${c.name}<span class="sub">${c.trait}${b ? ` · with you since stop ${b.at}` : ''}</span></h2>
+      `<h2>${c.icon} ${c.name}<span class="sub">${c.trait}${since ? ` · ${since}` : ''}</span></h2>
        <p>${c.blurb}</p>
        <p>Opens a special choice on ${opens} kinds of event, and has a story of their own a couple of stops after joining.</p>
-       <p class="small">The band eats: every pair of companions costs +${TUNE.bandFood} 🍞 a leg. Each companion who reaches Hollin adds ${TUNE.compPts} to the score.</p>`,
-      [{ label: 'Back', primary: true, onClick: () => this.back() }],
+       <p class="small">The band eats: ${bandLine()}. Each companion who reaches Hollin adds ${TUNE.compPts} to the score. You can part ways at any stop (−${TUNE.partTrust} 🤝).</p>`,
+      buttons,
     );
+  }
+
+  private part(id: CompId): void {
+    const r = this.r;
+    const prev = { ...r.res };
+    closeOverlay();
+    if (!act(r, `L${COMP_IDS.indexOf(id)}`)) return void toast('Not possible right now');
+    this.save();
+    this.renderRes(prev);
+    this.renderWhere();
+    this.renderHand();
+    this.renderDock();
+    if (r.phase === 'over') setTimeout(() => this.showEnd(), 300);
+    else toast(`${COMPANIONS[id].name} waves from the back of a cart`);
   }
 
   private showPromise(p: string): void {
@@ -639,13 +754,13 @@ export class Game {
 
   private showRes(k: Res): void {
     const lines: Record<Res, string> = {
-      f: `Every leg eats ${TUNE.legFood} in the lowlands and ${TUNE.legFoodHills} beyond, plus ${TUNE.bandFood} for each pair of companions. At 0 the journey ends.`,
+      f: `Every leg eats ${TUNE.legFood} in the lowlands and ${TUNE.legFoodHills} beyond, and ${bandLine()}. Villages and inns sell provisions (${TUNE.buyFood} 🍞 for ${TUNE.buyCost} 🪙 and up, once a stop). At 0 the journey ends.`,
       o: 'Lamps for the dark legs: roads, forests, shrines and huts cost 1 to reach, the heights 2; villages, inns and rivers none. At 0 the journey ends.',
       c: 'Buys food, oil, beds and favours. It can run out without ending the journey; you just can’t pay. Half of it counts at Hollin.',
       h: 'Hurts, cold and tired feet. Rivers and the heights cost 1 to reach. At 0 the journey ends.',
       t: 'How much the band believes in you. Dark forests cost 1 to cross. At 0 they turn back, and the journey ends.',
     };
-    showCard(`<h2>${RES_INFO[k].icon} ${RES_INFO[k].name}: ${this.r.res[k]}<span class="sub">at most ${MAX[k]()}</span></h2><p>${lines[k]}</p>`, [
+    showCard(`<h2>${RES_INFO[k].icon} ${RES_INFO[k].name}: ${this.r.res[k]}<span class="sub">at most ${MAX[k]()}</span></h2><p>${lines[k]}</p><p class="small">You can carry at most ${MAX[k]()}; a gain past that is lost (choices say “+1 fits” or “full”).</p>`, [
       { label: 'Back', primary: true, onClick: () => this.back() },
     ]);
   }
@@ -654,13 +769,16 @@ export class Game {
     store.save('seenHelp', true);
     showCard(
       `<h2>Tidings<span class="sub">The winter post to Hollin</span></h2>
-       <p>Snow is coming to the Teeth. Lead the post carriers and their mule from Tarrow Bridge to Hollin, eleven stops away, before the pass closes.</p>
+       <p>Snow is coming to the Teeth. Lead the post carriers and their mule from Tarrow Bridge to Hollin, ${LAST} stops away, before the pass closes.</p>
        <ul>
          <li>At each stop you are dealt <b>three event cards</b>. <b>Face two</b> of them; the third passes by. A <b>⚑</b> card can’t be passed by.</li>
          <li>Every choice shows exactly what it costs and gives: 🍞 food, 🪔 oil, 🪙 coin, ❤️ health, 🤝 trust. A <b>🎲 gamble</b> shows its odds and both outcomes.</li>
          <li>Then pick the road. Each leg costs food, and some cost oil, health or trust; the strip at the top shows the whole route.</li>
          <li>If food, oil, health or trust hits <b>0</b>, the journey ends. Coin can run out safely.</li>
-         <li><b>Companions</b> open special choices, but every pair of them eats an extra 🍞 each leg. Some choices are <b>remembered</b> (✦): a stranger you helped may turn up again.</li>
+         <li>Packs have limits: at most ${TUNE.capF} 🍞, ${TUNE.capO} 🪔, ${TUNE.capH} ❤️, ${TUNE.capT} 🤝 and ${TUNE.capC} 🪙. A gain past the limit is lost; choices say “+1 fits” or “full”.</li>
+         <li>Villages and inns sell <b>provisions</b>: ${TUNE.buyFood} 🍞 for ${TUNE.buyCost} 🪙, once a stop, ${TUNE.buyRise} 🪙 dearer each time you buy. The road buttons warn when you’re short of 🪔, ❤️ or 🤝 to reach Hollin.</li>
+         <li><b>Companions</b> open special choices, but ${bandLine()}. Tap one to part ways (−${TUNE.partTrust} 🤝). Some choices are <b>remembered</b> (✦): a stranger you helped may turn up again.</li>
+         <li>❄ ${this.blizzardNote()}</li>
          <li>Reach Hollin for a score: what you have left, ½ your coin, ${TUNE.compPts} per companion and ${TUNE.promisePts} per <b>promise</b> kept. Stars at ${STARS[1]} and ${STARS[2]}.</li>
          <li>The <b>📖 journal</b> keeps every event, companion and ending you’ve found.</li>
        </ul>`,
@@ -670,7 +788,7 @@ export class Game {
 
   showMenu(): void {
     const r = this.r;
-    showCard(`<h2>Tidings${this.daily ? ' · daily' : ''}<span class="sub">${r.stop >= LAST ? 'Hollin' : `Stop ${r.stop} of ${LAST - 1}`} · ${esc(nodeOf(r).name)}</span></h2>`, [
+    showCard(`<h2>Tidings${this.daily ? ' · daily' : ''}<span class="sub">${r.stop >= LAST ? 'Hollin' : `${stopLabel(r.stop)} · ${esc(nodeOf(r).name)}`}</span></h2>`, [
       { label: 'Resume', primary: true, onClick: () => this.back() },
       { label: 'Journal', onClick: () => this.showJournal(() => this.showMenu()) },
       { label: 'The road to Hollin', onClick: () => this.showRoute() },

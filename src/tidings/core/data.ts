@@ -1,7 +1,7 @@
 // Tidings: shared types, tunable numbers, the band you can recruit, places and endings.
 // Pure data; no DOM, no Math.random, no Date.
 
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 2;
 
 /** Food, oil, coin, health, trust. Coin can run dry; the other four end the journey at 0. */
 export type Res = 'f' | 'o' | 'c' | 'h' | 't';
@@ -20,9 +20,9 @@ export const RES_INFO: Record<Res, { icon: string; name: string; short: string }
 /** Numbers the balance probe can override (TUNE=legFood:1,startF:7). */
 export const TUNE = {
   startF: 5,
-  startO: 4,
+  startO: 3,
   startC: 5,
-  startH: 6,
+  startH: 5,
   startT: 5,
   capF: 12,
   capO: 10,
@@ -33,8 +33,15 @@ export const TUNE = {
   legFood: 1,
   legFoodHills: 2,
   legFoodPass: 2,
-  /** Each full pair of companions eats one more food a leg. */
+  /** Each `bandAt` companions make the band eat `bandFood` more food a leg. */
   bandFood: 1,
+  bandAt: 3,
+  /** Provisions at a village or inn, once a stop: coin for food, `buyRise` dearer each time. */
+  buyCost: 2,
+  buyRise: 1,
+  buyFood: 2,
+  /** Trust it costs to part ways with a companion. */
+  partTrust: 1,
   /** Extra oil a leg on the pass (long cold nights). */
   passOil: 0,
   /** Health a leg to the heights costs (the cold). */
@@ -43,6 +50,8 @@ export const TUNE = {
   woods: 1,
   /** Health a leg to a river costs (wet feet). */
   wet: 1,
+  /** Deal weight of a companion's recruit card (dealt anywhere in stops 0-6). */
+  recruitW: 1.5,
   /** Most companions at once. */
   bandMax: 3,
   /** Cards dealt at each stop, and how many of them you face. */
@@ -65,7 +74,7 @@ export const KIND_INFO: Record<Kind, { icon: string; word: string; oil: number; 
   inn: { icon: '🍺', word: 'inn', oil: 0, note: 'Beds and company, for a price.' },
   river: { icon: '🌊', word: 'river', oil: 0, note: 'Crossings, ferries, tolls. Wet feet cost health.' },
   wild: { icon: '🌲', word: 'forest', oil: 1, note: 'Foraging and hunting, wolves and outlaws. Dark woods cost trust.' },
-  shrine: { icon: '⛩️', word: 'shrine', oil: 1, note: 'Rest, blessings and strangers.' },
+  shrine: { icon: '⛪', word: 'shrine', oil: 1, note: 'Rest, blessings and strangers.' },
   heights: { icon: '🏔️', word: 'heights', oil: 2, note: 'Shortcuts and storms. The cold costs health.' },
   hut: { icon: '🛖', word: 'hut', oil: 1, note: 'Four walls and a stove on the pass.' },
 };
@@ -121,20 +130,22 @@ export interface Ending {
   title: string;
   icon: string;
   text: string;
+  /** What the journal says before you've found it. */
+  hint: string;
 }
 
 export const ENDINGS: Ending[] = [
-  { id: 'starve', kind: 'fail', title: 'Empty Packs', icon: '🍞', text: 'The last crust goes to the mule. You turn back for the lowlands, and the post waits for spring.' },
-  { id: 'dark', kind: 'fail', title: 'The Lamps Go Out', icon: '🪔', text: 'The last wick gutters. In the dark you can only sit together and wait for a dawn that takes its time.' },
-  { id: 'hurt', kind: 'fail', title: 'Carried Down', icon: '❤️', text: 'You can’t stand. The band carries you back down the road on the mule, which complains the whole way.' },
-  { id: 'scatter', kind: 'fail', title: 'The Band Turns Back', icon: '🤝', text: 'One by one they stop believing you, and one morning the camp is empty except for the mule and the post.' },
-  { id: 'wedding', kind: 'arrive', title: 'The Winter Wedding', icon: '💍', text: 'You came for the post and stayed for a wedding. The whole band dances, and the mule wears a ribbon.' },
-  { id: 'full', kind: 'arrive', title: 'A Full Table', icon: '🍲', text: 'Every one of you squeezes round the postmaster’s table. There aren’t enough chairs, and nobody cares.' },
-  { id: 'beloved', kind: 'arrive', title: 'Followed Anywhere', icon: '🔥', text: 'Your band would walk the Teeth again tomorrow if you asked. Please don’t ask.' },
-  { id: 'rich', kind: 'arrive', title: 'Silver in the Snow', icon: '🪙', text: 'You arrive with a purse heavier than the post sack. The valley eyes you with interest.' },
-  { id: 'thin', kind: 'arrive', title: 'By a Thread', icon: '🧵', text: 'You stumble into Hollin on nothing at all. The postmaster sits you by the stove before she opens a single letter.' },
-  { id: 'alone', kind: 'arrive', title: 'One Lamp Walking', icon: '🏮', text: 'Just you, the carriers and the mule, all the way. Hollin’s children follow your one lamp down the street.' },
-  { id: 'plain', kind: 'arrive', title: 'The Post Comes In', icon: '✉️', text: 'The bell rings, the doors open, and a whole valley reads its letters by the fire.' },
+  { id: 'starve', kind: 'fail', title: 'Empty Packs', icon: '🍞', text: 'The last crust goes to the mule. You turn back for the lowlands, and the post waits for spring.', hint: 'Run out of food.' },
+  { id: 'dark', kind: 'fail', title: 'The Lamps Go Out', icon: '🪔', text: 'The last wick gutters. In the dark you can only sit together and wait for a dawn that takes its time.', hint: 'Run out of oil.' },
+  { id: 'hurt', kind: 'fail', title: 'Carried Down', icon: '❤️', text: 'You can’t stand. The band carries you back down the road on the mule, which complains the whole way.', hint: 'Run out of health.' },
+  { id: 'scatter', kind: 'fail', title: 'The Band Turns Back', icon: '🤝', text: 'One by one they stop believing you, and one morning the camp is empty except for the mule and the post.', hint: 'Run out of trust.' },
+  { id: 'wedding', kind: 'arrive', title: 'The Winter Wedding', icon: '💍', text: 'You came for the post and stayed for a wedding. The whole band dances, and the mule wears a ribbon.', hint: 'Carry a ring all the way to Hollin.' },
+  { id: 'full', kind: 'arrive', title: 'A Full Table', icon: '🍲', text: 'Every one of you squeezes round the postmaster’s table. There aren’t enough chairs, and nobody cares.', hint: 'Reach Hollin with three companions.' },
+  { id: 'beloved', kind: 'arrive', title: 'Followed Anywhere', icon: '🔥', text: 'Your band would walk the Teeth again tomorrow if you asked. Please don’t ask.', hint: 'Reach Hollin with trust of 9 or more.' },
+  { id: 'rich', kind: 'arrive', title: 'Silver in the Snow', icon: '🪙', text: 'You arrive with a purse heavier than the post sack. The valley eyes you with interest.', hint: 'Reach Hollin with 14 coin or more.' },
+  { id: 'thin', kind: 'arrive', title: 'By a Thread', icon: '🧵', text: 'You stumble into Hollin on nothing at all. The postmaster sits you by the stove before she opens a single letter.', hint: 'Reach Hollin with something down to 1.' },
+  { id: 'alone', kind: 'arrive', title: 'One Lamp Walking', icon: '🏮', text: 'Just you, the carriers and the mule, all the way. Hollin’s children follow your one lamp down the street.', hint: 'Reach Hollin with no companions at all.' },
+  { id: 'plain', kind: 'arrive', title: 'The Post Comes In', icon: '✉️', text: 'The bell rings, the doors open, and a whole valley reads its letters by the fire.', hint: 'Reach Hollin any other way.' },
 ];
 export const ENDING = Object.fromEntries(ENDINGS.map((e) => [e.id, e])) as Record<string, Ending>;
 

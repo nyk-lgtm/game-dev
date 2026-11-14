@@ -115,13 +115,16 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
     beats live par on 5/45, p90 1.8%, max 7%); `wind.ts 18 2` adds wind to calm levels (v3: the calm par build fails in 15/18,
     windy par +8% median); `trail.ts 1 40` lists the trail; `why.ts`, `bumps.ts [cart]` (a heavy cart down a kinked road keeps
     planks ≤ 0.3; the V and hill stall: no climbing), `tutorials.ts` (each tutorial's `ref` peak < 0.85, surveyor ≤ par).
-  - Tidings: `npx vite-node scripts/tidings/balance.ts 400 [careful,casual,random,safe,risky,greedy,crowd,miser]` (rules v1:
-    careful (plans every order of this stop's cards and choices, gambles by their shown odds, then the road, valuing stock
-    against the cheapest remaining leg costs on the map) arrives ~55% (51-56% over seed sets 1000/5000/9000), ★★★ ~14% of
-    arrivals; casual (one choice at a time, 25% whim) ~11%; random 0%; safe (never gambles, smallest loss) 0% (starves by
-    stop 4-5); risky/greedy ~0%; deaths mostly food (~65%), then oil, spread over stops 4-10; ~2 callbacks faced a run).
-    `TUNE=startF:6,legFoodHills:1` tries numbers (careful: legFood hills/pass 2 → ~55%, 1 → ~85%: the touchiest knob),
-    `W=reserve:0.7` bot weights; `trace.ts <seed> [policy]` prints a journey stop by stop and its `?seed=&a=`.
+  - Tidings: `npx vite-node scripts/tidings/balance.ts 400 [careful,casual,random,safe,risky,greedy,crowd,miser]` (rules v2:
+    careful (plans every order of this stop's cards, choices, provisions and partings, gambles by their shown odds, then the
+    road, valuing stock against the cheapest remaining leg costs on the map) arrives ~74-75% (seed sets 1000/5000), ★★★ ~19%
+    of arrivals; casual (one action at a time, 25% whim that heeds the page's ☠ and "short of" warnings) ~21%; random/safe/
+    risky/greedy 0-1%; careful deaths now oil ~60%, food ~35%, mostly stops 8-10; casual oil and food alike). The gap
+    careful − casual stays ~50 points whatever the knob (provisions add ~+15 to both, startO/startF/startH/startC/legFoodPass
+    take from both); v1 was 55/11. `TUNE=startC:3` → 67/16, `legFoodPass:3` → ~-10/-6, `buyCost:99` (no provisions) ~-15.
+    `W=reserve:0.7` bot weights; `trace.ts <seed> [policy]` prints a journey stop by stop and its `?seed=&a=`;
+    `comps.ts 400` gives each companion's offer/take rate (all ~45-54% offered), `WITH=1 comps.ts 300` starts every run with
+    one companion (power: none 73%, Fen ~78 … Pell ~89%).
   - Lull: `npx vite-node scripts/lull/probe.ts [seed] [plants]` (weather spells, then a full garden's day: rules v1 ~1.6 notes
     a step / ~26 a bar, busiest step capped at 6 (`MAX_PER_STEP`), Harpfern runs are the bulk; bees/fireflies/frog out per phase).
     Frame cost (Playwright, Pixel 7, 30 grown plants): desktop 60 fps (draw JS ~0.4 ms); CPU ×4 throttled ~45-48 fps at DPR 2
@@ -496,17 +499,28 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   out, {boost: [comp, +odds]})`; a gamble's `breaks` only applies when it's lost), run.ts. Map: rows 0 (Tarrow Bridge) …
   11 (Hollin), rows 1-10 two nodes of different kinds from the region (lowlands 0-3, hills 4-7, the Teeth 8-10). A stop
   deals 3 (`rngFor(seed, T_DEAL, stop)`: callbacks first, then weighted: matching `where` 4, anywhere 2, repeat 1,
-  must ×0.7); face 2 (`P<h>.<c>`), then `M<k>` walks a leg: food 1 / 2 / 2 by region + 1 per full pair of companions,
+  recruit cards (no `where`, stops 0-6) `TUNE.recruitW` 1.5 so every companion is offered ~50% of runs, must ×0.7); face
+  2 (`P<h>.<c>`), then `M<k>` walks a leg: food 1 / 2 / 2 by region + `bandFood(n)` (+1 at `bandAt` 3 = a full band),
   oil by kind (heights 2; town/inn/river 0), heights and rivers −1 health, forest −1 trust; the last leg is free. Food,
-  oil, health or trust at 0 ends it (coin can't go below 0: choices that cost more are blocked). Gambles roll
+  oil, health or trust at 0 ends it (coin can't go below 0: choices that cost more are blocked). At any time in a stop:
+  `B` buys provisions at a village or inn (rules v2; `canBuy`, once a stop, `buyPrice` = 2 + 1 per earlier buy, +2 food)
+  and `L<compIndex>` parts with a companion (−1 trust, gone for good: `parted`, their recruit card never returns).
+  `shortOf(r, k)` (oil/health/trust the cheapest rest of the road needs ≥ what you carry, via `routeNeed`) drives the road
+  buttons' "⚠ short of … to reach Hollin"; food is a dock line ("To Hollin, at the least …") since it's always short early.
+  Riddles (`riddle(label, right, …)`, the Hermit): both outcomes shown, the answer decides (`won` = `right`), the clue is in
+  the text. The Blizzard (⚑, stops 8-10, dealt in ~58% of runs that get there) is foreshadowed by the map strip's
+  "❄ blizzards", the route card and help (worded from the card itself) and the Weatherwise Shepherd (stops 5-7). Gambles roll
   `rngFor(seed, T_GAMBLE, stop, cardIndex)` against `oddsOf` (boosts, ≤ 95%); `act(r, a, force)` decides one for bots.
   Every card keeps a choice with no gate and no coin (test). Score at Hollin = f+o+h+t + ⌊c/2⌋ + 3/companion +
   5/promise kept. Endings by priority: wedding (ring kept), thin (a resource ≤ 1), full (3 companions), beloved (trust ≥ 9),
   rich (coin ≥ 14), alone, plain. The page is DOM: resource pills, a journey strip (SVG + emoji nodes, tap = route
   card with every leg's cost), hand rows (SVG landscape art per card from art.ts: sky by `sky`, ground by region, emoji
   figures), a focus card with choices (chips for every number, ☠ when it would empty a resource, odds and boosts,
-  upkeep a recruit adds, promises, "✦ may be remembered"), a flip to the outcome, then the road buttons. Journal
-  (`profile`: cards faced, companions met, endings) survives runs. Reports `TIDINGS v… seed=… a=…`.
+  upkeep a recruit adds, promises, "✦ may be remembered"), a flip to the outcome, then the road buttons. Boosts always read
+  "🏹 Ysolde: +30% (with you, counted)" / "(not with you)". Stops read "Stop N of 11" (Tarrow Bridge = setting out,
+  Hollin = stop 11). Journal (`profile`: cards faced, companions met, endings) survives runs; cards are filed by type
+  (companions, remembered, ⚑ trouble, everyday, encounters, Teeth-only), unfound endings show their `hint`. Reports
+  `TIDINGS v… seed=… a=…`.
 - Telegraph specifics: new enemies go in `ENEMIES` (src/telegraph/core/enemies.ts)
   plus a shape in render/draw.ts and a color in palette.ts; tests in
   tests/telegraph/enemies.test.ts. Telegraphed attacks set `aim` and resolve via

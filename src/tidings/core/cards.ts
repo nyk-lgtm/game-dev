@@ -19,6 +19,9 @@ export interface Choice {
   need?: CompId;
   /** A gamble: chance of fx/out, else `lose`. */
   odds?: number;
+  /** A riddle answer: shows both outcomes; `right` says which one it gets. */
+  riddle?: boolean;
+  right?: boolean;
   lose?: Outcome;
   /** This companion in the band adds to the odds. */
   boost?: [CompId, number];
@@ -82,6 +85,16 @@ const gam = (t: string, odds: number, win: string, winOut: string, lose: string,
   ...x,
 });
 
+/** A riddle answer: both outcomes shown, only the wit decides. */
+const riddle = (t: string, right: boolean, win: string, winOut: string, lose: string, loseOut: string): Choice => ({
+  t,
+  fx: F(win),
+  out: winOut,
+  riddle: true,
+  right,
+  lose: { fx: F(lose), out: loseOut },
+});
+
 const L: [number, number] = [0, 3];
 const U: [number, number] = [4, 7];
 const P: [number, number] = [8, 10];
@@ -89,7 +102,7 @@ const P: [number, number] = [8, 10];
 export const CARDS: Card[] = [
   // ------------------------------------------------------------ companions to recruit
   {
-    id: 'goatgirl', title: 'The Goat Girl', art: '👧🐐', sky: 'day', at: [0, 6], where: ['road', 'town', 'wild'],
+    id: 'goatgirl', title: 'The Goat Girl', art: '👧🐐', sky: 'day', at: [0, 6],
     text: `A girl in a patched coat sits on a milestone, whistling a goat down off a wall. She has walked every ridge to the pass, she says, and is bored of all of them.`,
     choices: [
       ch('Take her on', '', 'She shoulders a pack before you’ve finished asking.', { join: 'wren' }),
@@ -98,7 +111,7 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'herbwife', title: 'The Herb Wife', art: '👵🌿', sky: 'day', at: [0, 6], where: ['town', 'shrine', 'inn'],
+    id: 'herbwife', title: 'The Herb Wife', art: '👵🌿', sky: 'day', at: [0, 6],
     text: `Old Tamsin sells bitter roots off a blanket. Her knees, she says, want one more mountain before they retire.`,
     choices: [
       ch('Welcome her along', '', 'She rolls up the blanket, roots and all.', { join: 'tamsin' }),
@@ -107,16 +120,16 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'trader', title: 'A Trader Without a Cart', art: '🧔🎲', sky: 'dusk', at: [0, 5], where: ['inn', 'town'],
+    id: 'trader', title: 'A Trader Without a Cart', art: '🧔🎲', sky: 'dusk', at: [0, 6],
     text: `Pell lost his cart at dice and somehow kept his smile. “Feed me to Hollin,” he says, “and I’ll make you rich on the way.”`,
     choices: [
-      ch('Shake on it', 'f-1', 'He eats the bread you give him as if it owes him money.', { join: 'pell' }),
+      ch('Shake on it', '', 'He shakes your hand, then the mule’s hoof, for luck.', { join: 'pell' }),
       ch('Buy his last trinket for the band', 'c-1 t+2', 'A tin bird that flaps when you blow on it. Silly. Everyone loves it.'),
       ch('Sell him your spare rope', 'c+2 t-1', 'He sells it back to the next traveller for twice the price, in front of you.'),
     ],
   },
   {
-    id: 'lampmender', title: 'The Lamp Mender', art: '👨‍🔧🏮', sky: 'dusk', at: [0, 6], where: ['town', 'road'],
+    id: 'lampmender', title: 'The Lamp Mender', art: '👨‍🔧🏮', sky: 'dusk', at: [0, 6],
     text: `A tinker’s barrow rattles with lamp chimneys. Bram says he’d sooner mend lamps on the road than wait for them to come to him.`,
     choices: [
       ch('Bring him along', '', 'He ties the barrow behind the mule. The mule has views.', { join: 'bram' }),
@@ -125,7 +138,7 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'arrow', title: 'An Arrow in the Hedge', art: '🏹🐇', sky: 'day', at: [1, 7], where: ['road', 'wild', 'river'],
+    id: 'arrow', title: 'An Arrow in the Hedge', art: '🏹🐇', sky: 'day', at: [0, 6],
     text: `An arrow thunks into the fence post beside your head. Ysolde apologises, then shows you the rabbit behind it. “Hollin? I could use a walk.”`,
     choices: [
       ch('Ask her to come', '', 'She nods once. That seems to be a whole conversation.', { join: 'ysolde' }),
@@ -134,16 +147,16 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'fiddle', title: 'A Fiddle for Supper', art: '🎻🍲', sky: 'night', at: [0, 7], where: ['inn', 'town'],
+    id: 'fiddle', title: 'A Fiddle for Supper', art: '🎻🍲', sky: 'night', at: [0, 6],
     text: `Fen plays for his supper, and tonight nobody is feeding him. Your band is tapping its feet anyway.`,
     choices: [
-      ch('Invite him along', 'f-1', 'He eats like a man who has been playing for nothing all week.', { join: 'fen' }),
+      ch('Invite him along', '', 'He packs the fiddle in two shirts and a sock.', { join: 'fen' }),
       ch('Pay him to play on', 'c-1 t+2', 'He plays until the landlord blows out the lamps.'),
       ch('Dance till you drop', 'h-1 t+2', 'Worth every ache.'),
     ],
   },
   {
-    id: 'mapbill', title: 'The Map on the Bill', art: '🗺️🍺', sky: 'dusk', at: [1, 7], where: ['inn', 'town', 'river'],
+    id: 'mapbill', title: 'The Map on the Bill', art: '🗺️🍺', sky: 'dusk', at: [0, 6],
     text: `Corrie has drawn the pass on the back of a tavern bill: every switchback, and every lie the guidebooks tell.`,
     choices: [
       ch('Ask her to guide you', '', '“Finally,” she says, “someone who asks.”', { join: 'corrie' }),
@@ -152,10 +165,10 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'giant', title: 'The Quiet Giant', art: '🧍‍♂️🛒', sky: 'day', at: [1, 7], where: ['road', 'river', 'town'],
+    id: 'giant', title: 'The Quiet Giant', art: '🧍‍♂️🛒', sky: 'day', at: [0, 6],
     text: `A big man lifts a cart out of a ditch while its owner shouts at him. When the shouting stops, so does Hob.`,
     choices: [
-      ch('Ask him to come', 'f-1', 'He shares your bread and says nothing, gratefully.', { join: 'hob' }),
+      ch('Ask him to come', '', 'He picks up the heaviest sack without a word.', { join: 'hob' }),
       ch('Hire him for an hour', 'c-1 h+2', 'He carries everything heavy. Your backs sing.'),
       ch('Thank him for the both of you', 't+1', 'He goes pink to the ears.'),
     ],
@@ -236,7 +249,7 @@ export const CARDS: Card[] = [
     choices: [
       ch('Push on through', 'h-2', 'Wet to the bone, but on time.'),
       ch('Light a fire in a barn', 'o-1 f-1', 'You lose the afternoon, and dry out by the evening.'),
-      ch('Tamsin brews nettle tea', 't+1', 'It’s horrible, and everyone feels better.', { need: 'tamsin' }),
+      ch('Corrie saw it coming', '', 'She had you under a barn roof before the first drop.', { need: 'corrie' }),
     ],
   },
   {
@@ -433,10 +446,20 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'hermit', title: 'The Hermit’s Riddle', art: '🧙❓', sky: 'dusk', at: U, where: ['shrine', 'wild'],
-    text: `A hermit offers a blessing for the answer to a riddle: “What grows lighter the further you carry it?”`,
+    id: 'weather', title: 'The Weatherwise Shepherd', art: '👴🌨️', sky: 'dusk', at: [5, 7], where: ['wild', 'town', 'shrine', 'river', 'inn'],
+    text: `An old shepherd squints up at the Teeth. “Blizzard up there inside the week. Keep bread and oil by, or the legs to push through it.”`,
     choices: [
-      gam('Guess', 0.5, 'h+2 t+1', '“A lamp, burning.” He beams and blesses you all.', 't-1', 'He shakes his head sadly. The band giggles all afternoon.'),
+      ch('Buy his spare oil', 'c-2 o+2', 'A stoppered jug that smells of sheep.'),
+      ch('Ask where to shelter', 't+1', 'He marks the huts on your map with a burnt stick.'),
+      ch('Share a crust with him', 'f-1 h+1', 'He tells you about the winter of ’09. Twice.'),
+    ],
+  },
+  {
+    id: 'hermit', title: 'The Hermit’s Riddle', art: '🧙❓', sky: 'dusk', at: U, where: ['shrine', 'wild'],
+    text: `A hermit offers a blessing for his riddle: “The more of me you take, the more you leave behind.” He looks hard at your muddy boots.`,
+    choices: [
+      riddle('“Footsteps.”', true, 'h+2 t+1', 'He beams, and blesses every boot in turn.', 't-1', ''),
+      riddle('“Bread.”', false, 'h+2 t+1', '', 't-1', 'He laughs until he coughs. The band giggles all afternoon.'),
       ch('Give him bread for the blessing', 'f-1 h+2', 'He blesses the bread, too, before he eats it.'),
       ch('Fen asks him for a song instead', 't+2', 'The hermit has a lovely voice. Who knew.', { need: 'fen' }),
     ],
@@ -565,7 +588,7 @@ export const CARDS: Card[] = [
     text: `A table of drovers is playing at dice, and they want a fourth.`,
     choices: [
       gam('Play a hand', 0.45, 'c+4', 'Sixes, sixes, and a table of very quiet drovers.', 'c-3', 'They are much better at dice than you.'),
-      ch('Pell plays for you', 'c+4', 'Pell loses the first two on purpose. Then he doesn’t.', { need: 'pell' }),
+      ch('Pell plays for you', 'c+3', 'Pell loses the first two on purpose. Then he doesn’t.', { need: 'pell' }),
       ch('Just watch', '', 'You learn three new songs and one new word.'),
     ],
   },
@@ -575,8 +598,8 @@ export const CARDS: Card[] = [
     id: 'blizzard', title: 'Blizzard', art: '🌨️💨', sky: 'snow', at: P, where: ['heights', 'hut', 'shrine'], must: true,
     text: `The sky goes white from top to bottom, and the wind begins to sing.`,
     choices: [
-      ch('Dig in and wait', 'f-2 o-2', 'Two days in a snow hole, playing guessing games.'),
-      ch('Push through', 'h-3', 'You get there. You can’t feel your face.'),
+      ch('Dig in and wait', 'f-1 o-1', 'A day in a snow hole, playing guessing games.'),
+      ch('Push through', 'h-2', 'You get there. You can’t feel your face.'),
       ch('Bram’s little stove', 'o-1', 'It roars all night on a cupful of oil.', { need: 'bram' }),
       ch('Corrie finds the cairns', 'h-1', 'Cairn to cairn through the white, never once lost.', { need: 'corrie' }),
     ],
@@ -614,7 +637,7 @@ export const CARDS: Card[] = [
     choices: [
       ch('Warm him with lamp and oil', 'o-2 t+1', 'He wakes by the lamp, asking for his brothers.', { set: 'rescued' }),
       ch('Carry him to shelter', 'h-2 t+1', 'Heavy as a sack of wet sand, and twice as cold.', { set: 'rescued' }),
-      ch('Tamsin works on him', 't+2', 'Rubbing, tea, a slap. He sits up swearing.', { need: 'tamsin', set: 'rescued' }),
+      ch('Tamsin works on him', 't+1', 'Rubbing, tea, a slap. He sits up swearing.', { need: 'tamsin', set: 'rescued' }),
       ch('You can’t save everyone', 't-2', 'Nobody speaks for the rest of the day.'),
     ],
   },
@@ -626,10 +649,11 @@ export const CARDS: Card[] = [
       ch('Burn oil for warmth', 'o-1 h+2', 'The stove glows red. Everyone sleeps.'),
       ch('Cook a proper meal', 'f-2 h+1 t+1', 'Stew, and a story for each spoonful.'),
       ch('Sign the book and sleep', 'h+1', 'You add your name under a hundred others.'),
+      ch('Hob splits a week of wood', 'h+2', 'The stove roars all night without a drop of oil.', { need: 'hob' }),
     ],
   },
   {
-    id: 'fort', title: 'The Empty Fort', art: '🏯❄️', sky: 'dusk', at: P, where: ['heights', 'hut'],
+    id: 'fort', title: 'The Empty Fort', art: '🏰❄️', sky: 'dusk', at: P, where: ['heights', 'hut'],
     text: `A border fort with nobody guarding it, and a storeroom nobody has guarded either.`,
     choices: [
       gam('Search the storeroom', 0.6, 'f+3 o+2', 'Hard biscuit and a barrel of lamp oil. Soldiers’ rations.', 'h-1', 'A rat the size of a cat, with views.'),
@@ -678,7 +702,7 @@ export const CARDS: Card[] = [
     text: `A yak train is coming down from Hollin. Its drivers haven’t seen a stranger in weeks.`,
     choices: [
       ch('Buy butter tea and barley', 'c-2 h+2 f+1', 'Salty, buttery, warming, strange.'),
-      ch('Pell trades with them', 'f+2 o+2', 'Somehow you come out ahead and they’re thrilled.', { need: 'pell' }),
+      ch('Pell trades with them', 'f+1 o+2', 'Somehow you come out ahead and they’re thrilled.', { need: 'pell' }),
       ch('Ask about the road ahead', 't+1', '“Open, for now.” It’s enough.'),
     ],
   },
@@ -711,7 +735,7 @@ export const CARDS: Card[] = [
     ],
   },
   {
-    id: 'monastery', title: 'The Snow Monastery', art: '🛕🕯️', sky: 'dusk', at: P, where: ['shrine', 'hut'],
+    id: 'monastery', title: 'The Snow Monastery', art: '⛪🕯️', sky: 'dusk', at: P, where: ['shrine', 'hut'],
     text: `Monks live up here all winter. They offer soup, and ask only for news of the world.`,
     choices: [
       ch('Trade news for soup', 'f+2 t+1', 'They like the bits about the dance best.'),
@@ -729,6 +753,7 @@ export const CARDS: Card[] = [
       ch('Rooms and stew', 'c-3 h+2 f+1', 'Real beds. Somebody cries a little.'),
       ch('Stew to go', 'c-1 f+2', 'In a pot you promise to bring back. You won’t.'),
       ch('Sleep in the stable', 'h+1', 'Warm straw and a curious horse.'),
+      ch('Fen plays for your supper', 'f+2', 'The landlord pays in stew, and seconds.', { need: 'fen' }),
     ],
   },
   {
@@ -739,6 +764,7 @@ export const CARDS: Card[] = [
       ch('Forage as you walk', 'f+2 h-1', 'Blackberries, nettles, and scratched hands.'),
       ch('Rest your feet', 'h+1', 'A long lunch in the sun.'),
       ch('Tell stories as you walk', 't+1', 'Everybody has a worse one than the last.'),
+      ch('Wren climbs for eggs', 'f+2', 'She comes down with a hatful and only one broken.', { need: 'wren' }),
     ],
   },
   {
@@ -790,13 +816,14 @@ export const CARDS: Card[] = [
   },
 
   {
-    id: 'camp', title: 'Camp by the Road', art: '🏕️🫏', sky: 'night', at: [0, 10], repeat: true,
+    id: 'camp', title: 'Camp by the Road', art: '🏕️🫏', sky: 'night', at: [0, 7], where: ['road', 'wild', 'river', 'shrine'], repeat: true,
     text: `You make camp where the day ends: a fire, a pot, and the mule grumbling at the stars.`,
-    alts: [{ text: `Nowhere to stop but a field corner and a hedge. It will do.` }],
+    alts: [{ text: `A sheltered bank and a ring of old fire-stones. It will do.` }],
     choices: [
       ch('Cook something hot', 'f-1 h+1 t+1', 'Onion soup, and everyone a little kinder.'),
       ch('Mend the packs by lamplight', 'o-1 c+1', 'You sell the spare straps at the next stop.'),
       ch('Turn in early', 'h+1', 'Sleep comes before the fire’s out.'),
+      ch('Ysolde sets snares', 'f+2', 'Two rabbits by morning. She looks almost pleased.', { need: 'ysolde' }),
     ],
   },
   {
@@ -814,7 +841,7 @@ export const CARDS: Card[] = [
     choices: [
       ch('Rest a day', 'f-2 h+1', 'Feet up, pots on.'),
       ch('Bind them and walk on', 'h-1', 'Every step a small opinion.'),
-      ch('Tamsin’s salve', 'h+1', 'It smells of goose fat and works like magic.', { need: 'tamsin' }),
+      ch('Tamsin’s salve', '', 'It smells of goose fat. The walking stops hurting.', { need: 'tamsin' }),
     ],
   },
   {
@@ -929,7 +956,7 @@ export const CARDS: Card[] = [
   },
   {
     id: 'rescued2', title: 'The Brothers', art: '👨‍👨‍👦🛷', sky: 'day', at: [9, 10], when: { flag: 'rescued', gap: 1 }, cb: true,
-    text: `The man you pulled out of the snow comes back up the path with his three brothers and a sledge.`,
+    text: `The man you saved in the snow comes back up the path with his three brothers and a sledge.`,
     choices: [
       ch('Ride the sledge', 'h+2 o+1', 'Down a whole valley, screaming happily.'),
       ch('Share their supper', 'f+3 t+1', 'They insist. Then they insist again.'),

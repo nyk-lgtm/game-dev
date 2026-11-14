@@ -3,7 +3,7 @@
 // roll), then the road, and scores the result with a value that fears empty
 // resources. The others are single-minded policies for comparison.
 
-import { CARD, COMPANIONS, LAST, LETHAL, TUNE, act, actError, blockOf, cardBlock, legCost, oddsOf, scoreOf, type CompId, type Run } from '../../src/tidings/core';
+import { CARD, COMPANIONS, COMP_IDS, LAST, LETHAL, TUNE, act, actError, blockOf, buyPrice, canBuy, cardBlock, emptied, legCost, shortOf, oddsOf, scoreOf, type CompId, type Run } from '../../src/tidings/core';
 
 export type Policy = (r: Run, rng: () => number) => string;
 
@@ -17,12 +17,15 @@ export function legal(r: Run): string[] {
     });
   } else if (r.phase === 'road') {
     r.map[r.stop + 1].forEach((_, k) => out.push(`M${k}`));
+    // Provisions and partings are offered once the cards are done (keeps the plan small).
+    if (canBuy(r) && r.res.c >= buyPrice(r)) out.push('B');
+    for (const b of r.band) out.push(`L${COMP_IDS.indexOf(b.id)}`);
   }
   return out;
 }
 
 const clone = (r: Run): Run => {
-  const c = { ...r, res: { ...r.res }, band: r.band.map((b) => ({ ...b })), met: [...r.met], flags: { ...r.flags }, promises: { ...r.promises }, used: [...r.used], hand: r.hand.map((h) => ({ ...h })), path: [...r.path], legs: [...r.legs], log: [...r.log], actions: [...r.actions] };
+  const c = { ...r, res: { ...r.res }, band: r.band.map((b) => ({ ...b })), met: [...r.met], parted: [...r.parted], flags: { ...r.flags }, promises: { ...r.promises }, used: [...r.used], hand: r.hand.map((h) => ({ ...h })), path: [...r.path], legs: [...r.legs], log: [...r.log], actions: [...r.actions] };
   return c;
 };
 
@@ -87,7 +90,8 @@ function plan(r: Run, w: Weights): { v: number; a: string } {
   let best = { v: -Infinity, a: acts[0] };
   for (const a of acts) {
     let v = 0;
-    for (const [p, s] of branches(r, a)) v += p * (r.phase === 'cards' && s.phase !== 'over' ? plan(s, w).v : value(s, w));
+    // Keep planning while still at this stop (cards, provisions, partings, then the road).
+    for (const [p, s] of branches(r, a)) v += p * (s.stop === r.stop && s.phase !== 'over' ? plan(s, w).v : value(s, w));
     if (v > best.v) best = { v, a };
   }
   return best;
@@ -170,10 +174,28 @@ export const miser: Policy = (r, rng) => {
   return careful()(r, rng);
 };
 
-/** A casual player: weighs each choice on its own (no pairing, no road planning) and sometimes just picks what appeals. */
+/** What the page warns about an action: ☠ on a choice that empties a resource, "short of …" on a road. */
+export function warned(r: Run, a: string): boolean {
+  if (a[0] === 'P') {
+    const ch = CARD[r.hand[Number(a[1])].id].choices[Number(a[3])];
+    return emptied(r, ch.fx).length > 0 || (!!ch.lose && emptied(r, ch.lose.fx).length > 0);
+  }
+  if (a[0] === 'M') {
+    return shortOf(r, Number(a[1])).length > 0;
+  }
+  return false;
+}
+
+/** A casual player: weighs each action on its own (no pairing, no road planning), sometimes just picks what
+ *  appeals. */
 export const casual: Policy = (r, rng) => {
   const acts = legal(r);
-  if (rng() < 0.25) return pick(acts, rng);
+  // A whim picks a card choice or a road (never a parting or a purchase), and heeds the page's warnings.
+  const all = acts.filter((a) => a[0] === 'P' || a[0] === 'M');
+  const heeded = all.filter((a) => !warned(r, a));
+  const whims = heeded.length ? heeded : all;
+  if (whims.length && rng() < 0.25) return pick(whims, rng);
+  // Otherwise the best-looking action on its own.
   let best = acts[0], bv = -Infinity;
   for (const a of acts) {
     let v = 0;

@@ -2,7 +2,7 @@
 // Prints a bot journey stop by stop (hand, choices, rolls, legs, resources) and
 // the `?seed=&a=` link that replays it.
 
-import { CARD, KIND_INFO, LAST, RES, RES_INFO, act, newRun, nodeOf, telling, type Fx, type Run } from '../../src/tidings/core';
+import { CARD, COMP_IDS, KIND_INFO, LAST, RES, RES_INFO, act, newRun, nodeOf, telling, type Fx, type Run } from '../../src/tidings/core';
 import { POLICIES, careful, mulberry } from './bot';
 
 const seed = Number(process.argv[2] ?? 1);
@@ -27,6 +27,13 @@ while (r.phase !== 'over') {
     const ch = CARD[hc.id].choices[Number(a[3])];
     act(r, a);
     console.log(`  ${telling(hc).title}: “${ch.t}”${hc.won === undefined ? '' : hc.won ? ' (won)' : ' (lost)'} → ${fxs(hc.got!)}   ${res(r)}`);
+  } else if (a === 'B') {
+    act(r, a);
+    console.log(`  bought provisions   ${res(r)}`);
+  } else if (a[0] === 'L') {
+    const id = COMP_IDS[Number(a[1])];
+    act(r, a);
+    console.log(`  parted with ${id}   ${res(r)}`);
   } else act(r, a);
 }
 console.log(`\nEND ${r.end!.ending} at stop ${r.stop}${r.end!.cause ? ` (out of ${r.end!.cause})` : ''} score ${r.end!.score} ★${r.end!.stars}  ${res(r)}`);

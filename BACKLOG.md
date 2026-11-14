@@ -53,9 +53,17 @@ keep every change touch-friendly at 390 px; prefer depth and polish over sprawl.
         rows with SVG landscape art, focus card with every number as chips (☠, odds, boosts, upkeep, promises, ✦), flip to
         outcome, road buttons with costs, ending card with score table and a card-by-card recap, journal, help, menu, bug
         report, daily, hub card (Story + Strategy) + Daily link + NEWS. Pixel 7 and 360×640 checked; a touch play-through.
-  - [ ] Next: first blind playtest. Watch: is it too hard for a thoughtful human (casual bot only ~11%; food is ~65% of
-        deaths)? Do players find the ⚑ rule and companion upkeep clear? Are 2 callbacks a run enough to feel the "stranger
-        returns"? Maybe: sound, a short intro vignette, more endings tied to companions, a gentler first journey.
+  - [x] First blind playtest fixes (rules v2): food eased (band surcharge only for a full band of 3, recruits free,
+        provisions at villages/inns: 2 🪙 → 2 🍞, +1 🪙 each buy), part ways with a companion (−1 🤝), road buttons warn
+        "short of 🪔/❤️/🤝 to reach Hollin" plus a "To Hollin, at the least" line, Blizzard softened (−1 🍞 −1 🪔 or −2 ❤️)
+        and foreshadowed (map strip ❄, route card, help, the Weatherwise Shepherd), recruits dealt anywhere at a lower weight
+        (every companion offered ~50% of runs; Tamsin's free fixes trimmed, Ysolde/Wren/Fen/Hob given a food/health choice
+        on everyday cards, Pell trimmed), 44 px band chips, caps explained, one boost wording, "Stop N of 11" everywhere,
+        journal filed by type with ending hints, the Hermit's riddle is a real answer with a clue, Camp/Brothers text fixed,
+        ⛪/🏰 for the shrine/fort. Bots: careful ~74%, casual ~21% (the ~50-point gap resisted every knob; careful's deaths
+        are now oil > food). Learned: provisions are worth ~+15 to every policy; the careful bot plans B/L inside a stop.
+  - [ ] Next: second blind playtest. Watch: does oil in the Teeth now feel fair with the warnings? Is careful-level play
+        too safe (74%)? `startC:3` gives 67/16 if it needs tightening. Do players use parting at all?
 - [ ] **Trestle** (original physics builder: planks, twigs and twine on a peg grid; carry the beetle's cart over a gap or
   hold a lantern at a ring; stars for matching the surveyor bot's cost and part count). Milestones:
   - [x] Core (src/trestle/core, rules v1): XPBD sim at 480 Hz (rigid members, one-sided twine, smoothed forces snap past

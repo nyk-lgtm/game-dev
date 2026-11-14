@@ -17,6 +17,8 @@ import {
   act,
   actError,
   blockOf,
+  buyPrice,
+  canBuy,
   cardBlock,
   eligible,
   legCost,
@@ -26,6 +28,7 @@ import {
   regionOf,
   replay,
   scoreOf,
+  shortOf,
   telling,
   type Run,
 } from '../../src/tidings/core';
@@ -214,6 +217,8 @@ describe('tidings runs', () => {
       expect(Math.abs(fx.o ?? 0)).toBe(KIND_INFO[row[k].kind].oil);
     }
     r.band = [{ id: 'fen', at: 0 }, { id: 'hob', at: 0 }];
+    expect(legCost(r, 0).f).toBe(-TUNE.legFoodHills);
+    r.band.push({ id: 'wren', at: 0 });
     expect(legCost(r, 0).f).toBe(-TUNE.legFoodHills - TUNE.bandFood);
     r.stop = LAST - 1;
     expect(legCost(r, 0)).toEqual({});
@@ -279,6 +284,98 @@ describe('tidings runs', () => {
     expect(telling({ id: 'peddler2', v: 0 }).title).toBe('The Peddler Again');
   });
 
+  it('sells provisions once a stop at villages and inns, dearer each time', () => {
+    let r: Run | null = null;
+    for (let seed = 1; seed < 400 && !r; seed++) {
+      const x = newRun(seed);
+      while (x.phase === 'cards') act(x, legal(x).find((a) => a[0] === 'P')!);
+      act(x, 'M0');
+      if (x.phase !== 'over' && canBuy(x)) r = x;
+    }
+    expect(r).toBeTruthy();
+    const x = r!;
+    expect(['town', 'inn']).toContain(x.map[x.stop][x.path[x.stop]].kind);
+    x.res.c = 10;
+    const f = x.res.f;
+    expect(buyPrice(x)).toBe(TUNE.buyCost);
+    expect(act(x, 'B')).toBe(true);
+    expect(x.res.c).toBe(10 - TUNE.buyCost);
+    expect(x.res.f).toBe(Math.min(TUNE.capF, f + TUNE.buyFood));
+    expect(actError(x, 'B')).toMatch(/provisions/);
+    expect(buyPrice(x)).toBe(TUNE.buyCost + TUNE.buyRise);
+    // Never at the start.
+    expect(canBuy(newRun(1))).toBe(false);
+  });
+
+  it('lets a companion go for a little trust, for good', () => {
+    const r = newRun(5);
+    r.band.push({ id: 'hob', at: 0 }, { id: 'fen', at: 0 }, { id: 'wren', at: 0 });
+    r.met.push('hob', 'fen', 'wren');
+    const before = legCost(r, 0).f!;
+    const t = r.res.t;
+    expect(act(r, `L${COMP_IDS.indexOf('fen')}`)).toBe(true);
+    expect(r.band.map((b) => b.id)).toEqual(['hob', 'wren']);
+    expect(r.res.t).toBe(t - TUNE.partTrust);
+    expect(legCost(r, 0).f!).toBe(before + TUNE.bandFood);
+    expect(actError(r, `L${COMP_IDS.indexOf('fen')}`)).toMatch(/band/);
+    // Their recruit card never comes back.
+    expect(eligible(r, CARD.fiddle)).toBe(false);
+  });
+
+  it('warns when the cheapest way to Hollin needs more oil than you carry', () => {
+    const r = newRun(9);
+    r.res.o = 1;
+    expect(shortOf(r, 0)).toContain('o');
+    r.res.o = 10;
+    expect(shortOf(r, 0)).not.toContain('o');
+  });
+
+  it('settles the hermit’s riddle by the answer, not by luck', () => {
+    const right = CARD.hermit.choices.filter((ch) => ch.riddle && ch.right);
+    expect(right.length).toBe(1);
+    expect(CARD.hermit.text).toMatch(/boots/);
+    for (let seed = 0; seed < 4000; seed++) {
+      const r = newRun(seed);
+      for (let i = 0; i < 40 && r.phase !== 'over' && r.stop < 8 && !r.hand.some((h) => h.id === 'hermit'); i++) {
+        if (r.phase === 'cards') act(r, legal(r).find((a) => a[0] === 'P')!);
+        else act(r, 'M0');
+        r.res.f = r.res.o = r.res.h = r.res.t = 9;
+      }
+      const h = r.hand.findIndex((x) => x.id === 'hermit' && !x.done);
+      if (h < 0 || cardBlock(r, h)) continue;
+      const k = CARD.hermit.choices.indexOf(right[0]);
+      const t = r.res.t;
+      act(r, `P${h}.${k}`);
+      expect(r.hand[h].won).toBe(true);
+      expect(r.res.t).toBe(Math.min(TUNE.capT, t + 1));
+      return;
+    }
+    throw new Error('never dealt the hermit');
+  });
+
+  it('offers every companion about as often', () => {
+    const offered: Record<string, number> = {};
+    const n = 400;
+    for (let seed = 0; seed < n; seed++) {
+      const r = newRun(seed);
+      const seen = new Set<string>();
+      while (r.phase !== 'over' && r.stop <= 6) {
+        for (const h of r.hand) {
+          const c = recruitOf(CARD[h.id]);
+          if (c) seen.add(c);
+        }
+        if (r.phase === 'cards') {
+          const a = legal(r).find((x) => x[0] === 'P' && !CARD[r.hand[Number(x[1])].id].choices[Number(x[3])].join);
+          act(r, a ?? legal(r)[0]);
+        } else act(r, 'M0');
+        r.res.f = r.res.o = r.res.h = r.res.t = 9;
+      }
+      for (const c of seen) offered[c] = (offered[c] ?? 0) + 1;
+    }
+    const rates = COMP_IDS.map((id) => (offered[id] ?? 0) / n);
+    expect(Math.max(...rates) - Math.min(...rates)).toBeLessThan(0.15);
+  });
+
   it('balances: careful play arrives about half the time, random and one-track play rarely', () => {
     const rate = (pol: Parameters<typeof playRun>[1], n: number) => {
       let k = 0;
@@ -286,8 +383,8 @@ describe('tidings runs', () => {
       return k / n;
     };
     const c = rate(careful(), 80);
-    expect(c).toBeGreaterThan(0.35);
-    expect(c).toBeLessThan(0.75);
+    expect(c).toBeGreaterThan(0.45);
+    expect(c).toBeLessThan(0.9);
     expect(rate(random, 200)).toBeLessThan(0.15);
     expect(rate(safe, 100)).toBeLessThan(c);
     expect(rate(risky, 100)).toBeLessThan(c);

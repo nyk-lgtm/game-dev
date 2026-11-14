@@ -46,7 +46,7 @@ for (const name of names) {
     const e = r.end!;
     endings[e.ending] = (endings[e.ending] ?? 0) + 1;
     for (const l of r.log) {
-      if (l.won !== undefined) (gambles++, l.won && gambleWins++);
+      if (CARD[l.id].choices[l.pick].odds !== undefined) (gambles++, l.won && gambleWins++);
       if (CARD[l.id].cb) cbs++;
       seenCards.add(l.id);
     }

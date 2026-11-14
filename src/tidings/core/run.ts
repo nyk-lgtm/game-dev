@@ -6,6 +6,7 @@
 import { Rng, mixSeed } from '../../shared/rng';
 import { CARD, CARDS, CARD_INDEX, recruitOf, type Card, type Choice } from './cards';
 import {
+  COMP_IDS,
   COMPANIONS,
   ENDING,
   END_NAME,
@@ -77,6 +78,8 @@ export interface Run {
   band: { id: CompId; at: number }[];
   /** Companions met this run (joined at some point). */
   met: CompId[];
+  /** Companions you parted ways with. */
+  parted: CompId[];
   /** Flag → the stop it was set at. */
   flags: Record<string, number>;
   promises: Record<string, PromiseState>;
@@ -84,6 +87,9 @@ export interface Run {
   used: string[];
   hand: HandCard[];
   faced: number;
+  /** The stop provisions were last bought at (-1: never), and how many times. */
+  bought: number;
+  buys: number;
   phase: 'cards' | 'road' | 'over';
   /** The leg costs paid on arriving at each stop. */
   legs: Fx[];
@@ -163,7 +169,8 @@ function deal(r: Run): void {
     take(c);
   }
   const rest = ok.filter((c) => !c.cb);
-  const weight = (c: Card) => (c.repeat ? 1 : c.where ? 4 : 2) * (c.must ? 0.7 : 1);
+  // Recruits go anywhere but weigh less, so each is offered about as often as the others.
+  const weight = (c: Card) => (c.repeat ? 1 : recruitOf(c) ? TUNE.recruitW : c.where ? 4 : 2) * (c.must ? 0.7 : 1);
   while (hand.length < TUNE.hand) {
     const pool = rest.filter((c) => !hand.includes(c) && !(c.must && musts));
     if (!pool.length) break;
@@ -263,13 +270,44 @@ function checkDead(r: Run): boolean {
 
 // ---------------------------------------------------------------- legs
 
+/** Extra food a leg for a band of n companions (the third one tips it). */
+export const bandFood = (n: number): number => TUNE.bandFood * Math.floor(n / TUNE.bandAt);
+
+/** The least each lethal resource the rest of the road costs after taking road k (the leg included), band as it is. */
+export function routeNeed(r: Run, k: number): Record<'f' | 'o' | 'h' | 't', number> {
+  const need = { f: 0, o: 0, h: 0, t: 0 };
+  const leg = legCost(r, k);
+  for (const x of ['f', 'o', 'h', 't'] as const) need[x] = -(leg[x] ?? 0);
+  // Cheapest per resource along any path from node k onward.
+  for (const x of ['f', 'o', 'h', 't'] as const) {
+    // Every row is reachable from every node of the row before, so the cheapest is per row.
+    for (let row = r.stop + 2; row <= LAST; row++) need[x] += Math.min(...r.map[row].map((_, i) => -(legCost(r, i, row)[x] ?? 0)));
+  }
+  return need;
+}
+
+/** What taking road k leaves you short of for the rest of the way to Hollin (oil, health, trust; the cards
+ *  rarely refill them much), at the least it could cost. Food is shown as a total instead: it always runs short early. */
+export function shortOf(r: Run, k: number): ('o' | 'h' | 't')[] {
+  if (r.stop + 1 >= LAST) return [];
+  const need = routeNeed(r, k);
+  return (['o', 'h', 't'] as const).filter((x) => need[x] > 0 && need[x] >= r.res[x]);
+}
+
+/** What provisions cost now: dearer each time you buy (word gets round). */
+export const buyPrice = (r: Run): number => TUNE.buyCost + TUNE.buyRise * r.buys;
+
+/** Provisions on sale here (a village or inn, once a stop). */
+export const canBuy = (r: Run): boolean =>
+  r.phase !== 'over' && r.stop > 0 && r.stop < LAST && r.bought !== r.stop && (nodeOf(r).kind === 'town' || nodeOf(r).kind === 'inn');
+
 /** What the road to row stop+1, node k, costs. */
 export function legCost(r: Run, k: number, row = r.stop + 1): Fx {
   const node = r.map[row]?.[k];
   // The last mile is downhill, and Hollin sends a sledge.
   if (!node || row >= LAST) return {};
   const fx: Fx = {};
-  fx.f = -([TUNE.legFood, TUNE.legFoodHills, TUNE.legFoodPass][regionOf(row)] + TUNE.bandFood * Math.floor(r.band.length / 2));
+  fx.f = -([TUNE.legFood, TUNE.legFoodHills, TUNE.legFoodPass][regionOf(row)] + bandFood(r.band.length));
   const oil = KIND_INFO[node.kind].oil + (regionOf(row) === 2 && row < LAST ? TUNE.passOil : 0);
   if (oil) fx.o = -oil;
   if (node.kind === 'heights' && TUNE.cold) fx.h = -TUNE.cold;
@@ -326,11 +364,14 @@ export function newRun(seed: number): Run {
     res: { f: TUNE.startF, o: TUNE.startO, c: TUNE.startC, h: TUNE.startH, t: TUNE.startT },
     band: [],
     met: [],
+    parted: [],
     flags: {},
     promises: {},
     used: [],
     hand: [],
     faced: 0,
+    bought: -1,
+    buys: 0,
     phase: 'cards',
     legs: [{}],
     log: [],
@@ -351,6 +392,17 @@ export function actError(r: Run, a: string): string | null {
     const ch = CARD[r.hand[h].id].choices[Number(m[2])];
     if (!ch) return 'No such choice';
     return blockOf(r, ch);
+  }
+  if (a === 'B') {
+    if (!canBuy(r)) return 'No provisions for sale here';
+    if (r.res.c < buyPrice(r)) return `Needs ${buyPrice(r)} coin`;
+    return null;
+  }
+  m = /^L(\d)$/.exec(a);
+  if (m) {
+    const id = COMP_IDS[Number(m[1])];
+    if (!id || !inBand(r, id)) return 'Not in your band';
+    return null;
   }
   m = /^M(\d)$/.exec(a);
   if (m) {
@@ -373,7 +425,10 @@ export function act(r: Run, a: string, force?: boolean): boolean {
     const ch = card.choices[k];
     let fx = ch.fx;
     let won: boolean | undefined;
-    if (ch.odds !== undefined) {
+    if (ch.riddle) {
+      won = !!ch.right;
+      if (!won) fx = ch.lose!.fx;
+    } else if (ch.odds !== undefined) {
       hc.p = oddsOf(r, ch);
       won = force ?? rngFor(r.seed, T_GAMBLE, r.stop, CARD_INDEX[card.id]).next() < hc.p;
       if (!won) fx = ch.lose!.fx;
@@ -399,6 +454,20 @@ export function act(r: Run, a: string, force?: boolean): boolean {
     r.log.push({ stop: r.stop, id: hc.id, v: hc.v, pick: k, won, got });
     if (checkDead(r)) return true;
     if (r.faced >= TUNE.face || r.hand.every((x) => x.done)) r.phase = 'road';
+    return true;
+  }
+  if (a === 'B') {
+    apply(r, { c: -buyPrice(r), f: TUNE.buyFood });
+    r.bought = r.stop;
+    r.buys++;
+    return true;
+  }
+  if (a[0] === 'L') {
+    const id = COMP_IDS[Number(a[1])];
+    r.band = r.band.filter((b) => b.id !== id);
+    r.parted.push(id);
+    apply(r, { t: -TUNE.partTrust });
+    checkDead(r);
     return true;
   }
   // M<k>: walk the leg to the next stop.
