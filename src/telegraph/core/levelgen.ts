@@ -2,14 +2,17 @@
 
 import { distanceField, playerWalkable } from './board';
 import { ENEMIES, PYLON_REST, faceToward } from './enemies';
-import { distance, key, neighbors, offsetToAxial, type Hex } from '../../shared/hex';
+import { distance, eq, key, neighbors, offsetToAxial, type Hex } from '../../shared/hex';
 import { Rng, mixSeed } from '../../shared/rng';
 import type { Enemy, EnemyKind, GameState, Player, Tile } from './types';
 
 export const COLS = 7;
 export const ROWS = 9;
-const START = offsetToAxial(3, ROWS - 1);
 const MAX_ENEMIES = 11;
+/** Start and stairs are at least this many steps apart (as the crow flies). */
+export const MIN_APART = 7;
+/** Salt for the start/stairs stream (separate from the layout's). */
+const T_ENDS = 0x5e7a1;
 
 export interface Floor {
   tiles: Record<string, Tile>;
@@ -18,17 +21,47 @@ export interface Floor {
   enemies: Omit<Enemy, 'id'>[];
 }
 
+/** The rim of the board: where starts and stairs go. */
+const RIM: Hex[] = [];
+for (let col = 0; col < COLS; col++)
+  for (let row = 0; row < ROWS; row++)
+    if (col === 0 || col === COLS - 1 || row === 0 || row === ROWS - 1) RIM.push(offsetToAxial(col, row));
+
+/**
+ * Where you arrive and where the stairs are on each floor: two rim hexes at
+ * least MIN_APART apart, seeded per floor from their own stream. The stairs
+ * never sit on the same hex as the floor before's (so they can't repeat
+ * floor after floor), and you never arrive where you arrived last floor.
+ */
+export function floorEnds(seed: number, depth: number): Ends {
+  let ends: Ends | null = null;
+  for (let d = 1; d <= depth; d++) ends = pickEnds(new Rng(mixSeed(mixSeed(seed, T_ENDS), d)), ends);
+  return ends!;
+}
+
+interface Ends {
+  start: Hex;
+  stairs: Hex;
+}
+
+function pickEnds(rng: Rng, prev: Ends | null): Ends {
+  const start = rng.pick(RIM.filter((h) => !prev || (!eq(h, prev.start) && !eq(h, prev.stairs))));
+  const far = RIM.filter((h) => distance(h, start) >= MIN_APART && !(prev && eq(h, prev.stairs)));
+  return { start, stairs: rng.pick(far) };
+}
+
 export function generateFloor(seed: number, depth: number): Floor {
   const rng = new Rng(mixSeed(seed, depth));
+  const ends = floorEnds(seed, depth);
   // Retry until we get a layout that satisfies all constraints.
   for (let attempt = 0; attempt < 200; attempt++) {
-    const floor = tryFloor(rng, depth);
+    const floor = tryFloor(rng, depth, ends.start, ends.stairs);
     if (floor) return floor;
   }
   throw new Error(`levelgen failed for seed ${seed} depth ${depth}`);
 }
 
-function tryFloor(rng: Rng, depth: number): Floor | null {
+function tryFloor(rng: Rng, depth: number, start: Hex, stairs: Hex): Floor | null {
   const tiles: Record<string, Tile> = {};
   const cells: Hex[] = [];
   for (let col = 0; col < COLS; col++) {
@@ -38,10 +71,9 @@ function tryFloor(rng: Rng, depth: number): Floor | null {
       cells.push(h);
     }
   }
-  const stairs = offsetToAxial(rng.int(1, COLS - 2), 0);
   tiles[key(stairs)] = 'stairs';
 
-  const protectedHex = (h: Hex) => distance(h, START) <= 1 || distance(h, stairs) <= 1;
+  const protectedHex = (h: Hex) => distance(h, start) <= 1 || distance(h, stairs) <= 1;
 
   // Walls: scattered pillars, sometimes pairs.
   const wallCount = rng.int(3, 6);
@@ -69,9 +101,9 @@ function tryFloor(rng: Rng, depth: number): Floor | null {
 
   // Connectivity: stairs reachable, unreachable floor becomes wall.
   const shell = { tiles } as GameState;
-  const field = distanceField(shell, START, playerWalkable);
+  const field = distanceField(shell, start, playerWalkable);
   const toStairs = field.get(key(stairs));
-  if (toStairs === undefined || toStairs < ROWS - 2) return null;
+  if (toStairs === undefined || toStairs < MIN_APART) return null;
   for (const h of cells) {
     if (tiles[key(h)] === 'floor' && !field.has(key(h))) tiles[key(h)] = 'wall';
   }
@@ -81,7 +113,7 @@ function tryFloor(rng: Rng, depth: number): Floor | null {
   // including any kind that first appears on this depth. Spend a depth-scaled
   // budget on the squad, one of each kind first.
   const spots = rng.shuffle(
-    cells.filter((h) => tiles[key(h)] === 'floor' && distance(h, START) >= 4),
+    cells.filter((h) => tiles[key(h)] === 'floor' && distance(h, start) >= 4),
   );
   const enemies: Omit<Enemy, 'id'>[] = [];
   let budget = floorBudget(depth);
@@ -109,23 +141,25 @@ function tryFloor(rng: Rng, depth: number): Floor | null {
       aim: null,
       // Pylons start out of step with each other.
       reload: kind === 'pylon' ? rng.int(0, PYLON_REST) : 0,
-      facing: faceToward(pos, START),
+      facing: faceToward(pos, start),
     });
     budget -= def.cost;
   }
   if (enemies.length === 0) return null;
 
-  return { tiles, stairs, start: START, enemies };
+  return { tiles, stairs, start, enemies };
 }
 
 /**
- * Spawn budget per depth. Depth 1 is the tutorial floor; depths 2-3 get a
- * little extra; past depth 8 it grows by 2 a floor instead of 3, so deep
- * floors stay crowded but not packed wall to wall.
+ * Spawn budget per depth. Depth 1 is the tutorial floor; depth 2 gets a
+ * little extra (depth 3 lost its +2 in rules v6, when starts and stairs
+ * moved onto the whole rim: bot deaths there rose from ~16% to ~23%); past
+ * depth 8 it grows by 2 a floor instead of 3, so deep floors stay crowded but
+ * not packed wall to wall.
  */
 export function floorBudget(depth: number): number {
   if (depth <= 1) return 4;
-  if (depth <= 8) return 3 * depth + (depth <= 3 ? 2 : 0);
+  if (depth <= 8) return 3 * depth + (depth === 2 ? 2 : 0);
   return 24 + 2 * (depth - 8);
 }
 
@@ -145,13 +179,13 @@ export function enterFloor(s: GameState, depth: number): void {
   s.tiles = f.tiles;
   s.stairs = f.stairs;
   s.player.pos = f.start;
-  s.player.facing = 5;
+  s.player.facing = faceToward(f.start, f.stairs);
   s.enemies = f.enemies.map((e) => ({ ...e, id: s.nextId++ }));
   s.bombs = [];
 }
 
 export function newRun(seed: number): GameState {
-  const player: Player = { pos: START, hp: 3, maxHp: 3, facing: 5, bashCd: 0 };
+  const player: Player = { pos: { q: 0, r: 0 }, hp: 3, maxHp: 3, facing: 5, bashCd: 0 };
   const s: GameState = {
     seed,
     depth: 0,
@@ -159,7 +193,7 @@ export function newRun(seed: number): GameState {
     cols: COLS,
     rows: ROWS,
     tiles: {},
-    stairs: START,
+    stairs: { q: 0, r: 0 },
     player,
     enemies: [],
     bombs: [],

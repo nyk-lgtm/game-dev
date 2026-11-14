@@ -469,11 +469,12 @@ export const GAMES: GameCard[] = [
     path: './telegraph/',
     title: 'Telegraph',
     tag: 'Tactics roguelike',
-    pitch: 'Every enemy shows its next attack. Moving is attacking. Get deeper.',
+    pitch: 'Every enemy shows its next attack. Moving is attacking. Get deeper. Daily run.',
     accent: '#5ee7ff',
     best: () => {
       const d = telegraph.load<number>('best', 0);
-      return d ? `Deepest floor: ${d}` : null;
+      const streak = streakOf(telegraph.load<Record<string, DailyResult>>('dailies', {}));
+      return d ? `Deepest floor: ${d}${streak ? ` · 🔥 ${streak}-day daily streak` : ''}` : null;
     },
     thumb: `<svg viewBox="0 0 76 76"><rect width="76" height="76" fill="#0f1118"/>
       <path d="M20 14h14l7 12-7 12H20l-7-12z" fill="#232838"/><path d="M42 26h14l7 12-7 12H42l-7-12z" fill="#3a1d2a"/>
@@ -558,4 +559,5 @@ export const DAILY: DailyLink[] = [
   { path: './trestle/?daily', title: 'Trestle', store: trestle, accent: '#e0b25a' },
   { path: './tidings/?daily', title: 'Tidings', store: tidings, accent: '#e9b45a' },
   { path: './lull/?daily', title: 'Lull', store: lull, accent: '#b9e48c' },
+  { path: './telegraph/?daily', title: 'Telegraph', store: telegraph, accent: '#5ee7ff' },
 ];

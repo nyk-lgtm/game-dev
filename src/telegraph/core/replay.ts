@@ -12,7 +12,7 @@ import type { Action, GameState } from './types';
  * Bump whenever a rules change would make an old (seed, actions) pair replay
  * differently. Saved runs from another version are discarded.
  */
-export const RULES_VERSION = 5;
+export const RULES_VERSION = 6;
 
 const BASH_CODES = 'abcdef';
 

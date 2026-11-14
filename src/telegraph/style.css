@@ -22,5 +22,14 @@ body .toast.hint {
   border-radius: 14px; z-index: 5; pointer-events: none; background: #20253a;
 }
 #info .warn { color: var(--gold); }
+#info .muted { color: var(--muted); font-weight: 400; }
+.skins { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 6px 0 2px; }
+.skins button { min-width: 64px; min-height: 48px; padding: 4px 6px; border-radius: 12px; border: 2px solid #2e3448;
+  background: #181c28; color: var(--text); font: inherit; font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.skins button.on { border-color: var(--accent); }
+.skins button:disabled { opacity: 0.45; }
+.skins .dot { width: 18px; height: 18px; border-radius: 50%; }
+.card .help li { margin-bottom: 4px; }
+.card details summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 700; }
 /* Long labels ("Move — you die") wrap instead of crowding the panel text. */
 #actBtn { max-width: 42%; line-height: 1.15; padding: 6px 10px; }

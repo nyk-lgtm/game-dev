@@ -32,10 +32,11 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   reports depend on it. Bump a game's `RULES_VERSION` when old saves would replay
   differently.
 - Before pushing: `npm test && npm run build`. Balance probes:
-  - Telegraph: `npx vite-node scripts/telegraph/balance.ts 150` (greedy bot median
-    depth ≈ 7, ~15% of runs end on depth 3; it can't plan bash/lunge combos). `scripts/telegraph/damage.ts`
+  - Telegraph: `npx vite-node scripts/telegraph/balance.ts 150` (greedy bot, rules v6: median
+    depth 7 (mean ~7.0, 600 runs too), ~13% of runs end on depth 3; it can't plan bash/lunge combos). `scripts/telegraph/damage.ts`
     shows what hurts the player; `scripts/telegraph/floors.ts` counts enemies/kinds per depth (budget
-    `floorBudget`: +3 a floor to 24 at depth 8, then +2; at most 11 enemies, 4 brutes).
+    `floorBudget`: 3 × depth (+2 on depth 2) to 24 at depth 8, then +2; at most 11 enemies, 4 brutes; v6 dropped
+    depth 3's +2 when starts/stairs moved onto the whole rim, which had pushed depth-3 deaths to ~23%).
   - Grove: `npx vite-node scripts/grove/balance.ts 60` (score, game length, best tier; rules v2:
     median ~248 turns, Spirit Tree in ~half the games).
   - Lantern: `npx vite-node scripts/lantern/balance.ts 50` (completion bot, rules v2: ~100% finish,
@@ -160,7 +161,7 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   with batched `fillText` runs; art lives in each game's `art.ts`.
 - Daily challenges (src/shared/daily.ts): `<game>/?daily` plays today's seed (`dailySeed(game, day)`,
   local date); each game keeps its in-progress daily under `dailyRun` and today's best under `daily`.
-  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad, Ninefold, Summit, Quarry, Sungrazer, Kitbag, Brink (a daily win-in-N puzzle), Loomsong (a daily song), Simmer (a daily season), Gleam (a Medium puzzle), Trestle (a d 0.55 level), Tidings (a daily road) and Lull (a daily wish); the hub's Daily section links them.
+  Wired for Afterglow, Rewild, Glyphwright, Delve, Nightline, Unspoken, Hexhold, Triad, Ninefold, Summit, Quarry, Sungrazer, Kitbag, Brink (a daily win-in-N puzzle), Loomsong (a daily song), Simmer (a daily season), Gleam (a Medium puzzle), Trestle (a d 0.55 level), Tidings (a daily road), Lull (a daily wish) and Telegraph (a daily run, streak + share line); the hub's Daily section links them.
 - Afterglow extras: Nights 1-5 (`NIGHTS` in content.ts, unlocked by `profile.nightsWon`), arenas
   (`ARENAS`/pillars in core/arena.ts, hashed from the seed), unions (`union` on a WeaponDef: two
   maxed weapons merge in a chest), and player damage is attributed (`w.taken`, `w.killedBy`).
@@ -630,7 +631,16 @@ A hub of small mobile web games: https://nyk-lgtm.github.io/game-dev/
   tests/telegraph/enemies.test.ts. Telegraphed attacks set `aim` and resolve via
   `release` at the start of the next enemy phase; a releasing enemy skips `act`. Previews
   (core/preview.ts) give `hurtBy` (who hits you) and `next` (telegraphs covering where a safe move ends
-  up, from the simulated post-state); `threatsAt(threats(s), hex)` lists who threatens a hex.
+  up, from the simulated post-state); `threatsAt(threats(s), hex)` lists who threatens a hex. `kills`/`wounded`
+  are only your own blows (events before the enemy phase); `friendlyKills`/`friendlyWounds` are enemies hitting
+  each other (panel: "You: kill 1 · Enemies hit each other: 3", grey ✕ on the board, only yours green). `trapped`
+  (`bombTrapped`: a bomb covers where you end up and every line of moves until its fuse runs out gets you hurt;
+  2-ply exact search, only run when a bomb covers you) shows a red "!!" and needs the red button.
+  Rules v6: start and stairs are rim hexes ≥ `MIN_APART` (7) apart from their own seeded stream (`floorEnds`), never
+  the previous floor's stairs hex. The board draws melee reach bright only on hexes beside you or for a tapped
+  enemy (a faint wash elsewhere); HP pips are a separate pass on a dark pill after all units. Daily (`?daily`):
+  `dailyRun` (with `a` for the hub) / `daily` (score depth·1000 + kills), `dailies` for the streak (shared/streak.ts)
+  and "Copy my result"; spear colours (`SKINS` in palette.ts: Ember 5, Moss 8, Gilt 12 by best depth) in the menu.
 - Visual check: build, `npx vite preview`, screenshot with Playwright using the
   `Pixel 7` device profile. `window.__game` exposes each game's controller.
 - Bug reports from the owner look like `TELEGRAPH …`/`GROVE …`/`LANTERN …`/`GLYPH …`/`REWILD … seed=… a=…` (and the other games' equivalents);

@@ -1,3 +1,4 @@
 import { makeStore } from '../shared/storage';
 
-export const { load, save } = makeStore('telegraph.');
+export const store = makeStore('telegraph.');
+export const { load, save } = store;

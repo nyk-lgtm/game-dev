@@ -1,10 +1,16 @@
 // Canvas 2D drawing. Everything is procedural vector shapes: no image assets.
 import { reducedFx } from '../../shared/settings';
 
-import { DIRS, allHexes, key, type Hex, type Outcome, type Threats } from '../core';
+import { DIRS, allHexes, distance, key, type Hex, type Outcome, type Threats } from '../core';
 import { hexToPx, type Layout } from './layout';
-import { C } from './palette';
+import { C, SKINS, type Skin } from './palette';
 import type { Scene, VisUnit } from './scene';
+
+/** The player's spear colour (a cosmetic unlock). */
+let skin: Skin = SKINS[0];
+export function setSkin(id: string): void {
+  skin = SKINS.find((k) => k.id === id) ?? SKINS[0];
+}
 
 export interface Overlay {
   legal: Hex[];
@@ -99,15 +105,23 @@ export function draw(
   if (ov.threats) {
     const focus = ov.marked.length ? new Set(ov.marked) : null;
     const fade = (ids: number[]) => (ctx.globalAlpha = focus && !ids.some((id) => focus.has(id)) ? 0.3 : 1);
+    // Melee reach: full strength only where it matters now (hexes you could
+    // end this turn on, or the reach of an enemy you tapped); elsewhere a
+    // faint wash, well under the aimed attacks, so deep floors stay readable.
+    const me = s.player.pos;
+    const shown = new Set<number>([...(ov.inspect !== null ? [ov.inspect] : []), ...ov.marked]);
     for (const k of ov.threats.melee) {
       const [q, r] = k.split(',').map(Number);
       const t = s.tiles[k];
       if (t === 'wall' || t === 'lava') continue;
-      fade(ov.threats.meleeBy.get(k) ?? []);
+      const by = ov.threats.meleeBy.get(k) ?? [];
+      fade(by);
+      const near = distance({ q, r }, me) <= 1 || by.some((id) => shown.has(id));
       const { x, y } = hexToPx(L, q, r);
       hexPath(ctx, x, y, S * 0.94);
-      ctx.fillStyle = `rgba(${C.threat}, 0.16)`;
+      ctx.fillStyle = `rgba(${C.threat}, ${near ? 0.16 : 0.06})`;
       ctx.fill();
+      if (!near) continue;
       hexPath(ctx, x, y, S * 0.8);
       ctx.strokeStyle = `rgba(${C.threat}, 0.35)`;
       ctx.lineWidth = 1.5;
@@ -169,6 +183,7 @@ export function draw(
   // A bomb someone stands on lies under them: a lit ring on the floor, with its fuse on a tag below.
   for (const b of scene.bombs) if (coveredBy(b)) drawGroundBomb(ctx, L, b.q, b.r, b.fuse, time);
   for (const u of units) drawUnit(ctx, L, u, time, ov.inspect === u.id);
+  for (const u of units) drawHpPips(ctx, L, u);
   for (const b of scene.bombs) if (coveredBy(b)) drawBombTag(ctx, L, b.q, b.r, b.fuse);
   // Who threatens the looked-at hex (red) or will aim at a safe preview (amber).
   const pulse = 0.5 + 0.5 * Math.sin(time / 160);
@@ -572,13 +587,13 @@ function drawUnit(ctx: CanvasRenderingContext2D, L: Layout, u: VisUnit, time: nu
     // Spear.
     ctx.save();
     ctx.rotate(ang);
-    ctx.strokeStyle = '#d7f9ff';
+    ctx.strokeStyle = skin.spear;
     ctx.lineWidth = Math.max(2, S * 0.07);
     ctx.beginPath();
     ctx.moveTo(-S * 0.2, 0);
     ctx.lineTo(S * 0.62, 0);
     ctx.stroke();
-    ctx.fillStyle = '#d7f9ff';
+    ctx.fillStyle = skin.spear;
     ctx.beginPath();
     ctx.moveTo(S * 0.8, 0);
     ctx.lineTo(S * 0.58, -S * 0.11);
@@ -587,10 +602,10 @@ function drawUnit(ctx: CanvasRenderingContext2D, L: Layout, u: VisUnit, time: nu
     ctx.restore();
     ctx.beginPath();
     ctx.arc(0, 0, S * 0.4, 0, TAU);
-    ctx.fillStyle = flash ? '#ffffff' : C.player;
+    ctx.fillStyle = flash ? '#ffffff' : skin.body;
     ctx.fill();
     ctx.lineWidth = S * 0.08;
-    ctx.strokeStyle = C.playerDark;
+    ctx.strokeStyle = skin.dark;
     ctx.stroke();
   } else if (u.kind === 'brute') {
     const r = S * 0.46;
@@ -796,16 +811,38 @@ function drawUnit(ctx: CanvasRenderingContext2D, L: Layout, u: VisUnit, time: nu
     }
   }
 
-  // HP pips (enemies only; the player's HP is in the HUD).
-  if (u.kind !== 'player' && u.maxHp > 1) {
-    const n = u.maxHp;
-    const gap = S * 0.2;
-    for (let i = 0; i < n; i++) {
-      const px = (i - (n - 1) / 2) * gap;
-      ctx.beginPath();
-      ctx.arc(px, S * 0.58, S * 0.07, 0, TAU);
-      ctx.fillStyle = i < u.hp ? C.text : 'rgba(255,255,255,0.18)';
+  ctx.restore();
+}
+
+/**
+ * HP pips (enemies only; the player's HP is in the HUD), drawn after every
+ * unit on a dark pill so no shield, hook or neighbour can cover them, and
+ * pale art (the shield, the grappler) can't wash them out.
+ */
+function drawHpPips(ctx: CanvasRenderingContext2D, L: Layout, u: VisUnit): void {
+  if (u.kind === 'player' || u.maxHp <= 1) return;
+  const S = L.size;
+  const { x, y } = hexToPx(L, u.q + u.bq, u.r + u.br);
+  const n = u.maxHp;
+  const gap = S * 0.22;
+  const r = Math.max(2.5, S * 0.075);
+  const cy = y + S * 0.62 * u.scale;
+  ctx.save();
+  ctx.globalAlpha = u.alpha;
+  ctx.beginPath();
+  ctx.roundRect(x - ((n - 1) / 2) * gap - r * 1.9, cy - r * 1.9, (n - 1) * gap + r * 3.8, r * 3.8, r * 1.9);
+  ctx.fillStyle = 'rgba(15,17,24,0.85)';
+  ctx.fill();
+  for (let i = 0; i < n; i++) {
+    ctx.beginPath();
+    ctx.arc(x + (i - (n - 1) / 2) * gap, cy, r, 0, TAU);
+    if (i < u.hp) {
+      ctx.fillStyle = C.text;
       ctx.fill();
+    } else {
+      ctx.strokeStyle = 'rgba(232,235,245,0.45)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
     }
   }
   ctx.restore();
@@ -827,7 +864,7 @@ function drawPreview(
   ctx.globalAlpha = 0.35 + 0.2 * pulse;
   ctx.beginPath();
   ctx.arc(x, y, S * 0.36, 0, TAU);
-  ctx.fillStyle = C.player;
+  ctx.fillStyle = skin.body;
   ctx.fill();
   ctx.globalAlpha = 1;
   if (out.hookedTo) {
@@ -863,32 +900,44 @@ function drawOutcomeMarks(
 ): void {
   const S = L.size;
   const pulse = 0.5 + 0.5 * Math.sin(time / 150);
-  // Marks on enemies that will die / be wounded.
-  for (const id of out.kills) {
-    const u = scene.units.get(id);
-    if (!u) continue;
-    const p = hexToPx(L, u.q, u.r);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = Math.max(3, S * 0.1);
-    ctx.lineCap = 'round';
-    const k = S * 0.3;
-    ctx.beginPath();
-    ctx.moveTo(p.x - k, p.y - k);
-    ctx.lineTo(p.x + k, p.y + k);
-    ctx.moveTo(p.x + k, p.y - k);
-    ctx.lineTo(p.x - k, p.y + k);
-    ctx.stroke();
-  }
-  for (const id of out.wounded) {
-    const u = scene.units.get(id);
-    if (!u || out.kills.includes(id)) continue;
-    const p = hexToPx(L, u.q, u.r);
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, S * 0.6, 0, TAU);
-    ctx.strokeStyle = `rgba(255,255,255,${0.5 + 0.5 * pulse})`;
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-  }
+  // Marks on enemies that will die / be wounded: white for your blows, a
+  // thinner grey for the enemies hitting each other (arrows, zaps, bombs).
+  const cross = (ids: number[], color: string, width: number) => {
+    for (const id of ids) {
+      const u = scene.units.get(id);
+      if (!u) continue;
+      const p = hexToPx(L, u.q, u.r);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineCap = 'round';
+      const k = S * 0.3;
+      ctx.beginPath();
+      ctx.moveTo(p.x - k, p.y - k);
+      ctx.lineTo(p.x + k, p.y + k);
+      ctx.moveTo(p.x + k, p.y - k);
+      ctx.lineTo(p.x - k, p.y + k);
+      ctx.stroke();
+    }
+  };
+  const ring = (ids: number[], color: string, dash: boolean) => {
+    for (const id of ids) {
+      const u = scene.units.get(id);
+      if (!u) continue;
+      const p = hexToPx(L, u.q, u.r);
+      ctx.save();
+      if (dash) ctx.setLineDash([S * 0.14, S * 0.1]);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, S * 0.6, 0, TAU);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.restore();
+    }
+  };
+  cross(out.friendlyKills, C.muted, Math.max(2, S * 0.07));
+  ring(out.friendlyWounds, `rgba(138,144,168,${0.5 + 0.5 * pulse})`, true);
+  cross(out.kills, '#ffffff', Math.max(3, S * 0.1));
+  ring(out.wounded, `rgba(255,255,255,${0.5 + 0.5 * pulse})`, false);
 
   // Damage warning on the destination.
   if (out.damageTaken > 0) {
@@ -902,15 +951,17 @@ function drawOutcomeMarks(
     ctx.fillStyle = C.brute;
     ctx.fillText(txt, x, y - S * 0.7);
   } else if (out.next.length > 0) {
-    // Safe this turn, but something takes aim at it next: an amber "!".
+    // Safe this turn, but something takes aim at it next: an amber "!"
+    // (red "!!" when a bomb leaves no way out: a bomb trap).
+    const txt = out.trapped ? '!!' : '!';
     ctx.font = `900 ${Math.round(S * 0.5)}px system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.lineWidth = 4;
     ctx.strokeStyle = C.bg;
-    ctx.strokeText('!', x, y - S * 0.68);
-    ctx.fillStyle = C.archer;
-    ctx.fillText('!', x, y - S * 0.68);
+    ctx.strokeText(txt, x, y - S * 0.68);
+    ctx.fillStyle = out.trapped ? C.brute : C.archer;
+    ctx.fillText(txt, x, y - S * 0.68);
   }
 }
 

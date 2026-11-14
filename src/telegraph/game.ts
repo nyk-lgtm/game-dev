@@ -29,12 +29,15 @@ import {
   type ThreatSource,
 } from './core';
 import { copyText, toast } from '../shared/debug';
+import { dailySeed, enterDaily, leaveDaily, loadDaily, prettyDay, recordDaily, todayKey } from '../shared/daily';
+import { pruneDailies, shortDay, streakOf, type DailyResult } from '../shared/streak';
 import { bugReport } from './debug';
 import { Animator } from './render/anim';
-import { draw } from './render/draw';
+import { draw, setSkin } from './render/draw';
 import { fitBoard, pxToHex, type Layout } from './render/layout';
+import { SKINS } from './render/palette';
 import { sceneFromState, type Scene } from './render/scene';
-import { load, save } from './storage';
+import { load, save, store } from './storage';
 import { HELP_HTML, closeOverlay, enemyIntroHtml, renderHud, renderPanel, showCard } from './ui/dom';
 
 /** In-play hint: a toast over the bottom panel, under menus, clear of the board's top row. */
@@ -67,7 +70,27 @@ interface SavedRun {
   seed: number;
   actions: string;
   v?: number;
+  /** The day (YYYY-MM-DD) when this is a daily run. */
+  day?: string;
 }
+
+/** Daily results by day ('dailies'): the streak and the share line. */
+type DailyRecord = DailyResult & { depth: number; kills: number };
+const loadDailies = () => load<Record<string, DailyRecord>>('dailies', {});
+
+const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+/** How deep a saved run has got (for "Continue today's daily (depth N)"). */
+function replayDepth(r: SavedRun): number {
+  try {
+    return replay(r.seed, r.actions).depth;
+  } catch {
+    return 1;
+  }
+}
+
+/** Spear colours unlocked by a best depth. */
+const unlockedSkins = (best: number) => SKINS.filter((k) => best >= k.depth);
 
 export class Game {
   private state!: GameState;
@@ -98,7 +121,7 @@ export class Game {
 
   // ---------- run lifecycle ----------
 
-  start(seed: number, actions = ''): void {
+  start(seed: number, actions = '', day?: string): void {
     let s: GameState;
     try {
       s = replay(seed, actions);
@@ -108,7 +131,10 @@ export class Game {
       s = newRun(seed);
     }
     this.animator.cancel();
-    this.run = { seed, actions, v: RULES_VERSION };
+    this.run = { seed, actions, v: RULES_VERSION, ...(day ? { day } : {}) };
+    if (day) enterDaily();
+    else leaveDaily();
+    if (day && !actions) toast(`Daily run · ${prettyDay(day)}`);
     this.state = s;
     this.scene = { current: sceneFromState(s) };
     this.clearSelection();
@@ -123,10 +149,62 @@ export class Game {
     this.start(randomSeed());
   }
 
+  /** Today's daily run: resume it if started, else begin it (again, after a fall). */
+  playDaily(): void {
+    closeOverlay();
+    const day = todayKey();
+    const saved = load<SavedRun | null>('dailyRun', null);
+    if (saved && saved.day === day && saved.v === RULES_VERSION) this.start(saved.seed, saved.actions, day);
+    else this.start(dailySeed('telegraph', day), '', day);
+  }
+
+  /** Back to your own run from the daily (the saved one, or a new one). */
+  private playOwn(): void {
+    closeOverlay();
+    const saved = load<SavedRun | null>('run', null);
+    if (saved && saved.v === RULES_VERSION) this.start(saved.seed, saved.actions);
+    else this.start(randomSeed());
+  }
+
   private persist(): void {
-    save('run', this.state.status === 'playing' ? this.run : null);
+    const playing = this.state.status === 'playing';
+    // The daily keeps its own slot ('a' mirrors the actions for the hub's "Resume").
+    if (this.run.day) save('dailyRun', playing ? { ...this.run, a: this.run.actions } : null);
+    else save('run', playing ? this.run : null);
     const best = load<number>('best', 0);
-    if (this.state.depth > best) save('best', this.state.depth);
+    if (this.state.depth > best) {
+      save('best', this.state.depth);
+      const fresh = SKINS.find((k) => k.depth > best && k.depth <= this.state.depth);
+      if (fresh) hint(`New spear colour: ${fresh.name} (pick it in the menu)`);
+    }
+  }
+
+  /** A run just ended: a daily records today's best, the streak and the share line. */
+  private finish(): void {
+    const day = this.run.day;
+    if (!day) return;
+    const s = this.state;
+    recordDaily(store, s.depth * 1000 + Math.min(999, s.kills), `depth ${s.depth}`, day);
+    const dailies = loadDailies();
+    const prev = dailies[day];
+    if (!prev || s.depth > prev.depth || (s.depth === prev.depth && s.kills > prev.kills))
+      dailies[day] = { ms: 0, hints: 0, onDay: prev?.onDay || day === todayKey(), depth: s.depth, kills: s.kills };
+    pruneDailies(dailies);
+    save('dailies', dailies);
+  }
+
+  /** A spoiler-free line for today's daily: best depth, kills, streak. */
+  shareText(): string {
+    const day = this.run.day ?? todayKey();
+    const dailies = loadDailies();
+    const r = dailies[day];
+    const streak = day === todayKey() ? streakOf(dailies) : 0;
+    const res = r ? `reached depth ${r.depth} · ${plural(r.kills, 'kill')}` : 'not finished';
+    return `Telegraph daily ${shortDay(day)}: ${res}${streak ? ` · 🔥 ${plural(streak, 'day')}` : ''}\n${location.origin}${location.pathname}?daily`;
+  }
+
+  private async share(): Promise<void> {
+    toast((await copyText(this.shareText())) ? 'Result copied: paste it anywhere' : 'Copy failed');
   }
 
   // ---------- input ----------
@@ -158,8 +236,14 @@ export class Game {
     if (legalMoves(this.state).some((m) => eq(m, h))) {
       if (this.selected && eq(this.selected, h)) {
         // A move that hurts only goes through the red button.
-        if (this.outcome && (this.outcome.damageTaken > 0 || this.outcome.dies)) {
-          hint(this.outcome.dies ? 'That move kills you: use the red button if you mean it' : 'That move hurts: press the red button if you mean it');
+        if (this.outcome && (this.outcome.damageTaken > 0 || this.outcome.dies || this.outcome.trapped)) {
+          hint(
+            this.outcome.dies
+              ? 'That move kills you: use the red button if you mean it'
+              : this.outcome.trapped
+                ? 'That move walks into a bomb trap: press the red button if you mean it'
+                : 'That move hurts: press the red button if you mean it',
+          );
           return;
         }
         this.commit({ type: 'move', to: h });
@@ -240,6 +324,7 @@ export class Game {
     this.state = state;
     this.clearSelection();
     this.persist();
+    if (state.status === 'dead') this.finish();
     renderPanel('', null);
     const depth = prev.depth;
     this.animator.play(this.scene, events, state, () => {
@@ -271,11 +356,18 @@ export class Game {
       const target = bashing ? s.enemies.find((x) => x.id === this.inspect) : undefined;
       if (target) parts.push(`Bash ${ENEMIES[target.kind].name}`);
       if (o.descends) parts.push('<span class="good">Take the stairs</span>');
-      if (o.kills.length) parts.push(`<span class="good">Kills ${o.kills.length}</span>`);
-      if (o.wounded.length) parts.push(`Wounds ${o.wounded.length}`);
+      // Only your own blows count as yours (and only they are green).
+      const yours = [
+        ...(o.kills.length ? [`<span class="good">kill ${o.kills.length}</span>`] : []),
+        ...(o.wounded.length ? [`wound ${o.wounded.length}`] : []),
+      ];
+      if (yours.length) parts.push(`You: ${yours.join(', ')}`);
+      const friendly = o.friendlyKills.length + o.friendlyWounds.length;
+      if (friendly) parts.push(`<span class="muted">Enemies hit each other: ${friendly}</span>`);
       if (o.hookedTo) parts.push('<span class="bad">Hooked!</span>');
       if (o.dies) parts.push('<span class="bad">You will die</span>');
       else if (o.damageTaken) parts.push(`<span class="bad">You take ${o.damageTaken} damage</span>`);
+      else if (o.trapped) parts.push('<span class="bad">Bomb trap</span>');
       else if (!o.descends && o.next.length) parts.push('Safe this turn');
       else if (!o.descends) parts.push('Safe');
       if (o.healed) parts.push('<span class="good">+1 ♥</span>');
@@ -286,16 +378,22 @@ export class Game {
           : null;
       // Who hurts you (outlined in red on the board), or what aims at you next.
       const hurtBy = o.hurtBy.length ? `Hit by ${threatList(s, o.hurtBy)}. ` : '';
-      const then = o.next.length ? `<span class="warn">Then in line for ${threatList(s, o.next)}.</span> ` : '';
+      const then = o.trapped
+        ? `<span class="bad">Then a bomb covers you there and every way out gets you hit before it goes off.</span> `
+        : o.next.length
+          ? `<span class="warn">Then in line for ${threatList(s, o.next)}.</span> `
+          : '';
       const body = target
         ? `${hurtBy}${then}${ENEMIES[target.kind].name} ${target.hp}/${target.maxHp} HP: ${ENEMIES[target.kind].blurb}`
         : o.dies
           ? `${hurtBy}This move kills you.`
           : o.damageTaken > 0
             ? `${hurtBy}Press the red button if you mean it.`
-            : `${then}Tap again or press Move.`;
+            : o.trapped
+              ? `${then}Press the red button if you mean it.`
+              : `${then}Tap again or press Move.`;
       const verb = bashing ? 'Bash' : 'Move';
-      const hurts = o.damageTaken > 0 || o.dies;
+      const hurts = o.damageTaken > 0 || o.dies || o.trapped;
       renderPanel(`<div class="title">${parts.join(' · ')}</div>${body}`, {
         label: o.dies
           ? this.armed
@@ -303,7 +401,9 @@ export class Game {
             : `${verb} — you die`
           : o.damageTaken > 0
             ? `${verb} (−${o.damageTaken} ♥)`
-            : verb,
+            : o.trapped
+              ? `${verb} (trap)`
+              : verb,
         danger: hurts,
         onClick: () => {
           if (!act) return;
@@ -321,7 +421,17 @@ export class Game {
     }
     if (this.probe) {
       const h = this.probe;
+      const tile = tileAt(s, h);
+      if (tile === 'wall') {
+        renderPanel('<div class="title">A wall</div>Nobody walks through it. It stops arrows, charges, hooks and zaps.', null);
+        return;
+      }
       const ts = threatsAt(threats(s), h);
+      if (tile === 'lava') {
+        const tt = ts.length ? `<span class="bad">Lava</span>, in line for ${threatList(s, ts)}` : 'Lava';
+        renderPanel(`<div class="title">${tt}</div>Nobody walks on it; an enemy shoved or charging into it dies. Arrows and zaps fly over it.`, null);
+        return;
+      }
       const stairs = eq(h, s.stairs);
       const title = ts.length
         ? `<span class="bad">Threatened</span> by ${threatList(s, ts)}`
@@ -360,7 +470,7 @@ export class Game {
       s.depth === 1 && s.turn < 3
         ? 'Tap a hex next to you to preview a move. Tap an enemy to learn what it does. Tap an adjacent enemy to Bash it.'
         : 'Reach the stairs. Red = danger.';
-    renderPanel(`<div class="title">Depth ${s.depth}</div>${hint}`, null);
+    renderPanel(`<div class="title">Depth ${s.depth}${this.run.day ? ' · daily run' : ''}</div>${hint}`, null);
   }
 
   /** First time an enemy kind shows up, explain it. */
@@ -378,33 +488,108 @@ export class Game {
     save('seenHelp', true);
   }
 
+  /** Spear colour buttons (locked ones say the depth that unlocks them). */
+  private skinsHtml(): string {
+    const best = load<number>('best', 0);
+    const cur = load<string>('skin', SKINS[0].id);
+    return `<div class="skins">${SKINS.map(
+      (k) =>
+        `<button data-skin="${k.id}" class="${k.id === cur ? 'on' : ''}" ${best >= k.depth ? '' : 'disabled'} aria-label="${k.name} spear">` +
+        `<span class="dot" style="background:${k.body}"></span>${best >= k.depth ? k.name : `depth ${k.depth}`}</button>`,
+    ).join('')}</div>`;
+  }
+
+  private wireSkins(): void {
+    for (const b of document.querySelectorAll<HTMLButtonElement>('#overlay .skins button')) {
+      b.onclick = () => {
+        const id = b.dataset.skin!;
+        if (!unlockedSkins(load<number>('best', 0)).some((k) => k.id === id)) return;
+        save('skin', id);
+        setSkin(id);
+        for (const o of document.querySelectorAll('#overlay .skins button')) o.classList.toggle('on', o === b);
+      };
+    }
+  }
+
   showMenu(): void {
     const best = load<number>('best', 0);
+    const day = this.run.day;
+    const today = todayKey();
+    const daily = loadDaily(store);
+    const dailyRun = load<SavedRun | null>('dailyRun', null);
+    const dailyOn = dailyRun && dailyRun.day === today && dailyRun.v === RULES_VERSION;
+    const streak = streakOf(loadDailies());
+    const dailyLine = day
+      ? `Daily run · ${prettyDay(day)}`
+      : `Depth ${this.state.depth} · Best ${best} · Seed ${this.run.seed}`;
     showCard(
-      `<h2>Telegraph</h2><p>Depth ${this.state.depth} · Best ${best} · Seed ${this.run.seed}</p>`,
+      `<h2>Telegraph</h2><p>${dailyLine}${streak ? `<br>🔥 ${plural(streak, 'day')} daily streak` : ''}</p>` +
+        `<p style="margin-bottom:0">Spear colour</p>${this.skinsHtml()}`,
       [
         { label: 'Resume', primary: true, onClick: closeOverlay },
+        day
+          ? { label: 'Back to my own run', onClick: () => this.playOwn() }
+          : {
+              label: dailyOn
+                ? `Continue today’s daily (depth ${replayDepth(dailyRun!)})`
+                : `Today’s daily${daily ? ` · best ${daily.label}` : ''}`,
+              onClick: () => this.playDaily(),
+            },
+        ...(daily ? [{ label: 'Copy my daily result', onClick: () => this.share() }] : []),
         { label: 'How to play', onClick: () => this.showHelp() },
         { label: 'Copy bug report', onClick: () => this.copyReport() },
         { label: 'All games', onClick: () => (location.href = '../') },
         {
-          label: 'Abandon run & start new',
+          label: day ? 'Abandon daily & start a run' : 'Abandon run & start new',
           onClick: () =>
-            showCard(`<h2>Abandon this run?</h2><p>You're on depth ${this.state.depth}. The run will be lost.</p>`, [
-              { label: 'Keep playing', primary: true, onClick: closeOverlay },
-              { label: 'Abandon it', onClick: () => this.newRun() },
-            ]),
+            showCard(
+              `<h2>Abandon this run?</h2><p>You're on depth ${this.state.depth}. The run will be lost${day ? ' (you can start today’s daily again)' : ''}.</p>`,
+              [
+                { label: 'Keep playing', primary: true, onClick: closeOverlay },
+                {
+                  label: 'Abandon it',
+                  onClick: () => {
+                    if (day) save('dailyRun', null);
+                    this.newRun();
+                  },
+                },
+              ],
+            ),
         },
       ],
     );
+    this.wireSkins();
   }
 
   private showGameOver(): void {
     const best = load<number>('best', 0);
+    const s = this.state;
+    const day = this.run.day;
+    if (day) {
+      const d = loadDaily(store, day);
+      const streak = day === todayKey() ? streakOf(loadDailies()) : 0;
+      const streakLine =
+        streak > 1 ? `<br>🔥 ${streak}-day streak` : streak === 1 ? '<br>🔥 Streak started: come back tomorrow' : '';
+      showCard(
+        `<h2>You fell on depth ${s.depth}</h2><p>${plural(s.kills, 'kill')} · ${plural(s.turn, 'turn')}</p>` +
+          `<p><b style="color:var(--accent)">Daily run · ${prettyDay(day)}</b>${d ? `<br>Today's best: ${d.label}` : ''}${streakLine}</p>`,
+        [
+          { label: 'Copy my result', primary: true, onClick: () => this.share() },
+          { label: 'Retry today’s daily', onClick: () => this.playDaily() },
+          { label: 'Back to my own run', onClick: () => this.playOwn() },
+          { label: 'All games', onClick: () => (location.href = '../') },
+        ],
+        false,
+      );
+      return;
+    }
+    const next = SKINS.find((k) => k.depth > best);
     showCard(
-      `<h2>You fell on depth ${this.state.depth}</h2><p>${this.state.kills} kills · ${this.state.turn} turns · Best depth ${best}</p>`,
+      `<h2>You fell on depth ${s.depth}</h2><p>${plural(s.kills, 'kill')} · ${plural(s.turn, 'turn')} · Best depth ${best}` +
+        `${next ? `<br><span style="color:var(--muted)">Reach depth ${next.depth} for the ${next.name} spear</span>` : ''}</p>`,
       [
         { label: 'New run', primary: true, onClick: () => this.newRun() },
+        { label: 'Today’s daily', onClick: () => this.playDaily() },
         { label: 'Copy bug report', onClick: () => this.copyReport() },
         { label: 'All games', onClick: () => (location.href = '../') },
       ],

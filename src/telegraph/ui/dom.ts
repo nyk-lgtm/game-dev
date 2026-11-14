@@ -55,17 +55,14 @@ export function enemyIntroHtml(kinds: EnemyKind[]): string {
 
 export const HELP_HTML = `
 <h2>How to play</h2>
-<p>You are the <span class="c-player">spear</span>. Reach the stairs at the top of each floor. Go as deep as you can.</p>
-<ul>
-  <li><b>Tap a hex</b> to preview. <b>Tap it again</b> (or press the button) to do it. The preview is exact: ✕ marks who dies, and it shows damage you will take.</li>
-  <li><b>Moving is attacking.</b> <b>Stab</b>: step from one hex next to an enemy to another hex next to it (1 damage). <b>Lunge</b>: step straight toward an enemy 2 hexes away (2 damage).</li>
-  <li><b>Bash</b>: tap an adjacent enemy, then press <b>Bash</b> to shove it 1 hex. It is <b>dazed</b> (skips its next action, loses its aim). Into lava it dies; into a wall or another enemy, both take 1 damage. Recharges in 3 turns.</li>
-  <li><span class="c-threat">Red</span> = danger for the coming enemy turn: solid red lines are aimed attacks, faint red outlines are where a brute can reach, dashed orange is a bomb's blast. Walls block arrows; lava blocks walking, not arrows. <b>Tap any hex</b> to see who threatens it: those enemies get a red ring.</li>
-  <li>"Safe" is about the coming enemy turn. If something will take aim at where you end up (a pylon charging, a bomb lobbed at you), the preview says so in amber with a <b>!</b>.</li>
-  <li>The dots under an enemy are its health. A move or Bash that would hurt you needs the red button: tapping the hex again won't do it. One that would kill you needs two presses.</li>
-  <li>Once a floor is clear, tap the stairs (or any hex) to walk there, around any bomb still ticking.</li>
-  <li>Kill every enemy before taking the stairs to <span class="c-heal">heal 1 ♥</span>.</li>
+<p>You are the <span class="c-player">spear</span>. Reach the <span class="c-heal">stairs</span> (somewhere new each floor) and go as deep as you can.</p>
+<ul class="help">
+  <li><b>Tap a hex</b> to preview, <b>tap again</b> to go. The preview is exact: a white ✕ is your kill, a grey ✕ an enemy hit by its own side.</li>
+  <li><b>Moving is attacking.</b> Stab: step between two hexes beside an enemy (1). Lunge: step straight at an enemy 2 away (2).</li>
+  <li><b>Bash</b> an adjacent enemy: shove it 1 hex and daze it. Lava kills it; a wall or enemy hurts both. Every 3 turns.</li>
+  <li><span class="c-threat">Red</span> fires on the coming enemy turn. Aimed lines: dashes = arrow, chevrons = charge, chain = hook, zigzag = zap. Red hexes = melee reach (bright beside you), dashed hexes = bomb blast. Tap any hex to see who threatens it.</li>
+  <li>Amber <b>!</b> = safe now, aimed at next. Red <b>!!</b> = bomb trap. Moves that hurt need the red button.</li>
+  <li>Clear the floor before the stairs to <span class="c-heal">heal 1 ♥</span>.</li>
 </ul>
-<h2>Enemies</h2>
-<ul>${(Object.keys(ENEMIES) as EnemyKind[]).map(enemyLine).join('')}</ul>
+<details><summary>Enemies ▸</summary><ul>${(Object.keys(ENEMIES) as EnemyKind[]).map(enemyLine).join('')}</ul></details>
 `;

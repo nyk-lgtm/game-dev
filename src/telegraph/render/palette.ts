@@ -40,3 +40,21 @@ export const C = {
   muted: '#8a90a8',
   heal: '#2fd3a5',
 };
+
+/** Spear colours: the first is yours from the start, the rest unlock at a best depth. */
+export interface Skin {
+  id: string;
+  name: string;
+  /** Best depth that unlocks it. */
+  depth: number;
+  body: string;
+  dark: string;
+  spear: string;
+}
+
+export const SKINS: Skin[] = [
+  { id: 'tide', name: 'Tide', depth: 0, body: C.player, dark: C.playerDark, spear: '#d7f9ff' },
+  { id: 'ember', name: 'Ember', depth: 5, body: '#ff9a4d', dark: '#7a3a12', spear: '#ffe2c4' },
+  { id: 'moss', name: 'Moss', depth: 8, body: '#8be36b', dark: '#2f6a1e', spear: '#e6ffd9' },
+  { id: 'gilt', name: 'Gilt', depth: 12, body: '#ffd34d', dark: '#7a5a08', spear: '#fff4c9' },
+];

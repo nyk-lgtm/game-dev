@@ -27,7 +27,7 @@ export function greedyAction(s: GameState, visits?: Map<string, number>): Action
     const o = previewAction(s, a);
     const at = a.type === 'move' ? a.to : s.player.pos;
     const score =
-      -o.damageTaken * 100 + (o.dies ? -1000 : 0) + o.kills.length * 8 + o.wounded.length * 3 -
+      -o.damageTaken * 100 + (o.dies ? -1000 : 0) + (o.kills.length + o.friendlyKills.length) * 8 + (o.wounded.length + o.friendlyWounds.length) * 3 -
       (field.get(key(at)) ?? 50) * 2 + (o.descends ? (s.enemies.length > 0 ? 5 : 40) : 0) -
       (a.type === 'bash' ? 4 : 0) -
       (visits?.get(key(at)) ?? 0) * 3;

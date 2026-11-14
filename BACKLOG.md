@@ -763,6 +763,19 @@ playtests with fixes shipped. Open threads, in order:
     and hold). Greedy bot x150: median 7 → 7, mean 6.59 → 6.77, depth-3 deaths 23 → 23, max 12 → 15;
     deep floors d9-14 average 9.2-11.0 enemies (were 9.6-12.0). Bombs hit the bot more (60 → 78 of
     ~600 hits) since bombers hold their ground in range.
+  - [x] Telegraph third blind playtest (rules v6; liked: previews, bash-then-lunge, shoves, fair deaths;
+    long-term pull weak). Preview splits your kills/wounds from enemy friendly fire ("You: kill 1 · Enemies
+    hit each other: 3", grey ✕ on the board, only yours green). Bomb traps: a move that ends under a bomb
+    with no damage-free line out before it blows says "Bomb trap", shows a red "!!" and needs the red
+    button (exact 2-ply search, `bombTrapped`). Melee reach is bright only beside you / for a tapped enemy,
+    a faint wash elsewhere (deep floors were drowning in outlines). Help agrees with the drawing (dashes =
+    arrow, chevrons = charge, chain = hook, zigzag = zap) and fits one Pixel 7 screen (enemies folded).
+    Tapping a wall/lava says what it is. HP pips drawn after every unit on a dark pill (were washed out by
+    the shield and grappler art). Start and stairs: seeded rim hexes ≥ 7 apart, stairs never on last
+    floor's hex. Daily run (`?daily`, hub Daily link) with streak and "Copy my result"; spear colours
+    unlock at best depth 5/8/12. Balance: rim starts pushed depth-3 deaths to ~23% (600 runs), so depth 3
+    lost its +2 budget: greedy bot x150 median 7 → 7, mean 6.77 → 7.01, depth-3 deaths 23 → 19 (x600:
+    median 7, 13% on depth 3). Next: a fourth playtest if wanted; watch whether the daily brings people back.
   - [ ] Next: owner feedback on depths 9+; if still steep, a heal source (e.g. a shrine every few floors).
   - [x] Rewild (rules v3): species alive 4 seasons in a row are **settled** and pay +3 each season;
     dying out restarts the streak, so keeping wolves and deer balanced beats replanting. Stars

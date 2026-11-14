@@ -1,10 +1,13 @@
 import { installErrorOverlay } from '../shared/debug';
+import { wantsDaily } from '../shared/daily';
 import { replayFromUrl } from './debug';
 import { Game } from './game';
 import { RULES_VERSION, randomSeed } from './core';
+import { setSkin } from './render/draw';
 import { load } from './storage';
 
 installErrorOverlay();
+setSkin(load<string>('skin', 'tide'));
 
 const game = new Game(document.getElementById('board') as HTMLCanvasElement);
 document.getElementById('menuBtn')!.onclick = () => game.showMenu();
@@ -17,7 +20,7 @@ if (fromUrl) {
   game.start(fromUrl.seed, fromUrl.actions);
   // Drop the params so a reload resumes the saved run instead of replaying again.
   history.replaceState(null, '', location.pathname);
-}
+} else if (wantsDaily()) game.playDaily();
 else if (saved) game.start(saved.seed, saved.actions);
 else game.start(randomSeed());
 
